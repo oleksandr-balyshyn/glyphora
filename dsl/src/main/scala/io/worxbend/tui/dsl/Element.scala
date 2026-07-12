@@ -364,3 +364,7 @@ object Element:
 
   def markdown(source: String): WidgetElement =
     WidgetElement(w.Markdown(source))
+
+  def dataTable(table: io.worxbend.tui.widgets.DataTable, state: io.worxbend.tui.widgets.DataTableState)
+      : DataTableElement =
+    DataTableElement(table, state)
