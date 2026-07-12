@@ -8,7 +8,8 @@ import org.scalatest.funsuite.AnyFunSuite
 final class VizExtrasSpec extends AnyFunSuite:
 
   test("braille resolution packs sub-pixels into braille glyphs"):
-    val canvas = Canvas((0.0, 1.0), (0.0, 3.0), Seq(Shape.Points(Seq((0.0, 3.0)))), resolution = CanvasResolution.Braille)
+    val canvas =
+      Canvas((0.0, 1.0), (0.0, 3.0), Seq(Shape.Points(Seq((0.0, 3.0)))), resolution = CanvasResolution.Braille)
     val buffer = rendered(canvas, 1, 1)
     assert(buffer.get(0, 0).symbol == "⠁") // top-left dot only
 
@@ -22,7 +23,12 @@ final class VizExtrasSpec extends AnyFunSuite:
   test("half-block resolution renders upper, lower, and full blocks"):
     def cellFor(ys: Seq[Double]): String =
       val canvas =
-        Canvas((0.0, 1.0), (0.0, 1.0), Seq(Shape.Points(ys.map(y => (0.0, y)))), resolution = CanvasResolution.HalfBlock)
+        Canvas(
+          (0.0, 1.0),
+          (0.0, 1.0),
+          Seq(Shape.Points(ys.map(y => (0.0, y)))),
+          resolution = CanvasResolution.HalfBlock,
+        )
       rendered(canvas, 1, 1).get(0, 0).symbol
     assert(cellFor(Seq(1.0)) == "▀")
     assert(cellFor(Seq(0.0)) == "▄")

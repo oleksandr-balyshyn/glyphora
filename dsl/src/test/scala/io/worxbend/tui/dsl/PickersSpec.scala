@@ -29,7 +29,9 @@ final class PickersSpec extends AnyFunSuite:
     pilot.typeText("de").waitForIdle()
     assert(pilot.screenText.contains("deploy-service"))
     assert(pilot.screenText.contains("delete-volume"))
-    assert(!pilot.screenText.contains("restart-service")) // 'd','e' is not a subsequence prefix match for it? it is: r-e-s... 'd' missing
+    assert(
+      !pilot.screenText.contains("restart-service")
+    ) // 'd','e' is not a subsequence prefix match for it? it is: r-e-s... 'd' missing
     pilot.pressKey(KeyCode.Down).pressKey(KeyCode.Enter).waitForIdle()
     assert(accepted.contains("delete-volume"))
     assert(state.input.value == "delete-volume")

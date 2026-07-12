@@ -10,7 +10,6 @@ import org.scalatest.funsuite.AnyFunSuite
 
 final class FormControlsSpec extends AnyFunSuite:
 
-
   private def startApp(view0: ReactiveScope ?=> Element): Pilot =
     val backend = HeadlessBackend(Size(40, 8))
     val testApp = new TuiApp:

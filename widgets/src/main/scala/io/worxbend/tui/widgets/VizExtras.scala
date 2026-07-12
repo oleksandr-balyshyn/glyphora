@@ -54,11 +54,16 @@ final case class PieChart(
       val percent = math.round(value / total * 100)
       val entry = s"■ $label $percent%"
       val x = area.x + discWidth + 1
-      buffer.setString(x, area.y + index, CharWidth.substringByWidth(entry, area.right - x), styles(index % styles.size))
+      buffer.setString(
+        x,
+        area.y + index,
+        CharWidth.substringByWidth(entry, area.right - x),
+        styles(index % styles.size),
+      )
     }
 
-/** Bars stacked from multiple series: each `(label, values)` column stacks one segment per series, scaled
-  * against the tallest stack.
+/** Bars stacked from multiple series: each `(label, values)` column stacks one segment per series, scaled against the
+  * tallest stack.
   */
 final case class StackedBarChart(
     data: Seq[(String, Seq[Long])],
@@ -95,8 +100,8 @@ final case class StackedBarChart(
             buffer.setString(barLeft + (barWidth - CharWidth.of(fitted)) / 2, area.bottom - 1, fitted, labelStyle)
       }
 
-/** A value grid rendered as shade intensity: each cell maps its value (against the grid's max) onto a shade
-  * ramp — rows are y (top first), columns are x.
+/** A value grid rendered as shade intensity: each cell maps its value (against the grid's max) onto a shade ramp — rows
+  * are y (top first), columns are x.
   */
 final case class Heatmap(
     values: Seq[Seq[Double]],

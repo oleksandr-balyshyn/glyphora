@@ -468,8 +468,8 @@ final case class SplitPaneElement(
           true
         case _ => false
 
-/** A text input with a live suggestion dropdown: typing filters `suggestions` (subsequence match), Up/Down
-  * move the highlight, Enter accepts it into the input and fires `onAccept`.
+/** A text input with a live suggestion dropdown: typing filters `suggestions` (subsequence match), Up/Down move the
+  * highlight, Enter accepts it into the input and fires `onAccept`.
   */
 final case class AutocompleteElement(
     state: AutocompleteState,
@@ -483,11 +483,13 @@ final case class AutocompleteElement(
     val query = state.input.value.toLowerCase
     if query.isEmpty then Seq.empty
     else
-      suggestions.filter { candidate =>
-        var i = 0
-        candidate.toLowerCase.foreach(c => if i < query.length && query.charAt(i) == c then i += 1)
-        i == query.length
-      }.take(maxSuggestions)
+      suggestions
+        .filter { candidate =>
+          var i = 0
+          candidate.toLowerCase.foreach(c => if i < query.length && query.charAt(i) == c then i += 1)
+          i == query.length
+        }
+        .take(maxSuggestions)
 
   def widget: Widget =
     val visible = matches
@@ -1080,8 +1082,7 @@ object Element:
   def radioGroup(options: Seq[String], selected: io.worxbend.tui.runtime.Signal[Int]): RadioGroupElement =
     RadioGroupElement(options, selected)
 
-  def slider(value: io.worxbend.tui.runtime.Signal[Int], min: Int = 0, max: Int = 100, step: Int = 5)
-      : SliderElement =
+  def slider(value: io.worxbend.tui.runtime.Signal[Int], min: Int = 0, max: Int = 100, step: Int = 5): SliderElement =
     SliderElement(value, min, max, step)
 
   def selectionList(
@@ -1091,8 +1092,7 @@ object Element:
   ): SelectionListElement =
     SelectionListElement(items, selected, state)
 
-  def numberInput(state: io.worxbend.tui.widgets.TextInputState, allowDecimal: Boolean = false)
-      : NumberInputElement =
+  def numberInput(state: io.worxbend.tui.widgets.TextInputState, allowDecimal: Boolean = false): NumberInputElement =
     NumberInputElement(state, allowDecimal)
 
   def maskedInput(state: io.worxbend.tui.widgets.TextInputState, mask: String): MaskedInputElement =

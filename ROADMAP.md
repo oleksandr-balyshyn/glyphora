@@ -153,6 +153,25 @@ independently shippable; items marked ★ are the enablers other items depend on
   `Canvas` markers (2×/2×4 sub-cell resolution for `Chart`).
 - `Link` (OSC 8 hyperlinks — needs a `Cell` attribute + backend support).
 
+> **0.6.0 shipped** — form controls (`RadioGroup`, `Slider`, `SelectionList`,
+> `NumberInput`, `MaskedInput`, `Paginator`); `Autocomplete` + `FilePicker`; canvas
+> braille/half-block sub-pixel resolutions; `PieChart`, `StackedBarChart`, `Heatmap`.
+> Timer/Stopwatch components were deliberately skipped — ticks + `Tween` already
+> cover that logic without dedicated widgets.
+>
+> **Post-0.6.0 brainstorm (the 0.7–0.9 arc):**
+> - **0.7.0 "polish & interaction"**: mouse upgrades (click buttons/checkboxes via
+>   hit-testing, scroll wheel in lists/scrollviews, SplitPane drag); OSC 8 `Link`
+>   (needs a `Cell` attribute + backend support — the first core change since 0.2);
+>   per-element effect targeting via a rendered-area registry; `Chart` with braille
+>   default + axis labels.
+> - **0.8.0 "images & docs"**: half-block image widget (RGB cell pairs; Kitty/Sixel
+>   protocols stay out); Scaladoc sweep over `tui-core`/`tui-dsl` public APIs; a
+>   `docs/` cookbook generated from the examples.
+> - **0.9.0 "hardening"**: publishLocal + consumption test from a scratch project;
+>   MiMa baseline; render-loop benchmark rerun + budget assertions; PTY matrix
+>   re-run; API deprecation pass (rename inconsistencies before a 1.0 freeze).
+
 ## Later / explicitly hard
 
 - **Image widget** (Kitty/iTerm2/Sixel/half-block) — highest platform risk; the
