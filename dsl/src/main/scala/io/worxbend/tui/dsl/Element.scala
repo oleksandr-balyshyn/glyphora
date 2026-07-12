@@ -254,6 +254,49 @@ final case class TreeElement(
           true
         case _ => false
 
+/** A pressable button: Enter or Space triggers `action` while focused. */
+final case class ButtonElement(
+    label: String,
+    action: () => Unit,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget = w.Button(label, focusStyled(props))
+  private[dsl] def withProps(props: ElementProps): ButtonElement = copy(props = props)
+  private[dsl] override def defaultConstraint: Constraint = Constraint.Length(1)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
+    Some(toggleOnActivate(props, action))
+
+/** A scrollable log panel: Up/Down (and PageUp/PageDown) scroll while focused; the tail re-follows when
+  * scrolled back to the bottom.
+  */
+final case class LogElement(
+    state: w.LogState,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget =
+    val log = w.Log(props.style)
+    (area, buffer) => log.render(area, buffer, state)
+  private[dsl] def withProps(props: ElementProps): LogElement = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Up =>
+          state.scrollUp()
+          true
+        case KeyCode.Down =>
+          state.scrollDown()
+          true
+        case KeyCode.PageUp =>
+          state.scrollUp(10)
+          true
+        case KeyCode.PageDown =>
+          state.scrollDown(10)
+          true
+        case _ => false
+
 /** Multi-line editor element. While focused it consumes printable characters, Enter (newline), Backspace, Delete,
   * arrows, Home/End, and Ctrl+Z (undo) — Tab stays free for focus traversal.
   */
@@ -475,3 +518,21 @@ object Element:
 
   def textArea(state: io.worxbend.tui.widgets.TextAreaState): TextAreaElement =
     TextAreaElement(state)
+
+  def button(label: String)(action: => Unit): ButtonElement =
+    ButtonElement(label, () => action)
+
+  def log(state: io.worxbend.tui.widgets.LogState): LogElement =
+    LogElement(state)
+
+  def rule(label: String = ""): WidgetElement =
+    WidgetElement(
+      w.Rule(Option(label).filter(_.nonEmpty)),
+      ElementProps(constraint = Some(Constraint.Length(1))),
+    )
+
+  def bigText(content: String): WidgetElement =
+    WidgetElement(
+      w.BigText(content),
+      ElementProps(constraint = Some(Constraint.Length(w.BigText.GlyphHeight))),
+    )

@@ -7,6 +7,8 @@ import io.worxbend.tui.widgets.BorderType
 // the styling/layout extensions, and the core vocabulary the examples need (SPEC.md §5.1).
 export Element.{
   barChart,
+  bigText,
+  button,
   calendar,
   canvas,
   chart,
@@ -21,9 +23,11 @@ export Element.{
   gauge,
   input,
   list,
+  log,
   markdown,
   panel,
   row,
+  rule,
   select,
   spacer,
   sparkline,
