@@ -361,3 +361,6 @@ object Element:
 
   def dualSparkline(upper: Seq[Long], lower: Seq[Long]): WidgetElement =
     WidgetElement(w.DualSparkline(upper, lower))
+
+  def markdown(source: String): WidgetElement =
+    WidgetElement(w.Markdown(source))

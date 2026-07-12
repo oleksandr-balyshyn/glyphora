@@ -19,6 +19,7 @@ export Element.{
   gauge,
   input,
   list,
+  markdown,
   panel,
   row,
   select,
