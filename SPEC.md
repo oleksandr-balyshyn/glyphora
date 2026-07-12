@@ -657,7 +657,15 @@ before):
    an unconsumed `Ctrl+C` also quits by default). `ReactiveScope`'s internal member is
    `private[runtime] def track(dependency)` rather than the sketched `stack` val — same
    capability contract, no observable difference outside `tui-runtime`.
-5. **`Backend` trait surface (recorded during step 3)** — four methods added beyond
+5. **Tier 5 + Markdown scope (recorded post-v0.1.0)** — the operator explicitly
+   requested the deferred lowest-priority items (the §14.2-mandated decision for
+   adding scope from the §7 non-goals/Tier 5 table): `Markdown` view, `DataTable`
+   (sortable/filterable), `DirectoryTree`, and `TextArea` are now implemented in
+   `tui-widgets` with DSL elements. Recorded exclusions within them: Markdown skips
+   links/images/tables/nested lists; `TextArea` has undo but no redo and **no syntax
+   highlighting** (a tree-sitter-class subsystem — still out of scope); the
+   multi-protocol image widget and braille drawing remain unimplemented.
+6. **`Backend` trait surface (recorded during step 3)** — four methods added beyond
    the §3.2 sketch: `enableMouseCapture()`/`disableMouseCapture()` (the runner must
    honor `RunnerConfig.mouseCapture` and cannot do so through raw-mode/alt-screen
    calls alone) and `hideCursor()`/`showCursor()` (a TUI hides the hardware cursor

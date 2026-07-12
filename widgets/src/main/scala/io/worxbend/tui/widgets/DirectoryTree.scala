@@ -9,8 +9,8 @@ import scala.util.control.NonFatal
 
 /** Caller-owned [[DirectoryTree]] state rooted at a directory.
   *
-  * Directory listings are loaded lazily on first visibility and cached — the filesystem is only touched when
-  * a branch expands (or after [[invalidate]]), never per frame. Unreadable directories degrade to empty.
+  * Directory listings are loaded lazily on first visibility and cached — the filesystem is only touched when a branch
+  * expands (or after [[invalidate]]), never per frame. Unreadable directories degrade to empty.
   */
 final class DirectoryTreeState(val root: Path):
   var selected: Option[Path] = None
@@ -67,8 +67,8 @@ final class DirectoryTreeState(val root: Path):
       finally entries.close()
     catch case NonFatal(_) => Vector.empty // unreadable directory: show as empty rather than crash the UI
 
-/** A filesystem browser (the Tier 5 filesystem-aware [[Tree]]): lazy-loaded directory listings with
-  * expand/collapse markers, `/`-suffixed directory names, selection highlight, and scroll-to-selection.
+/** A filesystem browser (the Tier 5 filesystem-aware [[Tree]]): lazy-loaded directory listings with expand/collapse
+  * markers, `/`-suffixed directory names, selection highlight, and scroll-to-selection.
   */
 final case class DirectoryTree(
     style: Style = Style.Default,

@@ -15,9 +15,14 @@ Implemented:
   lives in `tui-dsl` (`Form`/`FormState`), composed from these.
 - **Tier 3**: `Canvas` + shapes (`Points`/`SegmentShape`/`Polyline`/`RectangleShape`/
   `CircleShape`), `BarChart`, `Chart` (+`Dataset`, line/scatter), `Calendar`.
-- **Tier 4**: `Spinner`, `WaveText`, `Dialog`, `DualSparkline`. (Braille drawing,
-  Markdown view, and the multi-protocol image widget remain future work — the lowest
-  priority/highest platform-risk entries of `PLAN.md` §6.)
+- **Tier 4**: `Spinner`, `WaveText`, `Dialog`, `DualSparkline`, `Markdown` (subset:
+  headings, lists, quotes, code fences, inline styles — no links/images/tables).
+- **Tier 5**: `DataTable` (+`DataTableState`; sortable with numeric-aware compare,
+  filterable, selectable), `DirectoryTree` (+`DirectoryTreeState`; lazy cached
+  filesystem listings), `TextArea` (+`TextAreaState`; multi-line cluster-safe editing,
+  bounded undo, 2D cursor/scroll — no syntax highlighting).
+- Still future work: braille drawing and the multi-protocol image widget (highest
+  platform-compatibility risk, `PLAN.md` §6).
 
 Every widget has a render-to-`Buffer` test (`BufferAssertions` from `test-support/`).
 `RenderLoopBench` (in test sources) is the PLAN §12 render-loop benchmark:

@@ -7,7 +7,6 @@ import org.scalatest.funsuite.AnyFunSuite
 
 final class MarkdownSpec extends AnyFunSuite:
 
-
   test("headings strip their hashes and take the heading styles"):
     val buffer = rendered(Markdown("# Title\n## Section\n### Sub"), 20, 3)
     assert(trimmedLines(buffer) == Seq("Title", "Section", "Sub"))

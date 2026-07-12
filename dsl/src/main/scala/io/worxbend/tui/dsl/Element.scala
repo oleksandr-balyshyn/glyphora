@@ -254,8 +254,8 @@ final case class TreeElement(
           true
         case _ => false
 
-/** Multi-line editor element. While focused it consumes printable characters, Enter (newline), Backspace,
-  * Delete, arrows, Home/End, and Ctrl+Z (undo) — Tab stays free for focus traversal.
+/** Multi-line editor element. While focused it consumes printable characters, Enter (newline), Backspace, Delete,
+  * arrows, Home/End, and Ctrl+Z (undo) — Tab stays free for focus traversal.
   */
 final case class TextAreaElement(
     state: w.TextAreaState,
@@ -464,8 +464,10 @@ object Element:
   def markdown(source: String): WidgetElement =
     WidgetElement(w.Markdown(source))
 
-  def dataTable(table: io.worxbend.tui.widgets.DataTable, state: io.worxbend.tui.widgets.DataTableState)
-      : DataTableElement =
+  def dataTable(
+      table: io.worxbend.tui.widgets.DataTable,
+      state: io.worxbend.tui.widgets.DataTableState,
+  ): DataTableElement =
     DataTableElement(table, state)
 
   def directoryTree(state: io.worxbend.tui.widgets.DirectoryTreeState): DirectoryTreeElement =

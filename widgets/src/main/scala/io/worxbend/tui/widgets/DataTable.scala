@@ -4,8 +4,8 @@ import io.worxbend.tui.core.{Buffer, Constraint, Direction, Layout, Line, Rect, 
 
 /** Caller-owned [[DataTable]] state: sort column/direction, a substring filter, selection, and scroll.
   *
-  * Selection indexes into the *view* (the filtered, sorted rows) — use [[DataTable.visibleRows]] to map it
-  * back to data.
+  * Selection indexes into the *view* (the filtered, sorted rows) — use [[DataTable.visibleRows]] to map it back to
+  * data.
   */
 final class DataTableState:
   var sortColumn: Option[Int] = None
@@ -34,8 +34,8 @@ final class DataTableState:
 
 /** A sortable, filterable table with a selectable, scrollable body (the Tier 5 upgrade over [[Table]]).
   *
-  * The header shows a `▲`/`▼` indicator on the sorted column; the filter keeps rows where *any* cell contains
-  * the text (case-insensitive); sorting compares numerically when both cells parse as numbers, else as text.
+  * The header shows a `▲`/`▼` indicator on the sorted column; the filter keeps rows where *any* cell contains the text
+  * (case-insensitive); sorting compares numerically when both cells parse as numbers, else as text.
   */
 final case class DataTable(
     columns: Seq[String],

@@ -7,9 +7,9 @@ import scala.collection.mutable
 /** Caller-owned multi-line editing state (the Tier 5 editor model).
   *
   * Text is a vector of lines, each a vector of grapheme clusters — the cursor is `(line, column)` in cluster
-  * coordinates and can never split a combining sequence or emoji. Every editing operation snapshots onto a
-  * bounded undo stack ([[undo]] restores text and cursor; there is no redo — recorded as out of scope in
-  * SPEC.md §9, alongside syntax highlighting).
+  * coordinates and can never split a combining sequence or emoji. Every editing operation snapshots onto a bounded undo
+  * stack ([[undo]] restores text and cursor; there is no redo — recorded as out of scope in SPEC.md §9, alongside
+  * syntax highlighting).
   */
 final class TextAreaState(initial: String = ""):
 
@@ -111,8 +111,8 @@ final class TextAreaState(initial: String = ""):
 object TextAreaState:
   private val UndoLimit = 100
 
-/** A multi-line text editor view: vertical and horizontal scroll follow the cursor, which renders as a
-  * highlighted cell (`showCursor = false` for unfocused areas). No syntax highlighting (SPEC.md §9).
+/** A multi-line text editor view: vertical and horizontal scroll follow the cursor, which renders as a highlighted cell
+  * (`showCursor = false` for unfocused areas). No syntax highlighting (SPEC.md §9).
   */
 final case class TextArea(
     showCursor: Boolean = true,
@@ -125,10 +125,9 @@ final case class TextArea(
       val (cursorLine, cursorColumn) = state.cursor
       state.scrollRow = scrolled(state.scrollRow, cursorLine, area.height)
       state.scrollColumn = scrolledHorizontally(state, cursorColumn, area.width)
-      state.clusterLines.slice(state.scrollRow, state.scrollRow + area.height).zipWithIndex.foreach {
-        (clusters, row) =>
-          val lineIndex = state.scrollRow + row
-          renderLine(buffer, area, clusters, area.y + row, state, lineIndex == cursorLine)
+      state.clusterLines.slice(state.scrollRow, state.scrollRow + area.height).zipWithIndex.foreach { (clusters, row) =>
+        val lineIndex = state.scrollRow + row
+        renderLine(buffer, area, clusters, area.y + row, state, lineIndex == cursorLine)
       }
 
   private def renderLine(

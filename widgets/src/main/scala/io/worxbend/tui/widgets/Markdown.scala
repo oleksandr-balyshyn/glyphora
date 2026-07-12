@@ -14,12 +14,12 @@ final case class MarkdownTheme(
     bullet: Style = Style.Default.withFg(Color.Cyan),
 )
 
-/** Renders a pragmatic Markdown subset: `#`/`##`/`###`+ headings, `-`/`*` bullets, `1.` numbered items,
-  * `>` blockquotes, fenced code blocks, and inline `**strong**` / `*emphasis*` / `` `code` ``.
+/** Renders a pragmatic Markdown subset: `#`/`##`/`###`+ headings, `-`/`*` bullets, `1.` numbered items, `>`
+  * blockquotes, fenced code blocks, and inline `**strong**` / `*emphasis*` / `` `code` ``.
   *
-  * Deliberately excluded (recorded in SPEC.md §9): links, images, tables, nested lists, and syntax
-  * highlighting inside code fences — this is a document *viewer* for help screens and READMEs, not a
-  * rendering-complete engine. Prose wraps at the area width (cluster-safe); code blocks render verbatim.
+  * Deliberately excluded (recorded in SPEC.md §9): links, images, tables, nested lists, and syntax highlighting inside
+  * code fences — this is a document *viewer* for help screens and READMEs, not a rendering-complete engine. Prose wraps
+  * at the area width (cluster-safe); code blocks render verbatim.
   */
 final case class Markdown(
     source: String,
@@ -89,7 +89,8 @@ private[widgets] object MarkdownParser:
 
   /** A styled run starting exactly at `index`, with how many chars it consumed, or `None`. */
   private def styledRun(text: String, index: Int, theme: MarkdownTheme): Option[(Span, Int)] =
-    delimited(text, index, "**").map((content, consumed) => (Span(content, theme.strong), consumed))
+    delimited(text, index, "**")
+      .map((content, consumed) => (Span(content, theme.strong), consumed))
       .orElse(delimited(text, index, "*").map((content, consumed) => (Span(content, theme.emphasis), consumed)))
       .orElse(delimited(text, index, "`").map((content, consumed) => (Span(content, theme.code), consumed)))
 
