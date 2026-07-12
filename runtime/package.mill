@@ -11,5 +11,7 @@ object `package` extends build.TuiPublishModule {
 
   def moduleDeps = Seq(build.core, build.terminal)
 
-  object test extends TuiTests
+  object test extends TuiTests {
+    def moduleDeps = super.moduleDeps ++ Seq(build.`test-support`)
+  }
 }
