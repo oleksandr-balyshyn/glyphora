@@ -38,6 +38,14 @@ final class Buffer(val area: Rect):
       else if width > 0 then column = area.right // wide cluster that only half-fits: stop
     end while
 
+  /** An independent copy of this buffer. Backends snapshot the frame they just flushed so later mutation of the
+    * caller's buffer cannot corrupt the next diff.
+    */
+  def snapshot: Buffer =
+    val copied = Buffer(area)
+    Array.copy(cells, 0, copied.cells, 0, cells.length)
+    copied
+
   /** Resets every cell to [[Cell.Empty]], recycling the buffer for the next frame. */
   def reset(): Unit =
     var index = 0

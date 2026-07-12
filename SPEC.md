@@ -631,6 +631,12 @@ before):
 3. **JLine version** — pinned to `mvn"org.jline:jline:3.30.13"` (§3 above); do not
    move to the JLine 4.x major line for v1, it's too new (released 2026-05) to be a
    safe default dependency yet.
+4. **`Backend` trait surface (recorded during step 3)** — four methods added beyond
+   the §3.2 sketch: `enableMouseCapture()`/`disableMouseCapture()` (the runner must
+   honor `RunnerConfig.mouseCapture` and cannot do so through raw-mode/alt-screen
+   calls alone) and `hideCursor()`/`showCursor()` (a TUI hides the hardware cursor
+   during diff-based redraws or it visibly flickers at the last-written cell). All
+   four follow the same `Either[BackendError, Unit]` shape as the rest of the trait.
 
 ### 9.2 Still open — the implementing agent should make an explicit call and record
 it back into this file rather than defaulting silently
