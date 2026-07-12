@@ -191,6 +191,17 @@ independently shippable; items marked ★ are the enablers other items depend on
 > registry, per-element effects, Kitty image protocol behind a capability probe,
 > Scala Native cross-build of core/terminal, MiMa gates.
 
+> **0.9.0 shipped (hardening)** — verified end to end: `publishLocal` of all six
+> modules + a scratch Mill project consuming `tui-dsl:0.9.0` from ivy2-local
+> (compiles and runs a TuiApp headlessly); render benchmark steady at ~3200 fps on
+> a 200×50 buffer; all six example native images rebuilt (`--no-fallback`, zero
+> reflect-config) and passing the real-PTY smoke matrix; scalafmt/reflection/
+> CharWidth discipline checks clean; 1566 test targets green.
+>
+> The 0.3→0.9 arc from this roadmap is complete. Remaining before a 1.0: MiMa
+> binary-compat gates, hover/area registry, per-element effects, Kitty images
+> behind a capability probe, Scala Native cross-build — all explicitly deferred.
+
 ## Later / explicitly hard
 
 - **Image widget** (Kitty/iTerm2/Sixel/half-block) — highest platform risk; the
