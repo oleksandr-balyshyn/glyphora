@@ -27,3 +27,12 @@ object Screen:
 /** Severity of a [[TuiApp.notify]] toast; picks the theme style it renders with. */
 enum ToastLevel:
   case Info, Success, Warning, Error
+
+/** An intro shown before the first view render: `content` (typically a `bigText` logo composition) plays
+  * `effect` and holds for at least `minimumDuration`; any key skips it. Wire via `TuiApp.splash`.
+  */
+final case class SplashScreen(
+    content: Element,
+    effect: io.worxbend.tui.runtime.Effect,
+    minimumDuration: scala.concurrent.duration.FiniteDuration = scala.concurrent.duration.DurationInt(1500).millis,
+)

@@ -6,6 +6,7 @@ import io.worxbend.tui.terminal.{Backend, JLine3Backend}
 import io.worxbend.tui.widgets.TextInputState
 
 import java.util.concurrent.atomic.AtomicReference
+import scala.concurrent.duration.{DurationLong, FiniteDuration}
 
 /** The application entry point for the declarative DSL (SPEC.md §5.3).
   *
@@ -39,6 +40,15 @@ trait TuiApp:
     * `statusBar(bindings)` hints, [[helpOverlay]], and the command palette.
     */
   def bindings: KeyBindings = KeyBindings.empty
+
+  /** An intro screen shown before the first `view` render — see [[SplashScreen]]. Any key skips it. */
+  def splash: Option[SplashScreen] = None
+
+  /** Starts a post-render [[Effect]] over the whole frame. Needs a `config.tickRate` to animate; the effect
+    * is dropped once done.
+    */
+  protected final def runEffect(effect: io.worxbend.tui.runtime.Effect): Unit =
+    activeEffects = (effect, System.nanoTime()) :: activeEffects
 
   // ---- navigation ----
 
@@ -86,6 +96,12 @@ trait TuiApp:
     val scope = ReactiveScope.onInvalidation(() => invalidated = true)
 
     def handleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
+      if splashActive then
+        splashSkipped = true
+        true
+      else splashHandleKey(key, handle)
+
+    def splashHandleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
       val consumed = lastTree.exists(EventRouter.dispatchKey(_, key))
       val bound = !consumed && !paletteOpen.peek && bindings.handle(key)
       var focusMoved = false
@@ -124,21 +140,30 @@ trait TuiApp:
         case Event.Tick =>
           ageToasts()
           onTick()
-          invalidated
+          val splashJustFinished = updateSplashProgress()
+          val effectsJustFinished = pruneEffects()
+          invalidated || activeEffects.nonEmpty || splashActive || splashJustFinished || effectsJustFinished
 
-    val result = TerminalRunner(backend, config).run(
+    val effectiveConfig =
+      if splash.nonEmpty && config.tickRate.isEmpty then
+        config.copy(tickRate = Some(scala.concurrent.duration.DurationInt(50).millis))
+      else config
+    val result = TerminalRunner(backend, effectiveConfig).run(
       handleEvent,
       frame =>
         invalidated = false
-        val rawTree = effectiveView(using scope)
-        tracker.focusableCount = FocusPass.countFocusables(rawTree)
-        if tracker.focusableCount > 0 then
-          tracker.focusedIndex = math.max(0, math.min(tracker.focusedIndex, tracker.focusableCount - 1))
-        else tracker.focusedIndex = 0
-        tracker.clearAreas()
-        val tree = FocusPass.decorate(rawTree, tracker)
-        lastTree = Some(tree)
-        frame.renderWidget(tree.widget, frame.area),
+        if splashActive then renderSplash(frame)
+        else
+          val rawTree = effectiveView(using scope)
+          tracker.focusableCount = FocusPass.countFocusables(rawTree)
+          if tracker.focusableCount > 0 then
+            tracker.focusedIndex = math.max(0, math.min(tracker.focusedIndex, tracker.focusableCount - 1))
+          else tracker.focusedIndex = 0
+          tracker.clearAreas()
+          val tree = FocusPass.decorate(rawTree, tracker)
+          lastTree = Some(tree)
+          frame.renderWidget(tree.widget, frame.area)
+          processEffects(frame),
     )
     activeHandle.set(None)
     result
@@ -233,4 +258,47 @@ trait TuiApp:
   private val paletteOpen: Signal[Boolean] = Signal(false)
   private val paletteQuery: TextInputState = TextInputState()
   private var paletteSelected: Int = 0
+  private def splashActive: Boolean =
+    splash.nonEmpty && !splashFinished && !splashSkipped
+
+  private def renderSplash(frame: io.worxbend.tui.runtime.Frame): Unit =
+    splash.foreach { intro =>
+      if splashStartNanos == 0L then splashStartNanos = System.nanoTime()
+      val elapsed = (System.nanoTime() - splashStartNanos).nanos
+      frame.renderWidget(intro.content.widget, frame.area)
+      frame.applyEffect(intro.effect, elapsed)
+    }
+
+  private def processEffects(frame: io.worxbend.tui.runtime.Frame): Unit =
+    if activeEffects.nonEmpty then
+      val now = System.nanoTime()
+      activeEffects.foreach((effect, started) => frame.applyEffect(effect, (now - started).nanos))
+
+  /** Drops finished effects; `true` when any were dropped (one more redraw shows the un-effected frame). */
+  private def pruneEffects(): Boolean =
+    if activeEffects.isEmpty then false
+    else
+      val now = System.nanoTime()
+      val (done, running) = activeEffects.partition((effect, started) => effect.isDone((now - started).nanos))
+      activeEffects = running
+      done.nonEmpty
+
+  /** Flips the splash to finished once its effect and minimum duration have both elapsed. */
+  private def updateSplashProgress(): Boolean =
+    splash match
+      case Some(intro) if splashActive && splashStartNanos != 0L =>
+        val elapsed = (System.nanoTime() - splashStartNanos).nanos
+        val total = intro.effect.duration match
+          case finite: FiniteDuration => if finite > intro.minimumDuration then finite else intro.minimumDuration
+          case _                      => intro.minimumDuration
+        if elapsed >= total then
+          splashFinished = true
+          true
+        else false
+      case _ => false
+
+  private var activeEffects: List[(io.worxbend.tui.runtime.Effect, Long)] = Nil
+  private var splashStartNanos: Long = 0L
+  private var splashFinished: Boolean = false
+  private var splashSkipped: Boolean = false
   private val activeHandle = AtomicReference[Option[RunnerHandle]](None)

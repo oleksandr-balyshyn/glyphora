@@ -14,3 +14,7 @@ final class Frame(val area: Rect, private[runtime] val buffer: Buffer):
 
   def renderStatefulWidget[S](widget: StatefulWidget[S], area: Rect, state: S): Unit =
     widget.render(area, buffer, state)
+
+  /** Applies a post-render [[Effect]] to what has been drawn so far — call after the widgets rendered. */
+  def applyEffect(effect: Effect, elapsed: scala.concurrent.duration.FiniteDuration): Unit =
+    effect.process(elapsed, buffer, area)

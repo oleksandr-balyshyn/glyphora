@@ -45,7 +45,7 @@ export Element.{
   widget,
 }
 export io.worxbend.tui.core.{Color, Constraint, KeyCode, KeyEvent, KeyModifiers, MouseEvent, Style}
-export io.worxbend.tui.runtime.{Computed, ReactiveScope, Signal}
+export io.worxbend.tui.runtime.{Computed, Easing, Effect, ReactiveScope, Signal, Tween}
 
 /** Fluent styling — each call returns a new element (SPEC.md §5.2). */
 extension (element: Element)
