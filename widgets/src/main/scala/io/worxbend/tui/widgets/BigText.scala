@@ -2,9 +2,9 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
 
-/** Large banner text drawn with block glyphs from a built-in 3x5 pixel font (A–Z, 0–9, and common
-  * punctuation) — the splash-screen and header building block. Unknown characters render as blanks; lowercase
-  * maps to uppercase. Each glyph pixel is one terminal cell, glyphs are separated by one blank column.
+/** Large banner text drawn with block glyphs from a built-in 3x5 pixel font (A–Z, 0–9, and common punctuation) — the
+  * splash-screen and header building block. Unknown characters render as blanks; lowercase maps to uppercase. Each
+  * glyph pixel is one terminal cell, glyphs are separated by one blank column.
   */
 final case class BigText(
     content: String,

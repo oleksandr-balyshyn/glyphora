@@ -3,14 +3,13 @@ package io.worxbend.tui.dsl
 import io.worxbend.tui.core.{Constraint, Text}
 import io.worxbend.tui.widgets as w
 
-/** The app-chrome presets (ROADMAP 0.3.0): top bar, status bar, sidebar, scaffold, help overlay, and layout
-  * helpers. All of them are plain element builders over the ambient [[Theme]] — nothing here bypasses the
-  * widget layer.
+/** The app-chrome presets (ROADMAP 0.3.0): top bar, status bar, sidebar, scaffold, help overlay, and layout helpers.
+  * All of them are plain element builders over the ambient [[Theme]] — nothing here bypasses the widget layer.
   */
 
 /** A one-row title bar over the theme surface: title left, optional tabs center, optional right-side text. */
 def topBar(title: String, tabs: Seq[String] = Seq.empty, selectedTab: Int = 0, right: String = "")(using
-    theme: Theme,
+    theme: Theme
 ): Element =
   val parts = Seq.newBuilder[Element]
   parts += Element.text(s" $title ").styled(_ => theme.surface.bold).length(title.length + 2)
@@ -37,8 +36,8 @@ final case class Sidebar(content: Element, width: Int = 24, onRight: Boolean = f
 def sidebar(content: Element, width: Int = 24, onRight: Boolean = false): Sidebar =
   Sidebar(content, width, onRight)
 
-/** The application shell: optional top bar, optional sidebar (left or right of the content), the content
-  * filling the middle, and an optional status bar.
+/** The application shell: optional top bar, optional sidebar (left or right of the content), the content filling the
+  * middle, and an optional status bar.
   */
 def scaffold(
     topBar: Option[Element] = None,
@@ -60,7 +59,7 @@ def helpOverlay(bindings: KeyBindings, title: String = "Help")(using theme: Them
   val width = bindings.hints.map((key, description) => key.length + description.length + 3).maxOption.getOrElse(4)
   val lines = bindings.hints.map((key, description) => s"%-${math.min(width, 24)}s".format(key) + description)
   Element.widget(
-    w.Dialog(title, Text.raw(lines.mkString("\n")), buttons = Seq.empty, style = theme.primary),
+    w.Dialog(title, Text.raw(lines.mkString("\n")), buttons = Seq.empty, style = theme.primary)
   )
 
 // ---- layout presets ----
@@ -78,7 +77,11 @@ def centered(width: Int, height: Int)(content: Element): Element =
   Element.column(
     Element.spacer,
     Element
-      .row(Element.spacer, content.withProps(content.props.copy(constraint = Some(Constraint.Length(width)))), Element.spacer)
+      .row(
+        Element.spacer,
+        content.withProps(content.props.copy(constraint = Some(Constraint.Length(width)))),
+        Element.spacer,
+      )
       .length(height),
     Element.spacer,
   )

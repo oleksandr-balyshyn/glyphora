@@ -4,8 +4,8 @@ import io.worxbend.tui.core.{Color, Style}
 
 /** Semantic styles the chrome presets (and applications) draw from, provided ambiently via `given Theme`.
   *
-  * The default is [[Theme.Dark]]; an application overrides it by defining its own given (or by rendering from
-  * a `Signal[Theme]` for runtime switching — the view re-evaluates, presets pick up the new value).
+  * The default is [[Theme.Dark]]; an application overrides it by defining its own given (or by rendering from a
+  * `Signal[Theme]` for runtime switching — the view re-evaluates, presets pick up the new value).
   */
 final case class Theme(
     name: String,

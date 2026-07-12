@@ -254,8 +254,8 @@ final case class TreeElement(
           true
         case _ => false
 
-/** Fills its whole area with `fill` (a solid background) before rendering `inner` — what the chrome bars use
-  * to read as continuous surfaces. Transparent to focus and event routing.
+/** Fills its whole area with `fill` (a solid background) before rendering `inner` — what the chrome bars use to read as
+  * continuous surfaces. Transparent to focus and event routing.
   */
 final case class FilledElement(
     inner: Element,
@@ -291,8 +291,8 @@ final case class ButtonElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
     Some(toggleOnActivate(props, action))
 
-/** A scrollable log panel: Up/Down (and PageUp/PageDown) scroll while focused; the tail re-follows when
-  * scrolled back to the bottom.
+/** A scrollable log panel: Up/Down (and PageUp/PageDown) scroll while focused; the tail re-follows when scrolled back
+  * to the bottom.
   */
 final case class LogElement(
     state: w.LogState,

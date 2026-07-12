@@ -27,8 +27,8 @@ trait TuiApp:
     */
   def onTick(): Unit = ()
 
-  /** The app's declared keys (see [[binding]]): consulted for any key event no element consumed, and the
-    * source for `statusBar(bindings)` hints and [[helpOverlay]].
+  /** The app's declared keys (see [[binding]]): consulted for any key event no element consumed, and the source for
+    * `statusBar(bindings)` hints and [[helpOverlay]].
     */
   def bindings: KeyBindings = KeyBindings.empty
 

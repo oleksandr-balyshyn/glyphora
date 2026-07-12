@@ -18,7 +18,9 @@ final class ChromeWidgetsSpec extends AnyFunSuite:
     assert(trimmedLines(rendered(Rule(label = Some("cfg")), 10, 1)) == Seq("── cfg ───"))
 
   test("a vertical rule spans the height"):
-    assert(trimmedLines(rendered(Rule(orientation = io.worxbend.tui.core.Direction.Vertical), 1, 3)) == Seq("│", "│", "│"))
+    assert(
+      trimmedLines(rendered(Rule(orientation = io.worxbend.tui.core.Direction.Vertical), 1, 3)) == Seq("│", "│", "│")
+    )
 
   test("big text renders the 3x5 glyphs"):
     val buffer = rendered(BigText("HI"), 8, 5)
@@ -29,7 +31,7 @@ final class ChromeWidgetsSpec extends AnyFunSuite:
         "███  █",
         "█ █  █",
         "█ █ ███",
-      ),
+      )
     )
 
   test("big text maps lowercase to uppercase and skips unknown glyphs"):

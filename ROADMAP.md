@@ -51,6 +51,21 @@ independently shippable; items marked ★ are the enablers other items depend on
   `binding("q", "quit")(quit())` once → routed dispatch, auto-generated status-bar
   hints, and a `?` help overlay. Replaces ad-hoc `onKeyEvent` matches in apps.
 
+> **0.3.0 shipped** — Borders/title-alignment/padding on `Block`; `Button`, `Rule`,
+> `BigText` (3×5 font), `Log` (+follow-tail state); ambient `Theme` (dark/light/
+> high-contrast); `KeyBindings` registry with key-spec parser and app-level dispatch;
+> `scaffold`/`topBar`/`statusBar`/`sidebar`/`helpOverlay` + layout presets.
+>
+> **Post-0.3.0 brainstorm (carried into 0.4.0):**
+> - *Intrinsic-size protocol*: `defaultConstraint` is orientation-blind — a text
+>   element defaulting to `Length(1)` means one **column** inside a `row`. Replace
+>   with `preferredSize(direction)` while building the offscreen-render machinery
+>   (ScrollView needs natural sizes anyway).
+> - *Showcase example*: one `examples/showcase` app exercising scaffold + theme
+>   switching + bindings + (later) toasts/palette/effects — doubles as living docs
+>   and the manual PTY test bed.
+> - *Tab-switching helpers* for `topBar` once screens land (tab index ↔ screen).
+
 ## 0.4.0 — Overlays & navigation ("multiple screens, things on top")
 
 - ★ `Buffer.blit` + **layer compositing**: `layers(base, overlays*)` with z-order —

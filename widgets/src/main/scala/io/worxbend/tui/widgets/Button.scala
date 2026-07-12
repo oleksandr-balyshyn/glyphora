@@ -2,8 +2,8 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
 
-/** A pressable control rendered as `[ label ]`, centered in its area. Stateless — press handling lives with
-  * the caller (the DSL element activates on Enter/Space while focused).
+/** A pressable control rendered as `[ label ]`, centered in its area. Stateless — press handling lives with the caller
+  * (the DSL element activates on Enter/Space while focused).
   */
 final case class Button(
     label: String,

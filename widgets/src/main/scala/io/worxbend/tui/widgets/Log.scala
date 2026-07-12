@@ -6,8 +6,8 @@ import scala.collection.mutable
 
 /** Caller-owned [[Log]] state: a bounded ring of lines plus follow-tail scrolling.
   *
-  * While `follow` is on (the default), the view pins to the newest lines; scrolling up detaches it and
-  * scrolling back to the bottom re-attaches.
+  * While `follow` is on (the default), the view pins to the newest lines; scrolling up detaches it and scrolling back
+  * to the bottom re-attaches.
   */
 final class LogState(maxLines: Int = 1000):
 
@@ -35,8 +35,8 @@ final class LogState(maxLines: Int = 1000):
     follow = false
     offset = math.max(0, offset - count)
 
-  /** Scrolling down past the end re-enables follow. `viewportHeight` defaults to the height of the last
-    * render, so interactive scrolling needs no extra bookkeeping.
+  /** Scrolling down past the end re-enables follow. `viewportHeight` defaults to the height of the last render, so
+    * interactive scrolling needs no extra bookkeeping.
     */
   def scrollDown(count: Int = 1, viewportHeight: Int = -1): Unit =
     val height = if viewportHeight > 0 then viewportHeight else lastViewportHeight

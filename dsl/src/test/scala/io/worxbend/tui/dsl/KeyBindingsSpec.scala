@@ -19,7 +19,7 @@ final class KeyBindingsSpec extends AnyFunSuite:
     assert(KeyBindings.parseKey("shift+tab") == Right(KeyEvent(KeyCode.Tab, KeyModifiers.Shift)))
     assert(
       KeyBindings.parseKey("ctrl+alt+x") ==
-        Right(KeyEvent(KeyCode.Char('x'), KeyModifiers.Ctrl | KeyModifiers.Alt)),
+        Right(KeyEvent(KeyCode.Char('x'), KeyModifiers.Ctrl | KeyModifiers.Alt))
     )
 
   test("parseKey rejects nonsense"):

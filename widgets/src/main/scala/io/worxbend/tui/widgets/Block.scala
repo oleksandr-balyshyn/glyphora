@@ -7,10 +7,10 @@ enum BorderType:
 
 /** A bordered box with an optional title — the basic chrome widget almost everything else nests inside.
   *
-  * Borders are per-side (`Borders.Top | Borders.Bottom` for a horizontal band, `Borders.All` for the classic
-  * box); corner glyphs appear only where two adjacent sides meet. `padding` adds blank cells inside the
-  * borders on every side. Content belongs in `inner(area)`; rendering the block never touches the interior,
-  * so it composes with any content widget drawn after it.
+  * Borders are per-side (`Borders.Top | Borders.Bottom` for a horizontal band, `Borders.All` for the classic box);
+  * corner glyphs appear only where two adjacent sides meet. `padding` adds blank cells inside the borders on every
+  * side. Content belongs in `inner(area)`; rendering the block never touches the interior, so it composes with any
+  * content widget drawn after it.
   */
 final case class Block(
     title: Option[Line] = None,
