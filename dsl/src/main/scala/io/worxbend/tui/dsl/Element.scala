@@ -319,6 +319,144 @@ final case class LayersElement(
   private[dsl] def withProps(props: ElementProps): LayersElement = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): LayersElement = copy(children = children)
 
+/** A scrollable viewport over taller-than-the-screen content. Up/Down/PageUp/PageDown scroll while focused. */
+final case class ScrollViewElement(
+    content: Element,
+    contentHeight: Int,
+    state: w.ScrollViewState,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  override def children: Seq[Element] = Seq(content)
+  def widget: Widget =
+    val view = w.ScrollView(content.widget, contentHeight)
+    (area, buffer) => view.render(area, buffer, state)
+  private[dsl] def withProps(props: ElementProps): ScrollViewElement = copy(props = props)
+  private[dsl] override def withChildren(children: Seq[Element]): ScrollViewElement =
+    copy(content = children.headOption.getOrElse(content))
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Up =>
+          state.scrollUp()
+          true
+        case KeyCode.Down =>
+          state.scrollDown()
+          true
+        case KeyCode.PageUp =>
+          state.scrollUp(10)
+          true
+        case KeyCode.PageDown =>
+          state.scrollDown(10)
+          true
+        case _ => false
+
+/** A tab row plus the selected page (Textual's `TabbedContent`): Left/Right switch pages while focused. Only
+  * the active page's focusables participate in the tab order.
+  */
+final case class TabbedContentElement(
+    titles: Seq[String],
+    activePage: Element,
+    selected: Signal[Int],
+    pageCount: Int,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  override def children: Seq[Element] = Seq(activePage)
+  def widget: Widget =
+    val tabs = w.Tabs(titles.map(Line.raw), selected.peek, focusStyled(props))
+    (area, buffer) =>
+      w.Column(
+        Seq(
+          w.LayoutItem(Constraint.Length(1), tabs),
+          w.LayoutItem(Constraint.Fill(1), activePage.widget),
+        ),
+      ).render(area, buffer)
+  private[dsl] def withProps(props: ElementProps): TabbedContentElement = copy(props = props)
+  private[dsl] override def withChildren(children: Seq[Element]): TabbedContentElement =
+    copy(activePage = children.headOption.getOrElse(activePage))
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused || pageCount == 0 then false
+    else
+      event.code match
+        case KeyCode.Left =>
+          selected.update(index => (index - 1 + pageCount) % pageCount)
+          true
+        case KeyCode.Right =>
+          selected.update(index => (index + 1) % pageCount)
+          true
+        case _ => false
+
+/** A toggleable section: `▸ title` collapsed, `▾ title` plus the body expanded; Enter/Space toggle while
+  * focused. Collapsed bodies leave the tab order entirely.
+  */
+final case class CollapsibleElement(
+    title: String,
+    body: Element,
+    expanded: Signal[Boolean],
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  override def children: Seq[Element] = if expanded.peek then Seq(body) else Seq.empty
+  def widget: Widget =
+    val isOpen = expanded.peek
+    val marker = if isOpen then "▾ " else "▸ "
+    val header: Widget = (area, buffer) => buffer.setString(area.x, area.y, marker + title, focusStyled(props))
+    (area, buffer) =>
+      if isOpen then
+        w.Column(
+          Seq(w.LayoutItem(Constraint.Length(1), header), w.LayoutItem(Constraint.Fill(1), body.widget)),
+        ).render(area, buffer)
+      else header.render(area, buffer)
+  private[dsl] def withProps(props: ElementProps): CollapsibleElement = copy(props = props)
+  private[dsl] override def withChildren(children: Seq[Element]): CollapsibleElement =
+    copy(body = children.headOption.getOrElse(body))
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical if !expanded.peek => Constraint.Length(1)
+      case _                                    => Constraint.Fill(1)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
+    Some(toggleOnActivate(props, () => expanded.update(open => !open)))
+
+/** Two panes split by an adjustable divider: `[`/`]` shift the split while the pane itself is focused. */
+final case class SplitPaneElement(
+    first: Element,
+    second: Element,
+    splitPercent: Signal[Int],
+    horizontal: Boolean = true,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  override def children: Seq[Element] = Seq(first, second)
+  def widget: Widget =
+    val percent = math.max(10, math.min(90, splitPercent.peek))
+    val items = Seq(
+      first.layoutItem(direction).copy(constraint = Constraint.Percentage(percent)),
+      second.layoutItem(direction).copy(constraint = Constraint.Fill(1)),
+    )
+    if horizontal then w.Row(items, spacing = 1) else w.Column(items, spacing = 0)
+  private[dsl] def withProps(props: ElementProps): SplitPaneElement = copy(props = props)
+  private[dsl] override def withChildren(children: Seq[Element]): SplitPaneElement =
+    children match
+      case Seq(a, b) => copy(first = a, second = b)
+      case _         => this
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def direction: Direction = if horizontal then Direction.Horizontal else Direction.Vertical
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Char('[') =>
+          splitPercent.update(value => math.max(10, value - 5))
+          true
+        case KeyCode.Char(']') =>
+          splitPercent.update(value => math.min(90, value + 5))
+          true
+        case _ => false
+
 /** A pressable button: Enter or Space triggers `action` while focused. */
 final case class ButtonElement(
     label: String,
@@ -593,6 +731,31 @@ object Element:
   /** Later layers paint over earlier ones across the full area. */
   def layers(base: Element, overlays: Element*): LayersElement =
     LayersElement(base +: overlays)
+
+  def scrollView(content: Element, contentHeight: Int, state: io.worxbend.tui.widgets.ScrollViewState)
+      : ScrollViewElement =
+    ScrollViewElement(content, contentHeight, state)
+
+  /** `tabbedContent("One" -> pageOne, "Two" -> pageTwo)(selected)` — the selected page is picked at view
+    * construction, so the tree always holds exactly the visible page.
+    */
+  def tabbedContent(pages: (String, Element)*)(selected: io.worxbend.tui.runtime.Signal[Int])
+      : TabbedContentElement =
+    val index = math.max(0, math.min(selected.peek, pages.size - 1))
+    val active = if pages.isEmpty then Element.text("") else pages(index)._2
+    TabbedContentElement(pages.map(_._1), active, selected, pages.size)
+
+  def collapsible(title: String, expanded: io.worxbend.tui.runtime.Signal[Boolean])(body: Element)
+      : CollapsibleElement =
+    CollapsibleElement(title, body, expanded)
+
+  def splitPane(
+      first: Element,
+      second: Element,
+      splitPercent: io.worxbend.tui.runtime.Signal[Int],
+      horizontal: Boolean = true,
+  ): SplitPaneElement =
+    SplitPaneElement(first, second, splitPercent, horizontal)
 
   def log(state: io.worxbend.tui.widgets.LogState): LogElement =
     LogElement(state)
