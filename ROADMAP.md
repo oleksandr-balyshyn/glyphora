@@ -172,6 +172,16 @@ independently shippable; items marked ★ are the enablers other items depend on
 >   MiMa baseline; render-loop benchmark rerun + budget assertions; PTY matrix
 >   re-run; API deprecation pass (rename inconsistencies before a 1.0 freeze).
 
+> **0.7.0 shipped** — hit-aware mouse dispatch (click activates buttons/checkboxes/
+> toggles/select, wheel scrolls scrollables/lists/logs, click-drag positions sliders
+> and the SplitPane divider); OSC 8 hyperlinks (`Style.link`, backend emission,
+> `Link` widget — the first additive `tui-core` change since 0.2, recorded in SPEC
+> §9); `Chart` braille resolution + axis labels.
+>
+> **Post-0.7.0 brainstorm:** mouse `Moved` events are still unused (hover styles
+> would need an area registry for non-focusables); double-click and drag-start
+> semantics left to apps; consider a `hoverStyle` prop once the registry exists.
+
 ## Later / explicitly hard
 
 - **Image widget** (Kitty/iTerm2/Sixel/half-block) — highest platform risk; the

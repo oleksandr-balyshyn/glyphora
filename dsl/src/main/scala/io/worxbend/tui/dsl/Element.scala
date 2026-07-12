@@ -36,10 +36,11 @@ sealed trait Element:
     */
   private[dsl] def builtinKeyHandler: Option[KeyEvent => Boolean] = None
 
-  /** Framework mouse behavior (click-to-activate, wheel scrolling, drags), given the event and the element's
-    * rendered area. Runs after the user's `onMouseEvent` declined; only ever called on the hit element.
+  /** Framework mouse behavior (click-to-activate, wheel scrolling, drags), given the event and the element's rendered
+    * area. Runs after the user's `onMouseEvent` declined; only ever called on the hit element.
     */
-  private[dsl] def builtinMouseHandler: Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     None
 
   /** The space this element claims along `direction` inside a container when the user set nothing explicit — one-row
@@ -1015,7 +1016,9 @@ private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker
   private[dsl] override def preferredSize(direction: Direction): Constraint = inner.preferredSize(direction)
 
 /** A mouse press activates the control (focus already moved on the press). */
-private def clickActivates(activate: () => Unit): (io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean =
+private def clickActivates(
+    activate: () => Unit
+): (io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean =
   (event, _) =>
     if event.kind == io.worxbend.tui.core.MouseEventKind.Down then
       activate()
@@ -1023,8 +1026,10 @@ private def clickActivates(activate: () => Unit): (io.worxbend.tui.core.MouseEve
     else false
 
 /** Wheel events scroll by one step. */
-private def wheelScrolls(up: () => Unit, down: () => Unit)
-    : (io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean =
+private def wheelScrolls(
+    up: () => Unit,
+    down: () => Unit,
+): (io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean =
   (event, _) =>
     event.kind match
       case io.worxbend.tui.core.MouseEventKind.ScrollUp =>

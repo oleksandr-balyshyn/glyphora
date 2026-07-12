@@ -19,8 +19,8 @@ private[dsl] object EventRouter:
   def dispatchMouse(element: Element, event: MouseEvent): Boolean =
     element.children.exists(dispatchMouse(_, event)) || element.props.onMouse.exists(_(event))
 
-  /** Routes a mouse event to the hit tracked element (user handler, then built-in behavior with the element's
-    * rendered area), bubbling unconsumed events up its ancestors' `onMouseEvent` handlers.
+  /** Routes a mouse event to the hit tracked element (user handler, then built-in behavior with the element's rendered
+    * area), bubbling unconsumed events up its ancestors' `onMouseEvent` handlers.
     */
   def dispatchMouseAt(root: Element, index: Int, area: io.worxbend.tui.core.Rect, event: MouseEvent): Boolean =
     pathToTracked(root, index) match

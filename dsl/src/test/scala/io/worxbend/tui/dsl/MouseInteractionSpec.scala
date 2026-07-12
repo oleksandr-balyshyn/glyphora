@@ -43,8 +43,8 @@ final class MouseInteractionSpec extends AnyFunSuite:
     assert(pilot.screenLines.head.startsWith("row 0"))
     pilot.backend.postEvent(
       io.worxbend.tui.core.Event.Mouse(
-        io.worxbend.tui.core.MouseEvent(3, 3, io.worxbend.tui.core.MouseEventKind.ScrollDown, KeyModifiers.None),
-      ),
+        io.worxbend.tui.core.MouseEvent(3, 3, io.worxbend.tui.core.MouseEventKind.ScrollDown, KeyModifiers.None)
+      )
     )
     pilot.waitForIdle()
     assert(pilot.screenLines.head.startsWith("row 1"))
@@ -64,8 +64,8 @@ final class MouseInteractionSpec extends AnyFunSuite:
     val pilot = startApp(splitPane(text("L").fill, text("R").fill, split))
     pilot.backend.postEvent(
       io.worxbend.tui.core.Event.Mouse(
-        io.worxbend.tui.core.MouseEvent(10, 2, io.worxbend.tui.core.MouseEventKind.Drag, KeyModifiers.None),
-      ),
+        io.worxbend.tui.core.MouseEvent(10, 2, io.worxbend.tui.core.MouseEventKind.Drag, KeyModifiers.None)
+      )
     )
     pilot.waitForIdle()
     assert(split.peek == 25) // 10 of 40 columns

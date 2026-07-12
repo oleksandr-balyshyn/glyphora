@@ -665,7 +665,11 @@ before):
    links/images/tables/nested lists; `TextArea` has undo but no redo and **no syntax
    highlighting** (a tree-sitter-class subsystem — still out of scope); the
    multi-protocol image widget and braille drawing remain unimplemented.
-6. **`Backend` trait surface (recorded during step 3)** — four methods added beyond
+6. **`Style.link` (recorded at 0.7.0)** — one additive field on the frozen
+   `tui-core` `Style` (`link: Option[String]`, default `None`) for OSC 8 hyperlinks,
+   emitted by `JLine3Backend` as link open/close transitions around cell runs.
+   Additive-with-default, so every pre-0.7 construction and pattern remains valid.
+7. **`Backend` trait surface (recorded during step 3)** — four methods added beyond
    the §3.2 sketch: `enableMouseCapture()`/`disableMouseCapture()` (the runner must
    honor `RunnerConfig.mouseCapture` and cannot do so through raw-mode/alt-screen
    calls alone) and `hideCursor()`/`showCursor()` (a TUI hides the hardware cursor

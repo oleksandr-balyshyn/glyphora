@@ -2,8 +2,8 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Color, Rect, Style, Widget}
 
-/** A clickable hyperlink (OSC 8): renders `label` underlined with the link attached — terminals without OSC 8
-  * support just show the styled text.
+/** A clickable hyperlink (OSC 8): renders `label` underlined with the link attached — terminals without OSC 8 support
+  * just show the styled text.
   */
 final case class Link(
     label: String,
