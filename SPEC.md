@@ -631,7 +631,14 @@ before):
 3. **JLine version** — pinned to `mvn"org.jline:jline:3.30.13"` (§3 above); do not
    move to the JLine 4.x major line for v1, it's too new (released 2026-05) to be a
    safe default dependency yet.
-4. **`Backend` trait surface (recorded during step 3)** — four methods added beyond
+4. **`TuiApp` surface (recorded during step 6)** — two additions beyond §5.3's sketch:
+   `runWith(backend: Backend)` (the headless-test entry point — `run()` delegates to it
+   after opening the JLine backend) and `protected quit()` (handlers receive only the
+   event payload per §3.1's design, so apps need an app-level way to request exit;
+   an unconsumed `Ctrl+C` also quits by default). `ReactiveScope`'s internal member is
+   `private[runtime] def track(dependency)` rather than the sketched `stack` val — same
+   capability contract, no observable difference outside `tui-runtime`.
+5. **`Backend` trait surface (recorded during step 3)** — four methods added beyond
    the §3.2 sketch: `enableMouseCapture()`/`disableMouseCapture()` (the runner must
    honor `RunnerConfig.mouseCapture` and cannot do so through raw-mode/alt-screen
    calls alone) and `hideCursor()`/`showCursor()` (a TUI hides the hardware cursor
