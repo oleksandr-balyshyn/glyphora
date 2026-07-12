@@ -34,3 +34,7 @@ Attempted in the implementation environment (no interactive TTY attached):
   from an interactive shell once the step-4 render loop lands; it should enter the
   alternate screen, redraw on resize, and quit cleanly on `q`. ⚠️ pending human
   confirmation on real hardware.
+- Native-image spike (PLAN.md §12, scheduled "as early as step 3"):
+  `./mill show examples.hello-world.nativeImage` builds with `--no-fallback` under
+  GraalVM community 23.0.1 in ~26 s and the binary runs with the same output as the
+  JVM run — **no reflect-config JSON required**. ✅ (observed)
