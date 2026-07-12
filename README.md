@@ -21,7 +21,8 @@ GraalVM native-image target, built with Mill.
 ```bash
 ./mill __.compile   # compile everything
 ./mill __.test      # run all tests
-./mill examples.hello-world.run
+./mill examples.hello-world.run          # any example: hello-world, counter, todo-list, dashboard
+./mill show examples.counter.nativeImage # GraalVM native binary (no reflect-config needed anywhere)
 ```
 
 ## Planning documents

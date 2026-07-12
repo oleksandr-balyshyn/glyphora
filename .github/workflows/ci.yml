@@ -44,7 +44,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - name: Build hello-world native image
-        run: ./mill show examples.hello-world.nativeImage
-      - name: Run it
-        run: ./out/examples/hello-world/nativeImage.dest/native-executable | grep "no usable terminal"
+      - name: Build native images for every example
+        run: ./mill examples.hello-world.nativeImage examples.counter.nativeImage examples.todo-list.nativeImage examples.dashboard.nativeImage
+      - name: Run each binary (headless: must detect the missing TTY and exit cleanly)
+        run: |
+          for ex in hello-world counter todo-list dashboard; do
+            ./out/examples/$ex/nativeImage.dest/native-executable | grep -q "UnsupportedTerminal" || exit 1
+          done
