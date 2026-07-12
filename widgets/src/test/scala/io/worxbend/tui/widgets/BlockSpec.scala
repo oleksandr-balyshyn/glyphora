@@ -42,6 +42,32 @@ final class BlockSpec extends AnyFunSuite:
   test("inner shrinks the area by the border on every side"):
     assert(Block().inner(Rect(0, 0, 10, 6)) == Rect(1, 1, 8, 4))
 
-  test("a degenerate area renders nothing"):
+  test("a degenerate 1x1 area degrades to a single edge cell"):
     val buffer = rendered(Block(), 1, 1)
-    assert(trimmedLines(buffer) == Seq(""))
+    assert(trimmedLines(buffer) == Seq("─"))
+
+  test("per-side borders draw only the requested sides"):
+    val topOnly = rendered(Block(borders = Borders.Top), 4, 2)
+    assert(trimmedLines(topOnly) == Seq("────", ""))
+    val band = rendered(Block(borders = Borders.Top | Borders.Bottom), 4, 3)
+    assert(trimmedLines(band) == Seq("────", "", "────"))
+    val leftOnly = rendered(Block(borders = Borders.Left), 3, 2)
+    assert(trimmedLines(leftOnly) == Seq("│", "│"))
+
+  test("corners appear only where two adjacent sides meet"):
+    val noRight = rendered(Block(borders = Borders.Top | Borders.Bottom | Borders.Left), 4, 3)
+    assert(trimmedLines(noRight) == Seq("┌───", "│", "└───"))
+
+  test("title alignment positions the title on the top border"):
+    val centered = rendered(Block(title = Some(Line.raw("Hi")), titleAlignment = Alignment.Center), 8, 3)
+    assert(trimmedLines(centered).head == "┌──Hi──┐")
+    val right = rendered(Block(title = Some(Line.raw("Hi")), titleAlignment = Alignment.Right), 8, 3)
+    assert(trimmedLines(right).head == "┌────Hi┐")
+
+  test("padding shrinks the inner area inside the borders"):
+    val block = Block(padding = 1)
+    assert(block.inner(Rect(0, 0, 10, 6)) == Rect(2, 2, 6, 2))
+
+  test("inner accounts for missing sides"):
+    val block = Block(borders = Borders.Top)
+    assert(block.inner(Rect(0, 0, 10, 6)) == Rect(0, 1, 10, 5))
