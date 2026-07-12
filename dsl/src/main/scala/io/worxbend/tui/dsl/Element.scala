@@ -254,6 +254,31 @@ final case class TreeElement(
           true
         case _ => false
 
+/** Fills its whole area with `fill` (a solid background) before rendering `inner` — what the chrome bars use
+  * to read as continuous surfaces. Transparent to focus and event routing.
+  */
+final case class FilledElement(
+    inner: Element,
+    fill: Style,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  override def children: Seq[Element] = inner.children
+  def widget: Widget =
+    (area, buffer) =>
+      var y = area.y
+      while y < area.bottom do
+        var x = area.x
+        while x < area.right do
+          buffer.set(x, y, io.worxbend.tui.core.Cell(" ", fill))
+          x += 1
+        y += 1
+      inner.widget.render(area, buffer)
+  private[dsl] def withProps(props: ElementProps): FilledElement = copy(props = props)
+  private[dsl] override def withChildren(children: Seq[Element]): FilledElement =
+    copy(inner = inner.withChildren(children))
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = inner.builtinKeyHandler
+  private[dsl] override def defaultConstraint: Constraint = inner.defaultConstraint
+
 /** A pressable button: Enter or Space triggers `action` while focused. */
 final case class ButtonElement(
     label: String,

@@ -27,6 +27,11 @@ trait TuiApp:
     */
   def onTick(): Unit = ()
 
+  /** The app's declared keys (see [[binding]]): consulted for any key event no element consumed, and the
+    * source for `statusBar(bindings)` hints and [[helpOverlay]].
+    */
+  def bindings: KeyBindings = KeyBindings.empty
+
   /** Runs on the process's controlling terminal. Blocks until the app quits. */
   final def run(): Either[RunnerError, Unit] =
     JLine3Backend.create() match
@@ -42,8 +47,9 @@ trait TuiApp:
 
     def handleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
       val consumed = lastTree.exists(EventRouter.dispatchKey(_, key))
+      val bound = !consumed && bindings.handle(key)
       var focusMoved = false
-      if !consumed then
+      if !consumed && !bound then
         key match
           case KeyEvent(KeyCode.Tab, modifiers) if modifiers.has(KeyModifiers.Shift) =>
             focusMoved = tracker.focusPrevious()
@@ -52,7 +58,7 @@ trait TuiApp:
           case KeyEvent(KeyCode.Char('c'), modifiers) if modifiers.has(KeyModifiers.Ctrl) =>
             handle.quit()
           case _ => ()
-      consumed || focusMoved
+      consumed || bound || focusMoved
 
     def handleMouse(mouse: MouseEvent): Boolean =
       val focusMoved =
