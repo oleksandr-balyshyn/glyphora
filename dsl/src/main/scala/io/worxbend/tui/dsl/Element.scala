@@ -254,6 +254,58 @@ final case class TreeElement(
           true
         case _ => false
 
+/** Multi-line editor element. While focused it consumes printable characters, Enter (newline), Backspace,
+  * Delete, arrows, Home/End, and Ctrl+Z (undo) — Tab stays free for focus traversal.
+  */
+final case class TextAreaElement(
+    state: w.TextAreaState,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget =
+    val editor = w.TextArea(showCursor = props.focused, style = props.style)
+    (area, buffer) => editor.render(area, buffer, state)
+  private[dsl] def withProps(props: ElementProps): TextAreaElement = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event match
+        case KeyEvent(KeyCode.Char('z'), modifiers) if modifiers.has(KeyModifiers.Ctrl) =>
+          state.undo()
+          true
+        case KeyEvent(KeyCode.Char(c), modifiers) if modifiers.isEmpty || modifiers == KeyModifiers.Shift =>
+          state.insert(c.toString)
+          true
+        case KeyEvent(KeyCode.Enter, _) =>
+          state.newline()
+          true
+        case KeyEvent(KeyCode.Backspace, _) =>
+          state.backspace()
+          true
+        case KeyEvent(KeyCode.Delete, _) =>
+          state.delete()
+          true
+        case KeyEvent(KeyCode.Left, _) =>
+          state.moveLeft()
+          true
+        case KeyEvent(KeyCode.Right, _) =>
+          state.moveRight()
+          true
+        case KeyEvent(KeyCode.Up, _) =>
+          state.moveUp()
+          true
+        case KeyEvent(KeyCode.Down, _) =>
+          state.moveDown()
+          true
+        case KeyEvent(KeyCode.Home, _) =>
+          state.moveHome()
+          true
+        case KeyEvent(KeyCode.End, _) =>
+          state.moveEnd()
+          true
+        case _ => false
+
 final case class DirectoryTreeElement(
     state: w.DirectoryTreeState,
     props: ElementProps = ElementProps(focusable = true),
@@ -418,3 +470,6 @@ object Element:
 
   def directoryTree(state: io.worxbend.tui.widgets.DirectoryTreeState): DirectoryTreeElement =
     DirectoryTreeElement(state)
+
+  def textArea(state: io.worxbend.tui.widgets.TextAreaState): TextAreaElement =
+    TextAreaElement(state)

@@ -30,6 +30,7 @@ export Element.{
   table,
   tabs,
   text,
+  textArea,
   toggle,
   tree,
   widget,
