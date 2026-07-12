@@ -22,6 +22,11 @@ trait TuiApp:
 
   def config: RunnerConfig = RunnerConfig()
 
+  /** Called on every synthetic tick (requires a `config.tickRate`), on the render thread — the place to
+    * advance animation state via `Signal` updates.
+    */
+  def onTick(): Unit = ()
+
   /** Runs on the process's controlling terminal. Blocks until the app quits. */
   final def run(): Either[RunnerError, Unit] =
     JLine3Backend.create() match
@@ -66,8 +71,10 @@ trait TuiApp:
       event match
         case Event.Key(key)     => handleKey(key, handle) || invalidated
         case Event.Mouse(mouse) => handleMouse(mouse) || invalidated
-        case Event.Resize(_)    => true
-        case Event.Tick         => invalidated
+        case Event.Resize(_) => true
+        case Event.Tick =>
+          onTick()
+          invalidated
 
     val result = TerminalRunner(backend, config).run(
       handleEvent,

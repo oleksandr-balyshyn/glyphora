@@ -337,3 +337,15 @@ object Element:
 
   def tree(nodes: Seq[io.worxbend.tui.widgets.TreeNode], state: io.worxbend.tui.widgets.TreeState): TreeElement =
     TreeElement(nodes, state)
+
+  def barChart(data: Seq[(String, Long)], barWidth: Int = 3): WidgetElement =
+    WidgetElement(w.BarChart(data, barWidth))
+
+  def chart(datasets: Seq[w.Dataset], xBounds: (Double, Double), yBounds: (Double, Double)): WidgetElement =
+    WidgetElement(w.Chart(datasets, xBounds, yBounds))
+
+  def canvas(xBounds: (Double, Double), yBounds: (Double, Double))(shapes: w.Shape*): WidgetElement =
+    WidgetElement(w.Canvas(xBounds, yBounds, shapes))
+
+  def calendar(year: Int, month: Int, selected: Option[Int] = None): WidgetElement =
+    WidgetElement(w.Calendar(year, month, selected))
