@@ -209,7 +209,8 @@ final case class ListElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   def widget: Widget =
-    val view = w.ListView(items.map(Line.raw), style = focusStyled(props))
+    // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
+    val view = w.ListView(items.map(Line.raw), style = props.style)
     (area, buffer) => view.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): ListElement = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
@@ -232,7 +233,8 @@ final case class TreeElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   def widget: Widget =
-    val tree = w.Tree(nodes, style = focusStyled(props))
+    // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
+    val tree = w.Tree(nodes, style = props.style)
     (area, buffer) => tree.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): TreeElement = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)

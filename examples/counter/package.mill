@@ -1,0 +1,19 @@
+package build.examples.counter
+
+import mill.*
+import mill.javalib.NativeImageModule
+
+object `package` extends build.TuiModule with NativeImageModule {
+
+  def moduleDeps = Seq(build.core, build.terminal, build.runtime, build.dsl)
+
+  def mainClass = Some("io.worxbend.tui.examples.counter.Main")
+
+  def jvmVersion = "graalvm-community:23.0.1"
+
+  def nativeImageOptions = Seq("--no-fallback")
+
+  object test extends TuiTests {
+    def moduleDeps = super.moduleDeps ++ Seq(build.`test-support`)
+  }
+}
