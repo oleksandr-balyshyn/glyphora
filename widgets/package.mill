@@ -1,0 +1,14 @@
+package build.widgets
+
+import mill.*
+
+object `package` extends build.TuiPublishModule {
+
+  def artifactName = "tui-widgets"
+
+  def moduleDescription = "Built-in widget implementations for the tui library, terminal-backend-agnostic."
+
+  def moduleDeps = Seq(build.core)
+
+  object test extends TuiTests
+}

@@ -1,0 +1,15 @@
+package build.macros
+
+import mill.*
+
+object `package` extends build.TuiPublishModule {
+
+  def artifactName = "tui-macros"
+
+  def moduleDescription =
+    "Compile-time codegen for the tui library: form derivation and action binding without runtime reflection."
+
+  def moduleDeps = Seq(build.core)
+
+  object test extends TuiTests
+}

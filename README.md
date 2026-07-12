@@ -1,47 +1,38 @@
-# TUI Library — Planning
+# glyphora
 
-Planning space for building a Scala 3 library for terminal user interfaces (TUI),
-targeting the JVM (with a GraalVM native-image target) and Mill as the build tool.
+A Scala 3 library for building rich terminal user interfaces (TUI) on the JVM, with a
+GraalVM native-image target, built with Mill.
 
-**This directory holds planning docs only.** The library itself is implemented in a
-separate, standalone repository (not nested under `worxbend`'s `libs/`) — see
-`PLAN.md` §3 for the repo/module layout this plan targets.
+## Modules
 
-Documents:
-
-- [`RESEARCH.md`](RESEARCH.md) — findings from analyzing ratatui, TamboUI, Terminus,
-  cue4s, and Textual, including concrete type signatures and code excerpts pulled
-  directly from each reference implementation.
-- [`SPEC.md`](SPEC.md) — the technical specification: concrete Scala 3 type/trait
-  signatures for every module, package/versioning conventions, an explicit non-goals
-  table, and an open-decisions log. Authoritative over `PLAN.md` where the two
-  disagree.
-- [`PLAN.md`](PLAN.md) — the phased development plan, written to be handed to an AI
-  coding agent for autonomous implementation: module architecture, DSL design goals,
-  widget backlog, native-image strategy, examples, testing strategy, execution order,
-  acceptance criteria, risk register, and CI/docs plan.
-
-Read in order: `RESEARCH.md` → `SPEC.md` → `PLAN.md`.
-
-## Reference projects
-
-| Project | Language | Repo |
+| Directory | Published as | Purpose |
 |---|---|---|
-| ratatui | Rust | https://github.com/ratatui/ratatui |
-| TamboUI | Java | https://github.com/tamboui/tamboui |
-| Terminus | Scala 3 | https://github.com/creativescala/terminus |
-| cue4s | Scala 3 | https://github.com/neandertech/cue4s |
-| Textual | Python | https://github.com/Textualize/textual |
+| `core/` | `tui-core` | Foundational types: `Buffer`, `Cell`, `Rect`, `Style`/`Color`, `Text`/`Span`/`Line`, `Layout`/`Constraint`, `Widget`/`StatefulWidget`, `CharWidth`, input-event ADT |
+| `terminal/` | `tui-terminal` | Terminal backend abstraction (`Backend`) + the JLine 3 implementation: raw mode, alternate screen, key/mouse events |
+| `widgets/` | `tui-widgets` | Built-in widgets, terminal-backend-agnostic |
+| `runtime/` | `tui-runtime` | Render loop, event dispatch, render-thread model, `Signal`/`Computed` reactive state |
+| `dsl/` | `tui-dsl` | Declarative Scala 3 DSL: retained-mode `Element` tree, focus management, event routing |
+| `macros/` | `tui-macros` | Compile-time codegen (form derivation, action binding) — no runtime reflection |
+| `test-support/` | not published | Headless `Pilot` test driver + `Buffer` assertion matchers |
+| `examples/` | not published | Runnable example apps; also the native-image compile targets |
 
-These five are **read-only reference material** — architecture and API shape to learn
-from, never a source to copy code from. See `PLAN.md` §2.1 for the explicit
-originality mandate.
+## Building
 
-## Design guidelines
+```bash
+./mill __.compile   # compile everything
+./mill __.test      # run all tests
+./mill examples.hello-world.run
+```
 
-| Project | Purpose |
-|---|---|
-| [w0rxbend/ai-oop-design-patterns](https://github.com/w0rxbend/ai-oop-design-patterns) | OOP fundamentals, SOLID, and GoF-pattern guidelines (plus Claude Code skills) to apply throughout implementation — see `PLAN.md` §2.2 |
+## Planning documents
 
-Reference clones for local analysis live outside the repo (scratch/tmp, not committed) —
-re-clone with `--depth 1` as needed; see "Research method" in `RESEARCH.md`.
+- [`RESEARCH.md`](RESEARCH.md) — analysis of ratatui, TamboUI, Terminus, cue4s, and Textual.
+- [`SPEC.md`](SPEC.md) — the technical specification (authoritative over `PLAN.md` where they disagree).
+- [`PLAN.md`](PLAN.md) — the phased development plan: module architecture, widget backlog,
+  execution order, acceptance criteria.
+- [`SCALA_CODE_STYLE.md`](SCALA_CODE_STYLE.md) — the house Scala style guide, from
+  [w0rxbend/ai-oop-design-patterns](https://github.com/w0rxbend/ai-oop-design-patterns).
+
+The five reference projects (ratatui, TamboUI, Terminus, cue4s, Textual) are **read-only
+reference material** — architecture and API shape to learn from, never a source to copy
+code from. See `PLAN.md` §2.1.

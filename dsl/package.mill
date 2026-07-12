@@ -1,0 +1,15 @@
+package build.dsl
+
+import mill.*
+
+object `package` extends build.TuiPublishModule {
+
+  def artifactName = "tui-dsl"
+
+  def moduleDescription =
+    "High-level declarative Scala 3 DSL for the tui library: retained-mode Element tree, focus management, event routing."
+
+  def moduleDeps = Seq(build.core, build.widgets, build.runtime, build.macros)
+
+  object test extends TuiTests
+}

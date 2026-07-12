@@ -1,0 +1,13 @@
+package build.core
+
+import mill.*
+
+object `package` extends build.TuiPublishModule {
+
+  def artifactName = "tui-core"
+
+  def moduleDescription =
+    "Foundational types for the tui Scala 3 TUI library: Buffer, Rect, Style, Layout, Widget traits."
+
+  object test extends TuiTests
+}

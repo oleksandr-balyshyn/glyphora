@@ -1,0 +1,8 @@
+package build.examples.`hello-world`
+
+import mill.*
+
+object `package` extends build.TuiModule {
+
+  def moduleDeps = Seq(build.core, build.terminal, build.runtime, build.dsl)
+}

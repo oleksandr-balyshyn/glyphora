@@ -1,0 +1,9 @@
+out/
+.bloop/
+.bsp/
+.metals/
+.idea/
+.vscode/
+*.iml
+.scala-build/
+/cs

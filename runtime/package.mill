@@ -1,0 +1,15 @@
+package build.runtime
+
+import mill.*
+
+object `package` extends build.TuiPublishModule {
+
+  def artifactName = "tui-runtime"
+
+  def moduleDescription =
+    "Mid-level framework for the tui library: render loop, event dispatch, render-thread model, reactive signals."
+
+  def moduleDeps = Seq(build.core, build.terminal)
+
+  object test extends TuiTests
+}
