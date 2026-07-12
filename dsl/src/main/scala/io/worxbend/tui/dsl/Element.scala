@@ -254,6 +254,28 @@ final case class TreeElement(
           true
         case _ => false
 
+final case class DataTableElement(
+    table: w.DataTable,
+    state: w.DataTableState,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget =
+    (area, buffer) => table.render(area, buffer, state)
+  private[dsl] def withProps(props: ElementProps): DataTableElement = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Down =>
+          state.selectNext(table.visibleRows(state).size)
+          true
+        case KeyCode.Up =>
+          state.selectPrevious(table.visibleRows(state).size)
+          true
+        case _ => false
+
 /** Wraps a focusable element during the focus pass so its rendered area is recorded for click-to-focus hit-testing.
   * Transparent for everything else: props, children, and handlers delegate to the wrapped node.
   */

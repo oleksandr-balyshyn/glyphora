@@ -16,6 +16,7 @@ export Element.{
   spinner,
   waveText,
   column,
+  dataTable,
   gauge,
   input,
   list,
