@@ -182,6 +182,15 @@ independently shippable; items marked ★ are the enablers other items depend on
 > would need an area registry for non-focusables); double-click and drag-start
 > semantics left to apps; consider a `hoverStyle` prop once the registry exists.
 
+> **0.8.0 shipped** — half-block `Image` widget (RGB grid, nearest-neighbor scaling,
+> `Image.fromFile` via ImageIO kept off the no-AWT path); `docs/COOKBOOK.md`; README
+> feature overview.
+>
+> **Post-0.8.0 brainstorm:** 0.9.0 stays the hardening release (consumption test,
+> bench, PTY matrix). Post-0.9 candidates for a 1.0 line: hover styles + area
+> registry, per-element effects, Kitty image protocol behind a capability probe,
+> Scala Native cross-build of core/terminal, MiMa gates.
+
 ## Later / explicitly hard
 
 - **Image widget** (Kitty/iTerm2/Sixel/half-block) — highest platform risk; the

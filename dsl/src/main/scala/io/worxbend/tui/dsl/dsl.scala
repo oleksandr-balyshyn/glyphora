@@ -25,6 +25,7 @@ export Element.{
   directoryTree,
   gauge,
   heatmap,
+  image,
   indeterminateBar,
   input,
   layers,

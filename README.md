@@ -3,6 +3,12 @@
 A Scala 3 library for building rich terminal user interfaces (TUI) on the JVM, with a
 GraalVM native-image target, built with Mill.
 
+40+ widgets (layout, inputs, charts, markdown, editor, file tree), a declarative
+signals-driven DSL, app chrome (scaffold/top bar/status line/theme), screens, toasts,
+a command palette, a tachyonfx-style effects engine with splash screens, mouse
+support, and a headless end-to-end test harness. See [`docs/COOKBOOK.md`](docs/COOKBOOK.md)
+and [`ROADMAP.md`](ROADMAP.md).
+
 ## Modules
 
 | Directory | Published as | Purpose |

@@ -1188,6 +1188,9 @@ object Element:
       ElementProps(constraint = Some(Constraint.Length(1))),
     )
 
+  def image(source: io.worxbend.tui.widgets.Image): WidgetElement =
+    WidgetElement(source)
+
   def link(label: String, url: String): WidgetElement =
     WidgetElement(
       w.Link(label, url),
