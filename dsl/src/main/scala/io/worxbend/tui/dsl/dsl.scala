@@ -22,6 +22,7 @@ export Element.{
   directoryTree,
   gauge,
   input,
+  layers,
   list,
   log,
   markdown,

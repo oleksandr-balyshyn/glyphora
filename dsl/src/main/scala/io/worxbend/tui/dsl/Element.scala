@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Constraint, KeyCode, KeyEvent, KeyModifiers, Line, Style, Text, Widget}
+import io.worxbend.tui.core.{CharWidth, Constraint, Direction, KeyCode, KeyEvent, KeyModifiers, Line, Style, Text, Widget}
 import io.worxbend.tui.runtime.Signal
 import io.worxbend.tui.widgets as w
 
@@ -25,17 +25,24 @@ sealed trait Element:
     */
   private[dsl] def builtinKeyHandler: Option[KeyEvent => Boolean] = None
 
-  /** The space this element claims inside a container when the user set nothing explicit. */
-  private[dsl] def defaultConstraint: Constraint = Constraint.Fill(1)
+  /** The space this element claims along `direction` inside a container when the user set nothing explicit —
+    * one-row widgets claim one row vertically but their natural width (or a fill) horizontally.
+    */
+  private[dsl] def preferredSize(direction: Direction): Constraint =
+    val _ = direction
+    Constraint.Fill(1)
 
-  private[dsl] final def layoutItem: w.LayoutItem =
-    w.LayoutItem(props.constraint.getOrElse(defaultConstraint), widget)
+  private[dsl] final def layoutItem(direction: Direction): w.LayoutItem =
+    w.LayoutItem(props.constraint.getOrElse(preferredSize(direction)), widget)
 
 final case class TextElement(content: String, props: ElementProps = ElementProps()) extends Element:
   def widget: Widget = w.Paragraph(Text.styled(content, props.style))
   private[dsl] def withProps(props: ElementProps): TextElement = copy(props = props)
-  private[dsl] override def defaultConstraint: Constraint =
-    Constraint.Length(content.split("\n", -1).length)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(content.split("\n", -1).length)
+      case Direction.Horizontal =>
+        Constraint.Length(content.split("\n", -1).map(CharWidth.of).maxOption.getOrElse(0))
 
 final case class PanelElement(
     title: Option[String],
@@ -47,7 +54,7 @@ final case class PanelElement(
     (area, buffer) =>
       val block = w.Block(title.map(text => Line.styled(text, props.style)), borderType, props.style)
       block.render(area, buffer)
-      w.Column(children.map(_.layoutItem)).render(block.inner(area), buffer)
+      w.Column(children.map(_.layoutItem(Direction.Vertical))).render(block.inner(area), buffer)
   private[dsl] def withProps(props: ElementProps): PanelElement = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PanelElement = copy(children = children)
 
@@ -56,7 +63,7 @@ final case class RowElement(
     spacing: Int = 0,
     props: ElementProps = ElementProps(),
 ) extends Element:
-  def widget: Widget = w.Row(children.map(_.layoutItem), spacing)
+  def widget: Widget = w.Row(children.map(_.layoutItem(Direction.Horizontal)), spacing)
   private[dsl] def withProps(props: ElementProps): RowElement = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): RowElement = copy(children = children)
 
@@ -65,7 +72,7 @@ final case class ColumnElement(
     spacing: Int = 0,
     props: ElementProps = ElementProps(),
 ) extends Element:
-  def widget: Widget = w.Column(children.map(_.layoutItem), spacing)
+  def widget: Widget = w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing)
   private[dsl] def withProps(props: ElementProps): ColumnElement = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): ColumnElement = copy(children = children)
 
@@ -80,7 +87,10 @@ final case class GaugeElement(
 ) extends Element:
   def widget: Widget = w.Gauge(ratio, label, props.style, filledStyle = props.style.reverse)
   private[dsl] def withProps(props: ElementProps): GaugeElement = copy(props = props)
-  private[dsl] override def defaultConstraint: Constraint = Constraint.Length(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
 
 final case class SparklineElement(
     data: Seq[Long],
@@ -89,7 +99,10 @@ final case class SparklineElement(
 ) extends Element:
   def widget: Widget = w.Sparkline(data, max, props.style)
   private[dsl] def withProps(props: ElementProps): SparklineElement = copy(props = props)
-  private[dsl] override def defaultConstraint: Constraint = Constraint.Length(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
 
 final case class TabsElement(
     titles: Seq[String],
@@ -98,7 +111,10 @@ final case class TabsElement(
 ) extends Element:
   def widget: Widget = w.Tabs(titles.map(Line.raw), selected, props.style)
   private[dsl] def withProps(props: ElementProps): TabsElement = copy(props = props)
-  private[dsl] override def defaultConstraint: Constraint = Constraint.Length(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
 
 final case class TableElement(
     rows: Seq[Seq[String]],
@@ -129,7 +145,10 @@ final case class InputElement(
     val input = w.TextInput(placeholder, showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): InputElement = copy(props = props)
-  private[dsl] override def defaultConstraint: Constraint = Constraint.Length(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -166,7 +185,10 @@ final case class CheckboxElement(
 ) extends Element:
   def widget: Widget = w.Checkbox(label, checked.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): CheckboxElement = copy(props = props)
-  private[dsl] override def defaultConstraint: Constraint = Constraint.Length(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
     Some(toggleOnActivate(props, () => checked.update(value => !value)))
 
@@ -177,7 +199,10 @@ final case class ToggleElement(
 ) extends Element:
   def widget: Widget = w.Toggle(label, on.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): ToggleElement = copy(props = props)
-  private[dsl] override def defaultConstraint: Constraint = Constraint.Length(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
     Some(toggleOnActivate(props, () => on.update(value => !value)))
 
@@ -188,7 +213,10 @@ final case class SelectElement(
 ) extends Element:
   def widget: Widget = w.Select(options, selected.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): SelectElement = copy(props = props)
-  private[dsl] override def defaultConstraint: Constraint = Constraint.Length(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -277,7 +305,19 @@ final case class FilledElement(
   private[dsl] override def withChildren(children: Seq[Element]): FilledElement =
     copy(inner = inner.withChildren(children))
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = inner.builtinKeyHandler
-  private[dsl] override def defaultConstraint: Constraint = inner.defaultConstraint
+  private[dsl] override def preferredSize(direction: Direction): Constraint = inner.preferredSize(direction)
+
+/** Z-ordered stacking: every child renders over the full area in order, so later children paint over earlier
+  * ones — the primitive under dialogs, toasts, palettes, and splash overlays.
+  */
+final case class LayersElement(
+    override val children: Seq[Element],
+    props: ElementProps = ElementProps(),
+) extends Element:
+  def widget: Widget =
+    (area, buffer) => children.foreach(_.widget.render(area, buffer))
+  private[dsl] def withProps(props: ElementProps): LayersElement = copy(props = props)
+  private[dsl] override def withChildren(children: Seq[Element]): LayersElement = copy(children = children)
 
 /** A pressable button: Enter or Space triggers `action` while focused. */
 final case class ButtonElement(
@@ -287,7 +327,10 @@ final case class ButtonElement(
 ) extends Element:
   def widget: Widget = w.Button(label, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): ButtonElement = copy(props = props)
-  private[dsl] override def defaultConstraint: Constraint = Constraint.Length(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
     Some(toggleOnActivate(props, action))
 
@@ -435,7 +478,7 @@ private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker
   private[dsl] override def withChildren(children: Seq[Element]): TrackedElement =
     copy(inner = inner.withChildren(children))
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = inner.builtinKeyHandler
-  private[dsl] override def defaultConstraint: Constraint = inner.defaultConstraint
+  private[dsl] override def preferredSize(direction: Direction): Constraint = inner.preferredSize(direction)
 
 /** Space/Enter activates a focused two-state control. */
 private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEvent => Boolean =
@@ -546,6 +589,10 @@ object Element:
 
   def button(label: String)(action: => Unit): ButtonElement =
     ButtonElement(label, () => action)
+
+  /** Later layers paint over earlier ones across the full area. */
+  def layers(base: Element, overlays: Element*): LayersElement =
+    LayersElement(base +: overlays)
 
   def log(state: io.worxbend.tui.widgets.LogState): LogElement =
     LogElement(state)

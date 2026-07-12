@@ -37,8 +37,9 @@ final class DslConstructionSpec extends AnyFunSuite:
     assert(text("x").maxSize(9).props.constraint.contains(Constraint.Max(9)))
 
   test("text claims one row per line by default; containers fill"):
-    assert(text("a\nb").defaultConstraint == Constraint.Length(2))
-    assert(row().defaultConstraint == Constraint.Fill(1))
+    assert(text("a\nb").preferredSize(io.worxbend.tui.core.Direction.Vertical) == Constraint.Length(2))
+    assert(text("ab\nwide line").preferredSize(io.worxbend.tui.core.Direction.Horizontal) == Constraint.Length(9))
+    assert(row().preferredSize(io.worxbend.tui.core.Direction.Vertical) == Constraint.Fill(1))
     assert(spacer(2).props.constraint.contains(Constraint.Length(2)))
 
   test("rounded only affects panels"):

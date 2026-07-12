@@ -38,6 +38,25 @@ final class Buffer(val area: Rect):
       else if width > 0 then column = area.right // wide cluster that only half-fits: stop
     end while
 
+  /** Copies `region` of `source` into this buffer with the region's top-left landing at `at`.
+    *
+    * Writes outside this buffer's area are clipped like any other write — this is how offscreen-rendered
+    * content (scroll views, overlays) lands on the frame.
+    */
+  def blit(source: Buffer, at: Position, region: Rect): Unit =
+    val clipped = region.intersection(source.area)
+    var dy = 0
+    while dy < clipped.height do
+      var dx = 0
+      while dx < clipped.width do
+        set(at.x + dx, at.y + dy, source.get(clipped.x + dx, clipped.y + dy))
+        dx += 1
+      dy += 1
+
+  /** Copies all of `source` into this buffer at `at`. */
+  def blit(source: Buffer, at: Position): Unit =
+    blit(source, at, source.area)
+
   /** An independent copy of this buffer. Backends snapshot the frame they just flushed so later mutation of the
     * caller's buffer cannot corrupt the next diff.
     */

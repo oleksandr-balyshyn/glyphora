@@ -74,6 +74,25 @@ final class BufferSpec extends AnyFunSuite:
     assert(buf.get(0, 0) == Cell.Empty)
     assert(buf.get(1, 0) == Cell.Empty)
 
+  test("blit copies a source buffer at an offset with clipping"):
+    val source = buffer(3, 1)
+    source.setString(0, 0, "abc", Style.Default)
+    val target = buffer(4, 2)
+    target.blit(source, Position(2, 1))
+    assert(target.get(2, 1).symbol == "a")
+    assert(target.get(3, 1).symbol == "b") // 'c' clipped at the right edge
+    assert(target.get(0, 0) == Cell.Empty)
+
+  test("blit with a region copies only that window"):
+    val source = buffer(4, 2)
+    source.setString(0, 0, "abcd", Style.Default)
+    source.setString(0, 1, "efgh", Style.Default)
+    val target = buffer(4, 2)
+    target.blit(source, Position(0, 0), Rect(1, 1, 2, 1))
+    assert(target.get(0, 0).symbol == "f")
+    assert(target.get(1, 0).symbol == "g")
+    assert(target.get(2, 0) == Cell.Empty)
+
   test("diff of identical buffers is empty"):
     val previous = buffer(3, 2)
     val next = buffer(3, 2)
