@@ -349,3 +349,15 @@ object Element:
 
   def calendar(year: Int, month: Int, selected: Option[Int] = None): WidgetElement =
     WidgetElement(w.Calendar(year, month, selected))
+
+  def spinner(frame: Int, label: String = ""): WidgetElement =
+    WidgetElement(w.Spinner(frame, label))
+
+  def waveText(content: String, phase: Int): WidgetElement =
+    WidgetElement(w.WaveText(content, phase))
+
+  def dialog(title: String, message: String, buttons: Seq[String] = Seq("OK"), selected: Int = 0): WidgetElement =
+    WidgetElement(w.Dialog(title, io.worxbend.tui.core.Text.raw(message), buttons, selected))
+
+  def dualSparkline(upper: Seq[Long], lower: Seq[Long]): WidgetElement =
+    WidgetElement(w.DualSparkline(upper, lower))

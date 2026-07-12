@@ -10,6 +10,14 @@ Implemented:
 - **Tier 1**: `Paragraph` (alignment, cluster-safe wrapping), `ListView` (+`ListState`;
   named to avoid colliding with `scala.List`), `Table`, `Tabs`, `Gauge`, `LineGauge`,
   `Sparkline`.
+- **Tier 2**: `TextInput` (+`TextInputState`, grapheme-cluster-safe editing/cursor),
+  `Checkbox`, `Toggle`, `Select`, `Tree` (+`TreeNode`/`TreeState`). The `Form` widget
+  lives in `tui-dsl` (`Form`/`FormState`), composed from these.
+- **Tier 3**: `Canvas` + shapes (`Points`/`SegmentShape`/`Polyline`/`RectangleShape`/
+  `CircleShape`), `BarChart`, `Chart` (+`Dataset`, line/scatter), `Calendar`.
+- **Tier 4**: `Spinner`, `WaveText`, `Dialog`, `DualSparkline`. (Braille drawing,
+  Markdown view, and the multi-protocol image widget remain future work — the lowest
+  priority/highest platform-risk entries of `PLAN.md` §6.)
 
 Every widget has a render-to-`Buffer` test (`BufferAssertions` from `test-support/`).
 `RenderLoopBench` (in test sources) is the PLAN §12 render-loop benchmark:
