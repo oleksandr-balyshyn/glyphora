@@ -647,6 +647,10 @@ it back into this file rather than defaulting silently
    shows per-cell `Style` allocation is a hot path, consider a
    flyweight/interning `StyleId` scheme instead. Do not preemptively optimize this
    without a measurement.
+   **Measured (step 5, `RenderLoopBench` in `widgets/test`)**: ~3300 fps rendering a
+   Tabs+Gauge+Sparkline+wrapped-Paragraph composition into a 200×50 buffer on the
+   implementation machine — three orders of magnitude above any realistic redraw
+   rate. No interning scheme; keep the immutable case class.
 2. **`Buffer` mutability** (§2.2) — specified as a mutable `Array[Cell]`-backed class
    for render-loop performance (matching every reference implementation researched —
    none of the four use a persistent/immutable buffer). Confirm this doesn't conflict

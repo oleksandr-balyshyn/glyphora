@@ -50,9 +50,10 @@ object CharWidth:
       insertion % 2 == 1
 
   /** Splits `text` into the units that occupy terminal cells: a base codepoint plus its combining marks,
-    * variation selectors, ZWJ-joined continuations, or regional-indicator partner.
+    * variation selectors, ZWJ-joined continuations, or regional-indicator partner. This is the only sanctioned
+    * way to step through text one cell-unit at a time (wrapping, cursor movement, truncation).
     */
-  private[core] def graphemeClusters(text: String): Iterator[String] =
+  def graphemeClusters(text: String): Iterator[String] =
     new Iterator[String]:
       private var index = 0
 
