@@ -38,6 +38,14 @@ private[dsl] final class FocusTracker:
 
 private[dsl] object FocusPass:
 
+  /** A copy of the tree with every element made unfocusable — how layers *below* a modal drop out of the tab
+    * order while remaining visible.
+    */
+  def suppressFocus(element: Element): Element =
+    val cleared =
+      if element.props.focusable then element.withProps(element.props.copy(focusable = false)) else element
+    cleared.withChildren(cleared.children.map(suppressFocus))
+
   /** Number of focusable elements in depth-first order — the domain of [[FocusTracker.focusedIndex]]. */
   def countFocusables(element: Element): Int =
     val own = if element.props.focusable then 1 else 0
