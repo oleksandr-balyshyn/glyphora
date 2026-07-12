@@ -9,8 +9,12 @@ final case class Style(
     fg: Option[Color] = None,
     bg: Option[Color] = None,
     modifiers: Modifiers = Modifiers.None,
+    link: Option[String] = None,
 ):
   def withFg(color: Color): Style = copy(fg = Some(color))
+
+  /** Attaches an OSC 8 hyperlink target — terminals that support it make the cells clickable. */
+  def withLink(url: String): Style = copy(link = Some(url))
   def withBg(color: Color): Style = copy(bg = Some(color))
   def bold: Style = copy(modifiers = modifiers | Modifiers.Bold)
   def dim: Style = copy(modifiers = modifiers | Modifiers.Dim)
@@ -27,6 +31,7 @@ final case class Style(
       fg = other.fg.orElse(fg),
       bg = other.bg.orElse(bg),
       modifiers = modifiers | other.modifiers,
+      link = other.link.orElse(link),
     )
 
 object Style:

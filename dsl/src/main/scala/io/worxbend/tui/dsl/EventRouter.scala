@@ -19,6 +19,27 @@ private[dsl] object EventRouter:
   def dispatchMouse(element: Element, event: MouseEvent): Boolean =
     element.children.exists(dispatchMouse(_, event)) || element.props.onMouse.exists(_(event))
 
+  /** Routes a mouse event to the hit tracked element (user handler, then built-in behavior with the element's
+    * rendered area), bubbling unconsumed events up its ancestors' `onMouseEvent` handlers.
+    */
+  def dispatchMouseAt(root: Element, index: Int, area: io.worxbend.tui.core.Rect, event: MouseEvent): Boolean =
+    pathToTracked(root, index) match
+      case Some(leafToRoot) =>
+        val leaf = leafToRoot.head
+        val leafConsumed =
+          leaf.props.onMouse.exists(_(event)) || leaf.builtinMouseHandler.exists(_(event, area))
+        leafConsumed || leafToRoot.tail.exists(_.props.onMouse.exists(_(event)))
+      case None => false
+
+  private def pathToTracked(element: Element, index: Int): Option[List[Element]] =
+    element match
+      case tracked: TrackedElement if tracked.index == index => Some(List(tracked))
+      case _ =>
+        element.children
+          .to(LazyList)
+          .map(pathToTracked(_, index))
+          .collectFirst { case Some(path) => path :+ element }
+
   private def handlesKey(element: Element, event: KeyEvent): Boolean =
     element.props.onKey.exists(_(event)) || element.builtinKeyHandler.exists(_(event))
 

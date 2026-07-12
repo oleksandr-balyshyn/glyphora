@@ -31,6 +31,8 @@ private[dsl] final class FocusTracker:
       true
     else false
 
+  def areaOf(index: Int): Option[io.worxbend.tui.core.Rect] = areas.get(index)
+
   /** The innermost focusable rendered at this position, if any. */
   def hitTest(x: Int, y: Int): Option[Int] =
     val hits = areas.filter((_, area) => area.contains(io.worxbend.tui.core.Position(x, y)))

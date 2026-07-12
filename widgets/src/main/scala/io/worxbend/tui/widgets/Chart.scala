@@ -20,6 +20,8 @@ final case class Chart(
     yBounds: (Double, Double),
     axisStyle: Style = Style.Default,
     marker: String = "•",
+    resolution: CanvasResolution = CanvasResolution.Cell,
+    showLabels: Boolean = false,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -31,7 +33,13 @@ final case class Chart(
           case GraphType.Line    => Shape.Polyline(dataset.points, dataset.style)
           case GraphType.Scatter => Shape.Points(dataset.points, dataset.style)
       }
-      Canvas(xBounds, yBounds, shapes, marker).render(plotArea, buffer)
+      Canvas(xBounds, yBounds, shapes, marker, resolution).render(plotArea, buffer)
+      if showLabels then
+        buffer.setString(area.x + 1, area.y, formatBound(yBounds._2), axisStyle)
+        buffer.setString(area.x + 1, area.bottom - 2, formatBound(yBounds._1), axisStyle)
+
+  private def formatBound(value: Double): String =
+    if value == value.floor && math.abs(value) < 1e9 then value.toLong.toString else f"$value%.1f"
 
   private def drawAxes(area: Rect, buffer: Buffer): Unit =
     var y = area.y

@@ -120,15 +120,22 @@ trait TuiApp:
       consumed || bound || focusMoved
 
     def handleMouse(mouse: MouseEvent): Boolean =
+      val hit = tracker.hitTest(mouse.x, mouse.y)
       val focusMoved =
         if mouse.kind == MouseEventKind.Down then
-          tracker.hitTest(mouse.x, mouse.y) match
+          hit match
             case Some(index) if index != tracker.focusedIndex =>
               tracker.focusedIndex = index
               true
             case _ => false
         else false
-      val consumed = lastTree.exists(EventRouter.dispatchMouse(_, mouse))
+      val consumed = hit match
+        case Some(index) =>
+          val targeted = tracker
+            .areaOf(index)
+            .exists(area => lastTree.exists(EventRouter.dispatchMouseAt(_, index, area, mouse)))
+          targeted || lastTree.exists(EventRouter.dispatchMouse(_, mouse))
+        case None => lastTree.exists(EventRouter.dispatchMouse(_, mouse))
       consumed || focusMoved
 
     def handleEvent(event: Event, handle: RunnerHandle): Boolean =

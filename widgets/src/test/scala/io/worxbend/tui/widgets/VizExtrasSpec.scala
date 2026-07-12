@@ -74,3 +74,21 @@ final class VizExtrasSpec extends AnyFunSuite:
     val buffer = Buffer(Rect(0, 0, 1, 2))
     heat.render(buffer.area, buffer)
     assert(trimmedLines(buffer) == Seq("█", "█"))
+
+  test("a chart renders at braille resolution with axis labels"):
+    val chart = Chart(
+      Seq(Dataset("d", Seq((0.0, 0.0), (10.0, 10.0)))),
+      (0.0, 10.0),
+      (0.0, 10.0),
+      resolution = CanvasResolution.Braille,
+      showLabels = true,
+    )
+    val buffer = rendered(chart, 12, 6)
+    val text = trimmedLines(buffer).mkString("\n")
+    assert(text.contains("10")) // y-max label
+    assert(text.exists(c => c >= 0x2800.toChar && c <= 0x28ff.toChar)) // braille cells
+
+  test("a link renders its label with the url attached to the style"):
+    val buffer = rendered(Link("docs", "https://example.com"), 10, 1)
+    assert(trimmedLines(buffer).head == "docs")
+    assert(buffer.get(0, 0).style.link.contains("https://example.com"))

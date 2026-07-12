@@ -36,6 +36,12 @@ sealed trait Element:
     */
   private[dsl] def builtinKeyHandler: Option[KeyEvent => Boolean] = None
 
+  /** Framework mouse behavior (click-to-activate, wheel scrolling, drags), given the event and the element's
+    * rendered area. Runs after the user's `onMouseEvent` declined; only ever called on the hit element.
+    */
+  private[dsl] def builtinMouseHandler: Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    None
+
   /** The space this element claims along `direction` inside a container when the user set nothing explicit — one-row
     * widgets claim one row vertically but their natural width (or a fill) horizontally.
     */
@@ -202,6 +208,9 @@ final case class CheckboxElement(
       case Direction.Horizontal => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
     Some(toggleOnActivate(props, () => checked.update(value => !value)))
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some(clickActivates(() => checked.update(value => !value)))
 
 final case class ToggleElement(
     label: String,
@@ -216,12 +225,18 @@ final case class ToggleElement(
       case Direction.Horizontal => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
     Some(toggleOnActivate(props, () => on.update(value => !value)))
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some(clickActivates(() => on.update(value => !value)))
 
 final case class SelectElement(
     options: Seq[String],
     selected: Signal[Int],
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some(clickActivates(() => if options.nonEmpty then selected.update(index => (index + 1) % options.size)))
   def widget: Widget = w.Select(options, selected.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): SelectElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
@@ -247,6 +262,9 @@ final case class ListElement(
     state: w.ListState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some(wheelScrolls(() => state.selectPrevious(items.size), () => state.selectNext(items.size)))
   def widget: Widget =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
     val view = w.ListView(items.map(Line.raw), style = props.style)
@@ -316,6 +334,9 @@ final case class FilledElement(
   private[dsl] override def withChildren(children: Seq[Element]): FilledElement =
     copy(inner = inner.withChildren(children))
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = inner.builtinKeyHandler
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    inner.builtinMouseHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint = inner.preferredSize(direction)
 
 /** Z-ordered stacking: every child renders over the full area in order, so later children paint over earlier ones — the
@@ -345,6 +366,9 @@ final case class ScrollViewElement(
   private[dsl] override def withChildren(children: Seq[Element]): ScrollViewElement =
     copy(content = children.headOption.getOrElse(content))
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some(wheelScrolls(() => state.scrollUp(), () => state.scrollDown()))
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
@@ -439,6 +463,17 @@ final case class SplitPaneElement(
     horizontal: Boolean = true,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some { (event, area) =>
+      if event.kind == io.worxbend.tui.core.MouseEventKind.Drag then
+        val fraction =
+          if horizontal then (event.x - area.x).toDouble / math.max(1, area.width)
+          else (event.y - area.y).toDouble / math.max(1, area.height)
+        splitPercent.set(math.max(10, math.min(90, math.round(fraction * 100).toInt)))
+        true
+      else false
+    }
   override def children: Seq[Element] = Seq(first, second)
   def widget: Widget =
     val percent = math.max(10, math.min(90, splitPercent.peek))
@@ -613,6 +648,17 @@ final case class SliderElement(
     step: Int = 5,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some { (event, area) =>
+      event.kind match
+        case io.worxbend.tui.core.MouseEventKind.Down | io.worxbend.tui.core.MouseEventKind.Drag =>
+          if area.width > 3 then
+            val fraction = (event.x - area.x - 1).toDouble / (area.width - 3)
+            value.set(min + math.round(math.max(0.0, math.min(1.0, fraction)) * (max - min)).toInt)
+          true
+        case _ => false
+    }
   def widget: Widget = w.Slider(value.peek, min, max, props.style, focusStyled(props).bold)
   private[dsl] def withProps(props: ElementProps): SliderElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
@@ -812,6 +858,9 @@ final case class ButtonElement(
       case Direction.Horizontal => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
     Some(toggleOnActivate(props, action))
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some(clickActivates(action))
 
 /** A scrollable log panel: Up/Down (and PageUp/PageDown) scroll while focused; the tail re-follows when scrolled back
   * to the bottom.
@@ -820,6 +869,9 @@ final case class LogElement(
     state: w.LogState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some(wheelScrolls(() => state.scrollUp(), () => state.scrollDown()))
   def widget: Widget =
     val log = w.Log(props.style)
     (area, buffer) => log.render(area, buffer, state)
@@ -957,7 +1009,31 @@ private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker
   private[dsl] override def withChildren(children: Seq[Element]): TrackedElement =
     copy(inner = inner.withChildren(children))
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = inner.builtinKeyHandler
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    inner.builtinMouseHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint = inner.preferredSize(direction)
+
+/** A mouse press activates the control (focus already moved on the press). */
+private def clickActivates(activate: () => Unit): (io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean =
+  (event, _) =>
+    if event.kind == io.worxbend.tui.core.MouseEventKind.Down then
+      activate()
+      true
+    else false
+
+/** Wheel events scroll by one step. */
+private def wheelScrolls(up: () => Unit, down: () => Unit)
+    : (io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean =
+  (event, _) =>
+    event.kind match
+      case io.worxbend.tui.core.MouseEventKind.ScrollUp =>
+        up()
+        true
+      case io.worxbend.tui.core.MouseEventKind.ScrollDown =>
+        down()
+        true
+      case _ => false
 
 /** Space/Enter activates a focused two-state control. */
 private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEvent => Boolean =
@@ -1104,6 +1180,12 @@ object Element:
   def marquee(content: String, phase: Int): WidgetElement =
     WidgetElement(
       w.Marquee(content, phase),
+      ElementProps(constraint = Some(Constraint.Length(1))),
+    )
+
+  def link(label: String, url: String): WidgetElement =
+    WidgetElement(
+      w.Link(label, url),
       ElementProps(constraint = Some(Constraint.Length(1))),
     )
 

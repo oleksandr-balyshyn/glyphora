@@ -15,6 +15,10 @@ private[terminal] object AnsiSequences:
   val EnableMouseCapture: String = s"$Esc[?1000h$Esc[?1002h$Esc[?1006h"
   val DisableMouseCapture: String = s"$Esc[?1006l$Esc[?1002l$Esc[?1000l"
   val ResetStyle: String = s"$Esc[0m"
+  val LinkClose: String = s"$Esc]8;;$Esc\\"
+
+  /** OSC 8 hyperlink opener; pair every open with [[LinkClose]]. */
+  def linkOpen(url: String): String = s"$Esc]8;;$url$Esc\\"
 
   /** Moves the cursor to an absolute zero-based position (ANSI rows/columns are one-based). */
   def moveTo(x: Int, y: Int): String =

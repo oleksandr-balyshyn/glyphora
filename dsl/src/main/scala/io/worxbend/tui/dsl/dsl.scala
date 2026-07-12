@@ -28,6 +28,7 @@ export Element.{
   indeterminateBar,
   input,
   layers,
+  link,
   list,
   log,
   markdown,
