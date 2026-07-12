@@ -468,6 +468,225 @@ final case class SplitPaneElement(
           true
         case _ => false
 
+/** Mutually exclusive options: Up/Down move the selection while focused. */
+final case class RadioGroupElement(
+    options: Seq[String],
+    selected: Signal[Int],
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget = w.RadioGroup(options, selected.peek, props.style, focusStyled(props).bold)
+  private[dsl] def withProps(props: ElementProps): RadioGroupElement = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(math.max(1, options.size))
+      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused || options.isEmpty then false
+    else
+      event.code match
+        case KeyCode.Down =>
+          selected.update(index => math.min(index + 1, options.size - 1))
+          true
+        case KeyCode.Up =>
+          selected.update(index => math.max(index - 1, 0))
+          true
+        case _ => false
+
+/** A value slider: Left/Right adjust by `step`, Home/End jump to the bounds, while focused. */
+final case class SliderElement(
+    value: Signal[Int],
+    min: Int = 0,
+    max: Int = 100,
+    step: Int = 5,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget = w.Slider(value.peek, min, max, props.style, focusStyled(props).bold)
+  private[dsl] def withProps(props: ElementProps): SliderElement = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Left =>
+          value.update(v => math.max(min, v - step))
+          true
+        case KeyCode.Right =>
+          value.update(v => math.min(max, v + step))
+          true
+        case KeyCode.Home =>
+          value.set(min)
+          true
+        case KeyCode.End =>
+          value.set(max)
+          true
+        case _ => false
+
+/** A multi-select list: Up/Down move the cursor, Space toggles membership of the cursor row. */
+final case class SelectionListElement(
+    items: Seq[String],
+    selected: Signal[Set[Int]],
+    state: w.ListState,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget =
+    val chosen = selected.peek
+    val rendered = items.zipWithIndex.map { (item, index) =>
+      val marker = if chosen.contains(index) then "[x] " else "[ ] "
+      Line.raw(marker + item)
+    }
+    val view = w.ListView(rendered, style = props.style)
+    (area, buffer) => view.render(area, buffer, state)
+  private[dsl] def withProps(props: ElementProps): SelectionListElement = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Down =>
+          state.selectNext(items.size)
+          true
+        case KeyCode.Up =>
+          state.selectPrevious(items.size)
+          true
+        case KeyCode.Char(' ') =>
+          state.selected.foreach { cursor =>
+            selected.update(current => if current.contains(cursor) then current - cursor else current + cursor)
+          }
+          true
+        case _ => false
+
+/** A text input restricted to numbers (optional single leading minus and, with `allowDecimal`, one dot). */
+final case class NumberInputElement(
+    state: w.TextInputState,
+    allowDecimal: Boolean = false,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget =
+    val input = w.TextInput(showCursor = props.focused, style = props.style)
+    (area, buffer) => input.render(area, buffer, state)
+  private[dsl] def withProps(props: ElementProps): NumberInputElement = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Char(c) if event.modifiers.isEmpty =>
+          if accepts(c) then state.insert(c.toString)
+          true // swallow rejected characters too: they must not bubble as global keys while typing
+        case KeyCode.Backspace =>
+          state.backspace()
+          true
+        case KeyCode.Delete =>
+          state.delete()
+          true
+        case KeyCode.Left =>
+          state.moveLeft()
+          true
+        case KeyCode.Right =>
+          state.moveRight()
+          true
+        case KeyCode.Home =>
+          state.moveHome()
+          true
+        case KeyCode.End =>
+          state.moveEnd()
+          true
+        case _ => false
+
+  private def accepts(c: Char): Boolean =
+    if c.isDigit then true
+    else if c == '-' then state.cursor == 0 && !state.value.startsWith("-")
+    else if c == '.' then allowDecimal && !state.value.contains('.')
+    else false
+
+/** A template-driven input (`##/##/####`): `#` accepts a digit, `A` a letter, literals insert themselves. */
+final case class MaskedInputElement(
+    state: w.TextInputState,
+    mask: String,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget =
+    val input = w.TextInput(placeholder = mask, showCursor = props.focused, style = props.style)
+    (area, buffer) => input.render(area, buffer, state)
+  private[dsl] def withProps(props: ElementProps): MaskedInputElement = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Char(c) if event.modifiers.isEmpty =>
+          typeChar(c)
+          true
+        case KeyCode.Backspace =>
+          eraseSlot()
+          true
+        case _ => false
+
+  private def typeChar(c: Char): Unit =
+    state.moveEnd()
+    var position = currentLength
+    // literals between fillable slots insert themselves
+    while position < mask.length && !isSlot(mask.charAt(position)) do
+      state.insert(mask.charAt(position).toString)
+      position += 1
+    if position < mask.length && slotAccepts(mask.charAt(position), c) then state.insert(c.toString)
+
+  private def eraseSlot(): Unit =
+    state.moveEnd()
+    state.backspace()
+    while currentLength > 0 && !isSlot(mask.charAt(currentLength - 1)) do state.backspace()
+
+  private def currentLength: Int = CharWidth.graphemeClusters(state.value).size
+
+  private def isSlot(m: Char): Boolean = m == '#' || m == 'A'
+
+  private def slotAccepts(m: Char, c: Char): Boolean =
+    (m == '#' && c.isDigit) || (m == 'A' && c.isLetter)
+
+/** A page indicator: Left/Right change the page while focused. */
+final case class PaginatorElement(
+    current: Signal[Int],
+    total: Int,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget = w.Paginator(current.peek, total, props.style, focusStyled(props).bold)
+  private[dsl] def withProps(props: ElementProps): PaginatorElement = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused || total == 0 then false
+    else
+      event.code match
+        case KeyCode.Left =>
+          current.update(page => math.max(0, page - 1))
+          true
+        case KeyCode.Right =>
+          current.update(page => math.min(total - 1, page + 1))
+          true
+        case _ => false
+
 /** A pressable button: Enter or Space triggers `action` while focused. */
 final case class ButtonElement(
     label: String,
@@ -729,6 +948,30 @@ object Element:
       w.IndeterminateBar(phase),
       ElementProps(constraint = Some(Constraint.Length(1))),
     )
+
+  def radioGroup(options: Seq[String], selected: io.worxbend.tui.runtime.Signal[Int]): RadioGroupElement =
+    RadioGroupElement(options, selected)
+
+  def slider(value: io.worxbend.tui.runtime.Signal[Int], min: Int = 0, max: Int = 100, step: Int = 5)
+      : SliderElement =
+    SliderElement(value, min, max, step)
+
+  def selectionList(
+      items: Seq[String],
+      selected: io.worxbend.tui.runtime.Signal[Set[Int]],
+      state: io.worxbend.tui.widgets.ListState,
+  ): SelectionListElement =
+    SelectionListElement(items, selected, state)
+
+  def numberInput(state: io.worxbend.tui.widgets.TextInputState, allowDecimal: Boolean = false)
+      : NumberInputElement =
+    NumberInputElement(state, allowDecimal)
+
+  def maskedInput(state: io.worxbend.tui.widgets.TextInputState, mask: String): MaskedInputElement =
+    MaskedInputElement(state, mask)
+
+  def paginator(current: io.worxbend.tui.runtime.Signal[Int], total: Int): PaginatorElement =
+    PaginatorElement(current, total)
 
   def marquee(content: String, phase: Int): WidgetElement =
     WidgetElement(
