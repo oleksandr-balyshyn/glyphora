@@ -1037,6 +1037,15 @@ object Element:
   def calendar(year: Int, month: Int, selected: Option[Int] = None): WidgetElement =
     WidgetElement(w.Calendar(year, month, selected))
 
+  def pieChart(data: Seq[(String, Double)]): WidgetElement =
+    WidgetElement(w.PieChart(data))
+
+  def stackedBarChart(data: Seq[(String, Seq[Long])], barWidth: Int = 3): WidgetElement =
+    WidgetElement(w.StackedBarChart(data, barWidth))
+
+  def heatmap(values: Seq[Seq[Double]]): WidgetElement =
+    WidgetElement(w.Heatmap(values))
+
   def spinner(frame: Int, label: String = ""): WidgetElement =
     WidgetElement(w.Spinner(frame, label))
 
