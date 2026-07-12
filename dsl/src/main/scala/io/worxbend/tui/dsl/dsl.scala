@@ -17,6 +17,7 @@ export Element.{
   waveText,
   column,
   dataTable,
+  directoryTree,
   gauge,
   input,
   list,

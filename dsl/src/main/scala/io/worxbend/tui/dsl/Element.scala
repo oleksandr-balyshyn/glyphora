@@ -254,6 +254,31 @@ final case class TreeElement(
           true
         case _ => false
 
+final case class DirectoryTreeElement(
+    state: w.DirectoryTreeState,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget =
+    val tree = w.DirectoryTree(style = props.style)
+    (area, buffer) => tree.render(area, buffer, state)
+  private[dsl] def withProps(props: ElementProps): DirectoryTreeElement = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Down =>
+          state.selectNext()
+          true
+        case KeyCode.Up =>
+          state.selectPrevious()
+          true
+        case KeyCode.Enter =>
+          state.toggle()
+          true
+        case _ => false
+
 final case class DataTableElement(
     table: w.DataTable,
     state: w.DataTableState,
@@ -390,3 +415,6 @@ object Element:
   def dataTable(table: io.worxbend.tui.widgets.DataTable, state: io.worxbend.tui.widgets.DataTableState)
       : DataTableElement =
     DataTableElement(table, state)
+
+  def directoryTree(state: io.worxbend.tui.widgets.DirectoryTreeState): DirectoryTreeElement =
+    DirectoryTreeElement(state)
