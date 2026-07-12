@@ -40,8 +40,8 @@ final class Buffer(val area: Rect):
 
   /** Copies `region` of `source` into this buffer with the region's top-left landing at `at`.
     *
-    * Writes outside this buffer's area are clipped like any other write — this is how offscreen-rendered
-    * content (scroll views, overlays) lands on the frame.
+    * Writes outside this buffer's area are clipped like any other write — this is how offscreen-rendered content
+    * (scroll views, overlays) lands on the frame.
     */
   def blit(source: Buffer, at: Position, region: Rect): Unit =
     val clipped = region.intersection(source.area)

@@ -16,9 +16,9 @@ final class ScrollViewState:
 
 /** A vertically scrollable window over content taller than the viewport.
   *
-  * The content renders at its full `contentHeight` into an offscreen buffer each frame; the visible window is
-  * blitted into place and a scrollbar drawn on the right edge when the content overflows. Content height is
-  * explicit (the caller knows its data) — an intrinsic-measure pass is future work.
+  * The content renders at its full `contentHeight` into an offscreen buffer each frame; the visible window is blitted
+  * into place and a scrollbar drawn on the right edge when the content overflows. Content height is explicit (the
+  * caller knows its data) — an intrinsic-measure pass is future work.
   */
 final case class ScrollView(
     content: Widget,

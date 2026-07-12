@@ -9,17 +9,17 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** The application entry point for the declarative DSL (SPEC.md §5.3).
   *
-  * `view` is re-evaluated under a tracking [[ReactiveScope]]: any `Signal` read during the last evaluation
-  * schedules a redraw when it changes — state lives in signals, not in an explicitly threaded `State` value.
+  * `view` is re-evaluated under a tracking [[ReactiveScope]]: any `Signal` read during the last evaluation schedules a
+  * redraw when it changes — state lives in signals, not in an explicitly threaded `State` value.
   *
-  * Focus and events (SPEC.md §5.4): focusable elements form a tab order in depth-first view order; `Tab` /
-  * `Shift+Tab` cycle focus and a mouse press focuses the innermost focusable under the pointer. Key events
-  * start at the focused element and bubble to its ancestors (`true` consumes), then the app's [[bindings]]
-  * run; an unconsumed `Ctrl+P` opens the command palette (when bindings exist) and `Ctrl+C` quits.
+  * Focus and events (SPEC.md §5.4): focusable elements form a tab order in depth-first view order; `Tab` / `Shift+Tab`
+  * cycle focus and a mouse press focuses the innermost focusable under the pointer. Key events start at the focused
+  * element and bubble to its ancestors (`true` consumes), then the app's [[bindings]] run; an unconsumed `Ctrl+P` opens
+  * the command palette (when bindings exist) and `Ctrl+C` quits.
   *
-  * App services: [[pushScreen]]/[[popScreen]] for modal or full-screen navigation (layers below a modal leave
-  * the tab order), [[notify]] for tick-aged toasts, [[openPalette]] for the fuzzy command palette over the
-  * declared bindings. Call [[quit]] from any handler to exit cleanly.
+  * App services: [[pushScreen]]/[[popScreen]] for modal or full-screen navigation (layers below a modal leave the tab
+  * order), [[notify]] for tick-aged toasts, [[openPalette]] for the fuzzy command palette over the declared bindings.
+  * Call [[quit]] from any handler to exit cleanly.
   */
 trait TuiApp:
 
@@ -35,8 +35,8 @@ trait TuiApp:
     */
   def onTick(): Unit = ()
 
-  /** The app's declared keys (see [[binding]]): consulted for any key event no element consumed, and the source
-    * for `statusBar(bindings)` hints, [[helpOverlay]], and the command palette.
+  /** The app's declared keys (see [[binding]]): consulted for any key event no element consumed, and the source for
+    * `statusBar(bindings)` hints, [[helpOverlay]], and the command palette.
     */
   def bindings: KeyBindings = KeyBindings.empty
 

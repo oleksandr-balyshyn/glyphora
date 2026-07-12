@@ -1,6 +1,17 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{CharWidth, Constraint, Direction, KeyCode, KeyEvent, KeyModifiers, Line, Style, Text, Widget}
+import io.worxbend.tui.core.{
+  CharWidth,
+  Constraint,
+  Direction,
+  KeyCode,
+  KeyEvent,
+  KeyModifiers,
+  Line,
+  Style,
+  Text,
+  Widget,
+}
 import io.worxbend.tui.runtime.Signal
 import io.worxbend.tui.widgets as w
 
@@ -25,8 +36,8 @@ sealed trait Element:
     */
   private[dsl] def builtinKeyHandler: Option[KeyEvent => Boolean] = None
 
-  /** The space this element claims along `direction` inside a container when the user set nothing explicit —
-    * one-row widgets claim one row vertically but their natural width (or a fill) horizontally.
+  /** The space this element claims along `direction` inside a container when the user set nothing explicit — one-row
+    * widgets claim one row vertically but their natural width (or a fill) horizontally.
     */
   private[dsl] def preferredSize(direction: Direction): Constraint =
     val _ = direction
@@ -40,7 +51,7 @@ final case class TextElement(content: String, props: ElementProps = ElementProps
   private[dsl] def withProps(props: ElementProps): TextElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
-      case Direction.Vertical   => Constraint.Length(content.split("\n", -1).length)
+      case Direction.Vertical => Constraint.Length(content.split("\n", -1).length)
       case Direction.Horizontal =>
         Constraint.Length(content.split("\n", -1).map(CharWidth.of).maxOption.getOrElse(0))
 
@@ -307,8 +318,8 @@ final case class FilledElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = inner.builtinKeyHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint = inner.preferredSize(direction)
 
-/** Z-ordered stacking: every child renders over the full area in order, so later children paint over earlier
-  * ones — the primitive under dialogs, toasts, palettes, and splash overlays.
+/** Z-ordered stacking: every child renders over the full area in order, so later children paint over earlier ones — the
+  * primitive under dialogs, toasts, palettes, and splash overlays.
   */
 final case class LayersElement(
     override val children: Seq[Element],
@@ -353,8 +364,8 @@ final case class ScrollViewElement(
           true
         case _ => false
 
-/** A tab row plus the selected page (Textual's `TabbedContent`): Left/Right switch pages while focused. Only
-  * the active page's focusables participate in the tab order.
+/** A tab row plus the selected page (Textual's `TabbedContent`): Left/Right switch pages while focused. Only the active
+  * page's focusables participate in the tab order.
   */
 final case class TabbedContentElement(
     titles: Seq[String],
@@ -371,7 +382,7 @@ final case class TabbedContentElement(
         Seq(
           w.LayoutItem(Constraint.Length(1), tabs),
           w.LayoutItem(Constraint.Fill(1), activePage.widget),
-        ),
+        )
       ).render(area, buffer)
   private[dsl] def withProps(props: ElementProps): TabbedContentElement = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): TabbedContentElement =
@@ -390,8 +401,8 @@ final case class TabbedContentElement(
           true
         case _ => false
 
-/** A toggleable section: `▸ title` collapsed, `▾ title` plus the body expanded; Enter/Space toggle while
-  * focused. Collapsed bodies leave the tab order entirely.
+/** A toggleable section: `▸ title` collapsed, `▾ title` plus the body expanded; Enter/Space toggle while focused.
+  * Collapsed bodies leave the tab order entirely.
   */
 final case class CollapsibleElement(
     title: String,
@@ -407,7 +418,7 @@ final case class CollapsibleElement(
     (area, buffer) =>
       if isOpen then
         w.Column(
-          Seq(w.LayoutItem(Constraint.Length(1), header), w.LayoutItem(Constraint.Fill(1), body.widget)),
+          Seq(w.LayoutItem(Constraint.Length(1), header), w.LayoutItem(Constraint.Fill(1), body.widget))
         ).render(area, buffer)
       else header.render(area, buffer)
   private[dsl] def withProps(props: ElementProps): CollapsibleElement = copy(props = props)
@@ -732,21 +743,22 @@ object Element:
   def layers(base: Element, overlays: Element*): LayersElement =
     LayersElement(base +: overlays)
 
-  def scrollView(content: Element, contentHeight: Int, state: io.worxbend.tui.widgets.ScrollViewState)
-      : ScrollViewElement =
+  def scrollView(
+      content: Element,
+      contentHeight: Int,
+      state: io.worxbend.tui.widgets.ScrollViewState,
+  ): ScrollViewElement =
     ScrollViewElement(content, contentHeight, state)
 
-  /** `tabbedContent("One" -> pageOne, "Two" -> pageTwo)(selected)` — the selected page is picked at view
-    * construction, so the tree always holds exactly the visible page.
+  /** `tabbedContent("One" -> pageOne, "Two" -> pageTwo)(selected)` — the selected page is picked at view construction,
+    * so the tree always holds exactly the visible page.
     */
-  def tabbedContent(pages: (String, Element)*)(selected: io.worxbend.tui.runtime.Signal[Int])
-      : TabbedContentElement =
+  def tabbedContent(pages: (String, Element)*)(selected: io.worxbend.tui.runtime.Signal[Int]): TabbedContentElement =
     val index = math.max(0, math.min(selected.peek, pages.size - 1))
     val active = if pages.isEmpty then Element.text("") else pages(index)._2
     TabbedContentElement(pages.map(_._1), active, selected, pages.size)
 
-  def collapsible(title: String, expanded: io.worxbend.tui.runtime.Signal[Boolean])(body: Element)
-      : CollapsibleElement =
+  def collapsible(title: String, expanded: io.worxbend.tui.runtime.Signal[Boolean])(body: Element): CollapsibleElement =
     CollapsibleElement(title, body, expanded)
 
   def splitPane(

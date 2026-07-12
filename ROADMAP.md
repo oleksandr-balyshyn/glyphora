@@ -83,6 +83,23 @@ independently shippable; items marked ★ are the enablers other items depend on
 - `TabbedContent` (tabs + content switcher — we only have the tab *row*),
   `SplitPane` (draggable divider; mouse support exists), `Collapsible`, `Tooltip`.
 
+> **0.4.0 shipped** — `Buffer.blit` + `layers` z-order compositing; direction-aware
+> `preferredSize` (fixed the orientation-blind defaults); `ScrollView`,
+> `TabbedContent`, `Collapsible`, `SplitPane`; screen stack (modal with focus trap /
+> full replacement); tick-aged toasts (`notify`); fuzzy command palette (`Ctrl+P`
+> over `KeyBindings`); `examples/showcase` as the living chrome demo.
+>
+> **Post-0.4.0 brainstorm (carried into 0.5.0):**
+> - The palette selection could reuse `ListView` once list items accept styled
+>   lines with per-item actions — consider a shared `Menu` primitive (also usable
+>   for context menus and the sidebar).
+> - `ScrollView` needs explicit `contentHeight`; an intrinsic *measure* pass
+>   (preferredSize exists, but only per-axis constraint, not content-driven pixels)
+>   would remove that wart — revisit alongside effects, which also need per-element
+>   areas.
+> - Toast entry/exit should animate once effects land (slide-in from the right).
+> - `SplitPane` divider should be mouse-draggable (mouse drag events already decode).
+
 ## 0.5.0 — Motion ("splash screens and animations")
 
 - ★ **Effects engine** (tachyonfx-shaped, original implementation):

@@ -38,8 +38,8 @@ private[dsl] final class FocusTracker:
 
 private[dsl] object FocusPass:
 
-  /** A copy of the tree with every element made unfocusable — how layers *below* a modal drop out of the tab
-    * order while remaining visible.
+  /** A copy of the tree with every element made unfocusable — how layers *below* a modal drop out of the tab order
+    * while remaining visible.
     */
   def suppressFocus(element: Element): Element =
     val cleared =
