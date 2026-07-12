@@ -29,11 +29,16 @@ Attempted in the implementation environment (no interactive TTY attached):
 
 - `./mill examples.hello-world.run` → `no usable terminal: UnsupportedTerminal(dumb
   terminal (no TTY attached))` — clean detection and exit, no crash. ✅ (observed)
-- Raw-mode enter/exit, resize detection (SIGWINCH), and live key/mouse round-trips
-  **need confirmation on a real terminal** — run `./mill examples.hello-world.run`
-  from an interactive shell once the step-4 render loop lands; it should enter the
-  alternate screen, redraw on resize, and quit cleanly on `q`. ⚠️ pending human
-  confirmation on real hardware.
+- Verified on a real pseudo-terminal (scripted PTY harness, post-v0.1.0 audit): all
+  five example native binaries enter/leave the alternate screen, hide/show the cursor,
+  draw content, and exit cleanly on their quit key delivered through the PTY (JLine →
+  `InputDecoder` round-trip). The counter binary additionally confirmed diff-based
+  flushing (two `+` presses emitted exactly 40 bytes — one repainted digit cell each)
+  and SIGWINCH resize → full repaint with correct state. ✅ (observed)
+- Remaining human check: visual rendering quality on real terminal emulators
+  (fonts/colors/wide-glyph alignment) — run `./mill examples.dashboard.run`
+  interactively. Mouse capture round-trip on real hardware also unexercised (the
+  decoder's SGR-mouse path is unit-tested).
 - Native-image spike (PLAN.md §12, scheduled "as early as step 3"):
   `./mill show examples.hello-world.nativeImage` builds with `--no-fallback` under
   GraalVM community 23.0.1 in ~26 s and the binary runs with the same output as the
