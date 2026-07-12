@@ -503,8 +503,27 @@ explicit-state-passing model; **`PLAN.md` should be read with this correction**
 
 ### 5.4 Focus and event routing
 
-Not fully specified yet — deliberately left open pending Tier 2 implementation
-(`PLAN.md` §10 step 7). Requirements, drawn from `RESEARCH.md`:
+**Resolved during step 7** — the implemented algorithm (in `tui-dsl`'s `FocusPass`/
+`FocusTracker`/`EventRouter`, tested by `FocusSpec`):
+
+- *Identity*: focusables are identified positionally — the depth-first pre-order index
+  among elements with `props.focusable` in the current `view` result. That index is
+  the tab order. `Tab`/`Shift+Tab` (when unconsumed by handlers) cycle it with
+  wrap-around; the index is clamped when the tree shrinks.
+- *Marking*: each render runs a focus pass that rebuilds the tree, setting
+  `props.focused = true` on the focused element and wrapping every focusable in a
+  tracking node that records its rendered `Rect` for hit-testing.
+- *Key dispatch*: with a focused element present, a key event starts there and bubbles
+  up the ancestor chain; at each node the user's `onKeyEvent` runs before the
+  framework's built-in behavior (text editing, checkbox toggling, list navigation);
+  returning `true` consumes the event and stops propagation. With no focusables, the
+  tree is walked depth-first leaves-before-ancestors with the same contract.
+- *Click-to-focus*: a mouse press hit-tests the recorded areas (innermost = smallest
+  containing area wins) and moves focus there before mouse handlers run.
+- *Defaults*: unconsumed `Ctrl+C` quits; any consumed event triggers a redraw (app
+  state may have changed even when no `Signal` was written, e.g. `TextInputState`).
+
+Original requirements, drawn from `RESEARCH.md` (all met above):
 
 - Tab-order focus traversal and click-to-focus, matching TamboUI's Toolkit
   (`RESEARCH.md`, "Automatic focus management").

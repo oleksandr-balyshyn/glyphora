@@ -5,7 +5,24 @@ import io.worxbend.tui.widgets.BorderType
 
 // One import to rule them all: `import io.worxbend.tui.dsl.*` brings in TuiApp, Element, every factory,
 // the styling/layout extensions, and the core vocabulary the examples need (SPEC.md §5.1).
-export Element.{text, panel, row, column, spacer, gauge, sparkline, tabs, table, widget}
+export Element.{
+  checkbox,
+  column,
+  gauge,
+  input,
+  list,
+  panel,
+  row,
+  select,
+  spacer,
+  sparkline,
+  table,
+  tabs,
+  text,
+  toggle,
+  tree,
+  widget,
+}
 export io.worxbend.tui.core.{Color, Constraint, KeyCode, KeyEvent, KeyModifiers, MouseEvent, Style}
 export io.worxbend.tui.runtime.{Computed, ReactiveScope, Signal}
 
@@ -43,6 +60,10 @@ extension (element: Element)
 
   def onMouseEvent(handler: MouseEvent => Boolean): Element =
     element.withProps(element.props.copy(onMouse = Some(handler)))
+
+  /** Opts a non-interactive element into the tab order (interactive elements are focusable by default). */
+  def focusable: Element =
+    element.withProps(element.props.copy(focusable = true))
 
 /** Layout constraints — how much space the element claims inside its container (SPEC.md §5.2). */
 extension (element: Element)

@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind}
 import io.worxbend.tui.runtime.{ReactiveScope, RunnerConfig, RunnerError, RunnerHandle, TerminalRunner}
 import io.worxbend.tui.terminal.{Backend, JLine3Backend}
 
@@ -10,8 +10,11 @@ import java.util.concurrent.atomic.AtomicReference
   *
   * `view` is re-evaluated under a tracking [[ReactiveScope]]: any `Signal` read during the last evaluation
   * schedules a redraw when it changes — state lives in signals, not in an explicitly threaded `State` value.
-  * Key/mouse events route through the element tree's handlers (innermost first, `true` consumes); an
-  * unconsumed `Ctrl+C` quits. Call [[quit]] from any handler to exit cleanly.
+  *
+  * Focus and events (SPEC.md §5.4): focusable elements form a tab order in depth-first view order; `Tab` /
+  * `Shift+Tab` cycle focus and a mouse press focuses the innermost focusable under the pointer. Key events
+  * start at the focused element and bubble to its ancestors (`true` consumes); an unconsumed `Ctrl+C` quits.
+  * Call [[quit]] from any handler to exit cleanly.
   */
 trait TuiApp:
 
@@ -29,26 +32,54 @@ trait TuiApp:
   final def runWith(backend: Backend): Either[RunnerError, Unit] =
     var invalidated = false
     var lastTree: Option[Element] = None
+    val tracker = FocusTracker()
     val scope = ReactiveScope.onInvalidation(() => invalidated = true)
+
+    def handleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
+      val consumed = lastTree.exists(EventRouter.dispatchKey(_, key))
+      var focusMoved = false
+      if !consumed then
+        key match
+          case KeyEvent(KeyCode.Tab, modifiers) if modifiers.has(KeyModifiers.Shift) =>
+            focusMoved = tracker.focusPrevious()
+          case KeyEvent(KeyCode.Tab, _) =>
+            focusMoved = tracker.focusNext()
+          case KeyEvent(KeyCode.Char('c'), modifiers) if modifiers.has(KeyModifiers.Ctrl) =>
+            handle.quit()
+          case _ => ()
+      consumed || focusMoved
+
+    def handleMouse(mouse: MouseEvent): Boolean =
+      val focusMoved =
+        if mouse.kind == MouseEventKind.Down then
+          tracker.hitTest(mouse.x, mouse.y) match
+            case Some(index) if index != tracker.focusedIndex =>
+              tracker.focusedIndex = index
+              true
+            case _ => false
+        else false
+      val consumed = lastTree.exists(EventRouter.dispatchMouse(_, mouse))
+      consumed || focusMoved
 
     def handleEvent(event: Event, handle: RunnerHandle): Boolean =
       activeHandle.set(Some(handle))
       event match
-        case Event.Key(key) =>
-          val consumed = lastTree.exists(EventRouter.dispatchKey(_, key))
-          if !consumed && isCtrlC(key) then handle.quit()
-          invalidated
-        case Event.Mouse(mouse) =>
-          val _ = lastTree.exists(EventRouter.dispatchMouse(_, mouse))
-          invalidated
-        case Event.Resize(_) => true
-        case Event.Tick      => invalidated
+        case Event.Key(key)     => handleKey(key, handle) || invalidated
+        case Event.Mouse(mouse) => handleMouse(mouse) || invalidated
+        case Event.Resize(_)    => true
+        case Event.Tick         => invalidated
 
     val result = TerminalRunner(backend, config).run(
       handleEvent,
       frame =>
         invalidated = false
-        val tree = view(using scope)
+        val rawTree = view(using scope)
+        tracker.focusableCount = FocusPass.countFocusables(rawTree)
+        if tracker.focusableCount > 0 then
+          tracker.focusedIndex = math.max(0, math.min(tracker.focusedIndex, tracker.focusableCount - 1))
+        else tracker.focusedIndex = 0
+        tracker.clearAreas()
+        val tree = FocusPass.decorate(rawTree, tracker)
         lastTree = Some(tree)
         frame.renderWidget(tree.widget, frame.area),
     )
@@ -58,8 +89,5 @@ trait TuiApp:
   /** Requests a clean exit; safe to call from event handlers. No-op when the app is not running. */
   protected final def quit(): Unit =
     activeHandle.get().foreach(_.quit())
-
-  private def isCtrlC(key: KeyEvent): Boolean =
-    key.code == KeyCode.Char('c') && key.modifiers.has(KeyModifiers.Ctrl)
 
   private val activeHandle = AtomicReference[Option[RunnerHandle]](None)
