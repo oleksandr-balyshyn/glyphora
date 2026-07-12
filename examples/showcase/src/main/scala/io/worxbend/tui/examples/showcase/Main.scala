@@ -6,6 +6,8 @@ import io.worxbend.tui.widgets.{ListState, LogState, TextInputState}
 
 import scala.concurrent.duration.DurationInt
 
+// (splash effect durations use the same DurationInt syntax)
+
 /** showcase: the app-chrome tour — scaffold with top bar + sidebar + status bar, tabbed pages, theme switching, toasts,
   * a modal screen, and the command palette. Doubles as the manual PTY test bed.
   *
@@ -14,6 +16,14 @@ import scala.concurrent.duration.DurationInt
 final class ShowcaseApp extends TuiApp:
 
   override def config: RunnerConfig = RunnerConfig(tickRate = Some(200.millis))
+
+  override def splash: Option[SplashScreen] = Some(
+    SplashScreen(
+      centered(36, 5)(bigText("GLYPHORA").color(Color.Cyan)),
+      effect = Effect.coalesce(800.millis),
+      minimumDuration = 1200.millis,
+    )
+  )
 
   private val themes = Vector(Theme.Dark, Theme.Light, Theme.HighContrast)
   val themeIndex: Signal[Int] = Signal(0)

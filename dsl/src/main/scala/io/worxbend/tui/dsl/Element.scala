@@ -721,6 +721,21 @@ object Element:
   def dualSparkline(upper: Seq[Long], lower: Seq[Long]): WidgetElement =
     WidgetElement(w.DualSparkline(upper, lower))
 
+  def skeleton(phase: Int): WidgetElement =
+    WidgetElement(w.Skeleton(phase))
+
+  def indeterminateBar(phase: Int): WidgetElement =
+    WidgetElement(
+      w.IndeterminateBar(phase),
+      ElementProps(constraint = Some(Constraint.Length(1))),
+    )
+
+  def marquee(content: String, phase: Int): WidgetElement =
+    WidgetElement(
+      w.Marquee(content, phase),
+      ElementProps(constraint = Some(Constraint.Length(1))),
+    )
+
   def markdown(source: String): WidgetElement =
     WidgetElement(w.Markdown(source))
 

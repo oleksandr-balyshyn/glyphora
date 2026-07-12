@@ -44,8 +44,8 @@ trait TuiApp:
   /** An intro screen shown before the first `view` render — see [[SplashScreen]]. Any key skips it. */
   def splash: Option[SplashScreen] = None
 
-  /** Starts a post-render [[Effect]] over the whole frame. Needs a `config.tickRate` to animate; the effect
-    * is dropped once done.
+  /** Starts a post-render [[Effect]] over the whole frame. Needs a `config.tickRate` to animate; the effect is dropped
+    * once done.
     */
   protected final def runEffect(effect: io.worxbend.tui.runtime.Effect): Unit =
     activeEffects = (effect, System.nanoTime()) :: activeEffects

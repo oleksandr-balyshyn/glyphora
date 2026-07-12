@@ -4,10 +4,9 @@ import io.worxbend.tui.core.{Buffer, Cell, Color, Rect, Style}
 
 import scala.concurrent.duration.{Duration, DurationInt, DurationLong, FiniteDuration}
 
-/** A post-render frame transform (the tachyonfx model, original implementation): widgets render normally,
-  * then active effects mutate the rendered cells based on elapsed time. Effects are stateless in wall-clock —
-  * the runtime tracks each effect's start and passes total `elapsed`, which keeps combinators pure and
-  * replayable.
+/** A post-render frame transform (the tachyonfx model, original implementation): widgets render normally, then active
+  * effects mutate the rendered cells based on elapsed time. Effects are stateless in wall-clock — the runtime tracks
+  * each effect's start and passes total `elapsed`, which keeps combinators pure and replayable.
   */
 trait Effect:
 
@@ -125,8 +124,7 @@ object Effect:
 
   // ---- shared machinery ----
 
-  private abstract class TimedEffect(val totalDuration: FiniteDuration, easing: Easing = Easing.Linear)
-      extends Effect:
+  private abstract class TimedEffect(val totalDuration: FiniteDuration, easing: Easing = Easing.Linear) extends Effect:
     def duration: Duration = totalDuration
     def transform(progress: Double, buffer: Buffer, area: Rect): Unit
     final def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
@@ -177,7 +175,7 @@ object Effect:
         math.round(r * level).toInt,
         math.round(g * level).toInt,
         math.round(b * level).toInt,
-      ),
+      )
     )
 
   /** RGB approximation for every color model — good enough for fades, not for color management. */

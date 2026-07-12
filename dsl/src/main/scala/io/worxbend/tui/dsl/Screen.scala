@@ -28,8 +28,8 @@ object Screen:
 enum ToastLevel:
   case Info, Success, Warning, Error
 
-/** An intro shown before the first view render: `content` (typically a `bigText` logo composition) plays
-  * `effect` and holds for at least `minimumDuration`; any key skips it. Wire via `TuiApp.splash`.
+/** An intro shown before the first view render: `content` (typically a `bigText` logo composition) plays `effect` and
+  * holds for at least `minimumDuration`; any key skips it. Wire via `TuiApp.splash`.
   */
 final case class SplashScreen(
     content: Element,

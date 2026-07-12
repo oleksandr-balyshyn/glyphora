@@ -18,8 +18,8 @@ enum Easing:
       case Easing.SineOut   => math.sin(clamped * math.Pi / 2)
       case Easing.SineInOut => (1 - math.cos(clamped * math.Pi)) / 2
 
-/** A value animated from `from` to `to` over `duration` with an easing curve — for animating gauge ratios,
-  * offsets, and the like from `onTick` state.
+/** A value animated from `from` to `to` over `duration` with an easing curve — for animating gauge ratios, offsets, and
+  * the like from `onTick` state.
   */
 final case class Tween(
     from: Double,

@@ -16,7 +16,7 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
         centered(20, 1)(text("LOADING")),
         effect = Effect.fadeIn(100.millis),
         minimumDuration = 300.millis,
-      ),
+      )
     )
     override def bindings: KeyBindings = KeyBindings(binding("q", "quit")(quit()))
     def view(using ReactiveScope): Element = text("main view")
@@ -38,7 +38,7 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
     val backend = HeadlessBackend(Size(30, 5))
     val app = new TuiApp:
       override def splash: Option[SplashScreen] = Some(
-        SplashScreen(text("INTRO"), Effect.fadeIn(50.millis), minimumDuration = 60.seconds),
+        SplashScreen(text("INTRO"), Effect.fadeIn(50.millis), minimumDuration = 60.seconds)
       )
       override def bindings: KeyBindings = KeyBindings(binding("q", "quit")(quit()))
       def view(using ReactiveScope): Element = text("main view")
@@ -71,8 +71,7 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
       Thread.sleep(5)
     assert(sawPartial, "effect never visibly altered the frame")
     val restoreDeadline = System.nanoTime() + 3.seconds.toNanos
-    while !pilot.screenText.contains("solid content here") && System.nanoTime() < restoreDeadline do
-      Thread.sleep(10)
+    while !pilot.screenText.contains("solid content here") && System.nanoTime() < restoreDeadline do Thread.sleep(10)
     assert(pilot.screenText.contains("solid content here"))
     pilot.pressKey(KeyCode.Char('q'))
     assert(pilot.awaitTermination())

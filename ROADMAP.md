@@ -127,6 +127,22 @@ independently shippable; items marked ★ are the enablers other items depend on
 - `Spinner` gains indeterminate `ProgressBar` mode; `Skeleton` placeholders
   (pulse/sweep while loading).
 
+> **0.5.0 shipped** — effects engine in `tui-runtime` (`Easing`, `Tween`, fade/
+> coalesce/dissolve/sweep/slide/typewriter/pulse + sequence/parallel/delay/repeat);
+> `Frame.applyEffect`; `TuiApp.runEffect` (tick-driven, auto-pruned) and the
+> skippable `SplashScreen` preset (showcase now opens with a coalescing GLYPHORA
+> logo); `Skeleton`/`IndeterminateBar`/`Marquee` loading widgets.
+>
+> **Post-0.5.0 brainstorm (carried into 0.6.0):**
+> - Effects currently target the whole frame; per-element effects need the element's
+>   rendered `Rect` — the FocusTracker area-recording mechanism generalizes to an
+>   area registry (also what toast slide-in needs).
+> - Lesson learned twice: state flipped during *render* can't schedule the next
+>   redraw — all time-based state transitions belong in the Tick handler. Candidate
+>   for a small `Timeline` abstraction owning (start, duration, onDone) triples.
+> - `Tween` is unused by any widget yet — a `gauge(tween.at(elapsed))` example
+>   belongs in the showcase once per-element areas land.
+
 ## 0.6.0 — Input & data completeness
 
 - `RadioSet`/`RadioButton`, `Slider`, `NumberInput`, `MaskedInput` (template-based),

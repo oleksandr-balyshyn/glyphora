@@ -13,6 +13,7 @@ final class ShowcaseAppSpec extends AnyFunSuite:
     val app = ShowcaseApp()
     val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
+    pilot.pressKey(KeyCode.Enter).waitForIdle() // skip the splash
     (app, pilot)
 
   test("the shell renders top bar, sidebar, tabs, and status hints"):
