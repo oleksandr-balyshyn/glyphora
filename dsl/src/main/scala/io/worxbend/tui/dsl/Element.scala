@@ -468,6 +468,115 @@ final case class SplitPaneElement(
           true
         case _ => false
 
+/** A text input with a live suggestion dropdown: typing filters `suggestions` (subsequence match), Up/Down
+  * move the highlight, Enter accepts it into the input and fires `onAccept`.
+  */
+final case class AutocompleteElement(
+    state: AutocompleteState,
+    suggestions: Seq[String],
+    onAccept: String => Unit = _ => (),
+    maxSuggestions: Int = 5,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+
+  private def matches: Seq[String] =
+    val query = state.input.value.toLowerCase
+    if query.isEmpty then Seq.empty
+    else
+      suggestions.filter { candidate =>
+        var i = 0
+        candidate.toLowerCase.foreach(c => if i < query.length && query.charAt(i) == c then i += 1)
+        i == query.length
+      }.take(maxSuggestions)
+
+  def widget: Widget =
+    val visible = matches
+    val highlight = math.max(0, math.min(state.highlighted, math.max(0, visible.size - 1)))
+    val input = w.TextInput(showCursor = props.focused, style = props.style)
+    (area, buffer) =>
+      input.render(io.worxbend.tui.core.Rect(area.x, area.y, area.width, 1), buffer, state.input)
+      visible.zipWithIndex.foreach { (candidate, index) =>
+        val rowStyle = if index == highlight && props.focused then props.style.reverse else props.style.dim
+        buffer.setString(area.x + 2, area.y + 1 + index, candidate, rowStyle)
+      }
+  private[dsl] def withProps(props: ElementProps): AutocompleteElement = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1 + matches.size)
+      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
+          state.input.insert(c.toString)
+          state.highlighted = 0
+          true
+        case KeyCode.Backspace =>
+          state.input.backspace()
+          state.highlighted = 0
+          true
+        case KeyCode.Down =>
+          state.highlighted = math.min(state.highlighted + 1, math.max(0, matches.size - 1))
+          true
+        case KeyCode.Up =>
+          state.highlighted = math.max(0, state.highlighted - 1)
+          true
+        case KeyCode.Enter =>
+          matches.lift(math.min(state.highlighted, math.max(0, matches.size - 1))) match
+            case Some(choice) =>
+              state.accept(choice)
+              onAccept(choice)
+              true
+            case None => false
+        case KeyCode.Left =>
+          state.input.moveLeft()
+          true
+        case KeyCode.Right =>
+          state.input.moveRight()
+          true
+        case _ => false
+
+/** A file chooser over a [[FilePickerState]]: arrows navigate, Enter opens directories or accepts a file into
+  * `state.chosen`.
+  */
+final case class FilePickerElement(
+    state: FilePickerState,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget =
+    val tree = w.DirectoryTree(style = props.style)
+    (area, buffer) =>
+      val treeArea = io.worxbend.tui.core.Rect(area.x, area.y, area.width, math.max(0, area.height - 1))
+      tree.render(treeArea, buffer, state.tree)
+      val chosenLine = state.chosen.peek.map(path => s"→ $path").getOrElse("→ (nothing selected)")
+      buffer.setString(area.x, area.bottom - 1, chosenLine, props.style.dim)
+  private[dsl] def withProps(props: ElementProps): FilePickerElement = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Down =>
+          state.tree.selectNext()
+          true
+        case KeyCode.Up =>
+          state.tree.selectPrevious()
+          true
+        case KeyCode.Enter =>
+          state.tree.selected match
+            case Some(path) if java.nio.file.Files.isDirectory(path) =>
+              state.tree.toggle()
+              true
+            case Some(path) =>
+              state.chosen.set(Some(path))
+              true
+            case None => false
+        case _ => false
+
 /** Mutually exclusive options: Up/Down move the selection while focused. */
 final case class RadioGroupElement(
     options: Seq[String],
@@ -948,6 +1057,16 @@ object Element:
       w.IndeterminateBar(phase),
       ElementProps(constraint = Some(Constraint.Length(1))),
     )
+
+  def autocomplete(
+      state: AutocompleteState,
+      suggestions: Seq[String],
+      onAccept: String => Unit = _ => (),
+  ): AutocompleteElement =
+    AutocompleteElement(state, suggestions, onAccept)
+
+  def filePicker(state: FilePickerState): FilePickerElement =
+    FilePickerElement(state)
 
   def radioGroup(options: Seq[String], selected: io.worxbend.tui.runtime.Signal[Int]): RadioGroupElement =
     RadioGroupElement(options, selected)

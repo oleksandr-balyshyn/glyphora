@@ -6,6 +6,7 @@ import io.worxbend.tui.widgets.BorderType
 // One import to rule them all: `import io.worxbend.tui.dsl.*` brings in TuiApp, Element, every factory,
 // the styling/layout extensions, and the core vocabulary the examples need (SPEC.md §5.1).
 export Element.{
+  autocomplete,
   barChart,
   bigText,
   button,
@@ -16,6 +17,7 @@ export Element.{
   checkbox,
   dialog,
   dualSparkline,
+  filePicker,
   spinner,
   waveText,
   column,
