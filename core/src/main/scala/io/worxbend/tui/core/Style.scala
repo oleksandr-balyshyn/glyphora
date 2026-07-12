@@ -2,8 +2,8 @@ package io.worxbend.tui.core
 
 /** How a cell is drawn: optional foreground/background colors plus text-attribute modifiers.
   *
-  * `None` for a color means "leave the terminal default in effect". Builders return a new immutable `Style`;
-  * they are `with`-prefixed for the color fields because a case-class field and a `def` cannot share a name.
+  * `None` for a color means "leave the terminal default in effect". Builders return a new immutable `Style`; they are
+  * `with`-prefixed for the color fields because a case-class field and a `def` cannot share a name.
   */
 final case class Style(
     fg: Option[Color] = None,

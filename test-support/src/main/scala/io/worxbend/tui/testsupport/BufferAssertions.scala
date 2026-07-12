@@ -2,13 +2,13 @@ package io.worxbend.tui.testsupport
 
 import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Widget}
 
-/** Renders buffers to plain strings for test assertions — the lightweight equivalent of TamboUI's
-  * buffer-assertion module (PLAN.md §6).
+/** Renders buffers to plain strings for test assertions — the lightweight equivalent of TamboUI's buffer-assertion
+  * module (PLAN.md §6).
   */
 object BufferAssertions:
 
-  /** Each row of the buffer as a string. Continuation cells of wide graphemes are skipped, so a row's string
-    * content matches what a terminal shows, and trailing blanks are kept (every row spans the full width).
+  /** Each row of the buffer as a string. Continuation cells of wide graphemes are skipped, so a row's string content
+    * matches what a terminal shows, and trailing blanks are kept (every row spans the full width).
     */
   def lines(buffer: Buffer): Seq[String] =
     for y <- buffer.area.y until buffer.area.bottom

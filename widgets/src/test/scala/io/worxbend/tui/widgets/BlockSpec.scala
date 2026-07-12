@@ -14,7 +14,7 @@ final class BlockSpec extends AnyFunSuite:
         "┌───┐",
         "│   │",
         "└───┘",
-      ),
+      )
     )
 
   test("a rounded block uses rounded corners"):
@@ -24,7 +24,7 @@ final class BlockSpec extends AnyFunSuite:
         "╭──╮",
         "│  │",
         "╰──╯",
-      ),
+      )
     )
 
   test("double and thick border types use their glyph sets"):

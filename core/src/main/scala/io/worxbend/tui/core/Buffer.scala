@@ -2,12 +2,12 @@ package io.worxbend.tui.core
 
 /** A mutable grid of [[Cell]]s covering `area`, the in-memory render target for one frame.
   *
-  * `x`/`y` arguments are absolute terminal coordinates (the same space as `area`'s offset), not area-relative —
-  * widgets receive a `Rect` positioned in absolute space and write to the buffer at those coordinates. Writes
-  * outside `area` are silently clipped, never errors; reads outside `area` return [[Cell.Empty]].
+  * `x`/`y` arguments are absolute terminal coordinates (the same space as `area`'s offset), not area-relative — widgets
+  * receive a `Rect` positioned in absolute space and write to the buffer at those coordinates. Writes outside `area`
+  * are silently clipped, never errors; reads outside `area` return [[Cell.Empty]].
   *
-  * Mutability is an implementation detail of the render loop (every reference implementation uses a mutable
-  * frame buffer, SPEC.md §9.2) — it never escapes through `Widget.render`'s contract.
+  * Mutability is an implementation detail of the render loop (every reference implementation uses a mutable frame
+  * buffer, SPEC.md §9.2) — it never escapes through `Widget.render`'s contract.
   */
 final class Buffer(val area: Rect):
 
@@ -21,9 +21,9 @@ final class Buffer(val area: Rect):
 
   /** Writes `text` starting at `(x, y)`, one grapheme cluster per cell, clipping at the area's right edge.
     *
-    * A wide (two-column) cluster occupies its cell plus a continuation cell to the right; a wide cluster that
-    * would only half-fit at the right edge is dropped entirely. Grapheme clusters that begin with a combining
-    * mark (no base character before them in `text`) are skipped.
+    * A wide (two-column) cluster occupies its cell plus a continuation cell to the right; a wide cluster that would
+    * only half-fit at the right edge is dropped entirely. Grapheme clusters that begin with a combining mark (no base
+    * character before them in `text`) are skipped.
     */
   def setString(x: Int, y: Int, text: String, style: Style): Unit =
     var column = x
@@ -55,10 +55,9 @@ final class Buffer(val area: Rect):
 
   /** The cells that changed going from this buffer (the previous frame) to `next` (the frame to display).
     *
-    * This is what a terminal backend flushes each frame instead of redrawing everything. Positions covered by
-    * the continuation cell of a wide grapheme in `next` are never emitted — flushing the wide cell itself
-    * repaints both columns. If the two buffers cover different areas (e.g. after a resize), every cell of
-    * `next` is emitted.
+    * This is what a terminal backend flushes each frame instead of redrawing everything. Positions covered by the
+    * continuation cell of a wide grapheme in `next` are never emitted — flushing the wide cell itself repaints both
+    * columns. If the two buffers cover different areas (e.g. after a resize), every cell of `next` is emitted.
     */
   def diff(next: Buffer): Iterator[(Position, Cell)] =
     val emitAll = area != next.area

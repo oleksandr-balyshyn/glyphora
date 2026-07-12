@@ -11,8 +11,8 @@ final class Painter private[widgets] (
     marker: String,
 ):
 
-  /** Marks the cell containing the world-coordinate point; points outside the bounds are dropped. The y axis
-    * points up (world), while rows grow down (terminal) — the mapping flips it.
+  /** Marks the cell containing the world-coordinate point; points outside the bounds are dropped. The y axis points up
+    * (world), while rows grow down (terminal) — the mapping flips it.
     */
   def paint(x: Double, y: Double, style: Style): Unit =
     val (xMin, xMax) = xBounds
@@ -32,8 +32,8 @@ object Shape:
     def draw(painter: Painter): Unit =
       points.foreach((x, y) => painter.paint(x, y, style))
 
-  /** A straight segment, painted by parametric stepping (resolution-independent, no Bresenham needed at
-    * terminal-cell densities).
+  /** A straight segment, painted by parametric stepping (resolution-independent, no Bresenham needed at terminal-cell
+    * densities).
     */
   final case class SegmentShape(
       x1: Double,

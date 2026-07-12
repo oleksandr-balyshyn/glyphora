@@ -2,8 +2,8 @@ package io.worxbend.tui.core
 
 /** A rectangular region of the terminal in absolute coordinates.
   *
-  * `x`/`y` locate the top-left corner; the region spans `width` columns and `height` rows. The right and bottom
-  * edges (`x + width`, `y + height`) are exclusive.
+  * `x`/`y` locate the top-left corner; the region spans `width` columns and `height` rows. The right and bottom edges
+  * (`x + width`, `y + height`) are exclusive.
   */
 final case class Rect(x: Int, y: Int, width: Int, height: Int):
 

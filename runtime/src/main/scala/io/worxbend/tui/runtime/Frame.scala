@@ -4,8 +4,8 @@ import io.worxbend.tui.core.{Buffer, Rect, StatefulWidget, Widget}
 
 /** One frame being rendered: the drawable `area` plus the buffer widgets write into.
   *
-  * The buffer itself stays module-private — application render code goes through the widget contract, which
-  * keeps every write attributable to a widget and an area.
+  * The buffer itself stays module-private — application render code goes through the widget contract, which keeps every
+  * write attributable to a widget and an area.
   */
 final class Frame(val area: Rect, private[runtime] val buffer: Buffer):
 

@@ -60,8 +60,8 @@ extension (element: Element)
       case panel: PanelElement => panel.copy(borderType = BorderType.Double)
       case other               => other
 
-  /** A handler returning `true` consumes the event; `false` lets it continue to the next candidate
-    * (bubbling, SPEC.md §5.4).
+  /** A handler returning `true` consumes the event; `false` lets it continue to the next candidate (bubbling, SPEC.md
+    * §5.4).
     */
   def onKeyEvent(handler: KeyEvent => Boolean): Element =
     element.withProps(element.props.copy(onKey = Some(handler)))

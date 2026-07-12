@@ -5,9 +5,9 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** The single-render-thread model (SPEC.md §4.2, adopted from TamboUI's JavaFX/Swing-style contract).
   *
-  * All UI state mutation must happen on the render thread — the thread running the [[Runner]] loop. The guard
-  * is deliberately a no-op while no render thread is registered, so unit tests of widgets and signals need no
-  * running runtime.
+  * All UI state mutation must happen on the render thread — the thread running the [[Runner]] loop. The guard is
+  * deliberately a no-op while no render thread is registered, so unit tests of widgets and signals need no running
+  * runtime.
   */
 object RenderThread:
 
@@ -19,13 +19,13 @@ object RenderThread:
       case None         => true
       case Some(thread) => Thread.currentThread() eq thread
 
-  /** Defect-detection assertion: throws `IllegalStateException` when called off the render thread while one
-    * is registered. A programming error, not a recoverable condition — hence throw, not `Either`.
+  /** Defect-detection assertion: throws `IllegalStateException` when called off the render thread while one is
+    * registered. A programming error, not a recoverable condition — hence throw, not `Either`.
     */
   def checkRenderThread(): Unit =
     if !isRenderThread then
       throw IllegalStateException(
-        s"UI state must be mutated on the render thread, not '${Thread.currentThread().getName}'",
+        s"UI state must be mutated on the render thread, not '${Thread.currentThread().getName}'"
       )
 
   /** Runs `body` inline when already on the render thread, otherwise queues it for the next loop iteration. */

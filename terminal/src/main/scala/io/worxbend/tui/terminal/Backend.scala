@@ -6,15 +6,15 @@ import scala.concurrent.duration.Duration
 
 /** A terminal a TUI can draw to and read input from.
   *
-  * Implementations own the physical (or simulated) terminal: raw mode, the alternate screen, cursor visibility,
-  * and translating [[Buffer]] diffs into whatever the device understands. Everything above this trait —
-  * runtime, widgets, DSL — is backend-agnostic.
+  * Implementations own the physical (or simulated) terminal: raw mode, the alternate screen, cursor visibility, and
+  * translating [[Buffer]] diffs into whatever the device understands. Everything above this trait — runtime, widgets,
+  * DSL — is backend-agnostic.
   *
-  * I/O failures are values (`Either[BackendError, A]`) because callers can meaningfully degrade (log and
-  * continue vs. abort); `throw` is reserved for genuine defects.
+  * I/O failures are values (`Either[BackendError, A]`) because callers can meaningfully degrade (log and continue vs.
+  * abort); `throw` is reserved for genuine defects.
   *
-  * `draw` flushes only the cells that changed since the previous `draw` call (diff-based updates); the first
-  * call after construction, or after the buffer area changes, flushes everything.
+  * `draw` flushes only the cells that changed since the previous `draw` call (diff-based updates); the first call after
+  * construction, or after the buffer area changes, flushes everything.
   */
 trait Backend:
   def size: Either[BackendError, Size]

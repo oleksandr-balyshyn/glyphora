@@ -7,8 +7,8 @@ enum BorderType:
 
 /** A bordered box with an optional title — the basic chrome widget almost everything else nests inside.
   *
-  * Content belongs in `inner(area)`; rendering the block never touches the interior, so it composes with any
-  * content widget drawn after it.
+  * Content belongs in `inner(area)`; rendering the block never touches the interior, so it composes with any content
+  * widget drawn after it.
   */
 final case class Block(
     title: Option[Line] = None,

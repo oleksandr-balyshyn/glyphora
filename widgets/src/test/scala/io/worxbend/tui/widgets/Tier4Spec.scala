@@ -25,7 +25,8 @@ final class Tier4Spec extends AnyFunSuite:
 
   test("a dialog paints a cleared, bordered box over existing content"):
     val underlying: io.worxbend.tui.core.Widget =
-      (area, buffer) => (0 until area.height).foreach(y => buffer.setString(0, y, "#" * area.width, io.worxbend.tui.core.Style.Default))
+      (area, buffer) =>
+        (0 until area.height).foreach(y => buffer.setString(0, y, "#" * area.width, io.worxbend.tui.core.Style.Default))
     val dialog = Dialog("Confirm", Text.raw("Delete file?"), Seq("Yes", "No"), selectedButton = 1)
     val combined: io.worxbend.tui.core.Widget = (area, buffer) =>
       underlying.render(area, buffer)

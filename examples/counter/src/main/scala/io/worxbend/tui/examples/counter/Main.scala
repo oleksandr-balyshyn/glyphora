@@ -2,8 +2,8 @@ package io.worxbend.tui.examples.counter
 
 import io.worxbend.tui.dsl.*
 
-/** counter (PLAN.md §8, example 2): a stateful app with keybindings — the event loop, the
-  * signal-update → re-render cycle, and the render-thread model, end to end.
+/** counter (PLAN.md §8, example 2): a stateful app with keybindings — the event loop, the signal-update → re-render
+  * cycle, and the render-thread model, end to end.
   */
 final class CounterApp extends TuiApp:
 

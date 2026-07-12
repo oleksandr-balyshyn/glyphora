@@ -2,8 +2,8 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, CharWidth, Line, Style}
 
-/** Shared span-aware single-row text rendering: writes a [[Line]]'s spans in order, clipping at a column
-  * budget, layering each span's style over a base style.
+/** Shared span-aware single-row text rendering: writes a [[Line]]'s spans in order, clipping at a column budget,
+  * layering each span's style over a base style.
   */
 private[widgets] object LineRenderer:
 

@@ -2,12 +2,12 @@ package io.worxbend.tui.core
 
 /** Splits a rectangle into segments along one axis according to a list of [[Constraint]]s.
   *
-  * Solving happens in two passes: fixed demands first (`Length`, `Percentage`, `Ratio`, and `Min`'s floor),
-  * then any leftover space is shared among the flexible constraints (`Fill` by weight, `Min` and `Max` with
-  * weight 1, `Max` additionally capped). Sizes use integer cells; distribution remainders go to the earliest
-  * segments with the largest fractional share, so results are deterministic. When the fixed demands exceed the
-  * available space, trailing segments are truncated (possibly to zero width) rather than failing — consistent
-  * with the library-wide silent-clipping philosophy.
+  * Solving happens in two passes: fixed demands first (`Length`, `Percentage`, `Ratio`, and `Min`'s floor), then any
+  * leftover space is shared among the flexible constraints (`Fill` by weight, `Min` and `Max` with weight 1, `Max`
+  * additionally capped). Sizes use integer cells; distribution remainders go to the earliest segments with the largest
+  * fractional share, so results are deterministic. When the fixed demands exceed the available space, trailing segments
+  * are truncated (possibly to zero width) rather than failing — consistent with the library-wide silent-clipping
+  * philosophy.
   */
 final case class Layout(direction: Direction, constraints: Seq[Constraint], spacing: Int = 0):
 
@@ -31,12 +31,12 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
 
   private def fixedDemand(constraint: Constraint, available: Int): Int =
     constraint match
-      case Constraint.Length(cells)     => math.max(0, cells)
-      case Constraint.Percentage(pct)   => available * math.max(0, pct) / 100
-      case Constraint.Ratio(num, den)   => if den == 0 then 0 else available * math.max(0, num) / den
-      case Constraint.Min(cells)        => math.max(0, cells)
-      case Constraint.Max(_)            => 0
-      case Constraint.Fill(_)           => 0
+      case Constraint.Length(cells)   => math.max(0, cells)
+      case Constraint.Percentage(pct) => available * math.max(0, pct) / 100
+      case Constraint.Ratio(num, den) => if den == 0 then 0 else available * math.max(0, num) / den
+      case Constraint.Min(cells)      => math.max(0, cells)
+      case Constraint.Max(_)          => 0
+      case Constraint.Fill(_)         => 0
 
   /** Shares `leftover` cells among flexible constraints by weight, honoring `Max` caps; capped residue is
     * re-distributed among the still-uncapped until nothing changes.
@@ -63,8 +63,8 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
       remaining -= shares.sum
     granted.toIndexedSeq
 
-  /** Integer division of `amount` by `weights` with largest-remainder rounding (ties to the earlier index),
-    * each share clamped to its `limits` entry.
+  /** Integer division of `amount` by `weights` with largest-remainder rounding (ties to the earlier index), each share
+    * clamped to its `limits` entry.
     */
   private def weightedShares(amount: Int, weights: Seq[Int], limits: Seq[Int]): IndexedSeq[Int] =
     val totalWeight = weights.sum
@@ -97,10 +97,10 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
     }
 
 object Layout:
-  /** Constraint shorthand: a plain `Int` means `Length(cells)`, a `Double` means a fraction of the whole
-    * (`0.5` → `Percentage(50)`, truncating — use `Constraint.Ratio` when exact thirds matter), and any
-    * `Constraint` passes through. A union-typed overload rather than implicit `Conversion`s so call sites
-    * need no language import (SPEC.md §2.5).
+  /** Constraint shorthand: a plain `Int` means `Length(cells)`, a `Double` means a fraction of the whole (`0.5` →
+    * `Percentage(50)`, truncating — use `Constraint.Ratio` when exact thirds matter), and any `Constraint` passes
+    * through. A union-typed overload rather than implicit `Conversion`s so call sites need no language import (SPEC.md
+    * §2.5).
     */
   def apply(direction: Direction)(constraints: (Int | Double | Constraint)*): Layout =
     Layout(

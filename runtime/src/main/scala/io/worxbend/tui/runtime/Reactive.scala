@@ -5,10 +5,10 @@ import scala.compiletime.uninitialized
 
 /** A readable reactive value: either a mutable [[Signal]] or a derived [[Computed]].
   *
-  * Reads come in two flavors: `get` requires a [[ReactiveScope]] capability and subscribes the enclosing
-  * computation to future changes (automatic dependency tracking — no manual dependency arrays); `peek` reads
-  * untracked. Dependency edges are re-established on every recomputation, so conditional reads
-  * (`if cond.get then a.get else b.get`) subscribe exactly the branch that actually ran.
+  * Reads come in two flavors: `get` requires a [[ReactiveScope]] capability and subscribes the enclosing computation to
+  * future changes (automatic dependency tracking — no manual dependency arrays); `peek` reads untracked. Dependency
+  * edges are re-established on every recomputation, so conditional reads (`if cond.get then a.get else b.get`)
+  * subscribe exactly the branch that actually ran.
   */
 sealed trait Reactive[A]:
 
@@ -23,10 +23,9 @@ sealed trait Reactive[A]:
 
 /** A mutable reactive variable.
   *
-  * `set`/`update` mark dependents stale and (via the root scope) schedule a redraw; nothing recomputes
-  * eagerly. Setting an equal value (by `==`) notifies nobody. Must only be called from the render thread
-  * once one is registered — enforced by `RenderThread.checkRenderThread()`, which is a no-op in tests with
-  * no running runtime (SPEC.md §4.1).
+  * `set`/`update` mark dependents stale and (via the root scope) schedule a redraw; nothing recomputes eagerly. Setting
+  * an equal value (by `==`) notifies nobody. Must only be called from the render thread once one is registered —
+  * enforced by `RenderThread.checkRenderThread()`, which is a no-op in tests with no running runtime (SPEC.md §4.1).
   */
 final class Signal[A] private (initial: A) extends Reactive[A], Subscribable:
 
@@ -58,9 +57,9 @@ object Signal:
 
 /** A value derived from other reactive values.
   *
-  * Lazily cached: `set` on a dependency only marks this stale (cascading to dependents); the thunk re-runs on
-  * the next read. Each recomputation first unsubscribes from the previous dependency set, then re-subscribes
-  * to exactly what the thunk reads this time — the mechanism that makes conditional dependencies correct.
+  * Lazily cached: `set` on a dependency only marks this stale (cascading to dependents); the thunk re-runs on the next
+  * read. Each recomputation first unsubscribes from the previous dependency set, then re-subscribes to exactly what the
+  * thunk reads this time — the mechanism that makes conditional dependencies correct.
   */
 final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A], Subscriber, Subscribable:
 

@@ -5,8 +5,8 @@ import io.worxbend.tui.terminal.{Backend, BackendError}
 
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 
-/** The production [[Runner]]: raw mode + alternate screen setup, diff-driven redraws, tick emission, resize
-  * handling, and render-thread registration around a [[Backend]].
+/** The production [[Runner]]: raw mode + alternate screen setup, diff-driven redraws, tick emission, resize handling,
+  * and render-thread registration around a [[Backend]].
   *
   * `nanoTime` is injectable so tick scheduling is testable; production code uses the system clock.
   */
@@ -84,8 +84,8 @@ final class TerminalRunner(
       }
     failure.toLeft(())
 
-  /** Block on input at most until the next tick is due (or a coarse default poll when there is no tick rate),
-    * so ticks stay on schedule while input stays responsive.
+  /** Block on input at most until the next tick is due (or a coarse default poll when there is no tick rate), so ticks
+    * stay on schedule while input stays responsive.
     */
   private def pollTimeout(lastTick: Long): FiniteDuration =
     config.tickRate match

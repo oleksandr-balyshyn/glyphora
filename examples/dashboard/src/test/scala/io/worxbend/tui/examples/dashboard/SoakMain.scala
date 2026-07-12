@@ -6,8 +6,8 @@ import io.worxbend.tui.testsupport.Pilot
 
 import scala.concurrent.duration.DurationInt
 
-/** Scripted soak check (PLAN.md §11, step 9): runs the dashboard headless for 60 seconds under its tick rate
-  * and reports draw count and heap growth. Run with
+/** Scripted soak check (PLAN.md §11, step 9): runs the dashboard headless for 60 seconds under its tick rate and
+  * reports draw count and heap growth. Run with
   * `./mill examples.dashboard.test.runMain io.worxbend.tui.examples.dashboard.SoakMain`.
   */
 object SoakMain:
@@ -25,8 +25,10 @@ object SoakMain:
     val heapAfter = usedHeap()
     pilot.pressKey(KeyCode.Char('q'))
     val stopped = pilot.awaitTermination(2.seconds)
-    println(f"soak: $seconds s, $draws draws (${draws.toDouble / seconds}%.1f fps), " +
-      f"heap ${heapBefore / 1024 / 1024} MB -> ${heapAfter / 1024 / 1024} MB, clean shutdown: $stopped")
+    println(
+      f"soak: $seconds s, $draws draws (${draws.toDouble / seconds}%.1f fps), " +
+        f"heap ${heapBefore / 1024 / 1024} MB -> ${heapAfter / 1024 / 1024} MB, clean shutdown: $stopped"
+    )
 
   private def usedHeap(): Long =
     System.gc()

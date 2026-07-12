@@ -6,9 +6,9 @@ import io.worxbend.tui.widgets.{Block, BorderType, Column, LayoutItem, Paragraph
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** The step-6 acceptance criterion (PLAN.md §11): the DSL hello-world produces byte-identical buffer output
-  * to the same UI hand-built from `tui-widgets` — proof the DSL is a faithful layer over the widget/runtime
-  * stack, not a divergent rendering path.
+/** The step-6 acceptance criterion (PLAN.md §11): the DSL hello-world produces byte-identical buffer output to the same
+  * UI hand-built from `tui-widgets` — proof the DSL is a faithful layer over the widget/runtime stack, not a divergent
+  * rendering path.
   */
 final class DslFaithfulnessSpec extends AnyFunSuite:
 
@@ -27,7 +27,7 @@ final class DslFaithfulnessSpec extends AnyFunSuite:
           LayoutItem(Constraint.Length(1), Paragraph(Text.styled("Welcome!", Style.Default.bold.withFg(Color.Cyan)))),
           LayoutItem(Constraint.Fill(1), Spacer),
           LayoutItem(Constraint.Length(1), Paragraph(Text.styled("Press 'q' to quit", Style.Default.dim))),
-        ),
+        )
       ).render(block.inner(area), buffer)
 
   test("hello-world through the DSL is byte-identical to the hand-built widget tree"):

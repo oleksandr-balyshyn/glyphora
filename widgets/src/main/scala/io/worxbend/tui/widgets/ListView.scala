@@ -2,9 +2,9 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, CharWidth, Line, Rect, StatefulWidget, Style}
 
-/** Caller-owned list state: the selection and the scroll offset. Mutable on purpose — the widget adjusts the
-  * offset during render to keep the selection visible, and the app mutates the selection from key handlers
-  * (the `StatefulWidget` contract).
+/** Caller-owned list state: the selection and the scroll offset. Mutable on purpose — the widget adjusts the offset
+  * during render to keep the selection visible, and the app mutates the selection from key handlers (the
+  * `StatefulWidget` contract).
   */
 final class ListState(var selected: Option[Int] = None, var offset: Int = 0):
 
@@ -16,8 +16,8 @@ final class ListState(var selected: Option[Int] = None, var offset: Int = 0):
 
 /** A scrollable list of single-row items with an optional highlighted selection.
   *
-  * Named `ListView` rather than the reference libraries' `List` to avoid colliding with `scala.List` at every
-  * call site.
+  * Named `ListView` rather than the reference libraries' `List` to avoid colliding with `scala.List` at every call
+  * site.
   */
 final case class ListView(
     items: Seq[Line],

@@ -13,7 +13,7 @@ final class DerivationSpec extends AnyFunSuite:
         FieldSpec("username", FieldInput.TextField),
         FieldSpec("age", FieldInput.IntField),
         FieldSpec("subscribe", FieldInput.BoolField),
-      ),
+      )
     )
 
   test("assemble rebuilds the case class from submitted values"):

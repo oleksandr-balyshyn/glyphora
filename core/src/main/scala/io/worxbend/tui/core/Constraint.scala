@@ -2,8 +2,8 @@ package io.worxbend.tui.core
 
 /** How much of a split axis one segment claims (see [[Layout.split]]).
   *
-  * `Length`/`Percentage`/`Ratio` are fixed demands; `Min` is a floor that also competes for leftover space;
-  * `Max` is a cap that only takes leftover space; `Fill` divides leftover space by weight.
+  * `Length`/`Percentage`/`Ratio` are fixed demands; `Min` is a floor that also competes for leftover space; `Max` is a
+  * cap that only takes leftover space; `Fill` divides leftover space by weight.
   */
 enum Constraint:
   case Length(cells: Int)

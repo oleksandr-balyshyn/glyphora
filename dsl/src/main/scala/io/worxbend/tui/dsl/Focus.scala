@@ -4,9 +4,9 @@ import io.worxbend.tui.core.Rect
 
 import scala.collection.mutable
 
-/** Per-app focus bookkeeping, owned by a single `TuiApp.runWith` invocation and touched only on the render
-  * thread: which focusable (by depth-first order index) has focus, how many exist, and where each rendered
-  * last frame (for click-to-focus hit-testing).
+/** Per-app focus bookkeeping, owned by a single `TuiApp.runWith` invocation and touched only on the render thread:
+  * which focusable (by depth-first order index) has focus, how many exist, and where each rendered last frame (for
+  * click-to-focus hit-testing).
   */
 private[dsl] final class FocusTracker:
 
@@ -43,9 +43,8 @@ private[dsl] object FocusPass:
     val own = if element.props.focusable then 1 else 0
     own + element.children.map(countFocusables).sum
 
-  /** Rebuilds the tree with the focused element marked (`props.focused = true`) and every focusable wrapped
-    * in a [[TrackedElement]] that records its rendered area. Indices are assigned in depth-first pre-order —
-    * the tab order.
+  /** Rebuilds the tree with the focused element marked (`props.focused = true`) and every focusable wrapped in a
+    * [[TrackedElement]] that records its rendered area. Indices are assigned in depth-first pre-order — the tab order.
     */
   def decorate(root: Element, tracker: FocusTracker): Element =
     var counter = 0

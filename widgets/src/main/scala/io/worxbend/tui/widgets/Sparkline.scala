@@ -4,8 +4,8 @@ import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
 
 /** A compact bar-per-column chart using the eight block-element glyphs, scaled over the full area height.
   *
-  * Each data point maps to one column, oldest first; excess points are clipped on the right. `max` overrides
-  * the scale ceiling (defaults to the data's maximum).
+  * Each data point maps to one column, oldest first; excess points are clipped on the right. `max` overrides the scale
+  * ceiling (defaults to the data's maximum).
   */
 final case class Sparkline(
     data: Seq[Long],

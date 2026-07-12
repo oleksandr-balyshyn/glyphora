@@ -20,8 +20,8 @@ sealed trait Element:
   /** Containers rebuild with transformed children during the focus pass; leaves ignore it. */
   private[dsl] def withChildren(children: Seq[Element]): Element = this
 
-  /** Framework behavior an interactive element performs when focused (editing, toggling, cycling) — runs
-    * after the user's own `onKeyEvent` handler declined the event.
+  /** Framework behavior an interactive element performs when focused (editing, toggling, cycling) — runs after the
+    * user's own `onKeyEvent` handler declined the event.
     */
   private[dsl] def builtinKeyHandler: Option[KeyEvent => Boolean] = None
 
@@ -117,8 +117,8 @@ final case class WidgetElement(wrapped: Widget, props: ElementProps = ElementPro
 
 // ---- interactive (focusable) elements ----
 
-/** Single-line text input. Editing state (value + cursor) is app-owned; editing keys are handled by the
-  * built-in handler while focused, and any consumed key triggers a redraw.
+/** Single-line text input. Editing state (value + cursor) is app-owned; editing keys are handled by the built-in
+  * handler while focused, and any consumed key triggers a redraw.
   */
 final case class InputElement(
     state: w.TextInputState,
@@ -254,8 +254,8 @@ final case class TreeElement(
           true
         case _ => false
 
-/** Wraps a focusable element during the focus pass so its rendered area is recorded for click-to-focus
-  * hit-testing. Transparent for everything else: props, children, and handlers delegate to the wrapped node.
+/** Wraps a focusable element during the focus pass so its rendered area is recorded for click-to-focus hit-testing.
+  * Transparent for everything else: props, children, and handlers delegate to the wrapped node.
   */
 private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker: FocusTracker) extends Element:
   def props: ElementProps = inner.props
@@ -285,8 +285,8 @@ private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEven
 private def focusStyled(props: ElementProps): Style =
   if props.focused then props.style.reverse else props.style
 
-/** The factory set (TamboUI-Toolkit-style, `RESEARCH.md`): one obvious home, re-exported at the package top
-  * level so `import io.worxbend.tui.dsl.*` brings every factory in.
+/** The factory set (TamboUI-Toolkit-style, `RESEARCH.md`): one obvious home, re-exported at the package top level so
+  * `import io.worxbend.tui.dsl.*` brings every factory in.
   */
 object Element:
 

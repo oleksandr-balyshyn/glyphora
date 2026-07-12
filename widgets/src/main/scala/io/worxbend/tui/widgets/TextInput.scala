@@ -2,9 +2,9 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, StatefulWidget, Style}
 
-/** Caller-owned single-line editing state. The text is stored as grapheme clusters, so the cursor can never
-  * land inside a combining sequence or split an emoji; the cursor is a cluster index in `[0, length]` (the
-  * top value meaning "append here").
+/** Caller-owned single-line editing state. The text is stored as grapheme clusters, so the cursor can never land inside
+  * a combining sequence or split an emoji; the cursor is a cluster index in `[0, length]` (the top value meaning
+  * "append here").
   */
 final class TextInputState(initial: String = ""):
 

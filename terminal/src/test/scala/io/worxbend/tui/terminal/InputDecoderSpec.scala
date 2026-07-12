@@ -14,7 +14,7 @@ final class InputDecoderSpec extends AnyFunSuite:
   private def decoded(chars: Int*): Event =
     decoderFor(chars*).decode(10).getOrElse(fail("expected an event"))
 
-  private def csi(body: String): Seq[Int] = 0x1B +: '['.toInt +: body.map(_.toInt)
+  private def csi(body: String): Seq[Int] = 0x1b +: '['.toInt +: body.map(_.toInt)
 
   test("a timeout with no input decodes to no event"):
     assert(decoderFor().decode(10).isEmpty)
@@ -23,21 +23,21 @@ final class InputDecoderSpec extends AnyFunSuite:
     assert(decoded('q') == Event.Key(KeyEvent(KeyCode.Char('q'), KeyModifiers.None)))
 
   test("carriage return and line feed both decode to Enter"):
-    assert(decoded(0x0D) == Event.Key(KeyEvent.of(KeyCode.Enter)))
-    assert(decoded(0x0A) == Event.Key(KeyEvent.of(KeyCode.Enter)))
+    assert(decoded(0x0d) == Event.Key(KeyEvent.of(KeyCode.Enter)))
+    assert(decoded(0x0a) == Event.Key(KeyEvent.of(KeyCode.Enter)))
 
   test("tab and backspace decode to their named keys"):
     assert(decoded(0x09) == Event.Key(KeyEvent.of(KeyCode.Tab)))
-    assert(decoded(0x7F) == Event.Key(KeyEvent.of(KeyCode.Backspace)))
+    assert(decoded(0x7f) == Event.Key(KeyEvent.of(KeyCode.Backspace)))
 
   test("a control character decodes to Ctrl plus the letter"):
     assert(decoded(3) == Event.Key(KeyEvent(KeyCode.Char('c'), KeyModifiers.Ctrl)))
 
   test("a lone escape decodes to the Escape key"):
-    assert(decoded(0x1B) == Event.Key(KeyEvent.of(KeyCode.Escape)))
+    assert(decoded(0x1b) == Event.Key(KeyEvent.of(KeyCode.Escape)))
 
   test("escape followed by a printable character decodes to Alt plus the key"):
-    assert(decoded(0x1B, 'x') == Event.Key(KeyEvent(KeyCode.Char('x'), KeyModifiers.Alt)))
+    assert(decoded(0x1b, 'x') == Event.Key(KeyEvent(KeyCode.Char('x'), KeyModifiers.Alt)))
 
   test("CSI arrow sequences decode to the arrow keys"):
     assert(decoded(csi("A")*) == Event.Key(KeyEvent.of(KeyCode.Up)))
@@ -63,8 +63,8 @@ final class InputDecoderSpec extends AnyFunSuite:
     assert(decoded(csi("6~")*) == Event.Key(KeyEvent.of(KeyCode.PageDown)))
 
   test("function keys decode from SS3 and tilde encodings"):
-    assert(decoded(0x1B, 'O', 'P') == Event.Key(KeyEvent.of(KeyCode.F(1))))
-    assert(decoded(0x1B, 'O', 'S') == Event.Key(KeyEvent.of(KeyCode.F(4))))
+    assert(decoded(0x1b, 'O', 'P') == Event.Key(KeyEvent.of(KeyCode.F(1))))
+    assert(decoded(0x1b, 'O', 'S') == Event.Key(KeyEvent.of(KeyCode.F(4))))
     assert(decoded(csi("15~")*) == Event.Key(KeyEvent.of(KeyCode.F(5))))
     assert(decoded(csi("17~")*) == Event.Key(KeyEvent.of(KeyCode.F(6))))
     assert(decoded(csi("24~")*) == Event.Key(KeyEvent.of(KeyCode.F(12))))
@@ -90,4 +90,4 @@ final class InputDecoderSpec extends AnyFunSuite:
     assert(decoded(csi("<4;2;2M")*) == Event.Mouse(MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.Shift)))
 
   test("a torn escape sequence degrades to the Escape key instead of hanging"):
-    assert(decoded(0x1B, '[') == Event.Key(KeyEvent.of(KeyCode.Escape)))
+    assert(decoded(0x1b, '[') == Event.Key(KeyEvent.of(KeyCode.Escape)))

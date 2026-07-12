@@ -72,10 +72,10 @@ final class CharWidthSpec extends AnyFunSuite:
     assert(CharWidth.substringByWidth("hi", 10) == "hi")
 
   test("isWideCodePoint recognizes CJK, emoji, and hangul jamo starts"):
-    assert(CharWidth.isWideCodePoint(0x4E00))
-    assert(CharWidth.isWideCodePoint(0x1F600))
+    assert(CharWidth.isWideCodePoint(0x4e00))
+    assert(CharWidth.isWideCodePoint(0x1f600))
     assert(CharWidth.isWideCodePoint(0x1100))
 
   test("isWideCodePoint rejects ASCII and halfwidth forms"):
     assert(!CharWidth.isWideCodePoint('a'.toInt))
-    assert(!CharWidth.isWideCodePoint(0xFF61)) // halfwidth ideographic full stop
+    assert(!CharWidth.isWideCodePoint(0xff61)) // halfwidth ideographic full stop

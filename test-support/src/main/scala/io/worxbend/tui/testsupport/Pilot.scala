@@ -5,9 +5,9 @@ import io.worxbend.tui.terminal.HeadlessBackend
 
 import scala.concurrent.duration.{Deadline, DurationInt, FiniteDuration}
 
-/** Drives a TUI app end-to-end without a terminal (adapted from Textual's `Pilot`, PLAN.md §9): the app runs
-  * on a background thread against a [[HeadlessBackend]]; the test thread posts synthetic input and asserts on
-  * the rendered buffer.
+/** Drives a TUI app end-to-end without a terminal (adapted from Textual's `Pilot`, PLAN.md §9): the app runs on a
+  * background thread against a [[HeadlessBackend]]; the test thread posts synthetic input and asserts on the rendered
+  * buffer.
   *
   * All posting methods return `this` for chaining: `pilot.typeText("hi").pressKey(KeyCode.Enter).waitForIdle()`.
   */
@@ -30,8 +30,8 @@ final class Pilot private (val backend: HeadlessBackend, thread: Thread):
     backend.resizeTo(Size(width, height))
     this
 
-  /** Waits until the app has consumed every posted event and gone idle (an empty-queue read timeout), or the
-    * app thread has exited. Throws on deadline overrun — an assertion failure, not a modeled error.
+  /** Waits until the app has consumed every posted event and gone idle (an empty-queue read timeout), or the app thread
+    * has exited. Throws on deadline overrun — an assertion failure, not a modeled error.
     */
   def waitForIdle(timeout: FiniteDuration = 2.seconds): Pilot =
     val deadline = Deadline.now + timeout
@@ -59,8 +59,8 @@ final class Pilot private (val backend: HeadlessBackend, thread: Thread):
 
 object Pilot:
 
-  /** Starts `app` — any blocking function that drives a runner over `backend` — on a daemon thread and hands
-    * back the driver.
+  /** Starts `app` — any blocking function that drives a runner over `backend` — on a daemon thread and hands back the
+    * driver.
     */
   def start(backend: HeadlessBackend)(app: => Unit): Pilot =
     val thread = Thread(

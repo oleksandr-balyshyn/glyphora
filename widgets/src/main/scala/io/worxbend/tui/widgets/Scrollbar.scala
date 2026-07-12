@@ -7,8 +7,8 @@ final class ScrollbarState(var contentLength: Int, var position: Int = 0)
 
 /** A scrollbar strip: a vertical bar on the area's right edge or a horizontal bar on its bottom edge.
   *
-  * The thumb's size is proportional to how much of the content the track (viewport) covers; when the content
-  * fits entirely, only the track is drawn.
+  * The thumb's size is proportional to how much of the content the track (viewport) covers; when the content fits
+  * entirely, only the track is drawn.
   */
 final case class Scrollbar(
     orientation: Direction = Direction.Vertical,

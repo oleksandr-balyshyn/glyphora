@@ -5,8 +5,8 @@ import io.worxbend.tui.macros.{Field, FieldInput, FieldSpec, FormSpec}
 import io.worxbend.tui.runtime.{ReactiveScope, Signal}
 import io.worxbend.tui.widgets.TextInputState
 
-/** One rendered form field: its derived spec, the control state holding its raw value, and the parser that
-  * validates the raw value on submit.
+/** One rendered form field: its derived spec, the control state holding its raw value, and the parser that validates
+  * the raw value on submit.
   */
 private[dsl] sealed trait FieldBinding:
   def spec: FieldSpec
@@ -20,9 +20,9 @@ private[dsl] object FieldBinding:
 
   final case class BoolLike(spec: FieldSpec, value: Signal[Boolean]) extends FieldBinding
 
-/** Live state for a compile-time-derived form (SPEC.md §6): text/int fields become inputs, boolean fields
-  * become checkboxes; [[submit]] runs each field's parser/validators — errors land in [[errors]] per field,
-  * a fully valid form lands in [[result]].
+/** Live state for a compile-time-derived form (SPEC.md §6): text/int fields become inputs, boolean fields become
+  * checkboxes; [[submit]] runs each field's parser/validators — errors land in [[errors]] per field, a fully valid form
+  * lands in [[result]].
   *
   * Custom validation attaches per field name via cue4s-style [[Field]] composition:
   * `FormState.of(deriveForm[Signup], Field.int("age").mapValidated(...))`.
@@ -48,8 +48,8 @@ final class FormState[A] private (private[dsl] val bindings: Seq[FieldBinding], 
 
 object FormState:
 
-  /** Builds live state from a derived [[FormSpec]]; `validators` override the default per-type parsers by
-    * field name (their own `FieldSpec` is ignored — position comes from the derived spec).
+  /** Builds live state from a derived [[FormSpec]]; `validators` override the default per-type parsers by field name
+    * (their own `FieldSpec` is ignored — position comes from the derived spec).
     */
   def of[A](spec: FormSpec[A], validators: Field[?]*): FormState[A] =
     val byName = validators.map(field => field.spec.name -> field).toMap
@@ -58,14 +58,15 @@ object FormState:
         case FieldInput.BoolField =>
           FieldBinding.BoolLike(fieldSpec, Signal(false))
         case FieldInput.TextField | FieldInput.IntField =>
-          val default = if fieldSpec.input == FieldInput.IntField then Field.int(fieldSpec.name) else Field.text(fieldSpec.name)
+          val default =
+            if fieldSpec.input == FieldInput.IntField then Field.int(fieldSpec.name) else Field.text(fieldSpec.name)
           val field = byName.getOrElse(fieldSpec.name, default)
           FieldBinding.TextLike(fieldSpec, TextInputState(), raw => field.parse(raw).map(value => value: Any))
     }
     new FormState(bindings, spec.assemble)
 
-/** Renders a [[FormState]] as labeled controls with inline validation errors — the Tier 2 `Form` widget,
-  * composed from `input`/`checkbox` so it inherits focus traversal for free.
+/** Renders a [[FormState]] as labeled controls with inline validation errors — the Tier 2 `Form` widget, composed from
+  * `input`/`checkbox` so it inherits focus traversal for free.
   */
 object Form:
 

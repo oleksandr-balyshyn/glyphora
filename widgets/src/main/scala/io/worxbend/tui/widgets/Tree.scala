@@ -7,8 +7,8 @@ import scala.collection.mutable
 /** A node of a [[Tree]]: a label plus child nodes. */
 final case class TreeNode(label: String, children: Seq[TreeNode] = Seq.empty)
 
-/** Caller-owned tree state: which branch paths are expanded, the selected path, and the scroll offset.
-  * Paths address nodes by child index at each level (`Seq(1, 0)` = second root's first child).
+/** Caller-owned tree state: which branch paths are expanded, the selected path, and the scroll offset. Paths address
+  * nodes by child index at each level (`Seq(1, 0)` = second root's first child).
   */
 final class TreeState:
   val expanded: mutable.Set[Seq[Int]] = mutable.Set.empty

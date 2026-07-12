@@ -10,14 +10,15 @@ import scala.concurrent.duration.DurationInt
 
 final class TerminalRunnerSpec extends AnyFunSuite:
 
-  /** The immediate-mode hello-world render function — the same drawing the real example performs, asserted
-    * here on `Buffer` contents instead of a live terminal (PLAN.md §11, step 4).
+  /** The immediate-mode hello-world render function — the same drawing the real example performs, asserted here on
+    * `Buffer` contents instead of a live terminal (PLAN.md §11, step 4).
     */
   private def helloWorldRender(frame: Frame): Unit =
     frame.renderWidget(
       (area, buffer) =>
         buffer.setString(area.x + 2, area.y + 1, "Hello from glyphora!", Style.Default.bold.withFg(Color.Cyan))
-        buffer.setString(area.x + 2, area.y + 3, "Press 'q' to quit", Style.Default.dim),
+        buffer.setString(area.x + 2, area.y + 3, "Press 'q' to quit", Style.Default.dim)
+      ,
       frame.area,
     )
 

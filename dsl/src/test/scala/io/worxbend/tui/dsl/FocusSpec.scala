@@ -7,8 +7,8 @@ import io.worxbend.tui.widgets.TextInputState
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** Focus and event-routing acceptance tests (PLAN.md §11 step 7): tab-order traversal, focused-first key
-  * dispatch, bubbling with stop-propagation, and click-to-focus.
+/** Focus and event-routing acceptance tests (PLAN.md §11 step 7): tab-order traversal, focused-first key dispatch,
+  * bubbling with stop-propagation, and click-to-focus.
   */
 final class FocusSpec extends AnyFunSuite:
 

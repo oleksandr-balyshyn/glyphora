@@ -57,7 +57,7 @@ final class DslConstructionSpec extends AnyFunSuite:
       text("inner").onKeyEvent { _ =>
         seen += "inner"
         true
-      },
+      }
     ).onKeyEvent { _ =>
       seen += "outer"
       true
@@ -72,7 +72,7 @@ final class DslConstructionSpec extends AnyFunSuite:
       text("inner").onKeyEvent { _ =>
         seen += "inner"
         false
-      },
+      }
     ).onKeyEvent { _ =>
       seen += "outer"
       false

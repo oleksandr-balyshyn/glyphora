@@ -12,7 +12,7 @@ final class ContainersSpec extends AnyFunSuite:
       Seq(
         LayoutItem(Constraint.Length(3), Paragraph(Text.raw("ab"))),
         LayoutItem(Constraint.Fill(1), Paragraph(Text.raw("cd"))),
-      ),
+      )
     )
     assert(trimmedLines(rendered(row, 7, 1)) == Seq("ab cd"))
 
@@ -21,7 +21,7 @@ final class ContainersSpec extends AnyFunSuite:
       Seq(
         LayoutItem(Constraint.Length(1), Paragraph(Text.raw("top"))),
         LayoutItem(Constraint.Fill(1), Paragraph(Text.raw("bottom"))),
-      ),
+      )
     )
     assert(trimmedLines(rendered(column, 6, 3)) == Seq("top", "bottom", ""))
 
@@ -30,7 +30,7 @@ final class ContainersSpec extends AnyFunSuite:
       Seq(
         LayoutItem(Constraint.Percentage(50), Gauge(0.5)),
         LayoutItem(Constraint.Percentage(50), Sparkline(Seq(1, 2, 4, 8), max = Some(8))),
-      ),
+      )
     )
     val buffer = rendered(dashboardRow, 8, 1)
     assert(trimmedLines(buffer) == Seq("50% ▁▂▄█"))
@@ -41,7 +41,7 @@ final class ContainersSpec extends AnyFunSuite:
         LayoutItem(Constraint.Length(1), Paragraph(Text.raw("a"))),
         LayoutItem(Constraint.Length(2), Spacer),
         LayoutItem(Constraint.Length(1), Paragraph(Text.raw("b"))),
-      ),
+      )
     )
     assert(trimmedLines(rendered(row, 4, 1)) == Seq("a  b"))
 
@@ -50,6 +50,6 @@ final class ContainersSpec extends AnyFunSuite:
       Seq(
         LayoutItem(Constraint.Length(1), Row(Seq(LayoutItem(Constraint.Fill(1), Paragraph(Text.raw("x")))))),
         LayoutItem(Constraint.Length(1), Paragraph(Text.raw("y"))),
-      ),
+      )
     )
     assert(trimmedLines(rendered(nested, 2, 2)) == Seq("x", "y"))

@@ -10,9 +10,9 @@ import scala.util.control.NonFatal
 
 /** [[Backend]] implementation over JLine 3's system terminal.
   *
-  * Owns the JLine `Terminal` for its whole lifetime: construct via [[JLine3Backend.create]], release with
-  * `close()` (which restores cooked mode, the main screen, and cursor visibility if still active). `draw`
-  * keeps a snapshot of the last flushed frame and writes only the diff.
+  * Owns the JLine `Terminal` for its whole lifetime: construct via [[JLine3Backend.create]], release with `close()`
+  * (which restores cooked mode, the main screen, and cursor visibility if still active). `draw` keeps a snapshot of the
+  * last flushed frame and writes only the diff.
   */
 final class JLine3Backend private (terminal: Terminal) extends Backend:
 

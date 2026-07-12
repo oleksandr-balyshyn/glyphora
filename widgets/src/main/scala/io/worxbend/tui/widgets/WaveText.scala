@@ -2,8 +2,8 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
 
-/** Text with a highlight wave rolling through it: clusters near the wave crest (advanced by `phase`, one
-  * position per tick) render with `crestStyle`.
+/** Text with a highlight wave rolling through it: clusters near the wave crest (advanced by `phase`, one position per
+  * tick) render with `crestStyle`.
   */
 final case class WaveText(
     content: String,

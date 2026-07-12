@@ -4,8 +4,8 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, Rect, Span, Style, Text, W
 
 /** Multi-line styled text with alignment and optional wrapping.
   *
-  * Wrapping breaks at grapheme-cluster boundaries (not word boundaries — good enough for v1 and never splits
-  * a wide character or emoji); without wrapping, long lines are clipped at the area edge.
+  * Wrapping breaks at grapheme-cluster boundaries (not word boundaries — good enough for v1 and never splits a wide
+  * character or emoji); without wrapping, long lines are clipped at the area edge.
   */
 final case class Paragraph(
     text: Text,

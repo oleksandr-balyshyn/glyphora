@@ -4,9 +4,9 @@ import io.worxbend.tui.core.{Buffer, Constraint, Line, Rect, Text}
 
 /** Simple timed render-loop benchmark (PLAN.md §12: measure before optimizing anything).
   *
-  * Run with `./mill widgets.test.runMain io.worxbend.tui.widgets.RenderLoopBench`. Renders a dashboard-like
-  * composition into a 200x50 buffer and reports frames/second — the number that would justify (or rule out)
-  * a `Style` interning scheme (SPEC.md §9.2).
+  * Run with `./mill widgets.test.runMain io.worxbend.tui.widgets.RenderLoopBench`. Renders a dashboard-like composition
+  * into a 200x50 buffer and reports frames/second — the number that would justify (or rule out) a `Style` interning
+  * scheme (SPEC.md §9.2).
   */
 object RenderLoopBench:
 
@@ -17,8 +17,8 @@ object RenderLoopBench:
         LayoutItem(Constraint.Length(1), Tabs(Seq("overview", "detail", "logs").map(Line.raw))),
         LayoutItem(Constraint.Length(1), Gauge(0.42)),
         LayoutItem(Constraint.Length(3), Sparkline((1L to 200L).map(n => n % 17))),
-        LayoutItem(Constraint.Fill(1), Paragraph(Text.raw(("lorem ipsum dolor sit amet " * 40) + "\n") , wrap = true)),
-      ),
+        LayoutItem(Constraint.Fill(1), Paragraph(Text.raw(("lorem ipsum dolor sit amet " * 40) + "\n"), wrap = true)),
+      )
     )
     val frames = 2000
     // warmup

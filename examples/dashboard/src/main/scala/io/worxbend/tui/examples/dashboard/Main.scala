@@ -6,8 +6,8 @@ import io.worxbend.tui.widgets.{Dataset, GraphType}
 
 import scala.concurrent.duration.DurationInt
 
-/** dashboard (PLAN.md §8, example 4): `Gauge` + `Sparkline` + `Chart` under tick-rate animation — layout
-  * composition and the tick/redraw cycle. `q` quits.
+/** dashboard (PLAN.md §8, example 4): `Gauge` + `Sparkline` + `Chart` under tick-rate animation — layout composition
+  * and the tick/redraw cycle. `q` quits.
   */
 final class DashboardApp extends TuiApp:
 
@@ -32,7 +32,7 @@ final class DashboardApp extends TuiApp:
           Seq(Dataset("wave", wave, graphType = GraphType.Line)),
           xBounds = (0.0, 60.0),
           yBounds = (0.0, 100.0),
-        ).fill,
+        ).fill
       ).fill,
       text(s"tick $t · press 'q' to quit").dim,
     ).onKeyEvent {

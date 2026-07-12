@@ -2,11 +2,11 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Line, Rect, Style, Text, Widget}
 
-/** A modal-style dialog drawn over existing content: clears a centered box, borders it, renders the message
-  * and a row of buttons with one highlighted.
+/** A modal-style dialog drawn over existing content: clears a centered box, borders it, renders the message and a row
+  * of buttons with one highlighted.
   *
-  * There is no screen stack (SPEC.md §7 non-goal) — a dialog is just an element rendered last in the view,
-  * so it paints over whatever was drawn before it.
+  * There is no screen stack (SPEC.md §7 non-goal) — a dialog is just an element rendered last in the view, so it paints
+  * over whatever was drawn before it.
   */
 final case class Dialog(
     title: String,

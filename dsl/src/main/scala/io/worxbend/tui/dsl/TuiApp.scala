@@ -8,13 +8,13 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** The application entry point for the declarative DSL (SPEC.md §5.3).
   *
-  * `view` is re-evaluated under a tracking [[ReactiveScope]]: any `Signal` read during the last evaluation
-  * schedules a redraw when it changes — state lives in signals, not in an explicitly threaded `State` value.
+  * `view` is re-evaluated under a tracking [[ReactiveScope]]: any `Signal` read during the last evaluation schedules a
+  * redraw when it changes — state lives in signals, not in an explicitly threaded `State` value.
   *
-  * Focus and events (SPEC.md §5.4): focusable elements form a tab order in depth-first view order; `Tab` /
-  * `Shift+Tab` cycle focus and a mouse press focuses the innermost focusable under the pointer. Key events
-  * start at the focused element and bubble to its ancestors (`true` consumes); an unconsumed `Ctrl+C` quits.
-  * Call [[quit]] from any handler to exit cleanly.
+  * Focus and events (SPEC.md §5.4): focusable elements form a tab order in depth-first view order; `Tab` / `Shift+Tab`
+  * cycle focus and a mouse press focuses the innermost focusable under the pointer. Key events start at the focused
+  * element and bubble to its ancestors (`true` consumes); an unconsumed `Ctrl+C` quits. Call [[quit]] from any handler
+  * to exit cleanly.
   */
 trait TuiApp:
 
@@ -22,8 +22,8 @@ trait TuiApp:
 
   def config: RunnerConfig = RunnerConfig()
 
-  /** Called on every synthetic tick (requires a `config.tickRate`), on the render thread — the place to
-    * advance animation state via `Signal` updates.
+  /** Called on every synthetic tick (requires a `config.tickRate`), on the render thread — the place to advance
+    * animation state via `Signal` updates.
     */
   def onTick(): Unit = ()
 
@@ -71,7 +71,7 @@ trait TuiApp:
       event match
         case Event.Key(key)     => handleKey(key, handle) || invalidated
         case Event.Mouse(mouse) => handleMouse(mouse) || invalidated
-        case Event.Resize(_) => true
+        case Event.Resize(_)    => true
         case Event.Tick =>
           onTick()
           invalidated

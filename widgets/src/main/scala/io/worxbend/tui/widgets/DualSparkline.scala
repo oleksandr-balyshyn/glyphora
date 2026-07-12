@@ -2,8 +2,8 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Direction, Layout, Constraint, Rect, Style, Widget}
 
-/** Two sparklines sharing one area (top/bottom halves) for visually comparing a pair of series — e.g.
-  * ingress vs. egress. Each series scales independently unless a shared `max` is given.
+/** Two sparklines sharing one area (top/bottom halves) for visually comparing a pair of series — e.g. ingress vs.
+  * egress. Each series scales independently unless a shared `max` is given.
   */
 final case class DualSparkline(
     upper: Seq[Long],

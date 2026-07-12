@@ -2,11 +2,11 @@ package io.worxbend.tui.terminal
 
 import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind}
 
-/** Decodes terminal input bytes into [[Event]]s: printable keys, control keys, ANSI CSI/SS3 escape sequences
-  * for navigation and function keys, and SGR-encoded mouse reports.
+/** Decodes terminal input bytes into [[Event]]s: printable keys, control keys, ANSI CSI/SS3 escape sequences for
+  * navigation and function keys, and SGR-encoded mouse reports.
   *
-  * Reads through an injected `read(timeoutMillis) => Int` function (negative result = nothing available), so
-  * the decoder is testable with scripted input and independent of JLine.
+  * Reads through an injected `read(timeoutMillis) => Int` function (negative result = nothing available), so the
+  * decoder is testable with scripted input and independent of JLine.
   */
 private[terminal] final class InputDecoder(read: Long => Int):
 
@@ -18,10 +18,10 @@ private[terminal] final class InputDecoder(read: Long => Int):
 
   private def decodeFirst(first: Int): Event =
     first match
-      case 0x1B                   => decodeEscape()
-      case 0x0D | 0x0A            => key(KeyCode.Enter)
+      case 0x1b                   => decodeEscape()
+      case 0x0d | 0x0a            => key(KeyCode.Enter)
       case 0x09                   => key(KeyCode.Tab)
-      case 0x7F | 0x08            => key(KeyCode.Backspace)
+      case 0x7f | 0x08            => key(KeyCode.Backspace)
       case c if c >= 1 && c <= 26 => Event.Key(KeyEvent(KeyCode.Char(('a' + c - 1).toChar), KeyModifiers.Ctrl))
       case c                      => key(KeyCode.Char(c.toChar))
 
@@ -41,7 +41,7 @@ private[terminal] final class InputDecoder(read: Long => Int):
     while finalByte < 0 do
       val c = read(EscapeTimeoutMillis)
       if c < 0 then finalByte = 0 // torn sequence: decodeCsiFinal's default arm reports Escape
-      else if c >= 0x40 && c <= 0x7E then finalByte = c
+      else if c >= 0x40 && c <= 0x7e then finalByte = c
       else params.append(c.toChar)
     decodeCsiFinal(params.result(), finalByte)
 
@@ -66,17 +66,17 @@ private[terminal] final class InputDecoder(read: Long => Int):
   private def decodeTilde(numbers: Seq[Int]): Event =
     val modifiers = numbers.drop(1).headOption.map(modifiersFromCode).getOrElse(KeyModifiers.None)
     val code = numbers.headOption match
-      case Some(1)              => KeyCode.Home
-      case Some(2)              => KeyCode.Insert
-      case Some(3)              => KeyCode.Delete
-      case Some(4)              => KeyCode.End
-      case Some(5)              => KeyCode.PageUp
-      case Some(6)              => KeyCode.PageDown
+      case Some(1)                       => KeyCode.Home
+      case Some(2)                       => KeyCode.Insert
+      case Some(3)                       => KeyCode.Delete
+      case Some(4)                       => KeyCode.End
+      case Some(5)                       => KeyCode.PageUp
+      case Some(6)                       => KeyCode.PageDown
       case Some(n) if n >= 11 && n <= 15 => KeyCode.F(n - 10)
       case Some(n) if n >= 17 && n <= 21 => KeyCode.F(n - 11)
-      case Some(23)             => KeyCode.F(11)
-      case Some(24)             => KeyCode.F(12)
-      case _                    => KeyCode.Escape
+      case Some(23)                      => KeyCode.F(11)
+      case Some(24)                      => KeyCode.F(12)
+      case _                             => KeyCode.Escape
     Event.Key(KeyEvent(code, modifiers))
 
   /** SS3 sequences (`ESC O x`): F1–F4 and some terminals' Home/End. */
@@ -90,8 +90,7 @@ private[terminal] final class InputDecoder(read: Long => Int):
       case 'F' => key(KeyCode.End)
       case _   => key(KeyCode.Escape)
 
-  /** SGR mouse report `CSI < b ; x ; y (M|m)`: button bits carry drag/scroll/modifier flags, coordinates are
-    * one-based.
+  /** SGR mouse report `CSI < b ; x ; y (M|m)`: button bits carry drag/scroll/modifier flags, coordinates are one-based.
     */
   private def decodeSgrMouse(params: String, isPress: Boolean): Event =
     params.split(';').toSeq.flatMap(_.toIntOption) match

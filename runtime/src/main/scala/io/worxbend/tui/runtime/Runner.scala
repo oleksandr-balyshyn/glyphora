@@ -5,8 +5,8 @@ import io.worxbend.tui.terminal.BackendError
 
 import scala.concurrent.duration.Duration
 
-/** Runner configuration: an optional tick rate (synthetic [[Event.Tick]]s for animation) and whether to
-  * capture mouse events.
+/** Runner configuration: an optional tick rate (synthetic [[Event.Tick]]s for animation) and whether to capture mouse
+  * events.
   */
 final case class RunnerConfig(
     tickRate: Option[Duration] = None,
@@ -15,9 +15,9 @@ final case class RunnerConfig(
 
 /** The mid-level API tier (SPEC.md §4.3): owns the event/render loop over a `Backend`.
   *
-  * `handleEvent` returns whether the UI should redraw; `render` fills the frame on each redraw. `run` blocks
-  * until the app quits (via [[RunnerHandle.quit]]) or the backend fails, and always restores the terminal on
-  * the way out. The calling thread becomes the render thread for the duration of `run`.
+  * `handleEvent` returns whether the UI should redraw; `render` fills the frame on each redraw. `run` blocks until the
+  * app quits (via [[RunnerHandle.quit]]) or the backend fails, and always restores the terminal on the way out. The
+  * calling thread becomes the render thread for the duration of `run`.
   */
 trait Runner:
   def run(

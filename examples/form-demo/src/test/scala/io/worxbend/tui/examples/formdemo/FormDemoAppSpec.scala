@@ -6,8 +6,8 @@ import io.worxbend.tui.testsupport.Pilot
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** End-to-end form validation (PLAN.md §11, step 11): `Field.mapValidated` runs on submit, an invalid input
-  * surfaces its validation error in the rendered UI, and a corrected form assembles the case class.
+/** End-to-end form validation (PLAN.md §11, step 11): `Field.mapValidated` runs on submit, an invalid input surfaces
+  * its validation error in the rendered UI, and a corrected form assembles the case class.
   */
 final class FormDemoAppSpec extends AnyFunSuite:
 

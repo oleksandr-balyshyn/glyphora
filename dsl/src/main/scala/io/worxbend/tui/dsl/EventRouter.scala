@@ -4,10 +4,10 @@ import io.worxbend.tui.core.{KeyEvent, MouseEvent}
 
 /** Event routing (SPEC.md §5.4).
   *
-  * With a focused element present, a key event starts at the focused element and bubbles up its ancestor
-  * chain — at each node the user's `onKeyEvent` runs first, then the framework's built-in behavior (editing,
-  * toggling); a `true` result consumes the event. With no focusable elements the tree is walked depth-first,
-  * leaves before ancestors, with the same stop-propagation contract.
+  * With a focused element present, a key event starts at the focused element and bubbles up its ancestor chain — at
+  * each node the user's `onKeyEvent` runs first, then the framework's built-in behavior (editing, toggling); a `true`
+  * result consumes the event. With no focusable elements the tree is walked depth-first, leaves before ancestors, with
+  * the same stop-propagation contract.
   */
 private[dsl] object EventRouter:
 

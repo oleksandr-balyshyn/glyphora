@@ -13,7 +13,7 @@ final class TuiAppSpec extends AnyFunSuite:
     val count = Signal(0)
     def view(using ReactiveScope): Element =
       panel("Counter")(
-        text(s"count: ${count.get}"),
+        text(s"count: ${count.get}")
       ).onKeyEvent {
         case KeyEvent(KeyCode.Char('+'), _) =>
           count.update(_ + 1)

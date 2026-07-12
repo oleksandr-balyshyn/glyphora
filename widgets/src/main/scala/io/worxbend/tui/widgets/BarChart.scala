@@ -2,8 +2,8 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
 
-/** Vertical bars with optional labels underneath: each `(label, value)` gets a `barWidth`-column bar scaled
-  * against `max` (defaulting to the data's maximum), topped with a partial block glyph for sub-cell precision.
+/** Vertical bars with optional labels underneath: each `(label, value)` gets a `barWidth`-column bar scaled against
+  * `max` (defaulting to the data's maximum), topped with a partial block glyph for sub-cell precision.
   */
 final case class BarChart(
     data: Seq[(String, Long)],

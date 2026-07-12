@@ -3,8 +3,8 @@ package io.worxbend.tui.examples.formdemo
 import io.worxbend.tui.dsl.*
 import io.worxbend.tui.macros.{deriveForm, Field}
 
-/** form-demo (PLAN.md §8, example 5): a form derived at compile time from a case class (`deriveForm`, zero
-  * reflection) with cue4s-style `Field.mapValidated` validation surfacing errors in the UI.
+/** form-demo (PLAN.md §8, example 5): a form derived at compile time from a case class (`deriveForm`, zero reflection)
+  * with cue4s-style `Field.mapValidated` validation surfacing errors in the UI.
   *
   * Keys: type in fields · `Tab` next field · `Space` toggles the checkbox · `Ctrl+S` submit · `Esc` quit.
   */

@@ -3,8 +3,8 @@ package io.worxbend.tui.examples.todolist
 import io.worxbend.tui.dsl.*
 import io.worxbend.tui.widgets.{ListState, TextInputState}
 
-/** todo-list (PLAN.md §8, example 3): a `list` + `input` with focus switching — multi-widget focus
-  * management and list-selection state, end to end.
+/** todo-list (PLAN.md §8, example 3): a `list` + `input` with focus switching — multi-widget focus management and
+  * list-selection state, end to end.
   *
   * Keys: type + `Enter` to add · `Tab` to switch focus · `↑`/`↓` to select · `d` to delete · `Esc` to quit.
   */
