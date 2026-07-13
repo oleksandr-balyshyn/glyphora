@@ -45,14 +45,14 @@ final class ChromeWidgetsSpec extends AnyFunSuite:
     assert(BigText.widthOf("") == 0)
 
   test("the log follows the tail by default"):
-    val state = LogState()
+    val state  = LogState()
     (1 to 5).foreach(n => state.append(s"line $n"))
     val buffer = Buffer(Rect(0, 0, 10, 3))
     Log().render(buffer.area, buffer, state)
     assert(trimmedLines(buffer) == Seq("line 3", "line 4", "line 5"))
 
   test("scrolling up detaches follow; scrolling back to the bottom re-attaches"):
-    val state = LogState()
+    val state  = LogState()
     (1 to 5).foreach(n => state.append(s"line $n"))
     val buffer = Buffer(Rect(0, 0, 10, 3))
     Log().render(buffer.area, buffer, state) // establishes offset = 2
@@ -69,7 +69,7 @@ final class ChromeWidgetsSpec extends AnyFunSuite:
     assert(state.follow)
 
   test("the ring drops the oldest lines past the cap"):
-    val state = LogState(maxLines = 3)
+    val state  = LogState(maxLines = 3)
     (1 to 5).foreach(n => state.append(s"line $n"))
     assert(state.size == 3)
     val buffer = Buffer(Rect(0, 0, 10, 3))
@@ -77,7 +77,7 @@ final class ChromeWidgetsSpec extends AnyFunSuite:
     assert(trimmedLines(buffer) == Seq("line 3", "line 4", "line 5"))
 
   test("styled lines keep their span styles in the log"):
-    val state = LogState()
+    val state  = LogState()
     state.append(Line.styled("err", io.worxbend.tui.core.Style.Default.bold))
     val buffer = Buffer(Rect(0, 0, 5, 1))
     Log().render(buffer.area, buffer, state)

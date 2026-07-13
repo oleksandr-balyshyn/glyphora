@@ -11,8 +11,8 @@ import io.worxbend.tui.core.{Buffer, Constraint, Line, Rect, Text}
 object RenderLoopBench:
 
   def main(args: Array[String]): Unit =
-    val area = Rect(0, 0, 200, 50)
-    val widget = Column(
+    val area           = Rect(0, 0, 200, 50)
+    val widget         = Column(
       Seq(
         LayoutItem(Constraint.Length(1), Tabs(Seq("overview", "detail", "logs").map(Line.raw))),
         LayoutItem(Constraint.Length(1), Gauge(0.42)),
@@ -20,10 +20,10 @@ object RenderLoopBench:
         LayoutItem(Constraint.Fill(1), Paragraph(Text.raw(("lorem ipsum dolor sit amet " * 40) + "\n"), wrap = true)),
       )
     )
-    val frames = 2000
+    val frames         = 2000
     // warmup
     renderFrames(widget, area, 200)
-    val start = System.nanoTime()
+    val start          = System.nanoTime()
     renderFrames(widget, area, frames)
     val elapsedSeconds = (System.nanoTime() - start) / 1e9
     println(f"$frames frames in $elapsedSeconds%.2f s = ${frames / elapsedSeconds}%.0f fps (200x50 buffer)")

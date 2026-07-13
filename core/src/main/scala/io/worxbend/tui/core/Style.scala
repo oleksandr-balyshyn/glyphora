@@ -15,15 +15,15 @@ final case class Style(
 
   /** Attaches an OSC 8 hyperlink target — terminals that support it make the cells clickable. */
   def withLink(url: String): Style = copy(link = Some(url))
-  def withBg(color: Color): Style = copy(bg = Some(color))
-  def bold: Style = copy(modifiers = modifiers | Modifiers.Bold)
-  def dim: Style = copy(modifiers = modifiers | Modifiers.Dim)
-  def italic: Style = copy(modifiers = modifiers | Modifiers.Italic)
-  def underline: Style = copy(modifiers = modifiers | Modifiers.Underline)
-  def blink: Style = copy(modifiers = modifiers | Modifiers.Blink)
-  def reverse: Style = copy(modifiers = modifiers | Modifiers.Reverse)
-  def hidden: Style = copy(modifiers = modifiers | Modifiers.Hidden)
-  def crossedOut: Style = copy(modifiers = modifiers | Modifiers.CrossedOut)
+  def withBg(color: Color): Style  = copy(bg = Some(color))
+  def bold: Style                  = copy(modifiers = modifiers | Modifiers.Bold)
+  def dim: Style                   = copy(modifiers = modifiers | Modifiers.Dim)
+  def italic: Style                = copy(modifiers = modifiers | Modifiers.Italic)
+  def underline: Style             = copy(modifiers = modifiers | Modifiers.Underline)
+  def blink: Style                 = copy(modifiers = modifiers | Modifiers.Blink)
+  def reverse: Style               = copy(modifiers = modifiers | Modifiers.Reverse)
+  def hidden: Style                = copy(modifiers = modifiers | Modifiers.Hidden)
+  def crossedOut: Style            = copy(modifiers = modifiers | Modifiers.CrossedOut)
 
   /** This style with `other`'s explicit choices layered on top: `other`'s colors win where set, modifiers union. */
   def patch(other: Style): Style =

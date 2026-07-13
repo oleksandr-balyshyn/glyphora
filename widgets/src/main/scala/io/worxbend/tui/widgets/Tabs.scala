@@ -19,7 +19,7 @@ final case class Tabs(
         if remaining > 0 then
           val titleStyle = if index == selected then style.patch(highlightStyle) else style
           x += LineRenderer.render(buffer, x, area.y, title, remaining, titleStyle)
-          val isLast = index == titles.size - 1
+          val isLast     = index == titles.size - 1
           if !isLast && area.right - x > 0 then
             val fitted = CharWidth.substringByWidth(divider, area.right - x)
             buffer.setString(x, area.y, fitted, style)

@@ -12,16 +12,16 @@ final class Tier5ElementsSpec extends AnyFunSuite:
 
   test("a focused textArea edits multi-line text, consumes Enter, and undoes with Ctrl+Z"):
     val backend = HeadlessBackend(Size(30, 6))
-    val state = TextAreaState()
-    val app = new TuiApp:
+    val state   = TextAreaState()
+    val app     = new TuiApp:
       def view(using ReactiveScope): Element =
         column(textArea(state)).onKeyEvent {
           case KeyEvent(KeyCode.Char('q'), m) if m.has(KeyModifiers.Ctrl) =>
             quit()
             true
-          case _ => false
+          case _                                                          => false
         }
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("one").pressKey(KeyCode.Enter).typeText("two").waitForIdle()
     assert(state.value == "one\ntwo")
@@ -32,18 +32,18 @@ final class Tier5ElementsSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("a focused textArea leaves Tab available for focus traversal"):
-    val backend = HeadlessBackend(Size(30, 6))
+    val backend     = HeadlessBackend(Size(30, 6))
     val editorState = TextAreaState()
     val secondState = TextAreaState()
-    val app = new TuiApp:
+    val app         = new TuiApp:
       def view(using ReactiveScope): Element =
         column(textArea(editorState), textArea(secondState)).onKeyEvent {
           case KeyEvent(KeyCode.Escape, _) =>
             quit()
             true
-          case _ => false
+          case _                           => false
         }
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot       = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("a").pressKey(KeyCode.Tab).typeText("b").waitForIdle()
     assert(editorState.value == "a")

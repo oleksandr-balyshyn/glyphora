@@ -24,7 +24,7 @@ final class CounterApp extends TuiApp:
       case KeyEvent(KeyCode.Char('q'), _) =>
         quit()
         true
-      case _ => false
+      case _                              => false
     }
 
 object Main:

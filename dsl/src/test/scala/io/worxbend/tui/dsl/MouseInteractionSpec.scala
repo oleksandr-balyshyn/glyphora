@@ -12,7 +12,7 @@ final class MouseInteractionSpec extends AnyFunSuite:
   private def startApp(view0: ReactiveScope ?=> Element): Pilot =
     val backend = HeadlessBackend(Size(40, 8))
     val testApp = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0
     Pilot.start(backend) { val _ = testApp.runWith(backend) }.waitForIdle()
 
@@ -22,14 +22,14 @@ final class MouseInteractionSpec extends AnyFunSuite:
 
   test("clicking a button activates it"):
     var pressed = 0
-    val pilot = startApp(column(button("OK") { pressed += 1 }, text("below")))
+    val pilot   = startApp(column(button("OK") { pressed += 1 }, text("below")))
     pilot.click(5, 0).waitForIdle()
     assert(pressed == 1)
     quitApp(pilot)
 
   test("clicking a checkbox toggles its signal"):
     val checked = Signal(false)
-    val pilot = startApp(column(checkbox("opt in", checked), text("x")))
+    val pilot   = startApp(column(checkbox("opt in", checked), text("x")))
     pilot.click(2, 0).waitForIdle()
     assert(checked.peek)
     pilot.click(2, 0).waitForIdle()
@@ -37,9 +37,9 @@ final class MouseInteractionSpec extends AnyFunSuite:
     quitApp(pilot)
 
   test("the scroll wheel scrolls a scrollView under the pointer"):
-    val state = ScrollViewState()
+    val state   = ScrollViewState()
     val content = column((0 until 9).map(n => text(s"row $n").fill)*)
-    val pilot = startApp(scrollView(content, contentHeight = 9, state))
+    val pilot   = startApp(scrollView(content, contentHeight = 9, state))
     assert(pilot.screenLines.head.startsWith("row 0"))
     pilot.backend.postEvent(
       io.worxbend.tui.core.Event.Mouse(

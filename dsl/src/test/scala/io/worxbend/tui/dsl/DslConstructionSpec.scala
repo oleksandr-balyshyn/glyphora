@@ -19,7 +19,7 @@ final class DslConstructionSpec extends AnyFunSuite:
         assert(children.size == 3)
         assert(children(0).asInstanceOf[TextElement].content == "Welcome!")
         assert(children(1).isInstanceOf[SpacerElement])
-      case other => fail(s"unexpected tree shape: $other")
+      case other                                                        => fail(s"unexpected tree shape: $other")
 
   test("styling extensions accumulate into the element style"):
     val element = text("x").bold.dim.color(Color.Red).background(Color.Black)
@@ -48,13 +48,13 @@ final class DslConstructionSpec extends AnyFunSuite:
 
   test("onKeyEvent attaches a handler without disturbing the rest of the props"):
     val handler: KeyEvent => Boolean = _ => true
-    val element = text("x").bold.onKeyEvent(handler)
+    val element                      = text("x").bold.onKeyEvent(handler)
     assert(element.props.onKey.contains(handler))
     assert(element.style.modifiers.has(Modifiers.Bold))
 
   test("key events route to the innermost handler first and consumption stops propagation"):
-    val seen = scala.collection.mutable.Buffer[String]()
-    val tree = column(
+    val seen     = scala.collection.mutable.Buffer[String]()
+    val tree     = column(
       text("inner").onKeyEvent { _ =>
         seen += "inner"
         true
@@ -68,8 +68,8 @@ final class DslConstructionSpec extends AnyFunSuite:
     assert(seen.toSeq == Seq("inner"))
 
   test("an unconsumed event bubbles from leaf to ancestor"):
-    val seen = scala.collection.mutable.Buffer[String]()
-    val tree = column(
+    val seen     = scala.collection.mutable.Buffer[String]()
+    val tree     = column(
       text("inner").onKeyEvent { _ =>
         seen += "inner"
         false

@@ -22,7 +22,7 @@ object Screen:
   def full(element: ReactiveScope ?=> Element): Screen =
     new Screen:
       def view(using ReactiveScope): Element = element
-      override def modal: Boolean = false
+      override def modal: Boolean            = false
 
 /** Severity of a [[TuiApp.notify]] toast; picks the theme style it renders with. */
 enum ToastLevel:

@@ -23,19 +23,19 @@ final case class Block(
 
   /** The content region inside the borders and padding. */
   def inner(area: Rect): Rect =
-    val left = area.x + borderWidth(Borders.Left) + padding
-    val top = area.y + borderWidth(Borders.Top) + padding
-    val width = area.width - borderWidth(Borders.Left) - borderWidth(Borders.Right) - 2 * padding
+    val left   = area.x + borderWidth(Borders.Left) + padding
+    val top    = area.y + borderWidth(Borders.Top) + padding
+    val width  = area.width - borderWidth(Borders.Left) - borderWidth(Borders.Right) - 2 * padding
     val height = area.height - borderWidth(Borders.Top) - borderWidth(Borders.Bottom) - 2 * padding
     if width <= 0 || height <= 0 then Rect(left, top, 0, 0) else Rect(left, top, width, height)
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
       val glyphs = BorderGlyphs.of(borderType)
-      val top = area.y
+      val top    = area.y
       val bottom = area.bottom - 1
-      val left = area.x
-      val right = area.right - 1
+      val left   = area.x
+      val right  = area.right - 1
       if borders.has(Borders.Left) then verticalEdge(buffer, area, left, glyphs)
       if borders.has(Borders.Right) && area.width > 1 then verticalEdge(buffer, area, right, glyphs)
       if borders.has(Borders.Top) then horizontalEdge(buffer, area, top, glyphs)
@@ -63,12 +63,12 @@ final case class Block(
     if borders.has(first) && borders.has(second) then buffer.set(x, y, Cell(glyph, borderStyle))
 
   private def renderTitle(buffer: Buffer, area: Rect, line: Line): Unit =
-    val insetLeft = if borders.has(Borders.Left) then 1 else 0
+    val insetLeft  = if borders.has(Borders.Left) then 1 else 0
     val insetRight = if borders.has(Borders.Right) then 1 else 0
-    val available = area.width - insetLeft - insetRight
+    val available  = area.width - insetLeft - insetRight
     if available > 0 then
       val titleWidth = math.min(line.width, available)
-      val startX = titleAlignment match
+      val startX     = titleAlignment match
         case Alignment.Left   => area.x + insetLeft
         case Alignment.Center => area.x + insetLeft + (available - titleWidth) / 2
         case Alignment.Right  => area.x + insetLeft + available - titleWidth

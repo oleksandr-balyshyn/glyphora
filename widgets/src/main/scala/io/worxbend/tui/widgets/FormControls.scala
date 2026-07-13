@@ -13,8 +13,8 @@ final case class RadioGroup(
   def render(area: Rect, buffer: Buffer): Unit =
     options.take(area.height).zipWithIndex.foreach { (label, index) =>
       val isSelected = index == selected
-      val marker = if isSelected then "(•) " else "( ) "
-      val rowStyle = if isSelected then selectedStyle else style
+      val marker     = if isSelected then "(•) " else "( ) "
+      val rowStyle   = if isSelected then selectedStyle else style
       buffer.setString(area.x, area.y + index, marker + label, rowStyle)
     }
 
@@ -32,13 +32,13 @@ final case class Slider(
       val trackWidth = area.width - 2
       buffer.set(area.x, area.y, Cell("├", style))
       buffer.set(area.right - 1, area.y, Cell("┤", style))
-      var x = area.x + 1
+      var x          = area.x + 1
       while x < area.right - 1 do
         buffer.set(x, area.y, Cell("─", style))
         x += 1
-      val span = math.max(1, max - min)
-      val clamped = math.max(min, math.min(value, max))
-      val knob = area.x + 1 + math.round((clamped - min).toDouble / span * (trackWidth - 1)).toInt
+      val span       = math.max(1, max - min)
+      val clamped    = math.max(min, math.min(value, max))
+      val knob       = area.x + 1 + math.round((clamped - min).toDouble / span * (trackWidth - 1)).toInt
       buffer.set(knob, area.y, Cell("●", knobStyle))
 
 /** A compact page indicator: dots for small totals, `page/total` otherwise. Pages are 1-based for display. */

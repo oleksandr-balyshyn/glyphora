@@ -39,7 +39,7 @@ final class TextInputSpec extends AnyFunSuite:
     assert(state.value == "a")
 
   test("the value renders with the cursor highlighted at its cluster"):
-    val state = TextInputState("abc")
+    val state  = TextInputState("abc")
     state.moveHome()
     state.moveRight()
     val buffer = renderedWith(state)
@@ -48,12 +48,12 @@ final class TextInputSpec extends AnyFunSuite:
     assert(!buffer.get(0, 0).style.modifiers.has(Modifiers.Reverse))
 
   test("the cursor at the end highlights the trailing space"):
-    val state = TextInputState("ab")
+    val state  = TextInputState("ab")
     val buffer = renderedWith(state)
     assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Reverse))
 
   test("an unfocused input renders no cursor"):
-    val state = TextInputState("ab")
+    val state  = TextInputState("ab")
     val buffer = renderedWith(state, TextInput(showCursor = false))
     assert((0 until 10).forall(x => !buffer.get(x, 0).style.modifiers.has(Modifiers.Reverse)))
 
@@ -62,7 +62,7 @@ final class TextInputSpec extends AnyFunSuite:
     assert(trimmedLines(buffer).head == "name...")
 
   test("long content scrolls horizontally to keep the cursor visible"):
-    val state = TextInputState("abcdefghij")
+    val state  = TextInputState("abcdefghij")
     val buffer = renderedWith(state, width = 5)
     // cursor at end: the visible window is the tail of the text plus the cursor cell
     assert(trimmedLines(buffer).head == "ghij")

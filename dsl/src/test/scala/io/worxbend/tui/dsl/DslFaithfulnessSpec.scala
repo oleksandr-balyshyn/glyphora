@@ -31,13 +31,13 @@ final class DslFaithfulnessSpec extends AnyFunSuite:
       ).render(block.inner(area), buffer)
 
   test("hello-world through the DSL is byte-identical to the hand-built widget tree"):
-    val fromDsl = rendered(dslTree.widget, 30, 8)
+    val fromDsl     = rendered(dslTree.widget, 30, 8)
     val fromWidgets = rendered(handBuilt, 30, 8)
     assert(fromWidgets.diff(fromDsl).isEmpty)
 
   test("the equivalence holds at other sizes too"):
     Seq((20, 5), (40, 12), (10, 4)).foreach { (width, height) =>
-      val fromDsl = rendered(dslTree.widget, width, height)
+      val fromDsl     = rendered(dslTree.widget, width, height)
       val fromWidgets = rendered(handBuilt, width, height)
       assert(fromWidgets.diff(fromDsl).isEmpty, s"differs at ${width}x$height")
     }

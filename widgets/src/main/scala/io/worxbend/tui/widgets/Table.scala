@@ -19,7 +19,7 @@ final case class Table(
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
       val columns = Layout(Direction.Horizontal, widths, columnSpacing).split(area)
-      var y = area.y
+      var y       = area.y
       header.foreach { cells =>
         if y < area.bottom then
           renderRow(buffer, columns, cells, y, headerStyle)

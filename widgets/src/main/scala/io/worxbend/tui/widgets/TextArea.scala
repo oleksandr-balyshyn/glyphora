@@ -15,11 +15,11 @@ final class TextAreaState(initial: String = ""):
 
   private var lines: Vector[Vector[String]] =
     initial.split("\n", -1).toVector.map(line => CharWidth.graphemeClusters(line).toVector)
-  private var line = lines.size - 1
-  private var column = lines.last.size
-  private[widgets] var scrollRow: Int = 0
-  private[widgets] var scrollColumn: Int = 0
-  private val undoStack = mutable.Stack[(Vector[Vector[String]], Int, Int)]()
+  private var line                          = lines.size - 1
+  private var column                        = lines.last.size
+  private[widgets] var scrollRow: Int       = 0
+  private[widgets] var scrollColumn: Int    = 0
+  private val undoStack                     = mutable.Stack[(Vector[Vector[String]], Int, Int)]()
 
   def value: String = lines.map(_.mkString).mkString("\n")
 
@@ -32,14 +32,14 @@ final class TextAreaState(initial: String = ""):
 
   def insert(text: String): Unit =
     pushUndo()
-    val segments = text.split("\n", -1).toVector.map(seg => CharWidth.graphemeClusters(seg).toVector)
+    val segments        = text.split("\n", -1).toVector.map(seg => CharWidth.graphemeClusters(seg).toVector)
     val (before, after) = lines(line).splitAt(column)
     if segments.size == 1 then
       lines = lines.updated(line, before ++ segments.head ++ after)
       column += segments.head.size
     else
-      val first = before ++ segments.head
-      val last = segments.last ++ after
+      val first  = before ++ segments.head
+      val last   = segments.last ++ after
       val middle = segments.drop(1).dropRight(1)
       lines = lines.take(line) ++ (first +: middle :+ last) ++ lines.drop(line + 1)
       line += segments.size - 1
@@ -139,14 +139,14 @@ final case class TextArea(
       isCursorLine: Boolean,
   ): Unit =
     val cursorColumn = state.cursor._2
-    var x = area.x
-    var index = state.scrollColumn
+    var x            = area.x
+    var index        = state.scrollColumn
     while index <= clusters.size && x < area.right do
-      val atEnd = index == clusters.size
+      val atEnd  = index == clusters.size
       val symbol = if atEnd then " " else clusters(index)
-      val width = math.max(1, CharWidth.of(symbol))
+      val width  = math.max(1, CharWidth.of(symbol))
       if x + width <= area.right then
-        val isCursor = showCursor && isCursorLine && index == cursorColumn
+        val isCursor  = showCursor && isCursorLine && index == cursorColumn
         val cellStyle = if isCursor then style.patch(cursorStyle) else style
         if !atEnd || isCursor then
           buffer.set(x, y, Cell(symbol, cellStyle))
@@ -161,8 +161,8 @@ final case class TextArea(
 
   /** Scrolls all lines left just enough that the cursor's column (measured on its own line) stays visible. */
   private def scrolledHorizontally(state: TextAreaState, cursorColumn: Int, width: Int): Int =
-    val clusters = state.clusterLines(state.cursor._1)
-    var scroll = math.min(state.scrollColumn, cursorColumn)
+    val clusters                                 = state.clusterLines(state.cursor._1)
+    var scroll                                   = math.min(state.scrollColumn, cursorColumn)
     def visibleWidth(from: Int, until: Int): Int = clusters.slice(from, until).map(CharWidth.of).sum
     while visibleWidth(scroll, cursorColumn) + 1 > width && scroll < cursorColumn do scroll += 1
     scroll

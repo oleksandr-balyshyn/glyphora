@@ -23,11 +23,11 @@ final case class Scrollbar(
       val trackLength = orientation match
         case Direction.Vertical   => area.height
         case Direction.Horizontal => area.width
-      val thumb = thumbRange(trackLength, state)
-      var along = 0
+      val thumb       = thumbRange(trackLength, state)
+      var along       = 0
       while along < trackLength do
-        val inThumb = thumb.exists(range => along >= range._1 && along < range._1 + range._2)
-        val symbol = if inThumb then thumbSymbol else trackSymbol
+        val inThumb   = thumb.exists(range => along >= range._1 && along < range._1 + range._2)
+        val symbol    = if inThumb then thumbSymbol else trackSymbol
         val cellStyle = if inThumb then thumbStyle else style
         orientation match
           case Direction.Vertical   => buffer.set(area.right - 1, area.y + along, Cell(symbol, cellStyle))
@@ -38,8 +38,8 @@ final case class Scrollbar(
   private def thumbRange(trackLength: Int, state: ScrollbarState): Option[(Int, Int)] =
     if state.contentLength <= trackLength || trackLength == 0 then None
     else
-      val size = math.max(1, trackLength * trackLength / state.contentLength)
-      val maxPosition = state.contentLength - trackLength
+      val size            = math.max(1, trackLength * trackLength / state.contentLength)
+      val maxPosition     = state.contentLength - trackLength
       val clampedPosition = math.max(0, math.min(state.position, maxPosition))
-      val start = math.round(clampedPosition.toDouble / maxPosition * (trackLength - size)).toInt
+      val start           = math.round(clampedPosition.toDouble / maxPosition * (trackLength - size)).toInt
       Some((start, size))

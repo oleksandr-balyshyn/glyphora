@@ -26,7 +26,7 @@ final case class Calendar(
       drawDays(area, buffer, yearMonth)
 
   private def drawTitle(area: Rect, buffer: Buffer, yearMonth: YearMonth): Unit =
-    val title = s"${yearMonth.getMonth.getDisplayName(JTextStyle.FULL, Locale.ENGLISH)} $year"
+    val title  = s"${yearMonth.getMonth.getDisplayName(JTextStyle.FULL, Locale.ENGLISH)} $year"
     val fitted = CharWidth.substringByWidth(title, area.width)
     val offset = (math.min(area.width, GridWidth) - CharWidth.of(fitted)) / 2
     buffer.setString(area.x + math.max(0, offset), area.y, fitted, headerStyle)
@@ -38,9 +38,9 @@ final case class Calendar(
   private def drawDays(area: Rect, buffer: Buffer, yearMonth: YearMonth): Unit =
     val firstColumn = columnOf(yearMonth.atDay(1))
     (1 to yearMonth.lengthOfMonth).foreach { day =>
-      val slot = firstColumn + day - 1
-      val x = area.x + (slot % 7) * 3
-      val y = area.y + 2 + slot / 7
+      val slot     = firstColumn + day - 1
+      val x        = area.x + (slot % 7) * 3
+      val y        = area.y + 2 + slot / 7
       val dayStyle = if selected.contains(day) then style.patch(selectedStyle) else style
       buffer.setString(x, y, f"$day%2d", dayStyle)
     }
@@ -50,4 +50,4 @@ final case class Calendar(
     date.getDayOfWeek.getValue - DayOfWeek.MONDAY.getValue
 
   private val WeekDays: Seq[DayOfWeek] = DayOfWeek.values.toSeq
-  private val GridWidth = 20
+  private val GridWidth                = 20

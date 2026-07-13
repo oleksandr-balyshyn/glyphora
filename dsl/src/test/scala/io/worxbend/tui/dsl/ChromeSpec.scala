@@ -17,7 +17,7 @@ final class ChromeSpec extends AnyFunSuite:
     assert(summon[Theme].name == "light")
 
   test("topBar renders title, tabs, and right text over the surface"):
-    val bar = topBar("app", tabs = Seq("one", "two"), right = "v1")
+    val bar   = topBar("app", tabs = Seq("one", "two"), right = "v1")
     val lines = trimmedLines(rendered(bar.widget, 30, 1))
     assert(lines.head.startsWith(" app"))
     assert(lines.head.contains("one │ two"))
@@ -25,7 +25,7 @@ final class ChromeSpec extends AnyFunSuite:
 
   test("statusBar renders binding hints"):
     val bindings = KeyBindings(binding("q", "quit")(()), binding("tab", "next")(()))
-    val lines = trimmedLines(rendered(statusBar(bindings).widget, 40, 1))
+    val lines    = trimmedLines(rendered(statusBar(bindings).widget, 40, 1))
     assert(lines.head == " q quit  │  tab next")
 
   test("scaffold stacks top bar, sidebar+content, and status bar"):
@@ -48,7 +48,7 @@ final class ChromeSpec extends AnyFunSuite:
 
   test("helpOverlay lists the hinted bindings in a dialog"):
     val overlay = helpOverlay(KeyBindings(binding("q", "quit the app")(())))
-    val lines = trimmedLines(rendered(overlay.widget, 40, 9))
+    val lines   = trimmedLines(rendered(overlay.widget, 40, 9))
     assert(lines.exists(_.contains("Help")))
     assert(lines.exists(_.contains("quit the app")))
 
@@ -59,14 +59,14 @@ final class ChromeSpec extends AnyFunSuite:
 
   test("app-level bindings run for keys no element consumed, and trigger a redraw"):
     val backend = HeadlessBackend(Size(30, 4))
-    var saves = 0
-    val app = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(
+    var saves   = 0
+    val app     = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(
         binding("ctrl+s", "save") { saves += 1 },
         binding("q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text(s"saves: $saves")
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Char('s'), KeyModifiers.Ctrl).waitForIdle()
     assert(saves == 1)
@@ -75,6 +75,6 @@ final class ChromeSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("the surface style actually fills the whole bar row"):
-    val bar = statusBar(Seq("q" -> "quit"))
+    val bar    = statusBar(Seq("q" -> "quit"))
     val buffer = rendered(bar.widget, 20, 1)
     assert(buffer.get(19, 0).style.bg.nonEmpty)

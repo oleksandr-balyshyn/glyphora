@@ -10,8 +10,8 @@ final class ShowcaseAppSpec extends AnyFunSuite:
 
   private def startedApp(): (ShowcaseApp, Pilot) =
     val backend = HeadlessBackend(Size(70, 20))
-    val app = ShowcaseApp()
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val app     = ShowcaseApp()
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Enter).waitForIdle() // skip the splash
     (app, pilot)

@@ -13,18 +13,18 @@ import scala.concurrent.duration.DurationInt
 object SoakMain:
 
   def main(args: Array[String]): Unit =
-    val seconds = args.headOption.flatMap(_.toIntOption).getOrElse(60)
-    val backend = HeadlessBackend(Size(120, 40))
-    val app = DashboardApp()
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val seconds     = args.headOption.flatMap(_.toIntOption).getOrElse(60)
+    val backend     = HeadlessBackend(Size(120, 40))
+    val app         = DashboardApp()
+    val pilot       = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
-    val heapBefore = usedHeap()
+    val heapBefore  = usedHeap()
     val drawsBefore = backend.drawCount
     Thread.sleep(seconds * 1000L)
-    val draws = backend.drawCount - drawsBefore
-    val heapAfter = usedHeap()
+    val draws       = backend.drawCount - drawsBefore
+    val heapAfter   = usedHeap()
     pilot.pressKey(KeyCode.Char('q'))
-    val stopped = pilot.awaitTermination(2.seconds)
+    val stopped     = pilot.awaitTermination(2.seconds)
     println(
       f"soak: $seconds s, $draws draws (${draws.toDouble / seconds}%.1f fps), " +
         f"heap ${heapBefore / 1024 / 1024} MB -> ${heapAfter / 1024 / 1024} MB, clean shutdown: $stopped"

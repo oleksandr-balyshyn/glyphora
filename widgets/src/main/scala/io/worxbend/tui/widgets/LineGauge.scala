@@ -14,17 +14,17 @@ final case class LineGauge(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val clamped = math.max(0.0, math.min(1.0, ratio))
-      val text = label.getOrElse(s"${math.round(clamped * 100)}%") + " "
-      val fitted = CharWidth.substringByWidth(text, area.width)
+      val clamped   = math.max(0.0, math.min(1.0, ratio))
+      val text      = label.getOrElse(s"${math.round(clamped * 100)}%") + " "
+      val fitted    = CharWidth.substringByWidth(text, area.width)
       buffer.setString(area.x, area.y, fitted, style)
       val lineStart = area.x + CharWidth.of(fitted)
       val lineWidth = area.right - lineStart
       if lineWidth > 0 then
         val filled = math.round(clamped * lineWidth).toInt
-        var x = lineStart
+        var x      = lineStart
         while x < area.right do
-          val symbol = if x - lineStart < filled then filledSymbol else unfilledSymbol
+          val symbol      = if x - lineStart < filled then filledSymbol else unfilledSymbol
           val symbolStyle = if x - lineStart < filled then filledStyle else style
           buffer.set(x, area.y, Cell(symbol, symbolStyle))
           x += 1

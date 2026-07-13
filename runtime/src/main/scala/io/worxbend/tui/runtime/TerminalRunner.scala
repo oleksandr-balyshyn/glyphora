@@ -24,7 +24,7 @@ final class TerminalRunner(
       case Left(error) =>
         backend.close()
         Left(RunnerError.Backend(error))
-      case Right(()) =>
+      case Right(())   =>
         RenderThread.register(Thread.currentThread())
         try loop(handleEvent, render).left.map(RunnerError.Backend(_))
         finally
@@ -43,24 +43,24 @@ final class TerminalRunner(
       handleEvent: (Event, RunnerHandle) => Boolean,
       render: Frame => Unit,
   ): Either[BackendError, Unit] =
-    var running = true
+    var running                       = true
     var failure: Option[BackendError] = None
-    var frameBuffer: Option[Buffer] = None
-    var lastTick = nanoTime()
+    var frameBuffer: Option[Buffer]   = None
+    var lastTick                      = nanoTime()
 
     val handle = new RunnerHandle:
-      def quit(): Unit = running = false
+      def quit(): Unit                           = running = false
       def runOnRenderThread(body: => Unit): Unit = RenderThread.runOnRenderThread(body)
 
     def redraw(): Unit =
       val drawn =
         for
           size <- backend.size
-          area = Rect(size)
+          area   = Rect(size)
           buffer = frameBuffer.filter(_.area == area).getOrElse(Buffer(area))
-          _ = buffer.reset()
-          _ = frameBuffer = Some(buffer)
-          _ = render(Frame(area, buffer))
+          _      = buffer.reset()
+          _      = frameBuffer = Some(buffer)
+          _      = render(Frame(area, buffer))
           _ <- backend.draw(buffer)
         yield ()
       drawn.left.foreach(error => failure = Some(error))
@@ -69,14 +69,14 @@ final class TerminalRunner(
     while running && failure.isEmpty do
       RenderThread.drainPending()
       backend.readEvent(pollTimeout(lastTick)) match
-        case Left(error) => failure = Some(error)
+        case Left(error)        => failure = Some(error)
         case Right(Some(event)) =>
           val wantsRedraw = handleEvent(event, handle)
-          val isResize = event match
+          val isResize    = event match
             case Event.Resize(_) => true
             case _               => false
           if (wantsRedraw || isResize) && running && failure.isEmpty then redraw()
-        case Right(None) => ()
+        case Right(None)        => ()
       config.tickRate.foreach { rate =>
         if nanoTime() - lastTick >= rate.toNanos then
           lastTick = nanoTime()
@@ -89,10 +89,10 @@ final class TerminalRunner(
     */
   private def pollTimeout(lastTick: Long): FiniteDuration =
     config.tickRate match
-      case None => DefaultPollTimeout
+      case None       => DefaultPollTimeout
       case Some(rate) =>
         val remainingNanos = rate.toNanos - (nanoTime() - lastTick)
-        val clamped = math.max(0L, math.min(remainingNanos, rate.toNanos))
+        val clamped        = math.max(0L, math.min(remainingNanos, rate.toNanos))
         Duration.fromNanos(clamped)
 
   private val DefaultPollTimeout: FiniteDuration = 100.millis

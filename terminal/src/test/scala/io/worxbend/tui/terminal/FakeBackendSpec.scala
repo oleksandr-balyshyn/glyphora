@@ -14,30 +14,30 @@ final class FakeBackendSpec extends AnyFunSuite:
 
   private final class FakeBackend(events: Event*) extends Backend:
     private val queue = mutable.Queue[Event](events*)
-    val drawn = mutable.Buffer[Buffer]()
-    var rawMode = false
+    val drawn         = mutable.Buffer[Buffer]()
+    var rawMode       = false
 
-    def size: Either[BackendError, Size] = Right(Size(20, 5))
-    def draw(buffer: Buffer): Either[BackendError, Unit] =
+    def size: Either[BackendError, Size]                                  = Right(Size(20, 5))
+    def draw(buffer: Buffer): Either[BackendError, Unit]                  =
       drawn += buffer.snapshot
       Right(())
-    def enableRawMode(): Either[BackendError, Unit] =
+    def enableRawMode(): Either[BackendError, Unit]                       =
       rawMode = true
       Right(())
-    def disableRawMode(): Either[BackendError, Unit] =
+    def disableRawMode(): Either[BackendError, Unit]                      =
       if !rawMode then Left(BackendError.NotInRawMode)
       else
         rawMode = false
         Right(())
-    def enterAlternateScreen(): Either[BackendError, Unit] = Right(())
-    def leaveAlternateScreen(): Either[BackendError, Unit] = Right(())
-    def enableMouseCapture(): Either[BackendError, Unit] = Right(())
-    def disableMouseCapture(): Either[BackendError, Unit] = Right(())
-    def hideCursor(): Either[BackendError, Unit] = Right(())
-    def showCursor(): Either[BackendError, Unit] = Right(())
+    def enterAlternateScreen(): Either[BackendError, Unit]                = Right(())
+    def leaveAlternateScreen(): Either[BackendError, Unit]                = Right(())
+    def enableMouseCapture(): Either[BackendError, Unit]                  = Right(())
+    def disableMouseCapture(): Either[BackendError, Unit]                 = Right(())
+    def hideCursor(): Either[BackendError, Unit]                          = Right(())
+    def showCursor(): Either[BackendError, Unit]                          = Right(())
     def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
       Right(if queue.isEmpty then None else Some(queue.dequeue()))
-    def close(): Unit = ()
+    def close(): Unit                                                     = ()
 
   test("a backend can be implemented purely in terms of core types"):
     val backend: Backend = FakeBackend(Event.Key(KeyEvent.of(KeyCode.Enter)))
@@ -47,7 +47,7 @@ final class FakeBackendSpec extends AnyFunSuite:
 
   test("drawing hands the backend the frame buffer"):
     val backend = FakeBackend()
-    val buffer = Buffer(Rect(0, 0, 20, 5))
+    val buffer  = Buffer(Rect(0, 0, 20, 5))
     buffer.setString(0, 0, "hi", Style.Default)
     assert(backend.draw(buffer).isRight)
     assert(backend.drawn.head.get(0, 0).symbol == "h")

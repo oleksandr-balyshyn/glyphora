@@ -12,7 +12,7 @@ final case class Button(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val text = s"[ $label ]"
+      val text   = s"[ $label ]"
       val fitted = CharWidth.substringByWidth(text, area.width)
       val startX = area.x + (area.width - CharWidth.of(fitted)) / 2
       buffer.setString(startX, area.y + area.height / 2, fitted, style)

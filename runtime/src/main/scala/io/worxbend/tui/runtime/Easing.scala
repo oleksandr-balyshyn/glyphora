@@ -8,9 +8,9 @@ enum Easing:
   def apply(t: Double): Double =
     val clamped = math.max(0.0, math.min(1.0, t))
     this match
-      case Easing.Linear  => clamped
-      case Easing.QuadIn  => clamped * clamped
-      case Easing.QuadOut => 1 - (1 - clamped) * (1 - clamped)
+      case Easing.Linear    => clamped
+      case Easing.QuadIn    => clamped * clamped
+      case Easing.QuadOut   => 1 - (1 - clamped) * (1 - clamped)
       case Easing.QuadInOut =>
         if clamped < 0.5 then 2 * clamped * clamped
         else 1 - 2 * (1 - clamped) * (1 - clamped)

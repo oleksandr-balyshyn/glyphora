@@ -30,7 +30,7 @@ final case class BigText(
 object BigText:
 
   /** Rows x columns of one glyph. */
-  val GlyphWidth: Int = 3
+  val GlyphWidth: Int  = 3
   val GlyphHeight: Int = 5
 
   private[widgets] val Blank: Vector[String] = Vector("...", "...", "...", "...", "...")

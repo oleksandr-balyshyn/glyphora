@@ -19,9 +19,9 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
 
   /** The overlapping region of the two rectangles; a zero-sized `Rect` when they do not overlap. */
   def intersection(other: Rect): Rect =
-    val left = math.max(x, other.x)
-    val top = math.max(y, other.y)
-    val overlapRight = math.min(right, other.right)
+    val left          = math.max(x, other.x)
+    val top           = math.max(y, other.y)
+    val overlapRight  = math.min(right, other.right)
     val overlapBottom = math.min(bottom, other.bottom)
     if overlapRight <= left || overlapBottom <= top then Rect(left, top, 0, 0)
     else Rect(left, top, overlapRight - left, overlapBottom - top)
@@ -31,7 +31,7 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
 
   /** This rectangle shrunk by `margin` cells on every side; zero-sized when the margin exhausts it. */
   def inset(margin: Int): Rect =
-    val shrunkWidth = math.max(0, width - 2 * margin)
+    val shrunkWidth  = math.max(0, width - 2 * margin)
     val shrunkHeight = math.max(0, height - 2 * margin)
     if shrunkWidth == 0 || shrunkHeight == 0 then Rect(x + width / 2, y + height / 2, 0, 0)
     else Rect(x + margin, y + margin, shrunkWidth, shrunkHeight)

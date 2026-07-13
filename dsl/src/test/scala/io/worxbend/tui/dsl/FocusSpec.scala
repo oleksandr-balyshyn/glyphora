@@ -14,9 +14,9 @@ final class FocusSpec extends AnyFunSuite:
 
   /** Two inputs and a checkbox; whichever is focused receives typed characters. */
   private final class FormApp extends TuiApp:
-    val first = TextInputState()
-    val second = TextInputState()
-    val agreed = Signal(false)
+    val first                              = TextInputState()
+    val second                             = TextInputState()
+    val agreed                             = Signal(false)
     def view(using ReactiveScope): Element =
       column(
         input(first, placeholder = "first"),
@@ -26,13 +26,13 @@ final class FocusSpec extends AnyFunSuite:
         case KeyEvent(KeyCode.Char('q'), m) if m.has(KeyModifiers.Ctrl) =>
           quit()
           true
-        case _ => false
+        case _                                                          => false
       }
 
   private def startedApp(): (FormApp, Pilot) =
     val backend = HeadlessBackend(Size(30, 5))
-    val app = FormApp()
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val app     = FormApp()
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     (app, pilot)
 
@@ -97,10 +97,10 @@ final class FocusSpec extends AnyFunSuite:
     assert(app.first.value == "")
 
   test("a consumed event stops at the focused element and never reaches ancestors"):
-    val backend = HeadlessBackend(Size(30, 5))
+    val backend     = HeadlessBackend(Size(30, 5))
     var rootSawChar = false
-    val field = TextInputState()
-    val app = new TuiApp:
+    val field       = TextInputState()
+    val app         = new TuiApp:
       def view(using ReactiveScope): Element =
         column(input(field)).onKeyEvent {
           case KeyEvent(KeyCode.Char('x'), _) =>
@@ -109,16 +109,16 @@ final class FocusSpec extends AnyFunSuite:
           case KeyEvent(KeyCode.Char('q'), _) =>
             quit()
             true
-          case _ => false
+          case _                              => false
         }
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot       = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
-    pilot.typeText("x").waitForIdle() // consumed by the focused input's editing handler
+    pilot.typeText("x").waitForIdle()            // consumed by the focused input's editing handler
     assert(field.value == "x")
     assert(!rootSawChar)
     pilot.pressKey(KeyCode.Escape).waitForIdle() // input declines Escape; root also declines: harmless
-    pilot.pressKey(KeyCode.Char('q')) // 'q' would be typed into the input...
+    pilot.pressKey(KeyCode.Char('q'))            // 'q' would be typed into the input...
     pilot.waitForIdle()
-    assert(field.value == "xq") // ...proving focused-first ordering
+    assert(field.value == "xq")                  // ...proving focused-first ordering
     pilot.pressKey(KeyCode.Char('c'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())

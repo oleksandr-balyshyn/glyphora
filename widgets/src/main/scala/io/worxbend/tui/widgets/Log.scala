@@ -11,9 +11,9 @@ import scala.collection.mutable
   */
 final class LogState(maxLines: Int = 1000):
 
-  private val ring = mutable.ArrayDeque[Line]()
-  var follow: Boolean = true
-  var offset: Int = 0
+  private val ring                             = mutable.ArrayDeque[Line]()
+  var follow: Boolean                          = true
+  var offset: Int                              = 0
   private[widgets] var lastViewportHeight: Int = 1
 
   def append(text: String): Unit = append(Line.raw(text))
@@ -39,7 +39,7 @@ final class LogState(maxLines: Int = 1000):
     * interactive scrolling needs no extra bookkeeping.
     */
   def scrollDown(count: Int = 1, viewportHeight: Int = -1): Unit =
-    val height = if viewportHeight > 0 then viewportHeight else lastViewportHeight
+    val height    = if viewportHeight > 0 then viewportHeight else lastViewportHeight
     val maxOffset = math.max(0, ring.size - height)
     offset = math.min(maxOffset, offset + count)
     if offset >= maxOffset then follow = true

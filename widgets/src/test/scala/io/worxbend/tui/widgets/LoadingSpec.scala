@@ -27,9 +27,9 @@ final class LoadingSpec extends AnyFunSuite:
     assert(trimmedLines(rendered(IndeterminateBar(phase = 18), 12, 1)).head.startsWith("━"))
 
   test("a marquee rotates its content through the area"):
-    val at0 = trimmedLines(rendered(Marquee("news", phase = 0), 6, 1)).head
+    val at0     = trimmedLines(rendered(Marquee("news", phase = 0), 6, 1)).head
     assert(at0.startsWith("news"))
-    val at1 = trimmedLines(rendered(Marquee("news", phase = 1), 6, 1)).head
+    val at1     = trimmedLines(rendered(Marquee("news", phase = 1), 6, 1)).head
     assert(at1.startsWith("ews"))
     // wraps around: phase equal to content+gap is back at the start
     val wrapped = trimmedLines(rendered(Marquee("news", phase = 8), 6, 1)).head

@@ -35,15 +35,15 @@ final class VizExtrasSpec extends AnyFunSuite:
     assert(cellFor(Seq(0.0, 1.0)) == "█")
 
   test("a pie chart fills a disc and renders the legend with percentages"):
-    val pie = PieChart(Seq(("a", 3.0), ("b", 1.0)))
+    val pie    = PieChart(Seq(("a", 3.0), ("b", 1.0)))
     val buffer = rendered(pie, 30, 9)
-    val text = trimmedLines(buffer).mkString("\n")
+    val text   = trimmedLines(buffer).mkString("\n")
     assert(text.contains("█"))
     assert(text.contains("■ a 75%"))
     assert(text.contains("■ b 25%"))
 
   test("pie sectors use distinct palette styles"):
-    val pie = PieChart(Seq(("a", 1.0), ("b", 1.0)), showLegend = false)
+    val pie    = PieChart(Seq(("a", 1.0), ("b", 1.0)), showLegend = false)
     val buffer = rendered(pie, 12, 7)
     val colors = (for
       y <- 0 until 7
@@ -54,7 +54,7 @@ final class VizExtrasSpec extends AnyFunSuite:
     assert(colors.size == 2)
 
   test("stacked bars stack series segments bottom-up with palette styles"):
-    val chart = StackedBarChart(Seq(("x", Seq(1L, 1L)), ("y", Seq(2L, 2L))), barWidth = 1, barGap = 0)
+    val chart  = StackedBarChart(Seq(("x", Seq(1L, 1L)), ("y", Seq(2L, 2L))), barWidth = 1, barGap = 0)
     val buffer = rendered(chart, 2, 5) // 4 chart rows + label
     assert(buffer.get(0, 4).symbol == "x")
     assert(buffer.get(0, 3).style.fg.contains(Color.Cyan)) // series 0 at the bottom
@@ -63,20 +63,20 @@ final class VizExtrasSpec extends AnyFunSuite:
     assert(buffer.get(1, 0).style.fg.contains(Color.Green)) // the max bar fills to the top
 
   test("a heatmap maps values onto the shade ramp"):
-    val heat = Heatmap(Seq(Seq(0.0, 0.5, 1.0)))
+    val heat   = Heatmap(Seq(Seq(0.0, 0.5, 1.0)))
     val buffer = rendered(heat, 3, 1)
     assert(buffer.get(0, 0).symbol == " ")
     assert(buffer.get(1, 0).symbol == "▒")
     assert(buffer.get(2, 0).symbol == "█")
 
   test("heatmap rows clip to the area"):
-    val heat = Heatmap(Seq(Seq(1.0), Seq(1.0), Seq(1.0)))
+    val heat   = Heatmap(Seq(Seq(1.0), Seq(1.0), Seq(1.0)))
     val buffer = Buffer(Rect(0, 0, 1, 2))
     heat.render(buffer.area, buffer)
     assert(trimmedLines(buffer) == Seq("█", "█"))
 
   test("a chart renders at braille resolution with axis labels"):
-    val chart = Chart(
+    val chart  = Chart(
       Seq(Dataset("d", Seq((0.0, 0.0), (10.0, 10.0)))),
       (0.0, 10.0),
       (0.0, 10.0),
@@ -84,7 +84,7 @@ final class VizExtrasSpec extends AnyFunSuite:
       showLabels = true,
     )
     val buffer = rendered(chart, 12, 6)
-    val text = trimmedLines(buffer).mkString("\n")
+    val text   = trimmedLines(buffer).mkString("\n")
     assert(text.contains("10")) // y-max label
     assert(text.exists(c => c >= 0x2800.toChar && c <= 0x28ff.toChar)) // braille cells
 

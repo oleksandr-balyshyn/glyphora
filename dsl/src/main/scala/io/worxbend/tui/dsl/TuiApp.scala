@@ -90,10 +90,10 @@ trait TuiApp:
 
   /** Runs over an explicit backend — how headless tests drive a `TuiApp` (recorded in SPEC.md §9). */
   final def runWith(backend: Backend): Either[RunnerError, Unit] =
-    var invalidated = false
+    var invalidated               = false
     var lastTree: Option[Element] = None
-    val tracker = FocusTracker()
-    val scope = ReactiveScope.onInvalidation(() => invalidated = true)
+    val tracker                   = FocusTracker()
+    val scope                     = ReactiveScope.onInvalidation(() => invalidated = true)
 
     def handleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
       if splashActive then
@@ -102,40 +102,40 @@ trait TuiApp:
       else splashHandleKey(key, handle)
 
     def splashHandleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
-      val consumed = lastTree.exists(EventRouter.dispatchKey(_, key))
-      val bound = !consumed && !paletteOpen.peek && bindings.handle(key)
+      val consumed   = lastTree.exists(EventRouter.dispatchKey(_, key))
+      val bound      = !consumed && !paletteOpen.peek && bindings.handle(key)
       var focusMoved = false
       if !consumed && !bound then
         key match
-          case KeyEvent(KeyCode.Tab, modifiers) if modifiers.has(KeyModifiers.Shift) =>
+          case KeyEvent(KeyCode.Tab, modifiers) if modifiers.has(KeyModifiers.Shift)      =>
             focusMoved = tracker.focusPrevious()
-          case KeyEvent(KeyCode.Tab, _) =>
+          case KeyEvent(KeyCode.Tab, _)                                                   =>
             focusMoved = tracker.focusNext()
           case KeyEvent(KeyCode.Char('p'), modifiers)
               if modifiers.has(KeyModifiers.Ctrl) && bindings.bindings.nonEmpty && !paletteOpen.peek =>
             openPalette()
           case KeyEvent(KeyCode.Char('c'), modifiers) if modifiers.has(KeyModifiers.Ctrl) =>
             handle.quit()
-          case _ => ()
+          case _                                                                          => ()
       consumed || bound || focusMoved
 
     def handleMouse(mouse: MouseEvent): Boolean =
-      val hit = tracker.hitTest(mouse.x, mouse.y)
+      val hit        = tracker.hitTest(mouse.x, mouse.y)
       val focusMoved =
         if mouse.kind == MouseEventKind.Down then
           hit match
             case Some(index) if index != tracker.focusedIndex =>
               tracker.focusedIndex = index
               true
-            case _ => false
+            case _                                            => false
         else false
-      val consumed = hit match
+      val consumed   = hit match
         case Some(index) =>
           val targeted = tracker
             .areaOf(index)
             .exists(area => lastTree.exists(EventRouter.dispatchMouseAt(_, index, area, mouse)))
           targeted || lastTree.exists(EventRouter.dispatchMouse(_, mouse))
-        case None => lastTree.exists(EventRouter.dispatchMouse(_, mouse))
+        case None        => lastTree.exists(EventRouter.dispatchMouse(_, mouse))
       consumed || focusMoved
 
     def handleEvent(event: Event, handle: RunnerHandle): Boolean =
@@ -144,10 +144,10 @@ trait TuiApp:
         case Event.Key(key)     => handleKey(key, handle) || invalidated
         case Event.Mouse(mouse) => handleMouse(mouse) || invalidated
         case Event.Resize(_)    => true
-        case Event.Tick =>
+        case Event.Tick         =>
           ageToasts()
           onTick()
-          val splashJustFinished = updateSplashProgress()
+          val splashJustFinished  = updateSplashProgress()
           val effectsJustFinished = pruneEffects()
           invalidated || activeEffects.nonEmpty || splashActive || splashJustFinished || effectsJustFinished
 
@@ -155,7 +155,7 @@ trait TuiApp:
       if splash.nonEmpty && config.tickRate.isEmpty then
         config.copy(tickRate = Some(scala.concurrent.duration.DurationInt(50).millis))
       else config
-    val result = TerminalRunner(backend, effectiveConfig).run(
+    val result          = TerminalRunner(backend, effectiveConfig).run(
       handleEvent,
       frame =>
         invalidated = false
@@ -167,7 +167,7 @@ trait TuiApp:
             tracker.focusedIndex = math.max(0, math.min(tracker.focusedIndex, tracker.focusableCount - 1))
           else tracker.focusedIndex = 0
           tracker.clearAreas()
-          val tree = FocusPass.decorate(rawTree, tracker)
+          val tree    = FocusPass.decorate(rawTree, tracker)
           lastTree = Some(tree)
           frame.renderWidget(tree.widget, frame.area)
           processEffects(frame),
@@ -182,7 +182,7 @@ trait TuiApp:
   // ---- composite view: base -> screens -> palette -> toasts ----
 
   private def effectiveView(using scope: ReactiveScope): Element =
-    given Theme = theme
+    given Theme     = theme
     val withScreens = screenStack.get.reverse.foldLeft(view) { (below, screen) =>
       if screen.modal then Element.layers(FocusPass.suppressFocus(below), screen.view)
       else screen.view
@@ -190,7 +190,7 @@ trait TuiApp:
     val withPalette =
       if paletteOpen.get then Element.layers(FocusPass.suppressFocus(withScreens), paletteElement)
       else withScreens
-    val active = toasts.get
+    val active      = toasts.get
     if active.isEmpty then withPalette
     else Element.layers(withPalette, toastsElement(active))
 
@@ -199,10 +199,10 @@ trait TuiApp:
     paletteSelected = math.max(0, math.min(paletteSelected, math.max(0, matches.size - 1)))
     val listing = matches.zipWithIndex.map { (bound, index) =>
       val marker = if index == paletteSelected then "> " else "  "
-      val style = if index == paletteSelected then theme.focus else theme.primary
+      val style  = if index == paletteSelected then theme.focus else theme.primary
       Element.text(s"$marker${bound.label}  ${bound.description}").styled(_ => style).length(1)
     }
-    val body = Element
+    val body    = Element
       .panel("Commands")(
         (Element.input(paletteQuery, placeholder = "type to filter…").length(1) +: listing)*
       )
@@ -211,19 +211,19 @@ trait TuiApp:
         case KeyEvent(KeyCode.Escape, _) =>
           closePalette()
           true
-        case KeyEvent(KeyCode.Down, _) =>
+        case KeyEvent(KeyCode.Down, _)   =>
           paletteSelected += 1
           true
-        case KeyEvent(KeyCode.Up, _) =>
+        case KeyEvent(KeyCode.Up, _)     =>
           paletteSelected = math.max(0, paletteSelected - 1)
           true
-        case KeyEvent(KeyCode.Enter, _) =>
+        case KeyEvent(KeyCode.Enter, _)  =>
           paletteMatches.lift(paletteSelected).foreach { bound =>
             closePalette()
             bound.action()
           }
           true
-        case _ => false
+        case _                           => false
       }
     centered(46, math.min(4 + matches.size, 14))(body)
 
@@ -239,9 +239,9 @@ trait TuiApp:
   private def toastsElement(active: Vector[ActiveToast])(using theme: Theme): Element =
     Element.widget { (area, buffer) =>
       active.takeRight(5).zipWithIndex.foreach { (toast, index) =>
-        val text = s" ${toast.message} "
+        val text  = s" ${toast.message} "
         val width = CharWidth.of(text)
-        val x = math.max(area.x, area.right - width - 1)
+        val x     = math.max(area.x, area.right - width - 1)
         buffer.setString(x, area.y + 1 + index, text, toastStyle(toast.level))
       }
     }
@@ -260,12 +260,12 @@ trait TuiApp:
 
   private final case class ActiveToast(message: String, level: ToastLevel, remainingTicks: Int)
 
-  private val screenStack: Signal[List[Screen]] = Signal(Nil)
+  private val screenStack: Signal[List[Screen]]   = Signal(Nil)
   private val toasts: Signal[Vector[ActiveToast]] = Signal(Vector.empty)
-  private val paletteOpen: Signal[Boolean] = Signal(false)
-  private val paletteQuery: TextInputState = TextInputState()
-  private var paletteSelected: Int = 0
-  private def splashActive: Boolean =
+  private val paletteOpen: Signal[Boolean]        = Signal(false)
+  private val paletteQuery: TextInputState        = TextInputState()
+  private var paletteSelected: Int                = 0
+  private def splashActive: Boolean               =
     splash.nonEmpty && !splashFinished && !splashSkipped
 
   private def renderSplash(frame: io.worxbend.tui.runtime.Frame): Unit =
@@ -285,7 +285,7 @@ trait TuiApp:
   private def pruneEffects(): Boolean =
     if activeEffects.isEmpty then false
     else
-      val now = System.nanoTime()
+      val now             = System.nanoTime()
       val (done, running) = activeEffects.partition((effect, started) => effect.isDone((now - started).nanos))
       activeEffects = running
       done.nonEmpty
@@ -295,17 +295,17 @@ trait TuiApp:
     splash match
       case Some(intro) if splashActive && splashStartNanos != 0L =>
         val elapsed = (System.nanoTime() - splashStartNanos).nanos
-        val total = intro.effect.duration match
+        val total   = intro.effect.duration match
           case finite: FiniteDuration => if finite > intro.minimumDuration then finite else intro.minimumDuration
           case _                      => intro.minimumDuration
         if elapsed >= total then
           splashFinished = true
           true
         else false
-      case _ => false
+      case _                                                     => false
 
   private var activeEffects: List[(io.worxbend.tui.runtime.Effect, Long)] = Nil
-  private var splashStartNanos: Long = 0L
-  private var splashFinished: Boolean = false
-  private var splashSkipped: Boolean = false
-  private val activeHandle = AtomicReference[Option[RunnerHandle]](None)
+  private var splashStartNanos: Long                                      = 0L
+  private var splashFinished: Boolean                                     = false
+  private var splashSkipped: Boolean                                      = false
+  private val activeHandle                                                = AtomicReference[Option[RunnerHandle]](None)

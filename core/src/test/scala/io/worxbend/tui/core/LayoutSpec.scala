@@ -36,7 +36,7 @@ final class LayoutSpec extends AnyFunSuite:
 
   test("mixed constraints: fixed demands first, leftover to the fills"):
     val constraints = Seq(Constraint.Length(3), Constraint.Percentage(25), Constraint.Fill(1), Constraint.Fill(1))
-    val rects = Layout(Direction.Vertical, constraints).split(Rect(0, 0, 10, 20))
+    val rects       = Layout(Direction.Vertical, constraints).split(Rect(0, 0, 10, 20))
     assert(rects.map(_.height) == Seq(3, 5, 6, 6))
 
   test("spacing separates segments without joining their sizes"):

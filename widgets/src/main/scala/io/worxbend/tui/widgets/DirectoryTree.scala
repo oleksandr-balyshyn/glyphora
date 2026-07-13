@@ -13,10 +13,10 @@ import scala.util.control.NonFatal
   * expands (or after [[invalidate]]), never per frame. Unreadable directories degrade to empty.
   */
 final class DirectoryTreeState(val root: Path):
-  var selected: Option[Path] = None
-  var offset: Int = 0
+  var selected: Option[Path]      = None
+  var offset: Int                 = 0
   val expanded: mutable.Set[Path] = mutable.Set.empty
-  private val childrenCache = mutable.Map[Path, Vector[Path]]()
+  private val childrenCache       = mutable.Map[Path, Vector[Path]]()
 
   /** Sorted entries of `directory` (directories first, then files, alphabetical), cached after the first read. */
   def childrenOf(directory: Path): Vector[Path] =
@@ -51,8 +51,8 @@ final class DirectoryTreeState(val root: Path):
     val visible = visiblePaths()
     if visible.nonEmpty then
       val noSelectionStart = if delta > 0 then -1 else 1
-      val currentIndex = selected.map(visible.indexOf).filter(_ >= 0).getOrElse(noSelectionStart)
-      val nextIndex = math.max(0, math.min(currentIndex + delta, visible.size - 1))
+      val currentIndex     = selected.map(visible.indexOf).filter(_ >= 0).getOrElse(noSelectionStart)
+      val nextIndex        = math.max(0, math.min(currentIndex + delta, visible.size - 1))
       selected = Some(visible(nextIndex))
 
   private def listDirectory(directory: Path): Vector[Path] =
@@ -77,19 +77,19 @@ final case class DirectoryTree(
 
   def render(area: Rect, buffer: Buffer, state: DirectoryTreeState): Unit =
     if !area.isEmpty then
-      val visible = state.visiblePaths()
+      val visible       = state.visiblePaths()
       val selectedIndex = state.selected.map(visible.indexOf).filter(_ >= 0)
       state.offset = scrolledOffset(state.offset, selectedIndex, visible.size, area.height)
       visible.slice(state.offset, state.offset + area.height).zipWithIndex.foreach { (path, row) =>
         val rowStyle = if state.selected.contains(path) then style.patch(highlightStyle) else style
-        val text = CharWidth.substringByWidth(rowText(path, state), area.width)
+        val text     = CharWidth.substringByWidth(rowText(path, state), area.width)
         buffer.setString(area.x, area.y + row, text, rowStyle)
       }
 
   private def rowText(path: Path, state: DirectoryTreeState): String =
-    val depth = path.getNameCount - state.root.getNameCount - 1
+    val depth  = path.getNameCount - state.root.getNameCount - 1
     val indent = "  ".repeat(math.max(0, depth))
-    val name = path.getFileName.toString
+    val name   = path.getFileName.toString
     if Files.isDirectory(path) then
       val marker = if state.expanded.contains(path) then "▾ " else "▸ "
       s"$indent$marker$name/"
@@ -97,9 +97,9 @@ final case class DirectoryTree(
 
   private def scrolledOffset(offset: Int, selectedIndex: Option[Int], total: Int, height: Int): Int =
     val maxOffset = math.max(0, total - height)
-    val clamped = math.max(0, math.min(offset, maxOffset))
+    val clamped   = math.max(0, math.min(offset, maxOffset))
     selectedIndex match
-      case None => clamped
+      case None        => clamped
       case Some(index) =>
         if index < clamped then index
         else if index >= clamped + height then index - height + 1

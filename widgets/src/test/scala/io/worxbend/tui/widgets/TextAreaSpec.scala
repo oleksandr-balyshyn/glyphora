@@ -91,13 +91,13 @@ final class TextAreaSpec extends AnyFunSuite:
     assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Reverse))
 
   test("vertical scroll follows the cursor"):
-    val state = TextAreaState("1\n2\n3\n4\n5\n6")
+    val state  = TextAreaState("1\n2\n3\n4\n5\n6")
     val buffer = renderedWith(state, height = 3) // cursor on line 5 (index 5)
     assert(state.scrollRow == 3)
     assert(trimmedLines(buffer).head == "4")
 
   test("horizontal scroll follows the cursor on long lines"):
-    val state = TextAreaState("abcdefghij")
+    val state  = TextAreaState("abcdefghij")
     val buffer = renderedWith(state, width = 5, height = 1)
     assert(state.scrollColumn > 0)
     assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Reverse))

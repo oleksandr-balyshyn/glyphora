@@ -31,13 +31,13 @@ final class Tier4Spec extends AnyFunSuite:
     val combined: io.worxbend.tui.core.Widget = (area, buffer) =>
       underlying.render(area, buffer)
       dialog.render(area, buffer)
-    val buffer = rendered(combined, 30, 9)
-    val lines = trimmedLines(buffer)
+    val buffer                                = rendered(combined, 30, 9)
+    val lines                                 = trimmedLines(buffer)
     assert(lines.exists(_.contains("╔Confirm")))
     assert(lines.exists(_.contains("Delete file?")))
     assert(lines.exists(_.contains("[ Yes ] [ No ]")))
     // the dialog interior is cleared: no '#' survives between its side borders on the message row
-    val messageRow = lines.find(_.contains("Delete file?")).getOrElse(fail("no message row"))
+    val messageRow                            = lines.find(_.contains("Delete file?")).getOrElse(fail("no message row"))
     val interior = messageRow.substring(messageRow.indexOf("║"), messageRow.lastIndexOf("║"))
     assert(!interior.contains("#"))
 

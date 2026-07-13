@@ -29,10 +29,10 @@ final class Painter private[widgets] (
     case CanvasResolution.HalfBlock => (1, 2)
     case CanvasResolution.Braille   => (2, 4)
 
-  private val gridWidth = area.width * subWidth
+  private val gridWidth  = area.width * subWidth
   private val gridHeight = area.height * subHeight
-  private val masks = Array.fill(area.area)(0)
-  private val styles = Array.fill(area.area)(Style.Default)
+  private val masks      = Array.fill(area.area)(0)
+  private val styles     = Array.fill(area.area)(Style.Default)
 
   /** Marks the sub-pixel containing the world-coordinate point; points outside the bounds are dropped. The y axis
     * points up (world), while rows grow down (terminal) — the mapping flips it.
@@ -41,8 +41,8 @@ final class Painter private[widgets] (
     val (xMin, xMax) = xBounds
     val (yMin, yMax) = yBounds
     if x >= xMin && x <= xMax && y >= yMin && y <= yMax && xMax > xMin && yMax > yMin then
-      val column = ((x - xMin) / (xMax - xMin) * (gridWidth - 1)).round.toInt
-      val row = ((yMax - y) / (yMax - yMin) * (gridHeight - 1)).round.toInt
+      val column    = ((x - xMin) / (xMax - xMin) * (gridWidth - 1)).round.toInt
+      val row       = ((yMax - y) / (yMax - yMin) * (gridHeight - 1)).round.toInt
       val cellIndex = (row / subHeight) * area.width + (column / subWidth)
       masks(cellIndex) |= bitFor(column % subWidth, row % subHeight)
       styles(cellIndex) = style
@@ -64,13 +64,13 @@ final class Painter private[widgets] (
 
   private def glyphFor(mask: Int): String =
     resolution match
-      case CanvasResolution.Cell => marker
+      case CanvasResolution.Cell      => marker
       case CanvasResolution.HalfBlock =>
         mask match
           case 1 => "▀"
           case 2 => "▄"
           case _ => "█"
-      case CanvasResolution.Braille => (0x2800 + mask).toChar.toString
+      case CanvasResolution.Braille   => (0x2800 + mask).toChar.toString
 
 private object Painter:
   /** Braille dot bit for sub-position `(dx, dy)`: dots 1–8 per the Unicode braille block layout. */

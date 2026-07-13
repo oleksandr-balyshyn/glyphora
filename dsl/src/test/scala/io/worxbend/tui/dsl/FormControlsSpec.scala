@@ -13,7 +13,7 @@ final class FormControlsSpec extends AnyFunSuite:
   private def startApp(view0: ReactiveScope ?=> Element): Pilot =
     val backend = HeadlessBackend(Size(40, 8))
     val testApp = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0
     Pilot.start(backend) { val _ = testApp.runWith(backend) }.waitForIdle()
 
@@ -23,7 +23,7 @@ final class FormControlsSpec extends AnyFunSuite:
 
   test("radioGroup renders markers and moves the selection with arrows"):
     val selected = Signal(0)
-    val pilot = startApp(radioGroup(Seq("small", "medium", "large"), selected))
+    val pilot    = startApp(radioGroup(Seq("small", "medium", "large"), selected))
     assert(pilot.screenLines.head.startsWith("(•) small"))
     pilot.pressKey(KeyCode.Down).pressKey(KeyCode.Down).waitForIdle()
     assert(selected.peek == 2)
@@ -45,8 +45,8 @@ final class FormControlsSpec extends AnyFunSuite:
 
   test("selectionList toggles membership with space"):
     val selected = Signal(Set.empty[Int])
-    val state = ListState()
-    val pilot = startApp(selectionList(Seq("read", "write", "exec"), selected, state))
+    val state    = ListState()
+    val pilot    = startApp(selectionList(Seq("read", "write", "exec"), selected, state))
     pilot.pressKey(KeyCode.Down).pressKey(KeyCode.Char(' ')).waitForIdle()
     assert(selected.peek == Set(0))
     pilot.pressKey(KeyCode.Down).pressKey(KeyCode.Char(' ')).waitForIdle()
@@ -83,10 +83,10 @@ final class FormControlsSpec extends AnyFunSuite:
     quitApp(pilot)
 
   test("paginator renders dots and pages with arrows"):
-    val page = Signal(0)
+    val page    = Signal(0)
     val element = paginator(page, 4)
     assert(trimmedLines(rendered(element.widget, 10, 1)).head == "● ○ ○ ○")
-    val pilot = startApp(paginator(page, 4))
+    val pilot   = startApp(paginator(page, 4))
     pilot.pressKey(KeyCode.Right).pressKey(KeyCode.Right).waitForIdle()
     assert(page.peek == 2)
     quitApp(pilot)

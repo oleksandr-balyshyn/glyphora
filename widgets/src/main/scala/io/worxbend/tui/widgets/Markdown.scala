@@ -33,7 +33,7 @@ private[widgets] object MarkdownParser:
 
   def parse(source: String, theme: MarkdownTheme): Text =
     var inCodeFence = false
-    val lines = source.split("\n", -1).toSeq.map { raw =>
+    val lines       = source.split("\n", -1).toSeq.map { raw =>
       if raw.trim.startsWith("```") then
         inCodeFence = !inCodeFence
         Line(Seq.empty)
@@ -81,7 +81,7 @@ private[widgets] object MarkdownParser:
           flushPlain()
           spans += span
           index += consumed
-        case None =>
+        case None                   =>
           plain += text.charAt(index)
           index += 1
     flushPlain()
@@ -99,6 +99,6 @@ private[widgets] object MarkdownParser:
     if !text.startsWith(marker, index) then None
     else
       val contentStart = index + marker.length
-      val end = text.indexOf(marker, contentStart)
+      val end          = text.indexOf(marker, contentStart)
       if end <= contentStart then None
       else Some((text.slice(contentStart, end), end + marker.length - index))

@@ -32,7 +32,7 @@ final class KeyBindingsSpec extends AnyFunSuite:
     assertThrows[IllegalArgumentException](binding("not-a-key", "boom")(()))
 
   test("handle fires the first matching binding only"):
-    var fired = List.empty[String]
+    var fired    = List.empty[String]
     val bindings = KeyBindings(
       binding("q", "quit") { fired = "quit" :: fired },
       binding("ctrl+s", "save") { fired = "save" :: fired },

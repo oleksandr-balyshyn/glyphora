@@ -15,10 +15,10 @@ final case class Image(pixels: Vector[Vector[Color.Rgb]]) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     val sourceHeight = pixels.size
-    val sourceWidth = pixels.headOption.map(_.size).getOrElse(0)
+    val sourceWidth  = pixels.headOption.map(_.size).getOrElse(0)
     if !area.isEmpty && sourceHeight > 0 && sourceWidth > 0 then
       val targetRows = area.height * 2 // two pixels per cell vertically
-      var y = 0
+      var y          = 0
       while y < area.height do
         var x = 0
         while x < area.width do

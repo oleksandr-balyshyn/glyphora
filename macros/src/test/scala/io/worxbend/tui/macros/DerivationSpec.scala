@@ -23,7 +23,7 @@ final class DerivationSpec extends AnyFunSuite:
   test("bindAction dispatches directly to the bound handler"):
     enum AppAction:
       case Increment, Reset
-    var seen = List.empty[AppAction]
+    var seen    = List.empty[AppAction]
     val handler = bindAction[AppAction](action => seen = action :: seen)
     handler.handle(AppAction.Increment)
     handler.handle(AppAction.Reset)

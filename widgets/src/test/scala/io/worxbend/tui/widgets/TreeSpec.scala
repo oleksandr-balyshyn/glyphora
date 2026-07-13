@@ -22,7 +22,7 @@ final class TreeSpec extends AnyFunSuite:
     assert(trimmedLines(buffer).take(2) == Seq("▸ src", "  README.md"))
 
   test("expanding a branch reveals children with indentation"):
-    val state = TreeState()
+    val state  = TreeState()
     state.expanded += Seq(0)
     val buffer = renderedWith(state)
     assert(trimmedLines(buffer).take(4) == Seq("▾ src", "    main.scala", "  ▸ util", "  README.md"))
@@ -54,7 +54,7 @@ final class TreeSpec extends AnyFunSuite:
     assert(state.expanded.isEmpty)
 
   test("the selected row is highlighted"):
-    val state = TreeState()
+    val state  = TreeState()
     state.selected = Some(Seq(1))
     val buffer = renderedWith(state)
     assert(buffer.get(0, 1).style.modifiers.has(io.worxbend.tui.core.Modifiers.Reverse))

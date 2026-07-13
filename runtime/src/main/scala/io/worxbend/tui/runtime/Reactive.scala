@@ -30,7 +30,7 @@ sealed trait Reactive[A]:
 final class Signal[A] private (initial: A) extends Reactive[A], Subscribable:
 
   private var currentValue: A = initial
-  private val subscribers = mutable.LinkedHashSet[Subscriber]()
+  private val subscribers     = mutable.LinkedHashSet[Subscriber]()
 
   def peek: A = currentValue
 
@@ -64,9 +64,9 @@ object Signal:
 final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A], Subscriber, Subscribable:
 
   private var cachedValue: A = uninitialized
-  private var stale = true
-  private val subscribers = mutable.LinkedHashSet[Subscriber]()
-  private val dependencies = mutable.LinkedHashSet[Subscribable]()
+  private var stale          = true
+  private val subscribers    = mutable.LinkedHashSet[Subscriber]()
+  private val dependencies   = mutable.LinkedHashSet[Subscribable]()
 
   def peek: A =
     if stale then recompute()

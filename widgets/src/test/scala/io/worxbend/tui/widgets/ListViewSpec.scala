@@ -23,19 +23,19 @@ final class ListViewSpec extends AnyFunSuite:
     assert(trimmedLines(buffer) == Seq("  alpha", "> beta", "  gamma"))
 
   test("selecting below the viewport scrolls the offset down"):
-    val state = ListState(selected = Some(3))
+    val state  = ListState(selected = Some(3))
     val buffer = renderedWith(state)
     assert(trimmedLines(buffer) == Seq("  beta", "  gamma", "> delta"))
     assert(state.offset == 1)
 
   test("selecting above the current offset scrolls back up"):
-    val state = ListState(selected = Some(0), offset = 2)
+    val state  = ListState(selected = Some(0), offset = 2)
     val buffer = renderedWith(state)
     assert(trimmedLines(buffer).head == "> alpha")
     assert(state.offset == 0)
 
   test("a selection past the end is clamped to the last item"):
-    val state = ListState(selected = Some(99))
+    val state  = ListState(selected = Some(99))
     val buffer = renderedWith(state)
     assert(state.selected.contains(3))
     assert(trimmedLines(buffer).last == "> delta")

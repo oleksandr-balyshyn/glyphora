@@ -32,7 +32,7 @@ final class ContainersSpec extends AnyFunSuite:
         LayoutItem(Constraint.Percentage(50), Sparkline(Seq(1, 2, 4, 8), max = Some(8))),
       )
     )
-    val buffer = rendered(dashboardRow, 8, 1)
+    val buffer       = rendered(dashboardRow, 8, 1)
     assert(trimmedLines(buffer) == Seq("50% ▁▂▄█"))
 
   test("a spacer claims space but draws nothing"):

@@ -8,8 +8,8 @@ import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, StatefulWidget, Styl
   */
 final class TextInputState(initial: String = ""):
 
-  private var clusters: Vector[String] = CharWidth.graphemeClusters(initial).toVector
-  private var cursorIndex: Int = clusters.size
+  private var clusters: Vector[String]    = CharWidth.graphemeClusters(initial).toVector
+  private var cursorIndex: Int            = clusters.size
   private[widgets] var scrollCluster: Int = 0
 
   def value: String = clusters.mkString
@@ -18,7 +18,7 @@ final class TextInputState(initial: String = ""):
   def cursor: Int = cursorIndex
 
   def insert(text: String): Unit =
-    val inserted = CharWidth.graphemeClusters(text).toVector
+    val inserted        = CharWidth.graphemeClusters(text).toVector
     val (before, after) = clusters.splitAt(cursorIndex)
     clusters = before ++ inserted ++ after
     cursorIndex += inserted.size
@@ -77,21 +77,21 @@ final case class TextInput(
 
   /** Scrolls just enough that the cursor stays visible (one column is reserved for the end-of-text cursor). */
   private def scrolledTo(state: TextInputState, width: Int): Int =
-    val clusters = state.clusterSeq
-    var scroll = math.min(state.scrollCluster, state.cursor)
+    val clusters                                 = state.clusterSeq
+    var scroll                                   = math.min(state.scrollCluster, state.cursor)
     def visibleWidth(from: Int, until: Int): Int = clusters.slice(from, until).map(CharWidth.of).sum
     while visibleWidth(scroll, state.cursor).+(1) > width && scroll < state.cursor do scroll += 1
     scroll
 
   private def renderClusters(area: Rect, buffer: Buffer, state: TextInputState, clusters: Vector[String]): Unit =
-    var x = area.x
+    var x     = area.x
     var index = state.scrollCluster
     while index <= clusters.size && x < area.right do
-      val atEnd = index == clusters.size
+      val atEnd  = index == clusters.size
       val symbol = if atEnd then " " else clusters(index)
-      val width = math.max(1, CharWidth.of(symbol))
+      val width  = math.max(1, CharWidth.of(symbol))
       if x + width <= area.right then
-        val isCursor = showCursor && index == state.cursor
+        val isCursor  = showCursor && index == state.cursor
         val cellStyle = if isCursor then style.patch(cursorStyle) else style
         buffer.set(x, area.y, Cell(symbol, cellStyle))
         if width == 2 then buffer.set(x + 1, area.y, Cell.Empty)

@@ -15,10 +15,10 @@ final case class Spinner(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty && frames.nonEmpty then
-      val glyph = frames(math.floorMod(frame, frames.size))
+      val glyph   = frames(math.floorMod(frame, frames.size))
       val content = if label.isEmpty then glyph else s"$glyph $label"
       buffer.setString(area.x, area.y, content, style)
 
 object Spinner:
   val BrailleFrames: Seq[String] = Seq("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-  val LineFrames: Seq[String] = Seq("|", "/", "-", "\\")
+  val LineFrames: Seq[String]    = Seq("|", "/", "-", "\\")

@@ -20,8 +20,8 @@ final case class Sparkline(
         val clamped = math.max(0L, math.min(value, ceiling))
         // total eighth-blocks of fill for this column, over the full area height
         var eighths = math.round(clamped.toDouble / ceiling * area.height * 8).toInt
-        val x = area.x + column
-        var y = area.bottom - 1
+        val x       = area.x + column
+        var y       = area.bottom - 1
         while y >= area.y && eighths > 0 do
           val levelIndex = math.min(eighths, 8)
           buffer.set(x, y, Cell(Sparkline.Levels(levelIndex - 1), style))

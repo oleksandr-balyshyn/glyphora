@@ -28,7 +28,7 @@ final case class Chart(
     if area.width >= 3 && area.height >= 3 then
       drawAxes(area, buffer)
       val plotArea = Rect(area.x + 1, area.y, area.width - 1, area.height - 1)
-      val shapes = datasets.map { dataset =>
+      val shapes   = datasets.map { dataset =>
         dataset.graphType match
           case GraphType.Line    => Shape.Polyline(dataset.points, dataset.style)
           case GraphType.Scatter => Shape.Points(dataset.points, dataset.style)

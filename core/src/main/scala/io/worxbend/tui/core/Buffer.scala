@@ -26,11 +26,11 @@ final class Buffer(val area: Rect):
     * character before them in `text`) are skipped.
     */
   def setString(x: Int, y: Int, text: String, style: Style): Unit =
-    var column = x
+    var column   = x
     val clusters = CharWidth.graphemeClusters(text)
     while clusters.hasNext && column < area.right do
       val cluster = clusters.next()
-      val width = CharWidth.of(cluster)
+      val width   = CharWidth.of(cluster)
       if width > 0 && column + width <= area.right then
         set(column, y, Cell(cluster, style))
         if width == 2 then set(column + 1, y, Cell.Empty)
@@ -45,7 +45,7 @@ final class Buffer(val area: Rect):
     */
   def blit(source: Buffer, at: Position, region: Rect): Unit =
     val clipped = region.intersection(source.area)
-    var dy = 0
+    var dy      = 0
     while dy < clipped.height do
       var dx = 0
       while dx < clipped.width do
@@ -79,7 +79,7 @@ final class Buffer(val area: Rect):
     * columns. If the two buffers cover different areas (e.g. after a resize), every cell of `next` is emitted.
     */
   def diff(next: Buffer): Iterator[(Position, Cell)] =
-    val emitAll = area != next.area
+    val emitAll   = area != next.area
     val positions =
       for
         y <- Iterator.range(next.area.y, next.area.bottom)

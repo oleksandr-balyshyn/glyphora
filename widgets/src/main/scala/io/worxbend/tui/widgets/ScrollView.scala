@@ -4,9 +4,9 @@ import io.worxbend.tui.core.{Buffer, Position, Rect, StatefulWidget, Widget}
 
 /** Caller-owned scroll offset for a [[ScrollView]]. */
 final class ScrollViewState:
-  var offset: Int = 0
+  var offset: Int                              = 0
   private[widgets] var lastViewportHeight: Int = 1
-  private[widgets] var lastContentHeight: Int = 0
+  private[widgets] var lastContentHeight: Int  = 0
 
   def scrollUp(count: Int = 1): Unit =
     offset = math.max(0, offset - count)
@@ -28,9 +28,9 @@ final case class ScrollView(
 
   def render(area: Rect, buffer: Buffer, state: ScrollViewState): Unit =
     if !area.isEmpty && contentHeight > 0 then
-      val overflows = contentHeight > area.height
+      val overflows      = contentHeight > area.height
       val scrollbarWidth = if showScrollbar && overflows then 1 else 0
-      val contentWidth = area.width - scrollbarWidth
+      val contentWidth   = area.width - scrollbarWidth
       if contentWidth > 0 then
         state.lastViewportHeight = area.height
         state.lastContentHeight = contentHeight

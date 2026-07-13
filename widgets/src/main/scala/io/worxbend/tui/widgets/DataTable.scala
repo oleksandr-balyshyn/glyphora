@@ -9,10 +9,10 @@ import io.worxbend.tui.core.{Buffer, Constraint, Direction, Layout, Line, Rect, 
   */
 final class DataTableState:
   var sortColumn: Option[Int] = None
-  var sortAscending: Boolean = true
-  var filter: String = ""
-  var selected: Option[Int] = None
-  var offset: Int = 0
+  var sortAscending: Boolean  = true
+  var filter: String          = ""
+  var selected: Option[Int]   = None
+  var offset: Int             = 0
 
   /** Sorts by `column`; sorting the same column again flips the direction. */
   def sortBy(column: Int): Unit =
@@ -55,15 +55,15 @@ final case class DataTable(
         val needle = state.filter.toLowerCase
         rows.filter(_.exists(_.toLowerCase.contains(needle)))
     state.sortColumn match
-      case None => filtered
+      case None         => filtered
       case Some(column) =>
         val sorted = filtered.sortWith((a, b) => cellLess(a.lift(column), b.lift(column)))
         if state.sortAscending then sorted else sorted.reverse
 
   def render(area: Rect, buffer: Buffer, state: DataTableState): Unit =
     if !area.isEmpty then
-      val view = visibleRows(state)
-      val segments = Layout(Direction.Horizontal, widths, columnSpacing).split(area)
+      val view       = visibleRows(state)
+      val segments   = Layout(Direction.Horizontal, widths, columnSpacing).split(area)
       renderHeader(buffer, segments, state)
       val bodyHeight = area.height - 1
       if bodyHeight > 0 && view.nonEmpty then
@@ -71,7 +71,7 @@ final case class DataTable(
         state.selected = selected
         state.offset = scrolledOffset(state.offset, selected, view.size, bodyHeight)
         view.slice(state.offset, state.offset + bodyHeight).zipWithIndex.foreach { (cells, row) =>
-          val index = state.offset + row
+          val index    = state.offset + row
           val rowStyle = if selected.contains(index) then style.patch(highlightStyle) else style
           renderRow(buffer, segments, cells, area.y + 1 + row, rowStyle)
         }
@@ -82,8 +82,8 @@ final case class DataTable(
         val indicator =
           if state.sortColumn.contains(index) then if state.sortAscending then " ▲" else " ▼"
           else ""
-        val line = Line(Seq(Span(title + indicator, headerStyle)))
-        val _ = LineRenderer.render(buffer, segment.x, segment.y, line, segment.width)
+        val line      = Line(Seq(Span(title + indicator, headerStyle)))
+        val _         = LineRenderer.render(buffer, segment.x, segment.y, line, segment.width)
       }
     }
 
@@ -95,7 +95,7 @@ final case class DataTable(
 
   /** Numeric-aware ordering: numbers compare as numbers, everything else as case-insensitive text. */
   private def cellLess(a: Option[String], b: Option[String]): Boolean =
-    val left = a.getOrElse("")
+    val left  = a.getOrElse("")
     val right = b.getOrElse("")
     (left.toDoubleOption, right.toDoubleOption) match
       case (Some(x), Some(y)) => x < y
@@ -103,9 +103,9 @@ final case class DataTable(
 
   private def scrolledOffset(offset: Int, selected: Option[Int], total: Int, height: Int): Int =
     val maxOffset = math.max(0, total - height)
-    val clamped = math.max(0, math.min(offset, maxOffset))
+    val clamped   = math.max(0, math.min(offset, maxOffset))
     selected match
-      case None => clamped
+      case None        => clamped
       case Some(index) =>
         if index < clamped then index
         else if index >= clamped + height then index - height + 1

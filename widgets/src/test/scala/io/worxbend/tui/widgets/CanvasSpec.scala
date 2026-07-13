@@ -21,7 +21,7 @@ final class CanvasSpec extends AnyFunSuite:
   test("a segment paints a gapless diagonal touching both endpoints"):
     val canvas = Canvas(bounds, bounds, Seq(Shape.SegmentShape(0.0, 0.0, 4.0, 4.0)), marker = "*")
     val buffer = rendered(canvas, 5, 5)
-    val lines = trimmedLines(buffer)
+    val lines  = trimmedLines(buffer)
     assert(buffer.get(0, 4).symbol == "*") // start
     assert(buffer.get(4, 0).symbol == "*") // end
     assert(lines.forall(_.contains("*"))) // no vertical gaps (oversampled stepping may double cells)

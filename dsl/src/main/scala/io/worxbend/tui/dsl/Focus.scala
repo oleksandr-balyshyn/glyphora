@@ -10,9 +10,9 @@ import scala.collection.mutable
   */
 private[dsl] final class FocusTracker:
 
-  var focusedIndex: Int = 0
+  var focusedIndex: Int   = 0
   var focusableCount: Int = 0
-  private val areas = mutable.Map[Int, Rect]()
+  private val areas       = mutable.Map[Int, Rect]()
 
   def record(index: Int, area: Rect): Unit =
     areas(index) = area
@@ -62,7 +62,7 @@ private[dsl] object FocusPass:
     def transform(element: Element): Element =
       val current =
         if element.props.focusable then
-          val index = counter
+          val index  = counter
           counter += 1
           val marked = element.withProps(element.props.copy(focused = index == tracker.focusedIndex))
           TrackedElement(marked, index, tracker)

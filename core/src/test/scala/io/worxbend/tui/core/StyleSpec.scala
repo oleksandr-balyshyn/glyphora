@@ -37,14 +37,14 @@ final class StyleSpec extends AnyFunSuite:
     }
 
   test("patch overlays the other style's explicit choices"):
-    val base = Style.Default.withFg(Color.Red).bold
+    val base    = Style.Default.withFg(Color.Red).bold
     val patched = base.patch(Style.Default.withFg(Color.Green).italic)
     assert(patched.fg.contains(Color.Green))
     assert(patched.modifiers.has(Modifiers.Bold))
     assert(patched.modifiers.has(Modifiers.Italic))
 
   test("patch keeps this style's colors where the other is silent"):
-    val base = Style.Default.withFg(Color.Red).withBg(Color.Blue)
+    val base    = Style.Default.withFg(Color.Red).withBg(Color.Blue)
     val patched = base.patch(Style.Default.bold)
     assert(patched.fg.contains(Color.Red))
     assert(patched.bg.contains(Color.Blue))

@@ -25,15 +25,15 @@ final class ShowcaseApp extends TuiApp:
     )
   )
 
-  private val themes = Vector(Theme.Dark, Theme.Light, Theme.HighContrast)
+  private val themes          = Vector(Theme.Dark, Theme.Light, Theme.HighContrast)
   val themeIndex: Signal[Int] = Signal(0)
-  override def theme: Theme = themes(themeIndex.peek)
+  override def theme: Theme   = themes(themeIndex.peek)
 
-  val selectedTab: Signal[Int] = Signal(0)
-  val sidebarList: ListState = ListState()
+  val selectedTab: Signal[Int]  = Signal(0)
+  val sidebarList: ListState    = ListState()
   val noteField: TextInputState = TextInputState()
-  val logState: LogState = LogState()
-  val ticks: Signal[Int] = Signal(0)
+  val logState: LogState        = LogState()
+  val ticks: Signal[Int]        = Signal(0)
 
   override def onTick(): Unit =
     ticks.update(_ + 1)
@@ -55,14 +55,14 @@ final class ShowcaseApp extends TuiApp:
         case KeyEvent(KeyCode.Escape, _) =>
           popScreen()
           true
-        case _ => false
+        case _                           => false
       }
     }
   })
 
   def view(using ReactiveScope): Element =
     given Theme = theme
-    val _ = themeIndex.get // theme switching re-renders
+    val _       = themeIndex.get // theme switching re-renders
     scaffold(
       topBar = Some(topBar("glyphora", tabs = Seq("Widgets", "Log", "About"), selectedTab = selectedTab.get)),
       sidebar = Some(sidebar(sidebarPane, width = 22)),
@@ -77,8 +77,8 @@ final class ShowcaseApp extends TuiApp:
   private def mainPane(using ReactiveScope): Element =
     tabbedContent(
       "Widgets" -> widgetsPage,
-      "Log" -> log(logState),
-      "About" -> markdown(ShowcaseApp.AboutMarkdown),
+      "Log"     -> log(logState),
+      "About"   -> markdown(ShowcaseApp.AboutMarkdown),
     )(selectedTab)
 
   private def widgetsPage(using ReactiveScope): Element =

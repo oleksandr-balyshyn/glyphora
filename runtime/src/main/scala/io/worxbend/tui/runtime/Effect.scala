@@ -53,12 +53,12 @@ object Effect:
         val shift = math.round((1 - progress) * area.width).toInt
         if shift > 0 then
           val snapshot = buffer.snapshot
-          var y = area.y
+          var y        = area.y
           while y < area.bottom do
             var x = area.right - 1
             while x >= area.x do
               val sourceX = x - shift
-              val cell = if sourceX >= area.x then snapshot.get(sourceX, y) else Cell.Empty
+              val cell    = if sourceX >= area.x then snapshot.get(sourceX, y) else Cell.Empty
               buffer.set(x, y, cell)
               x -= 1
             y += 1
@@ -67,16 +67,16 @@ object Effect:
   def typewriter(duration: FiniteDuration, easing: Easing = Easing.Linear): Effect =
     new TimedEffect(duration, easing):
       def transform(progress: Double, buffer: Buffer, area: Rect): Unit =
-        val total = area.area
+        val total   = area.area
         val visible = math.round(progress * total).toInt
         eraseWhere(buffer, area)((x, y) => (y - area.y) * area.width + (x - area.x) >= visible)
 
   /** Endless brightness oscillation with the given period. */
   def pulse(period: FiniteDuration = 1.second): Effect =
     new Effect:
-      def duration: Duration = Duration.Inf
+      def duration: Duration                                                 = Duration.Inf
       def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
-        val phase = (elapsed.toMillis % period.toMillis).toDouble / period.toMillis
+        val phase      = (elapsed.toMillis % period.toMillis).toDouble / period.toMillis
         val brightness = 0.55 + 0.45 * math.sin(phase * 2 * math.Pi)
         mapCells(buffer, area)(style => withFgScaled(style, brightness))
 
@@ -86,12 +86,12 @@ object Effect:
       def duration: Duration = effects.foldLeft(Duration.Zero: Duration)((acc, e) => acc + e.duration)
       def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
         var remaining = elapsed
-        val active = effects.iterator.dropWhile { effect =>
+        val active    = effects.iterator.dropWhile { effect =>
           effect.duration match
             case finite: FiniteDuration if remaining >= finite =>
               remaining -= finite
               true
-            case _ => false
+            case _                                             => false
         }
         if active.hasNext then active.next().process(remaining, buffer, area)
 
@@ -105,7 +105,7 @@ object Effect:
   /** Waits `pause` before `effect` starts (the effect is held at progress zero during the wait). */
   def delay(pause: FiniteDuration, effect: Effect): Effect =
     new Effect:
-      def duration: Duration = effect.duration + pause
+      def duration: Duration                                                 = effect.duration + pause
       def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
         if elapsed >= pause then effect.process(elapsed - pause, buffer, area)
         else effect.process(Duration.Zero, buffer, area)
@@ -113,19 +113,19 @@ object Effect:
   /** Repeats `effect` `times` times. */
   def repeat(effect: Effect, times: Int): Effect =
     new Effect:
-      def duration: Duration = effect.duration * times.toDouble
+      def duration: Duration                                                 = effect.duration * times.toDouble
       def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
         effect.duration match
           case finite: FiniteDuration if finite.toNanos > 0 =>
             val within = (elapsed.toNanos % finite.toNanos).nanos
-            val cycle = elapsed.toNanos / finite.toNanos
+            val cycle  = elapsed.toNanos / finite.toNanos
             if cycle < times then effect.process(within, buffer, area)
-          case _ => effect.process(elapsed, buffer, area)
+          case _                                            => effect.process(elapsed, buffer, area)
 
   // ---- shared machinery ----
 
   private abstract class TimedEffect(val totalDuration: FiniteDuration, easing: Easing = Easing.Linear) extends Effect:
-    def duration: Duration = totalDuration
+    def duration: Duration                                                       = totalDuration
     def transform(progress: Double, buffer: Buffer, area: Rect): Unit
     final def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
       val t = if totalDuration.toNanos == 0 then 1.0 else elapsed.toNanos.toDouble / totalDuration.toNanos
@@ -181,22 +181,22 @@ object Effect:
   /** RGB approximation for every color model — good enough for fades, not for color management. */
   private[runtime] def approximateRgb(color: Color): (Int, Int, Int) =
     color match
-      case Color.Rgb(r, g, b) => (r, g, b)
-      case Color.Black        => (0, 0, 0)
-      case Color.Red          => (205, 49, 49)
-      case Color.Green        => (13, 188, 121)
-      case Color.Yellow       => (229, 229, 16)
-      case Color.Blue         => (36, 114, 200)
-      case Color.Magenta      => (188, 63, 188)
-      case Color.Cyan         => (17, 168, 205)
-      case Color.White        => (229, 229, 229)
-      case Color.Reset        => (192, 192, 192)
+      case Color.Rgb(r, g, b)   => (r, g, b)
+      case Color.Black          => (0, 0, 0)
+      case Color.Red            => (205, 49, 49)
+      case Color.Green          => (13, 188, 121)
+      case Color.Yellow         => (229, 229, 16)
+      case Color.Blue           => (36, 114, 200)
+      case Color.Magenta        => (188, 63, 188)
+      case Color.Cyan           => (17, 168, 205)
+      case Color.White          => (229, 229, 229)
+      case Color.Reset          => (192, 192, 192)
       case Color.Indexed(index) =>
         if index < 16 then if index < 8 then (index * 24, index * 24, index * 24) else (192, 192, 192)
         else if index >= 232 then
           val gray = 8 + (index - 232) * 10
           (gray, gray, gray)
         else
-          val cube = index - 16
+          val cube  = index - 16
           val steps = Vector(0, 95, 135, 175, 215, 255)
           (steps(cube / 36), steps(cube / 6 % 6), steps(cube % 6))

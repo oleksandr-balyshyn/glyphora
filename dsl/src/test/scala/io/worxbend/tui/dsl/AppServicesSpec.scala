@@ -14,9 +14,9 @@ import scala.concurrent.duration.DurationInt
 final class AppServicesSpec extends AnyFunSuite:
 
   private final class NavApp extends TuiApp:
-    val baseField = TextInputState()
-    val modalField = TextInputState()
-    override def bindings: KeyBindings = KeyBindings(
+    val baseField                          = TextInputState()
+    val modalField                         = TextInputState()
+    override def bindings: KeyBindings     = KeyBindings(
       binding("ctrl+o", "open modal")(openModal()),
       binding("ctrl+q", "quit")(quit()),
     )
@@ -29,15 +29,15 @@ final class AppServicesSpec extends AnyFunSuite:
           case KeyEvent(KeyCode.Escape, _) =>
             popScreen()
             true
-          case _ => false
+          case _                           => false
         }
       }
     })
 
   test("a modal screen renders over the base and traps focus; pop restores"):
     val backend = HeadlessBackend(Size(30, 8))
-    val app = NavApp()
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val app     = NavApp()
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("a").waitForIdle()
     assert(app.baseField.value == "a")
@@ -46,7 +46,7 @@ final class AppServicesSpec extends AnyFunSuite:
     assert(pilot.screenText.contains("base screen")) // still visible beneath
     pilot.typeText("m").waitForIdle()
     assert(app.modalField.value == "m")
-    assert(app.baseField.value == "a") // base input no longer focused
+    assert(app.baseField.value == "a")               // base input no longer focused
     pilot.pressKey(KeyCode.Escape).waitForIdle()
     assert(!pilot.screenText.contains("Modal"))
     pilot.typeText("b").waitForIdle()
@@ -56,14 +56,14 @@ final class AppServicesSpec extends AnyFunSuite:
 
   test("a full screen replaces the base view and pop restores it"):
     val backend = HeadlessBackend(Size(30, 5))
-    val app = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(
+    val app     = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(
         binding("ctrl+f", "forward")(pushScreen(Screen.full(text("second screen")))),
         binding("ctrl+b", "back")(popScreen()),
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("base screen")
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("base screen"))
     pilot.pressKey(KeyCode.Char('f'), KeyModifiers.Ctrl).waitForIdle()
@@ -75,15 +75,15 @@ final class AppServicesSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("toasts appear on notify and age out with ticks"):
-    val backend = HeadlessBackend(Size(40, 6))
-    val app = new TuiApp:
-      override def config: RunnerConfig = RunnerConfig(tickRate = Some(10.millis))
-      override def bindings: KeyBindings = KeyBindings(
+    val backend  = HeadlessBackend(Size(40, 6))
+    val app      = new TuiApp:
+      override def config: RunnerConfig      = RunnerConfig(tickRate = Some(10.millis))
+      override def bindings: KeyBindings     = KeyBindings(
         binding("n", "notify me")(notify("saved ok", ToastLevel.Success, ttlTicks = 40)),
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("content")
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot    = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Char('n')).waitForIdle()
     assert(pilot.screenText.contains("saved ok"))
@@ -94,16 +94,16 @@ final class AppServicesSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("ctrl+p opens the palette, typing filters, enter runs the command"):
-    val backend = HeadlessBackend(Size(60, 16))
+    val backend  = HeadlessBackend(Size(60, 16))
     var deployed = false
-    val app = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(
+    val app      = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(
         binding("d", "deploy to production") { deployed = true },
         binding("r", "restart service")(()),
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("content")
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot    = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Char('p'), KeyModifiers.Ctrl).waitForIdle()
     assert(pilot.screenText.contains("Commands"))
@@ -119,14 +119,14 @@ final class AppServicesSpec extends AnyFunSuite:
 
   test("escape closes the palette without running anything"):
     val backend = HeadlessBackend(Size(60, 16))
-    var fired = false
-    val app = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(
+    var fired   = false
+    val app     = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(
         binding("x", "dangerous action") { fired = true },
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("content")
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Char('p'), KeyModifiers.Ctrl).waitForIdle()
     assert(pilot.screenText.contains("Commands"))

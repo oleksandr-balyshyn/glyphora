@@ -23,7 +23,7 @@ import io.worxbend.tui.widgets as w
   */
 sealed trait Element:
   def props: ElementProps
-  def style: Style = props.style
+  def style: Style           = props.style
   def widget: Widget
   def children: Seq[Element] = Seq.empty
   private[dsl] def withProps(props: ElementProps): Element
@@ -54,11 +54,11 @@ sealed trait Element:
     w.LayoutItem(props.constraint.getOrElse(preferredSize(direction)), widget)
 
 final case class TextElement(content: String, props: ElementProps = ElementProps()) extends Element:
-  def widget: Widget = w.Paragraph(Text.styled(content, props.style))
+  def widget: Widget                                           = w.Paragraph(Text.styled(content, props.style))
   private[dsl] def withProps(props: ElementProps): TextElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
-      case Direction.Vertical => Constraint.Length(content.split("\n", -1).length)
+      case Direction.Vertical   => Constraint.Length(content.split("\n", -1).length)
       case Direction.Horizontal =>
         Constraint.Length(content.split("\n", -1).map(CharWidth.of).maxOption.getOrElse(0))
 
@@ -68,12 +68,12 @@ final case class PanelElement(
     borderType: w.BorderType = w.BorderType.Plain,
     props: ElementProps = ElementProps(),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                                           =
     (area, buffer) =>
       val block = w.Block(title.map(text => Line.styled(text, props.style)), borderType, props.style)
       block.render(area, buffer)
       w.Column(children.map(_.layoutItem(Direction.Vertical))).render(block.inner(area), buffer)
-  private[dsl] def withProps(props: ElementProps): PanelElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): PanelElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PanelElement = copy(children = children)
 
 final case class RowElement(
@@ -82,7 +82,7 @@ final case class RowElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   def widget: Widget = w.Row(children.map(_.layoutItem(Direction.Horizontal)), spacing)
-  private[dsl] def withProps(props: ElementProps): RowElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): RowElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): RowElement = copy(children = children)
 
 final case class ColumnElement(
@@ -91,11 +91,11 @@ final case class ColumnElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   def widget: Widget = w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing)
-  private[dsl] def withProps(props: ElementProps): ColumnElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): ColumnElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): ColumnElement = copy(children = children)
 
 final case class SpacerElement(props: ElementProps = ElementProps()) extends Element:
-  def widget: Widget = w.Spacer
+  def widget: Widget                                             = w.Spacer
   private[dsl] def withProps(props: ElementProps): SpacerElement = copy(props = props)
 
 final case class GaugeElement(
@@ -104,7 +104,7 @@ final case class GaugeElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   def widget: Widget = w.Gauge(ratio, label, props.style, filledStyle = props.style.reverse)
-  private[dsl] def withProps(props: ElementProps): GaugeElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): GaugeElement             = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
@@ -115,8 +115,8 @@ final case class SparklineElement(
     max: Option[Long] = None,
     props: ElementProps = ElementProps(),
 ) extends Element:
-  def widget: Widget = w.Sparkline(data, max, props.style)
-  private[dsl] def withProps(props: ElementProps): SparklineElement = copy(props = props)
+  def widget: Widget                                                        = w.Sparkline(data, max, props.style)
+  private[dsl] def withProps(props: ElementProps): SparklineElement         = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
@@ -127,7 +127,7 @@ final case class TabsElement(
     selected: Int = 0,
     props: ElementProps = ElementProps(),
 ) extends Element:
-  def widget: Widget = w.Tabs(titles.map(Line.raw), selected, props.style)
+  def widget: Widget                                           = w.Tabs(titles.map(Line.raw), selected, props.style)
   private[dsl] def withProps(props: ElementProps): TabsElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
@@ -140,13 +140,13 @@ final case class TableElement(
     header: Option[Seq[String]] = None,
     props: ElementProps = ElementProps(),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                            =
     w.Table(rows.map(_.map(Line.raw)), widths, header.map(_.map(Line.raw)), style = props.style)
   private[dsl] def withProps(props: ElementProps): TableElement = copy(props = props)
 
 /** Escape hatch: any core [[Widget]] as a leaf element (its rendering ignores the element style). */
 final case class WidgetElement(wrapped: Widget, props: ElementProps = ElementProps()) extends Element:
-  def widget: Widget = wrapped
+  def widget: Widget                                             = wrapped
   private[dsl] def withProps(props: ElementProps): WidgetElement = copy(props = props)
 
 // ---- interactive (focusable) elements ----
@@ -159,15 +159,15 @@ final case class InputElement(
     placeholder: String = "",
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                                        =
     val input = w.TextInput(placeholder, showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): InputElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): InputElement             = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
@@ -176,38 +176,38 @@ final case class InputElement(
         case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
           state.insert(c.toString)
           true
-        case KeyCode.Backspace =>
+        case KeyCode.Backspace                                                                   =>
           state.backspace()
           true
-        case KeyCode.Delete =>
+        case KeyCode.Delete                                                                      =>
           state.delete()
           true
-        case KeyCode.Left =>
+        case KeyCode.Left                                                                        =>
           state.moveLeft()
           true
-        case KeyCode.Right =>
+        case KeyCode.Right                                                                       =>
           state.moveRight()
           true
-        case KeyCode.Home =>
+        case KeyCode.Home                                                                        =>
           state.moveHome()
           true
-        case KeyCode.End =>
+        case KeyCode.End                                                                         =>
           state.moveEnd()
           true
-        case _ => false
+        case _                                                                                   => false
 
 final case class CheckboxElement(
     label: String,
     checked: Signal[Boolean],
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget = w.Checkbox(label, checked.peek, focusStyled(props))
+  def widget: Widget                                               = w.Checkbox(label, checked.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): CheckboxElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  =
     Some(toggleOnActivate(props, () => checked.update(value => !value)))
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
@@ -218,13 +218,13 @@ final case class ToggleElement(
     on: Signal[Boolean],
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget = w.Toggle(label, on.peek, focusStyled(props))
+  def widget: Widget                                             = w.Toggle(label, on.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): ToggleElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  =
     Some(toggleOnActivate(props, () => on.update(value => !value)))
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
@@ -238,25 +238,25 @@ final case class SelectElement(
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     Some(clickActivates(() => if options.nonEmpty then selected.update(index => (index + 1) % options.size)))
-  def widget: Widget = w.Select(options, selected.peek, focusStyled(props))
+  def widget: Widget                                             = w.Select(options, selected.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): SelectElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused || options.isEmpty then false
     else
       event.code match
-        case KeyCode.Left =>
+        case KeyCode.Left  =>
           selected.update(index => (index - 1 + options.size) % options.size)
           true
         case KeyCode.Right =>
           selected.update(index => (index + 1) % options.size)
           true
-        case _ => false
+        case _             => false
 
 final case class ListElement(
     items: Seq[String],
@@ -270,7 +270,7 @@ final case class ListElement(
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
     val view = w.ListView(items.map(Line.raw), style = props.style)
     (area, buffer) => view.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): ListElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): ListElement             = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -280,10 +280,10 @@ final case class ListElement(
         case KeyCode.Down =>
           state.selectNext(items.size)
           true
-        case KeyCode.Up =>
+        case KeyCode.Up   =>
           state.selectPrevious(items.size)
           true
-        case _ => false
+        case _            => false
 
 final case class TreeElement(
     nodes: Seq[w.TreeNode],
@@ -294,23 +294,23 @@ final case class TreeElement(
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
     val tree = w.Tree(nodes, style = props.style)
     (area, buffer) => tree.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): TreeElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): TreeElement             = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
     else
       event.code match
-        case KeyCode.Down =>
+        case KeyCode.Down  =>
           state.selectNext(nodes)
           true
-        case KeyCode.Up =>
+        case KeyCode.Up    =>
           state.selectPrevious(nodes)
           true
         case KeyCode.Enter =>
           state.toggle(nodes)
           true
-        case _ => false
+        case _             => false
 
 /** Fills its whole area with `fill` (a solid background) before rendering `inner` — what the chrome bars use to read as
   * continuous surfaces. Transparent to focus and event routing.
@@ -320,8 +320,8 @@ final case class FilledElement(
     fill: Style,
     props: ElementProps = ElementProps(),
 ) extends Element:
-  override def children: Seq[Element] = inner.children
-  def widget: Widget =
+  override def children: Seq[Element]                                           = inner.children
+  def widget: Widget                                                            =
     (area, buffer) =>
       var y = area.y
       while y < area.bottom do
@@ -331,14 +331,14 @@ final case class FilledElement(
           x += 1
         y += 1
       inner.widget.render(area, buffer)
-  private[dsl] def withProps(props: ElementProps): FilledElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): FilledElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): FilledElement =
     copy(inner = inner.withChildren(children))
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = inner.builtinKeyHandler
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]      = inner.builtinKeyHandler
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     inner.builtinMouseHandler
-  private[dsl] override def preferredSize(direction: Direction): Constraint = inner.preferredSize(direction)
+  private[dsl] override def preferredSize(direction: Direction): Constraint     = inner.preferredSize(direction)
 
 /** Z-ordered stacking: every child renders over the full area in order, so later children paint over earlier ones — the
   * primitive under dialogs, toasts, palettes, and splash overlays.
@@ -347,9 +347,9 @@ final case class LayersElement(
     override val children: Seq[Element],
     props: ElementProps = ElementProps(),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                                            =
     (area, buffer) => children.foreach(_.widget.render(area, buffer))
-  private[dsl] def withProps(props: ElementProps): LayersElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): LayersElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): LayersElement = copy(children = children)
 
 /** A scrollable viewport over taller-than-the-screen content. Up/Down/PageUp/PageDown scroll while focused. */
@@ -359,14 +359,14 @@ final case class ScrollViewElement(
     state: w.ScrollViewState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  override def children: Seq[Element] = Seq(content)
-  def widget: Widget =
+  override def children: Seq[Element]                                               = Seq(content)
+  def widget: Widget                                                                =
     val view = w.ScrollView(content.widget, contentHeight)
     (area, buffer) => view.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): ScrollViewElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): ScrollViewElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): ScrollViewElement =
     copy(content = children.headOption.getOrElse(content))
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]          = Some(handleKey)
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     Some(wheelScrolls(() => state.scrollUp(), () => state.scrollDown()))
@@ -375,19 +375,19 @@ final case class ScrollViewElement(
     if !props.focused then false
     else
       event.code match
-        case KeyCode.Up =>
+        case KeyCode.Up       =>
           state.scrollUp()
           true
-        case KeyCode.Down =>
+        case KeyCode.Down     =>
           state.scrollDown()
           true
-        case KeyCode.PageUp =>
+        case KeyCode.PageUp   =>
           state.scrollUp(10)
           true
         case KeyCode.PageDown =>
           state.scrollDown(10)
           true
-        case _ => false
+        case _                => false
 
 /** A tab row plus the selected page (Textual's `TabbedContent`): Left/Right switch pages while focused. Only the active
   * page's focusables participate in the tab order.
@@ -399,8 +399,8 @@ final case class TabbedContentElement(
     pageCount: Int,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  override def children: Seq[Element] = Seq(activePage)
-  def widget: Widget =
+  override def children: Seq[Element]                                                  = Seq(activePage)
+  def widget: Widget                                                                   =
     val tabs = w.Tabs(titles.map(Line.raw), selected.peek, focusStyled(props))
     (area, buffer) =>
       w.Column(
@@ -409,22 +409,22 @@ final case class TabbedContentElement(
           w.LayoutItem(Constraint.Fill(1), activePage.widget),
         )
       ).render(area, buffer)
-  private[dsl] def withProps(props: ElementProps): TabbedContentElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): TabbedContentElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): TabbedContentElement =
     copy(activePage = children.headOption.getOrElse(activePage))
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]             = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused || pageCount == 0 then false
     else
       event.code match
-        case KeyCode.Left =>
+        case KeyCode.Left  =>
           selected.update(index => (index - 1 + pageCount) % pageCount)
           true
         case KeyCode.Right =>
           selected.update(index => (index + 1) % pageCount)
           true
-        case _ => false
+        case _             => false
 
 /** A toggleable section: `▸ title` collapsed, `▾ title` plus the body expanded; Enter/Space toggle while focused.
   * Collapsed bodies leave the tab order entirely.
@@ -435,10 +435,10 @@ final case class CollapsibleElement(
     expanded: Signal[Boolean],
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  override def children: Seq[Element] = if expanded.peek then Seq(body) else Seq.empty
-  def widget: Widget =
-    val isOpen = expanded.peek
-    val marker = if isOpen then "▾ " else "▸ "
+  override def children: Seq[Element]                                 = if expanded.peek then Seq(body) else Seq.empty
+  def widget: Widget                                                  =
+    val isOpen         = expanded.peek
+    val marker         = if isOpen then "▾ " else "▸ "
     val header: Widget = (area, buffer) => buffer.setString(area.x, area.y, marker + title, focusStyled(props))
     (area, buffer) =>
       if isOpen then
@@ -449,11 +449,11 @@ final case class CollapsibleElement(
   private[dsl] def withProps(props: ElementProps): CollapsibleElement = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): CollapsibleElement =
     copy(body = children.headOption.getOrElse(body))
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
+  private[dsl] override def preferredSize(direction: Direction): Constraint          =
     direction match
       case Direction.Vertical if !expanded.peek => Constraint.Length(1)
       case _                                    => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]           =
     Some(toggleOnActivate(props, () => expanded.update(open => !open)))
 
 /** Two panes split by an adjustable divider: `[`/`]` shift the split while the pane itself is focused. */
@@ -475,20 +475,20 @@ final case class SplitPaneElement(
         true
       else false
     }
-  override def children: Seq[Element] = Seq(first, second)
-  def widget: Widget =
+  override def children: Seq[Element]                                              = Seq(first, second)
+  def widget: Widget                                                               =
     val percent = math.max(10, math.min(90, splitPercent.peek))
-    val items = Seq(
+    val items   = Seq(
       first.layoutItem(direction).copy(constraint = Constraint.Percentage(percent)),
       second.layoutItem(direction).copy(constraint = Constraint.Fill(1)),
     )
     if horizontal then w.Row(items, spacing = 1) else w.Column(items, spacing = 0)
-  private[dsl] def withProps(props: ElementProps): SplitPaneElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): SplitPaneElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): SplitPaneElement =
     children match
       case Seq(a, b) => copy(first = a, second = b)
       case _         => this
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]         = Some(handleKey)
 
   private def direction: Direction = if horizontal then Direction.Horizontal else Direction.Vertical
 
@@ -502,7 +502,7 @@ final case class SplitPaneElement(
         case KeyCode.Char(']') =>
           splitPercent.update(value => math.min(90, value + 5))
           true
-        case _ => false
+        case _                 => false
 
 /** A text input with a live suggestion dropdown: typing filters `suggestions` (subsequence match), Up/Down move the
   * highlight, Enter accepts it into the input and fires `onAccept`.
@@ -527,22 +527,22 @@ final case class AutocompleteElement(
         }
         .take(maxSuggestions)
 
-  def widget: Widget =
-    val visible = matches
+  def widget: Widget                                                        =
+    val visible   = matches
     val highlight = math.max(0, math.min(state.highlighted, math.max(0, visible.size - 1)))
-    val input = w.TextInput(showCursor = props.focused, style = props.style)
+    val input     = w.TextInput(showCursor = props.focused, style = props.style)
     (area, buffer) =>
       input.render(io.worxbend.tui.core.Rect(area.x, area.y, area.width, 1), buffer, state.input)
       visible.zipWithIndex.foreach { (candidate, index) =>
         val rowStyle = if index == highlight && props.focused then props.style.reverse else props.style.dim
         buffer.setString(area.x + 2, area.y + 1 + index, candidate, rowStyle)
       }
-  private[dsl] def withProps(props: ElementProps): AutocompleteElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): AutocompleteElement      = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1 + matches.size)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
@@ -552,30 +552,30 @@ final case class AutocompleteElement(
           state.input.insert(c.toString)
           state.highlighted = 0
           true
-        case KeyCode.Backspace =>
+        case KeyCode.Backspace                                                                   =>
           state.input.backspace()
           state.highlighted = 0
           true
-        case KeyCode.Down =>
+        case KeyCode.Down                                                                        =>
           state.highlighted = math.min(state.highlighted + 1, math.max(0, matches.size - 1))
           true
-        case KeyCode.Up =>
+        case KeyCode.Up                                                                          =>
           state.highlighted = math.max(0, state.highlighted - 1)
           true
-        case KeyCode.Enter =>
+        case KeyCode.Enter                                                                       =>
           matches.lift(math.min(state.highlighted, math.max(0, matches.size - 1))) match
             case Some(choice) =>
               state.accept(choice)
               onAccept(choice)
               true
-            case None => false
-        case KeyCode.Left =>
+            case None         => false
+        case KeyCode.Left                                                                        =>
           state.input.moveLeft()
           true
-        case KeyCode.Right =>
+        case KeyCode.Right                                                                       =>
           state.input.moveRight()
           true
-        case _ => false
+        case _                                                                                   => false
 
 /** A file chooser over a [[FilePickerState]]: arrows navigate, Enter opens directories or accepts a file into
   * `state.chosen`.
@@ -584,24 +584,24 @@ final case class FilePickerElement(
     state: FilePickerState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                                       =
     val tree = w.DirectoryTree(style = props.style)
     (area, buffer) =>
-      val treeArea = io.worxbend.tui.core.Rect(area.x, area.y, area.width, math.max(0, area.height - 1))
+      val treeArea   = io.worxbend.tui.core.Rect(area.x, area.y, area.width, math.max(0, area.height - 1))
       tree.render(treeArea, buffer, state.tree)
       val chosenLine = state.chosen.peek.map(path => s"→ $path").getOrElse("→ (nothing selected)")
       buffer.setString(area.x, area.bottom - 1, chosenLine, props.style.dim)
-  private[dsl] def withProps(props: ElementProps): FilePickerElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): FilePickerElement       = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
     else
       event.code match
-        case KeyCode.Down =>
+        case KeyCode.Down  =>
           state.tree.selectNext()
           true
-        case KeyCode.Up =>
+        case KeyCode.Up    =>
           state.tree.selectPrevious()
           true
         case KeyCode.Enter =>
@@ -609,11 +609,11 @@ final case class FilePickerElement(
             case Some(path) if java.nio.file.Files.isDirectory(path) =>
               state.tree.toggle()
               true
-            case Some(path) =>
+            case Some(path)                                          =>
               state.chosen.set(Some(path))
               true
-            case None => false
-        case _ => false
+            case None                                                => false
+        case _             => false
 
 /** Mutually exclusive options: Up/Down move the selection while focused. */
 final case class RadioGroupElement(
@@ -622,12 +622,12 @@ final case class RadioGroupElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   def widget: Widget = w.RadioGroup(options, selected.peek, props.style, focusStyled(props).bold)
-  private[dsl] def withProps(props: ElementProps): RadioGroupElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): RadioGroupElement        = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(math.max(1, options.size))
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused || options.isEmpty then false
@@ -636,10 +636,10 @@ final case class RadioGroupElement(
         case KeyCode.Down =>
           selected.update(index => math.min(index + 1, options.size - 1))
           true
-        case KeyCode.Up =>
+        case KeyCode.Up   =>
           selected.update(index => math.max(index - 1, 0))
           true
-        case _ => false
+        case _            => false
 
 /** A value slider: Left/Right adjust by `step`, Home/End jump to the bounds, while focused. */
 final case class SliderElement(
@@ -658,33 +658,33 @@ final case class SliderElement(
             val fraction = (event.x - area.x - 1).toDouble / (area.width - 3)
             value.set(min + math.round(math.max(0.0, math.min(1.0, fraction)) * (max - min)).toInt)
           true
-        case _ => false
+        case _                                                                                   => false
     }
   def widget: Widget = w.Slider(value.peek, min, max, props.style, focusStyled(props).bold)
-  private[dsl] def withProps(props: ElementProps): SliderElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): SliderElement            = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
     else
       event.code match
-        case KeyCode.Left =>
+        case KeyCode.Left  =>
           value.update(v => math.max(min, v - step))
           true
         case KeyCode.Right =>
           value.update(v => math.min(max, v + step))
           true
-        case KeyCode.Home =>
+        case KeyCode.Home  =>
           value.set(min)
           true
-        case KeyCode.End =>
+        case KeyCode.End   =>
           value.set(max)
           true
-        case _ => false
+        case _             => false
 
 /** A multi-select list: Up/Down move the cursor, Space toggles membership of the cursor row. */
 final case class SelectionListElement(
@@ -693,25 +693,25 @@ final case class SelectionListElement(
     state: w.ListState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget =
-    val chosen = selected.peek
+  def widget: Widget                                                       =
+    val chosen   = selected.peek
     val rendered = items.zipWithIndex.map { (item, index) =>
       val marker = if chosen.contains(index) then "[x] " else "[ ] "
       Line.raw(marker + item)
     }
-    val view = w.ListView(rendered, style = props.style)
+    val view     = w.ListView(rendered, style = props.style)
     (area, buffer) => view.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): SelectionListElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): SelectionListElement    = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
     else
       event.code match
-        case KeyCode.Down =>
+        case KeyCode.Down      =>
           state.selectNext(items.size)
           true
-        case KeyCode.Up =>
+        case KeyCode.Up        =>
           state.selectPrevious(items.size)
           true
         case KeyCode.Char(' ') =>
@@ -719,7 +719,7 @@ final case class SelectionListElement(
             selected.update(current => if current.contains(cursor) then current - cursor else current + cursor)
           }
           true
-        case _ => false
+        case _                 => false
 
 /** A text input restricted to numbers (optional single leading minus and, with `allowDecimal`, one dot). */
 final case class NumberInputElement(
@@ -727,15 +727,15 @@ final case class NumberInputElement(
     allowDecimal: Boolean = false,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                                        =
     val input = w.TextInput(showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): NumberInputElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): NumberInputElement       = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
@@ -747,22 +747,22 @@ final case class NumberInputElement(
         case KeyCode.Backspace =>
           state.backspace()
           true
-        case KeyCode.Delete =>
+        case KeyCode.Delete    =>
           state.delete()
           true
-        case KeyCode.Left =>
+        case KeyCode.Left      =>
           state.moveLeft()
           true
-        case KeyCode.Right =>
+        case KeyCode.Right     =>
           state.moveRight()
           true
-        case KeyCode.Home =>
+        case KeyCode.Home      =>
           state.moveHome()
           true
-        case KeyCode.End =>
+        case KeyCode.End       =>
           state.moveEnd()
           true
-        case _ => false
+        case _                 => false
 
   private def accepts(c: Char): Boolean =
     if c.isDigit then true
@@ -776,15 +776,15 @@ final case class MaskedInputElement(
     mask: String,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                                        =
     val input = w.TextInput(placeholder = mask, showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): MaskedInputElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): MaskedInputElement       = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
@@ -793,10 +793,10 @@ final case class MaskedInputElement(
         case KeyCode.Char(c) if event.modifiers.isEmpty =>
           typeChar(c)
           true
-        case KeyCode.Backspace =>
+        case KeyCode.Backspace                          =>
           eraseSlot()
           true
-        case _ => false
+        case _                                          => false
 
   private def typeChar(c: Char): Unit =
     state.moveEnd()
@@ -826,24 +826,24 @@ final case class PaginatorElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   def widget: Widget = w.Paginator(current.peek, total, props.style, focusStyled(props).bold)
-  private[dsl] def withProps(props: ElementProps): PaginatorElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): PaginatorElement         = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused || total == 0 then false
     else
       event.code match
-        case KeyCode.Left =>
+        case KeyCode.Left  =>
           current.update(page => math.max(0, page - 1))
           true
         case KeyCode.Right =>
           current.update(page => math.min(total - 1, page + 1))
           true
-        case _ => false
+        case _             => false
 
 /** A pressable button: Enter or Space triggers `action` while focused. */
 final case class ButtonElement(
@@ -851,13 +851,13 @@ final case class ButtonElement(
     action: () => Unit,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget = w.Button(label, focusStyled(props))
-  private[dsl] def withProps(props: ElementProps): ButtonElement = copy(props = props)
+  def widget: Widget                                                        = w.Button(label, focusStyled(props))
+  private[dsl] def withProps(props: ElementProps): ButtonElement            = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint =
     direction match
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] =
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  =
     Some(toggleOnActivate(props, action))
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
@@ -873,29 +873,29 @@ final case class LogElement(
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     Some(wheelScrolls(() => state.scrollUp(), () => state.scrollDown()))
-  def widget: Widget =
+  def widget: Widget                                                       =
     val log = w.Log(props.style)
     (area, buffer) => log.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): LogElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): LogElement              = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
     else
       event.code match
-        case KeyCode.Up =>
+        case KeyCode.Up       =>
           state.scrollUp()
           true
-        case KeyCode.Down =>
+        case KeyCode.Down     =>
           state.scrollDown()
           true
-        case KeyCode.PageUp =>
+        case KeyCode.PageUp   =>
           state.scrollUp(10)
           true
         case KeyCode.PageDown =>
           state.scrollDown(10)
           true
-        case _ => false
+        case _                => false
 
 /** Multi-line editor element. While focused it consumes printable characters, Enter (newline), Backspace, Delete,
   * arrows, Home/End, and Ctrl+Z (undo) — Tab stays free for focus traversal.
@@ -904,84 +904,84 @@ final case class TextAreaElement(
     state: w.TextAreaState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                                       =
     val editor = w.TextArea(showCursor = props.focused, style = props.style)
     (area, buffer) => editor.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): TextAreaElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): TextAreaElement         = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
     else
       event match
-        case KeyEvent(KeyCode.Char('z'), modifiers) if modifiers.has(KeyModifiers.Ctrl) =>
+        case KeyEvent(KeyCode.Char('z'), modifiers) if modifiers.has(KeyModifiers.Ctrl)                   =>
           state.undo()
           true
         case KeyEvent(KeyCode.Char(c), modifiers) if modifiers.isEmpty || modifiers == KeyModifiers.Shift =>
           state.insert(c.toString)
           true
-        case KeyEvent(KeyCode.Enter, _) =>
+        case KeyEvent(KeyCode.Enter, _)                                                                   =>
           state.newline()
           true
-        case KeyEvent(KeyCode.Backspace, _) =>
+        case KeyEvent(KeyCode.Backspace, _)                                                               =>
           state.backspace()
           true
-        case KeyEvent(KeyCode.Delete, _) =>
+        case KeyEvent(KeyCode.Delete, _)                                                                  =>
           state.delete()
           true
-        case KeyEvent(KeyCode.Left, _) =>
+        case KeyEvent(KeyCode.Left, _)                                                                    =>
           state.moveLeft()
           true
-        case KeyEvent(KeyCode.Right, _) =>
+        case KeyEvent(KeyCode.Right, _)                                                                   =>
           state.moveRight()
           true
-        case KeyEvent(KeyCode.Up, _) =>
+        case KeyEvent(KeyCode.Up, _)                                                                      =>
           state.moveUp()
           true
-        case KeyEvent(KeyCode.Down, _) =>
+        case KeyEvent(KeyCode.Down, _)                                                                    =>
           state.moveDown()
           true
-        case KeyEvent(KeyCode.Home, _) =>
+        case KeyEvent(KeyCode.Home, _)                                                                    =>
           state.moveHome()
           true
-        case KeyEvent(KeyCode.End, _) =>
+        case KeyEvent(KeyCode.End, _)                                                                     =>
           state.moveEnd()
           true
-        case _ => false
+        case _                                                                                            => false
 
 final case class DirectoryTreeElement(
     state: w.DirectoryTreeState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                                       =
     val tree = w.DirectoryTree(style = props.style)
     (area, buffer) => tree.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): DirectoryTreeElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): DirectoryTreeElement    = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
     else
       event.code match
-        case KeyCode.Down =>
+        case KeyCode.Down  =>
           state.selectNext()
           true
-        case KeyCode.Up =>
+        case KeyCode.Up    =>
           state.selectPrevious()
           true
         case KeyCode.Enter =>
           state.toggle()
           true
-        case _ => false
+        case _             => false
 
 final case class DataTableElement(
     table: w.DataTable,
     state: w.DataTableState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget =
+  def widget: Widget                                                       =
     (area, buffer) => table.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): DataTableElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): DataTableElement        = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -991,29 +991,29 @@ final case class DataTableElement(
         case KeyCode.Down =>
           state.selectNext(table.visibleRows(state).size)
           true
-        case KeyCode.Up =>
+        case KeyCode.Up   =>
           state.selectPrevious(table.visibleRows(state).size)
           true
-        case _ => false
+        case _            => false
 
 /** Wraps a focusable element during the focus pass so its rendered area is recorded for click-to-focus hit-testing.
   * Transparent for everything else: props, children, and handlers delegate to the wrapped node.
   */
 private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker: FocusTracker) extends Element:
-  def props: ElementProps = inner.props
-  override def children: Seq[Element] = inner.children
-  def widget: Widget =
+  def props: ElementProps                                                        = inner.props
+  override def children: Seq[Element]                                            = inner.children
+  def widget: Widget                                                             =
     (area, buffer) =>
       tracker.record(index, area)
       inner.widget.render(area, buffer)
-  private[dsl] def withProps(props: ElementProps): TrackedElement = copy(inner = inner.withProps(props))
+  private[dsl] def withProps(props: ElementProps): TrackedElement                = copy(inner = inner.withProps(props))
   private[dsl] override def withChildren(children: Seq[Element]): TrackedElement =
     copy(inner = inner.withChildren(children))
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = inner.builtinKeyHandler
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]       = inner.builtinKeyHandler
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     inner.builtinMouseHandler
-  private[dsl] override def preferredSize(direction: Direction): Constraint = inner.preferredSize(direction)
+  private[dsl] override def preferredSize(direction: Direction): Constraint      = inner.preferredSize(direction)
 
 /** A mouse press activates the control (focus already moved on the press). */
 private def clickActivates(
@@ -1032,13 +1032,13 @@ private def wheelScrolls(
 ): (io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean =
   (event, _) =>
     event.kind match
-      case io.worxbend.tui.core.MouseEventKind.ScrollUp =>
+      case io.worxbend.tui.core.MouseEventKind.ScrollUp   =>
         up()
         true
       case io.worxbend.tui.core.MouseEventKind.ScrollDown =>
         down()
         true
-      case _ => false
+      case _                                              => false
 
 /** Space/Enter activates a focused two-state control. */
 private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEvent => Boolean =
@@ -1049,7 +1049,7 @@ private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEven
         case KeyCode.Char(' ') | KeyCode.Enter =>
           activate()
           true
-        case _ => false
+        case _                                 => false
 
 /** Focused interactive elements render reversed so the user can see where keystrokes go. */
 private def focusStyled(props: ElementProps): Style =
@@ -1230,7 +1230,7 @@ object Element:
     * so the tree always holds exactly the visible page.
     */
   def tabbedContent(pages: (String, Element)*)(selected: io.worxbend.tui.runtime.Signal[Int]): TabbedContentElement =
-    val index = math.max(0, math.min(selected.peek, pages.size - 1))
+    val index  = math.max(0, math.min(selected.peek, pages.size - 1))
     val active = if pages.isEmpty then Element.text("") else pages(index)._2
     TabbedContentElement(pages.map(_._1), active, selected, pages.size)
 

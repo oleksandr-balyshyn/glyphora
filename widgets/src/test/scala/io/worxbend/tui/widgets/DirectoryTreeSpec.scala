@@ -44,13 +44,13 @@ final class DirectoryTreeSpec extends AnyFunSuite:
     assert(state.expanded.isEmpty)
 
   test("the selected row is highlighted"):
-    val state = DirectoryTreeState(fixture())
+    val state  = DirectoryTreeState(fixture())
     state.selectNext()
     val buffer = renderedWith(state)
     assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Reverse))
 
   test("listings are cached until invalidated"):
-    val root = fixture()
+    val root  = fixture()
     val state = DirectoryTreeState(root)
     assert(state.childrenOf(root).size == 2)
     Files.writeString(root.resolve("new.txt"), "")

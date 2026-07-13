@@ -36,7 +36,7 @@ private[terminal] final class InputDecoder(read: Long => Int):
 
   /** CSI sequences: parameters (digits, `;`, and the SGR-mouse `<` prefix) followed by a final byte in 0x40–0x7E. */
   private def decodeCsi(): Event =
-    val params = StringBuilder()
+    val params    = StringBuilder()
     var finalByte = -1
     while finalByte < 0 do
       val c = read(EscapeTimeoutMillis)
@@ -49,7 +49,7 @@ private[terminal] final class InputDecoder(read: Long => Int):
     val isSgrMouse = params.startsWith("<")
     if isSgrMouse && (finalByte == 'M' || finalByte == 'm') then decodeSgrMouse(params.drop(1), finalByte == 'M')
     else
-      val numbers = params.split(';').toSeq.filter(_.nonEmpty).flatMap(_.toIntOption)
+      val numbers   = params.split(';').toSeq.filter(_.nonEmpty).flatMap(_.toIntOption)
       val modifiers = numbers.drop(1).headOption.map(modifiersFromCode).getOrElse(KeyModifiers.None)
       finalByte match
         case 'A' => Event.Key(KeyEvent(KeyCode.Up, modifiers))
@@ -65,7 +65,7 @@ private[terminal] final class InputDecoder(read: Long => Int):
   /** `CSI n ~` navigation/function keys; the modifier, when present, is the second parameter. */
   private def decodeTilde(numbers: Seq[Int]): Event =
     val modifiers = numbers.drop(1).headOption.map(modifiersFromCode).getOrElse(KeyModifiers.None)
-    val code = numbers.headOption match
+    val code      = numbers.headOption match
       case Some(1)                       => KeyCode.Home
       case Some(2)                       => KeyCode.Insert
       case Some(3)                       => KeyCode.Delete
@@ -95,7 +95,7 @@ private[terminal] final class InputDecoder(read: Long => Int):
   private def decodeSgrMouse(params: String, isPress: Boolean): Event =
     params.split(';').toSeq.flatMap(_.toIntOption) match
       case Seq(button, column, row) =>
-        val kind =
+        val kind      =
           if (button & 64) != 0 then if (button & 1) != 0 then MouseEventKind.ScrollDown else MouseEventKind.ScrollUp
           else if (button & 32) != 0 then MouseEventKind.Drag
           else if isPress then MouseEventKind.Down
@@ -107,7 +107,7 @@ private[terminal] final class InputDecoder(read: Long => Int):
             if (button & 16) != 0 then Some(KeyModifiers.Ctrl) else None,
           )
         Event.Mouse(MouseEvent(column - 1, row - 1, kind, modifiers))
-      case _ => key(KeyCode.Escape)
+      case _                        => key(KeyCode.Escape)
 
   /** xterm modifier parameter: `code - 1` is a bitmask of shift/alt/ctrl. */
   private def modifiersFromCode(code: Int): KeyModifiers =

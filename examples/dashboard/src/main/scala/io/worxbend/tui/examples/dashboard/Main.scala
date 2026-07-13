@@ -18,10 +18,10 @@ final class DashboardApp extends TuiApp:
   override def onTick(): Unit = tick.update(_ + 1)
 
   def view(using ReactiveScope): Element =
-    val t = tick.get
-    val load = (math.sin(t * 0.1) + 1) / 2
+    val t       = tick.get
+    val load    = (math.sin(t * 0.1) + 1) / 2
     val samples = Vector.tabulate(60)(i => (math.sin((t + i) * 0.25) * 40 + 50).toLong)
-    val wave = Vector.tabulate(120)(i => (i * 0.5, math.sin((t * 0.5 + i) * 0.1) * 40 + 50))
+    val wave    = Vector.tabulate(120)(i => (i * 0.5, math.sin((t * 0.5 + i) * 0.1) * 40 + 50))
     column(
       row(
         panel("Load")(gauge(load)).percent(50),
@@ -39,7 +39,7 @@ final class DashboardApp extends TuiApp:
       case KeyEvent(KeyCode.Char('q'), _) =>
         quit()
         true
-      case _ => false
+      case _                              => false
     }
 
 object Main:

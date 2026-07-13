@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference
 object RenderThread:
 
   private val registered = AtomicReference[Option[Thread]](None)
-  private val pending = ConcurrentLinkedQueue[() => Unit]()
+  private val pending    = ConcurrentLinkedQueue[() => Unit]()
 
   def isRenderThread: Boolean =
     registered.get() match

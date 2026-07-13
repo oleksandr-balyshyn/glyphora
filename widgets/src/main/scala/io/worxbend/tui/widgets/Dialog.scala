@@ -40,10 +40,10 @@ final case class Dialog(
       y += 1
 
   private def renderButtons(inner: Rect, buffer: Buffer): Unit =
-    val labels = buttons.map(label => s"[ $label ]")
+    val labels     = buttons.map(label => s"[ $label ]")
     val totalWidth = labels.map(CharWidth.of).sum + math.max(0, labels.size - 1)
-    var x = inner.x + math.max(0, (inner.width - totalWidth) / 2)
-    val y = inner.bottom - 1
+    var x          = inner.x + math.max(0, (inner.width - totalWidth) / 2)
+    val y          = inner.bottom - 1
     labels.zipWithIndex.foreach { (label, index) =>
       val buttonStyle = if index == selectedButton then style.patch(selectedStyle) else style
       buffer.setString(x, y, label, buttonStyle)

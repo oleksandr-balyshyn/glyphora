@@ -14,15 +14,15 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
   def split(area: Rect): Seq[Rect] =
     if constraints.isEmpty then Seq.empty
     else
-      val total = direction match
+      val total     = direction match
         case Direction.Horizontal => area.width
         case Direction.Vertical   => area.height
       val available = math.max(0, total - spacing * (constraints.size - 1))
-      val sizes = solve(available)
+      val sizes     = solve(available)
       positioned(area, sizes)
 
   private def solve(available: Int): IndexedSeq[Int] =
-    val fixed = constraints.map(fixedDemand(_, available)).toArray
+    val fixed    = constraints.map(fixedDemand(_, available)).toArray
     val leftover = available - fixed.sum
     if leftover <= 0 then fixed.toIndexedSeq
     else
@@ -42,21 +42,21 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
     * re-distributed among the still-uncapped until nothing changes.
     */
   private def distributeLeftover(leftover: Int): IndexedSeq[Int] =
-    val weights = constraints.map {
+    val weights    = constraints.map {
       case Constraint.Fill(weight) => math.max(0, weight)
       case Constraint.Min(_)       => 1
       case Constraint.Max(_)       => 1
       case _                       => 0
     }.toIndexedSeq
-    val caps = constraints.map {
+    val caps       = constraints.map {
       case Constraint.Max(cells) => math.max(0, cells)
       case _                     => Int.MaxValue
     }.toIndexedSeq
-    val granted = Array.fill(constraints.size)(0)
-    var remaining = leftover
+    val granted    = Array.fill(constraints.size)(0)
+    var remaining  = leftover
     var progressed = true
     while remaining > 0 && progressed do
-      val open = constraints.indices.filter(i => weights(i) > 0 && granted(i) < caps(i))
+      val open   = constraints.indices.filter(i => weights(i) > 0 && granted(i) < caps(i))
       val shares = weightedShares(remaining, open.map(weights), open.map(i => caps(i) - granted(i)))
       progressed = shares.sum > 0
       open.zip(shares).foreach { (index, share) => granted(index) += share }
@@ -70,11 +70,11 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
     val totalWeight = weights.sum
     if totalWeight == 0 then IndexedSeq.fill(weights.size)(0)
     else
-      val base = weights.map(w => amount.toLong * w / totalWeight)
-      val remainders = weights.map(w => amount.toLong * w % totalWeight)
-      var extras = amount - base.sum
+      val base        = weights.map(w => amount.toLong * w / totalWeight)
+      val remainders  = weights.map(w => amount.toLong * w % totalWeight)
+      var extras      = amount - base.sum
       val byRemainder = weights.indices.sortBy(i => (-remainders(i), i))
-      val shares = base.map(_.toInt).toArray
+      val shares      = base.map(_.toInt).toArray
       byRemainder.foreach { index =>
         if extras > 0 then
           shares(index) += 1
@@ -86,9 +86,9 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
     val (axisStart, axisEnd) = direction match
       case Direction.Horizontal => (area.x, area.right)
       case Direction.Vertical   => (area.y, area.bottom)
-    var offset = axisStart
+    var offset               = axisStart
     sizes.map { size =>
-      val start = math.min(offset, axisEnd)
+      val start       = math.min(offset, axisEnd)
       val clampedSize = math.max(0, math.min(size, axisEnd - start))
       offset = start + size + spacing
       direction match

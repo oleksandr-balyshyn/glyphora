@@ -50,7 +50,7 @@ object KeyBindings:
     val parts = spec.trim.toLowerCase.split('+').toList.filter(_.nonEmpty)
     parts match
       case Nil => Left("empty spec")
-      case _ =>
+      case _   =>
         val (modifierNames, keyNames) = parts.partition(ModifierNames.contains)
         keyNames match
           case Seq(keyName) =>
@@ -58,26 +58,26 @@ object KeyBindings:
               val modifiers = modifierNames.foldLeft(KeyModifiers.None)((acc, name) => acc | ModifierNames(name))
               KeyEvent(code, modifiers)
             }
-          case Nil   => Left("no key name (only modifiers)")
-          case other => Left(s"multiple key names: ${other.mkString(", ")}")
+          case Nil          => Left("no key name (only modifiers)")
+          case other        => Left(s"multiple key names: ${other.mkString(", ")}")
 
   private def keyCodeFor(name: String): Either[String, KeyCode] =
     name match
-      case "enter"             => Right(KeyCode.Enter)
-      case "esc" | "escape"    => Right(KeyCode.Escape)
-      case "tab"               => Right(KeyCode.Tab)
-      case "space"             => Right(KeyCode.Char(' '))
-      case "backspace"         => Right(KeyCode.Backspace)
-      case "delete" | "del"    => Right(KeyCode.Delete)
-      case "insert"            => Right(KeyCode.Insert)
-      case "home"              => Right(KeyCode.Home)
-      case "end"               => Right(KeyCode.End)
-      case "pageup" | "pgup"   => Right(KeyCode.PageUp)
-      case "pagedown" | "pgdn" => Right(KeyCode.PageDown)
-      case "up"                => Right(KeyCode.Up)
-      case "down"              => Right(KeyCode.Down)
-      case "left"              => Right(KeyCode.Left)
-      case "right"             => Right(KeyCode.Right)
+      case "enter"                                                                        => Right(KeyCode.Enter)
+      case "esc" | "escape"                                                               => Right(KeyCode.Escape)
+      case "tab"                                                                          => Right(KeyCode.Tab)
+      case "space"                                                                        => Right(KeyCode.Char(' '))
+      case "backspace"                                                                    => Right(KeyCode.Backspace)
+      case "delete" | "del"                                                               => Right(KeyCode.Delete)
+      case "insert"                                                                       => Right(KeyCode.Insert)
+      case "home"                                                                         => Right(KeyCode.Home)
+      case "end"                                                                          => Right(KeyCode.End)
+      case "pageup" | "pgup"                                                              => Right(KeyCode.PageUp)
+      case "pagedown" | "pgdn"                                                            => Right(KeyCode.PageDown)
+      case "up"                                                                           => Right(KeyCode.Up)
+      case "down"                                                                         => Right(KeyCode.Down)
+      case "left"                                                                         => Right(KeyCode.Left)
+      case "right"                                                                        => Right(KeyCode.Right)
       case f if f.startsWith("f") && f.drop(1).toIntOption.exists(n => n >= 1 && n <= 12) =>
         Right(KeyCode.F(f.drop(1).toInt))
       case single if single.length == 1 => Right(KeyCode.Char(single.head))

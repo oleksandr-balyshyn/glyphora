@@ -14,15 +14,15 @@ import scala.concurrent.duration.Duration
   */
 final class HeadlessBackend(initialSize: Size) extends Backend:
 
-  private val events = LinkedBlockingQueue[Event]()
-  @volatile private var terminalSize = initialSize
+  private val events                              = LinkedBlockingQueue[Event]()
+  @volatile private var terminalSize              = initialSize
   @volatile private var lastFrame: Option[Buffer] = None
-  @volatile private var rawMode = false
-  @volatile private var alternateScreen = false
-  @volatile private var mouseCapture = false
-  @volatile private var cursorVisible = true
-  private val drawCounter = AtomicLong(0)
-  private val idleReadCounter = AtomicLong(0)
+  @volatile private var rawMode                   = false
+  @volatile private var alternateScreen           = false
+  @volatile private var mouseCapture              = false
+  @volatile private var cursorVisible             = true
+  private val drawCounter                         = AtomicLong(0)
+  private val idleReadCounter                     = AtomicLong(0)
 
   def size: Either[BackendError, Size] = Right(terminalSize)
 
@@ -96,7 +96,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   def pendingEvents: Int = events.size()
 
-  def isRawMode: Boolean = rawMode
+  def isRawMode: Boolean         = rawMode
   def isAlternateScreen: Boolean = alternateScreen
-  def isMouseCaptured: Boolean = mouseCapture
-  def isCursorVisible: Boolean = cursorVisible
+  def isMouseCaptured: Boolean   = mouseCapture
+  def isCursorVisible: Boolean   = cursorVisible

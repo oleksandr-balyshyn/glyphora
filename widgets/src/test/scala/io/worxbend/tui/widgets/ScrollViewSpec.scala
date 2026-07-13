@@ -17,14 +17,14 @@ final class ScrollViewSpec extends AnyFunSuite:
 
   test("shows the top window initially with a scrollbar on the right"):
     val buffer = renderedWith(ScrollViewState())
-    val lines = trimmedLines(buffer)
+    val lines  = trimmedLines(buffer)
     assert(lines.head.startsWith("row 0"))
     assert(lines(2).startsWith("row 2"))
     assert(buffer.get(9, 0).symbol == "█") // thumb at top
 
   test("scrolling down shifts the window and clamps at the end"):
     val state = ScrollViewState()
-    val _ = renderedWith(state) // establish viewport metrics
+    val _     = renderedWith(state) // establish viewport metrics
     state.scrollDown(3)
     assert(trimmedLines(renderedWith(state)).head.startsWith("row 3"))
     state.scrollDown(99)

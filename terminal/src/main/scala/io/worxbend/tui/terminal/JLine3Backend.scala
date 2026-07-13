@@ -17,11 +17,11 @@ import scala.util.control.NonFatal
 final class JLine3Backend private (terminal: Terminal) extends Backend:
 
   private var savedAttributes: Option[org.jline.terminal.Attributes] = None
-  private var lastFlushed: Option[Buffer] = None
-  private var alternateScreenActive = false
-  private var mouseCaptureActive = false
-  private var cursorHidden = false
-  private val pendingResize = AtomicReference[Option[Size]](None)
+  private var lastFlushed: Option[Buffer]                            = None
+  private var alternateScreenActive                                  = false
+  private var mouseCaptureActive                                     = false
+  private var cursorHidden                                           = false
+  private val pendingResize                                          = AtomicReference[Option[Size]](None)
   private val decoder = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
 
   terminal.handle(
@@ -33,11 +33,11 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
 
   def draw(buffer: Buffer): Either[BackendError, Unit] =
     attempt {
-      val previous = lastFlushed.getOrElse(Buffer(buffer.area))
-      val output = StringBuilder()
-      var expectedX = -1
-      var currentY = -1
-      var currentStyle = ""
+      val previous                    = lastFlushed.getOrElse(Buffer(buffer.area))
+      val output                      = StringBuilder()
+      var expectedX                   = -1
+      var currentY                    = -1
+      var currentStyle                = ""
       var currentLink: Option[String] = None
       previous.diff(buffer).foreach { (pos, cell) =>
         if pos.y != currentY || pos.x != expectedX then output ++= AnsiSequences.moveTo(pos.x, pos.y)
@@ -67,7 +67,7 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
 
   def disableRawMode(): Either[BackendError, Unit] =
     savedAttributes match
-      case None => Left(BackendError.NotInRawMode)
+      case None             => Left(BackendError.NotInRawMode)
       case Some(attributes) =>
         attempt {
           terminal.setAttributes(attributes)

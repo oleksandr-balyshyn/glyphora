@@ -69,12 +69,12 @@ extension (element: Element)
   def styled(transform: Style => Style): Element =
     element.withProps(element.props.copy(style = transform(element.props.style)))
 
-  def bold: Element = element.styled(_.bold)
-  def dim: Element = element.styled(_.dim)
-  def italic: Element = element.styled(_.italic)
-  def underline: Element = element.styled(_.underline)
-  def reverse: Element = element.styled(_.reverse)
-  def color(c: Color): Element = element.styled(_.withFg(c))
+  def bold: Element                 = element.styled(_.bold)
+  def dim: Element                  = element.styled(_.dim)
+  def italic: Element               = element.styled(_.italic)
+  def underline: Element            = element.styled(_.underline)
+  def reverse: Element              = element.styled(_.reverse)
+  def color(c: Color): Element      = element.styled(_.withFg(c))
   def background(c: Color): Element = element.styled(_.withBg(c))
 
   /** Rounded borders — meaningful on panels, identity elsewhere. */
@@ -105,10 +105,10 @@ extension (element: Element)
 /** Layout constraints — how much space the element claims inside its container (SPEC.md §5.2). */
 extension (element: Element)
 
-  def length(cells: Int): Element = constrained(element, Constraint.Length(cells))
-  def percent(pct: Int): Element = constrained(element, Constraint.Percentage(pct))
-  def fill: Element = constrained(element, Constraint.Fill(1))
-  def fill(weight: Int): Element = constrained(element, Constraint.Fill(weight))
+  def length(cells: Int): Element  = constrained(element, Constraint.Length(cells))
+  def percent(pct: Int): Element   = constrained(element, Constraint.Percentage(pct))
+  def fill: Element                = constrained(element, Constraint.Fill(1))
+  def fill(weight: Int): Element   = constrained(element, Constraint.Fill(weight))
   def minSize(cells: Int): Element = constrained(element, Constraint.Min(cells))
   def maxSize(cells: Int): Element = constrained(element, Constraint.Max(cells))
 

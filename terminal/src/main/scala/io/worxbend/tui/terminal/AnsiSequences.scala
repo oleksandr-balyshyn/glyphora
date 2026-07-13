@@ -9,13 +9,13 @@ private[terminal] object AnsiSequences:
 
   val EnterAlternateScreen: String = s"$Esc[?1049h"
   val LeaveAlternateScreen: String = s"$Esc[?1049l"
-  val ClearScreen: String = s"$Esc[2J"
-  val HideCursor: String = s"$Esc[?25l"
-  val ShowCursor: String = s"$Esc[?25h"
-  val EnableMouseCapture: String = s"$Esc[?1000h$Esc[?1002h$Esc[?1006h"
-  val DisableMouseCapture: String = s"$Esc[?1006l$Esc[?1002l$Esc[?1000l"
-  val ResetStyle: String = s"$Esc[0m"
-  val LinkClose: String = s"$Esc]8;;$Esc\\"
+  val ClearScreen: String          = s"$Esc[2J"
+  val HideCursor: String           = s"$Esc[?25l"
+  val ShowCursor: String           = s"$Esc[?25h"
+  val EnableMouseCapture: String   = s"$Esc[?1000h$Esc[?1002h$Esc[?1006h"
+  val DisableMouseCapture: String  = s"$Esc[?1006l$Esc[?1002l$Esc[?1000l"
+  val ResetStyle: String           = s"$Esc[0m"
+  val LinkClose: String            = s"$Esc]8;;$Esc\\"
 
   /** OSC 8 hyperlink opener; pair every open with [[LinkClose]]. */
   def linkOpen(url: String): String = s"$Esc]8;;$url$Esc\\"
@@ -63,12 +63,12 @@ private[terminal] object AnsiSequences:
 
   private def modifierCodes(modifiers: Modifiers): List[String] =
     List(
-      Modifiers.Bold -> "1",
-      Modifiers.Dim -> "2",
-      Modifiers.Italic -> "3",
-      Modifiers.Underline -> "4",
-      Modifiers.Blink -> "5",
-      Modifiers.Reverse -> "7",
-      Modifiers.Hidden -> "8",
+      Modifiers.Bold       -> "1",
+      Modifiers.Dim        -> "2",
+      Modifiers.Italic     -> "3",
+      Modifiers.Underline  -> "4",
+      Modifiers.Blink      -> "5",
+      Modifiers.Reverse    -> "7",
+      Modifiers.Hidden     -> "8",
       Modifiers.CrossedOut -> "9",
     ).collect { case (flag, code) if modifiers.has(flag) => code }

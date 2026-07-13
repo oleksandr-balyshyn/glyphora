@@ -45,13 +45,13 @@ def scaffold(
     statusBar: Option[Element] = None,
 )(content: Element): Element =
   val middle = sidebar match
-    case None => content.fill
+    case None       => content.fill
     case Some(side) =>
       val sideElement = side.content.length(side.width)
       val mainElement = content.fill
-      val ordered = if side.onRight then Seq(mainElement, sideElement) else Seq(sideElement, mainElement)
+      val ordered     = if side.onRight then Seq(mainElement, sideElement) else Seq(sideElement, mainElement)
       Element.row(ordered*).fill
-  val rows = topBar.toSeq ++ Seq(middle) ++ statusBar.toSeq
+  val rows   = topBar.toSeq ++ Seq(middle) ++ statusBar.toSeq
   Element.column(rows*)
 
 /** A centered help dialog listing every hinted binding — render it last (over the view) while visible. */

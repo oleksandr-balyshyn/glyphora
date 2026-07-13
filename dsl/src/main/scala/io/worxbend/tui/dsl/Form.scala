@@ -30,7 +30,7 @@ private[dsl] object FieldBinding:
 final class FormState[A] private (private[dsl] val bindings: Seq[FieldBinding], assemble: Seq[Any] => A):
 
   val errors: Signal[Map[String, String]] = Signal(Map.empty)
-  val result: Signal[Option[A]] = Signal(None)
+  val result: Signal[Option[A]]           = Signal(None)
 
   /** Validates every field; either publishes per-field errors or the assembled value. */
   def submit(): Unit =
@@ -38,7 +38,7 @@ final class FormState[A] private (private[dsl] val bindings: Seq[FieldBinding], 
       case FieldBinding.TextLike(spec, state, parse) => spec.name -> parse(state.value)
       case FieldBinding.BoolLike(spec, value)        => spec.name -> Right(value.peek)
     }
-    val failed = parsed.collect { case (name, Left(message)) => name -> message }
+    val failed                                     = parsed.collect { case (name, Left(message)) => name -> message }
     if failed.nonEmpty then
       errors.set(failed.toMap)
       result.set(None)
@@ -52,15 +52,15 @@ object FormState:
     * (their own `FieldSpec` is ignored — position comes from the derived spec).
     */
   def of[A](spec: FormSpec[A], validators: Field[?]*): FormState[A] =
-    val byName = validators.map(field => field.spec.name -> field).toMap
+    val byName   = validators.map(field => field.spec.name -> field).toMap
     val bindings = spec.fields.map { fieldSpec =>
       fieldSpec.input match
-        case FieldInput.BoolField =>
+        case FieldInput.BoolField                       =>
           FieldBinding.BoolLike(fieldSpec, Signal(false))
         case FieldInput.TextField | FieldInput.IntField =>
           val default =
             if fieldSpec.input == FieldInput.IntField then Field.int(fieldSpec.name) else Field.text(fieldSpec.name)
-          val field = byName.getOrElse(fieldSpec.name, default)
+          val field   = byName.getOrElse(fieldSpec.name, default)
           FieldBinding.TextLike(fieldSpec, TextInputState(), raw => field.parse(raw).map(value => value: Any))
     }
     new FormState(bindings, spec.assemble)
@@ -72,8 +72,8 @@ object Form:
 
   def apply[A](state: FormState[A])(using ReactiveScope): Element =
     val currentErrors = state.errors.get
-    val labelWidth = state.bindings.map(_.spec.name.length).maxOption.getOrElse(0) + 2
-    val rows = state.bindings.flatMap { binding =>
+    val labelWidth    = state.bindings.map(_.spec.name.length).maxOption.getOrElse(0) + 2
+    val rows          = state.bindings.flatMap { binding =>
       val field = binding match
         case FieldBinding.TextLike(spec, inputState, _) =>
           Element
@@ -82,7 +82,7 @@ object Form:
               Element.input(inputState).fill,
             )
             .length(1)
-        case FieldBinding.BoolLike(spec, value) =>
+        case FieldBinding.BoolLike(spec, value)         =>
           Element.checkbox(spec.name, value)
       val error = currentErrors.get(binding.spec.name).map { message =>
         Element.text(s"${" ".repeat(labelWidth)}! $message").color(Color.Red).length(1)

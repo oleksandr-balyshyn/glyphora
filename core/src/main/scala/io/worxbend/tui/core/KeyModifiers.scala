@@ -4,12 +4,12 @@ package io.worxbend.tui.core
 opaque type KeyModifiers = Int
 
 object KeyModifiers:
-  val None: KeyModifiers = 0
+  val None: KeyModifiers  = 0
   val Shift: KeyModifiers = 1 << 0
-  val Ctrl: KeyModifiers = 1 << 1
-  val Alt: KeyModifiers = 1 << 2
+  val Ctrl: KeyModifiers  = 1 << 1
+  val Alt: KeyModifiers   = 1 << 2
 
   extension (m: KeyModifiers)
     def |(other: KeyModifiers): KeyModifiers = (m: Int) | (other: Int)
-    def has(flag: KeyModifiers): Boolean = ((m: Int) & (flag: Int)) != 0
-    def isEmpty: Boolean = (m: Int) == 0
+    def has(flag: KeyModifiers): Boolean     = ((m: Int) & (flag: Int)) != 0
+    def isEmpty: Boolean                     = (m: Int) == 0

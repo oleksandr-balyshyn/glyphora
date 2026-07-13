@@ -44,7 +44,7 @@ final class DataTableSpec extends AnyFunSuite:
     assert(lines.drop(1) == Seq("gamma    3", "beta     20", "alpha    100"))
 
   test("the filter keeps rows where any cell matches, case-insensitively"):
-    val state = DataTableState()
+    val state   = DataTableState()
     state.setFilter("A")
     val visible = table.visibleRows(state)
     assert(visible.map(_.head) == Seq("beta", "alpha", "gamma")) // all contain 'a'

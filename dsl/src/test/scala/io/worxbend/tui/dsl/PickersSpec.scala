@@ -13,7 +13,7 @@ final class PickersSpec extends AnyFunSuite:
   private def startApp(view0: ReactiveScope ?=> Element): Pilot =
     val backend = HeadlessBackend(Size(50, 10))
     val testApp = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0
     Pilot.start(backend) { val _ = testApp.runWith(backend) }.waitForIdle()
 
@@ -22,10 +22,10 @@ final class PickersSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("autocomplete filters by subsequence, highlights, and accepts with enter"):
-    val state = AutocompleteState()
-    var accepted = Option.empty[String]
+    val state       = AutocompleteState()
+    var accepted    = Option.empty[String]
     val suggestions = Seq("deploy-service", "restart-service", "delete-volume")
-    val pilot = startApp(autocomplete(state, suggestions, choice => accepted = Some(choice)))
+    val pilot       = startApp(autocomplete(state, suggestions, choice => accepted = Some(choice)))
     pilot.typeText("de").waitForIdle()
     assert(pilot.screenText.contains("deploy-service"))
     assert(pilot.screenText.contains("delete-volume"))
@@ -46,7 +46,7 @@ final class PickersSpec extends AnyFunSuite:
     quitApp(pilot)
 
   test("filePicker navigates directories and accepts a file"):
-    val root = Files.createTempDirectory("glyphora-picker")
+    val root  = Files.createTempDirectory("glyphora-picker")
     Files.createDirectories(root.resolve("docs"))
     Files.writeString(root.resolve("docs/readme.md"), "")
     Files.writeString(root.resolve("build.txt"), "")

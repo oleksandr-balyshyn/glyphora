@@ -37,7 +37,7 @@ final class EffectSpec extends AnyFunSuite:
 
   test("sweepIn reveals columns monotonically until everything shows"):
     val effect = Effect.sweepIn(1.second, Easing.Linear)
-    val half = filledBuffer()
+    val half   = filledBuffer()
     effect.process(500.millis, half, half.area)
     assert(visibleCells(half) == 6) // half of 12 cells
     val done = filledBuffer()
@@ -57,16 +57,16 @@ final class EffectSpec extends AnyFunSuite:
 
   test("dissolve is coalesce reversed: everything visible at start, nothing at the end"):
     val effect = Effect.dissolve(1.second, Easing.Linear)
-    val start = filledBuffer(10, 4)
+    val start  = filledBuffer(10, 4)
     effect.process(Duration.Zero, start, start.area)
     assert(visibleCells(start) == 40)
-    val end = filledBuffer(10, 4)
+    val end    = filledBuffer(10, 4)
     effect.process(1.second, end, end.area)
     assert(visibleCells(end) == 0)
 
   test("fadeIn scales foreground colors up from black"):
     val effect = Effect.fadeIn(1.second, Easing.Linear)
-    val dark = filledBuffer()
+    val dark   = filledBuffer()
     effect.process(Duration.Zero, dark, dark.area)
     assert(dark.get(0, 0).style.fg.contains(Color.Rgb(0, 0, 0)))
     val bright = filledBuffer()
@@ -89,8 +89,8 @@ final class EffectSpec extends AnyFunSuite:
     assert(effect.isDone(2.seconds))
 
   test("delay holds the effect at progress zero, then plays it"):
-    val effect = Effect.delay(1.second, Effect.sweepIn(1.second, Easing.Linear))
-    val held = filledBuffer()
+    val effect  = Effect.delay(1.second, Effect.sweepIn(1.second, Easing.Linear))
+    val held    = filledBuffer()
     effect.process(500.millis, held, held.area)
     assert(visibleCells(held) == 0)
     val playing = filledBuffer()

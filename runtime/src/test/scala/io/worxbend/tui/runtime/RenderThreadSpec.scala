@@ -18,7 +18,7 @@ final class RenderThreadSpec extends AnyFunSuite:
     try
       RenderThread.checkRenderThread() // current thread is the render thread: fine
       var thrown: Option[Throwable] = None
-      val foreign = Thread { () =>
+      val foreign                   = Thread { () =>
         try RenderThread.checkRenderThread()
         catch case error: IllegalStateException => thrown = Some(error)
       }
@@ -30,9 +30,9 @@ final class RenderThreadSpec extends AnyFunSuite:
   test("Signal.set from a foreign thread is a defect while a render thread is registered"):
     RenderThread.register(Thread.currentThread())
     try
-      val signal = Signal(1)
+      val signal                    = Signal(1)
       var thrown: Option[Throwable] = None
-      val foreign = Thread { () =>
+      val foreign                   = Thread { () =>
         try signal.set(2)
         catch case error: IllegalStateException => thrown = Some(error)
       }
@@ -57,7 +57,7 @@ final class RenderThreadSpec extends AnyFunSuite:
   test("runOnRenderThread queues from a foreign thread and drains on the render thread"):
     RenderThread.register(Thread.currentThread())
     try
-      var ran = false
+      var ran     = false
       val foreign = Thread(() => RenderThread.runOnRenderThread { ran = true })
       foreign.start()
       foreign.join()

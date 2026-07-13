@@ -30,7 +30,7 @@ object BufferAssertions:
 
   private def rowText(buffer: Buffer, y: Int): String =
     val row = StringBuilder()
-    var x = buffer.area.x
+    var x   = buffer.area.x
     while x < buffer.area.right do
       val cell = buffer.get(x, y)
       row ++= cell.symbol

@@ -18,11 +18,11 @@ final case class WaveText(
       val clusters = CharWidth.graphemeClusters(content).toVector
       if clusters.nonEmpty then
         val crest = math.floorMod(phase, clusters.size)
-        var x = area.x
+        var x     = area.x
         clusters.zipWithIndex.foreach { (cluster, index) =>
           val width = CharWidth.of(cluster)
           if width > 0 && x + width <= area.right then
-            val distance = math.abs(index - crest)
+            val distance  = math.abs(index - crest)
             val cellStyle = if distance < crestWidth then crestStyle else style
             buffer.set(x, area.y, Cell(cluster, cellStyle))
             if width == 2 then buffer.set(x + 1, area.y, Cell.Empty)

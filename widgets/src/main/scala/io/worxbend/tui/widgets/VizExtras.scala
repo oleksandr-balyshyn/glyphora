@@ -29,21 +29,21 @@ final case class PieChart(
     val total = data.map(_._2).filter(_ > 0).sum
     if !area.isEmpty && total > 0 then
       val legendWidth = if showLegend then data.map(_._1.length).maxOption.getOrElse(0) + 7 else 0
-      val discWidth = area.width - legendWidth
-      val radius = math.min(discWidth / 2.0 / 2.0, area.height / 2.0) // width halved for cell aspect
-      val centerX = area.x + discWidth / 2.0
-      val centerY = area.y + area.height / 2.0
-      val cumulative = data.scanLeft(0.0)((acc, entry) => acc + math.max(0, entry._2)).tail
-      var y = area.y
+      val discWidth   = area.width - legendWidth
+      val radius      = math.min(discWidth / 2.0 / 2.0, area.height / 2.0) // width halved for cell aspect
+      val centerX     = area.x + discWidth / 2.0
+      val centerY     = area.y + area.height / 2.0
+      val cumulative  = data.scanLeft(0.0)((acc, entry) => acc + math.max(0, entry._2)).tail
+      var y           = area.y
       while y < area.bottom do
         var x = area.x
         while x < area.x + discWidth do
           val dx = (x - centerX) / 2.0 // undo the aspect correction
           val dy = y - centerY
           if math.sqrt(dx * dx + dy * dy) <= radius then
-            val angle = (math.atan2(dy, dx) + math.Pi) / (2 * math.Pi) // 0..1 around the disc
+            val angle  = (math.atan2(dy, dx) + math.Pi) / (2 * math.Pi) // 0..1 around the disc
             val sector = cumulative.indexWhere(edge => angle * total <= edge)
-            val index = if sector < 0 then data.size - 1 else sector
+            val index  = if sector < 0 then data.size - 1 else sector
             buffer.set(x, y, Cell("█", styles(index % styles.size)))
           x += 1
         y += 1
@@ -52,8 +52,8 @@ final case class PieChart(
   private def renderLegend(area: Rect, buffer: Buffer, discWidth: Int, total: Double): Unit =
     data.take(area.height).zipWithIndex.foreach { case ((label, value), index) =>
       val percent = math.round(value / total * 100)
-      val entry = s"■ $label $percent%"
-      val x = area.x + discWidth + 1
+      val entry   = s"■ $label $percent%"
+      val x       = area.x + discWidth + 1
       buffer.setString(
         x,
         area.y + index,
@@ -74,9 +74,9 @@ final case class StackedBarChart(
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    val showLabels = area.height >= 2 && data.exists((label, _) => label.nonEmpty)
+    val showLabels  = area.height >= 2 && data.exists((label, _) => label.nonEmpty)
     val chartHeight = if showLabels then area.height - 1 else area.height
-    val maxTotal = data.map(_._2.map(math.max(0L, _)).sum).maxOption.getOrElse(0L)
+    val maxTotal    = data.map(_._2.map(math.max(0L, _)).sum).maxOption.getOrElse(0L)
     if area.isEmpty || data.isEmpty || chartHeight <= 0 || maxTotal <= 0 then ()
     else
       data.zipWithIndex.foreach { case ((label, values), barIndex) =>
@@ -85,8 +85,8 @@ final case class StackedBarChart(
           var bottom = area.y + chartHeight
           values.zipWithIndex.foreach { (value, series) =>
             val cells = math.round(math.max(0L, value).toDouble / maxTotal * chartHeight).toInt
-            val top = bottom - cells
-            var y = top
+            val top   = bottom - cells
+            var y     = top
             while y < bottom do
               var x = barLeft
               while x < barLeft + barWidth do
@@ -114,7 +114,7 @@ final case class Heatmap(
       values.take(area.height).zipWithIndex.foreach { (row, y) =>
         row.take(area.width).zipWithIndex.foreach { (value, x) =>
           val normalized = math.max(0.0, math.min(1.0, value / ceiling))
-          val level = math.round(normalized * (Heatmap.Ramp.size - 1)).toInt
+          val level      = math.round(normalized * (Heatmap.Ramp.size - 1)).toInt
           buffer.set(area.x + x, area.y + y, Cell(Heatmap.Ramp(level), style))
         }
       }

@@ -15,7 +15,7 @@ final case class Gauge(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val clamped = math.max(0.0, math.min(1.0, ratio))
+      val clamped     = math.max(0.0, math.min(1.0, ratio))
       val filledWidth = math.round(clamped * area.width).toInt
 
       def styleAt(x: Int): Style = if x - area.x < filledWidth then filledStyle else style
@@ -28,12 +28,12 @@ final case class Gauge(
           x += 1
         y += 1
 
-      val text = label.getOrElse(s"${math.round(clamped * 100)}%")
-      val fitted = CharWidth.substringByWidth(text, area.width)
+      val text      = label.getOrElse(s"${math.round(clamped * 100)}%")
+      val fitted    = CharWidth.substringByWidth(text, area.width)
       val textWidth = CharWidth.of(fitted)
-      val startX = area.x + (area.width - textWidth) / 2
-      val labelY = area.y + area.height / 2
-      var x = startX
+      val startX    = area.x + (area.width - textWidth) / 2
+      val labelY    = area.y + area.height / 2
+      var x         = startX
       CharWidth.graphemeClusters(fitted).foreach { cluster =>
         val width = CharWidth.of(cluster)
         if width > 0 then

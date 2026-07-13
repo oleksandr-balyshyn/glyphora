@@ -18,20 +18,20 @@ object CharWidth:
 
   /** Display width of `text` in terminal columns. Control characters count as zero. */
   def of(text: String): Int =
-    var total = 0
+    var total    = 0
     val clusters = graphemeClusters(text)
     while clusters.hasNext do total += clusterWidth(clusters.next())
     total
 
   /** The longest prefix of `text` that fits in `maxWidth` columns; never splits a grapheme cluster. */
   def substringByWidth(text: String, maxWidth: Int): String =
-    val clusters = graphemeClusters(text)
-    val prefix = StringBuilder()
-    var used = 0
+    val clusters  = graphemeClusters(text)
+    val prefix    = StringBuilder()
+    var used      = 0
     var truncated = false
     while !truncated && clusters.hasNext do
       val cluster = clusters.next()
-      val width = clusterWidth(cluster)
+      val width   = clusterWidth(cluster)
       if used + width > maxWidth then truncated = true
       else
         prefix.append(cluster)
@@ -40,7 +40,7 @@ object CharWidth:
 
   /** Whether `codePoint` has East Asian Width `W` (Wide) or `F` (Fullwidth), i.e. occupies two columns. */
   def isWideCodePoint(codePoint: Int): Boolean =
-    val table = WidthTable.WideRanges
+    val table    = WidthTable.WideRanges
     val position = Arrays.binarySearch(table, codePoint)
     if position >= 0 then true
     else
@@ -122,6 +122,6 @@ object CharWidth:
       index += Character.charCount(cp)
     found
 
-  private val ZeroWidthJoiner = 0x200d
-  private val TextPresentationSelector = 0xfe0e
+  private val ZeroWidthJoiner           = 0x200d
+  private val TextPresentationSelector  = 0xfe0e
   private val EmojiPresentationSelector = 0xfe0f

@@ -20,7 +20,7 @@ object ActionHandler:
   * compile error, not a runtime surprise. No runtime reflection anywhere.
   */
 inline def deriveForm[A](using m: Mirror.ProductOf[A]): FormSpec[A] =
-  val names = constValueTuple[m.MirroredElemLabels].toList.map(_.toString)
+  val names  = constValueTuple[m.MirroredElemLabels].toList.map(_.toString)
   val inputs = fieldInputs[m.MirroredElemTypes]
   val fields = names.zip(inputs).map(FieldSpec(_, _))
   FormSpec(fields, values => m.fromProduct(Tuple.fromArray(values.toArray)))
@@ -41,5 +41,5 @@ private inline def fieldInputOf[H]: FieldInput =
     case _: String  => FieldInput.TextField
     case _: Int     => FieldInput.IntField
     case _: Boolean => FieldInput.BoolField
-    case _ =>
+    case _          =>
       error("deriveForm supports String, Int, and Boolean fields; wrap other types or add a custom Field")

@@ -27,11 +27,11 @@ final class TerminalRunnerSpec extends AnyFunSuite:
       case Event.Key(KeyEvent(KeyCode.Char('q'), _)) =>
         handle.quit()
         false
-      case _ => true
+      case _                                         => true
 
   test("the runner renders an initial frame before any event arrives"):
     val backend = HeadlessBackend(Size(30, 5))
-    val pilot = Pilot.start(backend)(TerminalRunner(backend).run(quitOnQ, helloWorldRender))
+    val pilot   = Pilot.start(backend)(TerminalRunner(backend).run(quitOnQ, helloWorldRender))
     pilot.waitForIdle()
     assert(pilot.screenLines(1) == "  Hello from glyphora!")
     assert(pilot.screenLines(3) == "  Press 'q' to quit")
@@ -40,7 +40,7 @@ final class TerminalRunnerSpec extends AnyFunSuite:
 
   test("the runner sets up and tears down the terminal around the loop"):
     val backend = HeadlessBackend(Size(30, 5))
-    val pilot = Pilot.start(backend)(TerminalRunner(backend).run(quitOnQ, helloWorldRender))
+    val pilot   = Pilot.start(backend)(TerminalRunner(backend).run(quitOnQ, helloWorldRender))
     pilot.waitForIdle()
     assert(backend.isRawMode)
     assert(backend.isAlternateScreen)
@@ -50,8 +50,8 @@ final class TerminalRunnerSpec extends AnyFunSuite:
 
   test("an event handler returning true triggers a redraw with updated state"):
     val backend = HeadlessBackend(Size(20, 3))
-    var count = 0
-    val pilot = Pilot.start(backend) {
+    var count   = 0
+    val pilot   = Pilot.start(backend) {
       val _ = TerminalRunner(backend).run(
         (event, handle) =>
           event match
@@ -61,7 +61,7 @@ final class TerminalRunnerSpec extends AnyFunSuite:
             case Event.Key(KeyEvent(KeyCode.Char('+'), _)) =>
               count += 1
               true
-            case _ => false
+            case _                                         => false
         ,
         frame =>
           frame.renderWidget(
@@ -78,9 +78,9 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("a resize event recreates the frame at the new size"):
-    val backend = HeadlessBackend(Size(20, 3))
+    val backend  = HeadlessBackend(Size(20, 3))
     var lastArea = Size(0, 0)
-    val pilot = Pilot.start(backend) {
+    val pilot    = Pilot.start(backend) {
       val _ = TerminalRunner(backend).run(
         quitOnQ,
         frame =>
@@ -97,9 +97,9 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("a configured tick rate delivers Tick events without input"):
-    val backend = HeadlessBackend(Size(10, 2))
+    val backend         = HeadlessBackend(Size(10, 2))
     @volatile var ticks = 0
-    val pilot = Pilot.start(backend) {
+    val pilot           = Pilot.start(backend) {
       val _ = TerminalRunner(backend, RunnerConfig(tickRate = Some(10.millis))).run(
         (event, handle) =>
           event match
@@ -107,7 +107,7 @@ final class TerminalRunnerSpec extends AnyFunSuite:
               ticks += 1
               if ticks >= 3 then handle.quit()
               true
-            case _ => false
+            case _          => false
         ,
         frame => frame.renderWidget((_, _) => (), frame.area),
       )
@@ -116,9 +116,9 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     assert(ticks >= 3)
 
   test("the render thread is registered for the duration of the loop"):
-    val backend = HeadlessBackend(Size(10, 2))
+    val backend                   = HeadlessBackend(Size(10, 2))
     @volatile var wasRenderThread = false
-    val pilot = Pilot.start(backend) {
+    val pilot                     = Pilot.start(backend) {
       val _ = TerminalRunner(backend).run(
         (event, handle) =>
           wasRenderThread = RenderThread.isRenderThread

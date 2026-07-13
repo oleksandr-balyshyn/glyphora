@@ -32,7 +32,7 @@ final class ParagraphSpec extends AnyFunSuite:
     assert(trimmedLines(buffer) == Seq("   ab"))
 
   test("span styles survive rendering and layer over the paragraph style"):
-    val line = Line(Seq(Span.raw("a"), Span("b", Style.Default.withFg(Color.Red))))
+    val line   = Line(Seq(Span.raw("a"), Span("b", Style.Default.withFg(Color.Red))))
     val buffer = rendered(Paragraph(Text(Seq(line)), style = Style.Default.bold), 3, 1)
     assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Bold))
     assert(buffer.get(1, 0).style.fg.contains(Color.Red))

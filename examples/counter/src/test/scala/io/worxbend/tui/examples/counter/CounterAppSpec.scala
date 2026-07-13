@@ -11,8 +11,8 @@ final class CounterAppSpec extends AnyFunSuite:
 
   test("increments and decrements re-render the count, and q quits"):
     val backend = HeadlessBackend(Size(44, 6))
-    val app = CounterApp()
-    val pilot = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val app     = CounterApp()
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("Count: 0"))
     pilot.pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char('+')).waitForIdle()

@@ -33,10 +33,10 @@ final class FormDemoApp extends TuiApp:
       case KeyEvent(KeyCode.Char('s'), m) if m.has(KeyModifiers.Ctrl) =>
         formState.submit()
         true
-      case KeyEvent(KeyCode.Escape, _) =>
+      case KeyEvent(KeyCode.Escape, _)                                =>
         quit()
         true
-      case _ => false
+      case _                                                          => false
     }
 
 object Main:

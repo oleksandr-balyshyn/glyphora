@@ -34,8 +34,8 @@ final class Pilot private (val backend: HeadlessBackend, thread: Thread):
     * has exited. Throws on deadline overrun — an assertion failure, not a modeled error.
     */
   def waitForIdle(timeout: FiniteDuration = 2.seconds): Pilot =
-    val deadline = Deadline.now + timeout
-    val idleReadsBefore = backend.idleReads
+    val deadline         = Deadline.now + timeout
+    val idleReadsBefore  = backend.idleReads
     def settled: Boolean =
       !thread.isAlive || (backend.pendingEvents == 0 && backend.idleReads > idleReadsBefore)
     while !settled && deadline.hasTimeLeft() do Thread.sleep(PollSleep.toMillis)

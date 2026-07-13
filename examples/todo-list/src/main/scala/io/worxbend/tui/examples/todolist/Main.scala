@@ -11,8 +11,8 @@ import io.worxbend.tui.widgets.{ListState, TextInputState}
 final class TodoApp extends TuiApp:
 
   val items: Signal[Vector[String]] = Signal(Vector.empty)
-  val inputState: TextInputState = TextInputState()
-  val listState: ListState = ListState()
+  val inputState: TextInputState    = TextInputState()
+  val listState: ListState          = ListState()
 
   def view(using ReactiveScope): Element =
     panel("Todo")(
@@ -20,21 +20,21 @@ final class TodoApp extends TuiApp:
         case KeyEvent(KeyCode.Enter, _) =>
           addItem()
           true
-        case _ => false
+        case _                          => false
       },
       spacer(1),
       list(items.get.map(item => s"· $item"), listState).onKeyEvent {
         case KeyEvent(KeyCode.Char('d'), _) =>
           deleteSelected()
           true
-        case _ => false
+        case _                              => false
       },
       text("Enter: add · Tab: switch · ↑/↓: select · d: delete · Esc: quit").dim,
     ).rounded.onKeyEvent {
       case KeyEvent(KeyCode.Escape, _) =>
         quit()
         true
-      case _ => false
+      case _                           => false
     }
 
   private def addItem(): Unit =

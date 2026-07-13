@@ -12,7 +12,7 @@ final class BufferSpec extends AnyFunSuite:
     assert(buf.get(1, 1) == Cell.Empty)
 
   test("set then get round-trips inside the area"):
-    val buf = buffer(3, 3)
+    val buf  = buffer(3, 3)
     val cell = Cell("x", Style.Default.bold)
     buf.set(1, 2, cell)
     assert(buf.get(1, 2) == cell)
@@ -95,26 +95,26 @@ final class BufferSpec extends AnyFunSuite:
 
   test("diff of identical buffers is empty"):
     val previous = buffer(3, 2)
-    val next = buffer(3, 2)
+    val next     = buffer(3, 2)
     assert(previous.diff(next).isEmpty)
 
   test("diff emits exactly the changed cells with their new content"):
     val previous = buffer(3, 1)
-    val next = buffer(3, 1)
+    val next     = buffer(3, 1)
     next.setString(0, 0, "ab", Style.Default)
-    val changes = previous.diff(next).toSeq
+    val changes  = previous.diff(next).toSeq
     assert(changes == Seq(Position(0, 0) -> Cell("a", Style.Default), Position(1, 0) -> Cell("b", Style.Default)))
 
   test("diff never emits the continuation cell of a wide character"):
-    val previous = buffer(3, 1)
+    val previous         = buffer(3, 1)
     previous.setString(1, 0, "x", Style.Default)
-    val next = buffer(3, 1)
+    val next             = buffer(3, 1)
     next.setString(0, 0, "你", Style.Default)
     val changedPositions = previous.diff(next).map(_._1).toSeq
     assert(changedPositions == Seq(Position(0, 0)))
 
   test("diff emits every cell when the areas differ"):
     val previous = buffer(2, 1)
-    val next = buffer(3, 1)
+    val next     = buffer(3, 1)
     next.setString(0, 0, "abc", Style.Default)
     assert(previous.diff(next).size == 3)

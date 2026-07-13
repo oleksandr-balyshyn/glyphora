@@ -15,7 +15,7 @@ final case class BarChart(
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    val showLabels = area.height >= 2 && data.exists((label, _) => label.nonEmpty)
+    val showLabels  = area.height >= 2 && data.exists((label, _) => label.nonEmpty)
     val chartHeight = if showLabels then area.height - 1 else area.height
     if area.isEmpty || data.isEmpty || chartHeight <= 0 || barWidth <= 0 then ()
     else
@@ -30,10 +30,10 @@ final case class BarChart(
   private def drawBar(buffer: Buffer, area: Rect, barLeft: Int, chartHeight: Int, value: Long, ceiling: Long): Unit =
     val clamped = math.max(0L, math.min(value, ceiling))
     var eighths = math.round(clamped.toDouble / ceiling * chartHeight * 8).toInt
-    var y = area.y + chartHeight - 1
+    var y       = area.y + chartHeight - 1
     while y >= area.y && eighths > 0 do
       val levelIndex = math.min(eighths, 8)
-      var x = barLeft
+      var x          = barLeft
       while x < barLeft + barWidth do
         buffer.set(x, y, Cell(BarChart.Levels(levelIndex - 1), barStyle))
         x += 1
