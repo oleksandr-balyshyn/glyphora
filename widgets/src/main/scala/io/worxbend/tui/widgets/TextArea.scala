@@ -8,8 +8,7 @@ import scala.collection.mutable
   *
   * Text is a vector of lines, each a vector of grapheme clusters — the cursor is `(line, column)` in cluster
   * coordinates and can never split a combining sequence or emoji. Every editing operation snapshots onto a bounded undo
-  * stack ([[undo]] restores text and cursor; there is no redo — recorded as out of scope in SPEC.md §9, alongside
-  * syntax highlighting).
+  * stack.
   */
 final class TextAreaState(initial: String = ""):
 
@@ -112,7 +111,7 @@ object TextAreaState:
   private val UndoLimit = 100
 
 /** A multi-line text editor view: vertical and horizontal scroll follow the cursor, which renders as a highlighted cell
-  * (`showCursor = false` for unfocused areas). No syntax highlighting (SPEC.md §9).
+  * (`showCursor = false` for unfocused areas). No syntax highlighting.
   */
 final case class TextArea(
     showCursor: Boolean = true,

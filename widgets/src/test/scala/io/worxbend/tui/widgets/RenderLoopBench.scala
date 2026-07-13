@@ -2,11 +2,11 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Constraint, Line, Rect, Text}
 
-/** Simple timed render-loop benchmark (PLAN.md §12: measure before optimizing anything).
+/** Simple timed render-loop benchmark.
   *
   * Run with `./mill widgets.test.runMain io.worxbend.tui.widgets.RenderLoopBench`. Renders a dashboard-like composition
   * into a 200x50 buffer and reports frames/second — the number that would justify (or rule out) a `Style` interning
-  * scheme (SPEC.md §9.2).
+  * scheme.
   */
 object RenderLoopBench:
 

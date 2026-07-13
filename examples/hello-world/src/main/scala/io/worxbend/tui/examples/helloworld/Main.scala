@@ -2,7 +2,7 @@ package io.worxbend.tui.examples.helloworld
 
 import io.worxbend.tui.dsl.*
 
-/** hello-world, DSL edition (PLAN.md §8, example 1): a static paragraph in a bordered panel. */
+/** hello-world, DSL edition: a static paragraph in a bordered panel. */
 object HelloWorld extends TuiApp:
 
   def view(using ReactiveScope): Element =

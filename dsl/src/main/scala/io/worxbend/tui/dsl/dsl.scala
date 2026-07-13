@@ -4,7 +4,7 @@ import io.worxbend.tui.core.{Color, Constraint, KeyEvent, MouseEvent, Style}
 import io.worxbend.tui.widgets.BorderType
 
 // One import to rule them all: `import io.worxbend.tui.dsl.*` brings in TuiApp, Element, every factory,
-// the styling/layout extensions, and the core vocabulary the examples need (SPEC.md §5.1).
+// the styling/layout extensions, and the core vocabulary the examples need.
 export Element.{
   autocomplete,
   barChart,
@@ -63,7 +63,7 @@ export Element.{
 export io.worxbend.tui.core.{Color, Constraint, KeyCode, KeyEvent, KeyModifiers, MouseEvent, Style}
 export io.worxbend.tui.runtime.{Computed, Easing, Effect, ReactiveScope, Signal, Tween}
 
-/** Fluent styling — each call returns a new element (SPEC.md §5.2). */
+/** Fluent styling — each call returns a new element. */
 extension (element: Element)
 
   def styled(transform: Style => Style): Element =
@@ -89,8 +89,7 @@ extension (element: Element)
       case panel: PanelElement => panel.copy(borderType = BorderType.Double)
       case other               => other
 
-  /** A handler returning `true` consumes the event; `false` lets it continue to the next candidate (bubbling, SPEC.md
-    * §5.4).
+  /** A handler returning `true` consumes the event; `false` lets it continue to the next candidate.
     */
   def onKeyEvent(handler: KeyEvent => Boolean): Element =
     element.withProps(element.props.copy(onKey = Some(handler)))
@@ -102,7 +101,7 @@ extension (element: Element)
   def focusable: Element =
     element.withProps(element.props.copy(focusable = true))
 
-/** Layout constraints — how much space the element claims inside its container (SPEC.md §5.2). */
+/** Layout constraints — how much space the element claims inside its container. */
 extension (element: Element)
 
   def length(cells: Int): Element  = constrained(element, Constraint.Length(cells))

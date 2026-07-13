@@ -6,9 +6,8 @@ import io.worxbend.tui.testsupport.Pilot
 
 import scala.concurrent.duration.DurationInt
 
-/** Scripted soak check (PLAN.md §11, step 9): runs the dashboard headless for 60 seconds under its tick rate and
-  * reports draw count and heap growth. Run with
-  * `./mill examples.dashboard.test.runMain io.worxbend.tui.examples.dashboard.SoakMain`.
+/** Scripted soak check: runs the dashboard headless for 60 seconds under its tick rate and reports draw count and heap
+  * growth. Run with `./mill examples.dashboard.test.runMain io.worxbend.tui.examples.dashboard.SoakMain`.
   */
 object SoakMain:
 

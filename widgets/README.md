@@ -1,6 +1,6 @@
 # tui-widgets
 
-Built-in widgets (`PLAN.md` §6 backlog). Depends only on `tui-core` — widgets are
+Built-in widgets. Depends only on `tui-core` — widgets are
 terminal-backend-agnostic and render into a `Buffer`, nothing else.
 
 Implemented:
@@ -21,11 +21,12 @@ Implemented:
   filterable, selectable), `DirectoryTree` (+`DirectoryTreeState`; lazy cached
   filesystem listings), `TextArea` (+`TextAreaState`; multi-line cluster-safe editing,
   bounded undo, 2D cursor/scroll — no syntax highlighting).
-- Still future work: braille drawing and the multi-protocol image widget (highest
-  platform-compatibility risk, `PLAN.md` §6).
+- Plus: form controls (`RadioGroup`, `Slider`, `Paginator`), loading states
+  (`Skeleton`, `IndeterminateBar`, `Marquee`), viz extras (`PieChart`,
+  `StackedBarChart`, `Heatmap`), `ScrollView`, `Image` (half-block raster), `Link`.
 
 Every widget has a render-to-`Buffer` test (`BufferAssertions` from `test-support/`).
-`RenderLoopBench` (in test sources) is the PLAN §12 render-loop benchmark:
+`RenderLoopBench` (in test sources) is the render-loop benchmark:
 `./mill widgets.test.runMain io.worxbend.tui.widgets.RenderLoopBench`.
 
 ```scala

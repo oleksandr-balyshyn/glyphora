@@ -1,45 +1,158 @@
-# glyphora
+<div align="center">
 
-A Scala 3 library for building rich terminal user interfaces (TUI) on the JVM, with a
-GraalVM native-image target, built with Mill.
+<img src="docs/assets/logo.svg" alt="glyphora" width="560"/>
 
-40+ widgets (layout, inputs, charts, markdown, editor, file tree), a declarative
-signals-driven DSL, app chrome (scaffold/top bar/status line/theme), screens, toasts,
-a command palette, a tachyonfx-style effects engine with splash screens, mouse
-support, and a headless end-to-end test harness. See [`docs/COOKBOOK.md`](docs/COOKBOOK.md)
-and [`ROADMAP.md`](ROADMAP.md).
+# ⚡ glyphora
 
-## Modules
+**Build swaggy terminal UIs in Scala 3** — a signals-driven widget toolkit with app chrome,
+animations, mouse support, and first-class GraalVM native-image binaries.
 
-| Directory | Published as | Purpose |
-|---|---|---|
-| `core/` | `tui-core` | Foundational types: `Buffer`, `Cell`, `Rect`, `Style`/`Color`, `Text`/`Span`/`Line`, `Layout`/`Constraint`, `Widget`/`StatefulWidget`, `CharWidth`, input-event ADT |
-| `terminal/` | `tui-terminal` | Terminal backend abstraction (`Backend`) + the JLine 3 implementation: raw mode, alternate screen, key/mouse events |
-| `widgets/` | `tui-widgets` | Built-in widgets, terminal-backend-agnostic |
-| `runtime/` | `tui-runtime` | Render loop, event dispatch, render-thread model, `Signal`/`Computed` reactive state |
-| `dsl/` | `tui-dsl` | Declarative Scala 3 DSL: retained-mode `Element` tree, focus management, event routing |
-| `macros/` | `tui-macros` | Compile-time codegen (form derivation, action binding) — no runtime reflection |
-| `test-support/` | not published | Headless `Pilot` test driver + `Buffer` assertion matchers |
-| `examples/` | not published | Runnable example apps; also the native-image compile targets |
+[![CI](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml/badge.svg)](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/tag/oleksandr-balyshyn/glyphora?label=release&color=e879f9)](https://github.com/oleksandr-balyshyn/glyphora/tags)
+[![Scala](https://img.shields.io/badge/Scala-3.7-DC322F?logo=scala&logoColor=white)](https://scala-lang.org)
+[![Mill](https://img.shields.io/badge/build-Mill-1E90FF)](https://mill-build.org)
+[![Native Image](https://img.shields.io/badge/GraalVM-native--image%20ready-34d399?logo=oracle)](https://www.graalvm.org/latest/reference-manual/native-image/)
+[![Zero Reflection](https://img.shields.io/badge/reflection-zero-818cf8)](#-architecture)
+[![License](https://img.shields.io/github/license/oleksandr-balyshyn/glyphora?color=fbbf24)](LICENSE)
 
-## Building
+```text
+ glyphora   Widgets │ Log │ About
+┌Menu────────────────┐Widgets │ Log │ About
+│  dashboard         │
+│  deployments       │  note: type here…
+│  services          │
+│  settings          │                      10%
+│                    │██▇▅▄▂▁   ▁▃▄▆▇██▇▆▅▃▂▁  ▁▂▃▅▆▇██▇▆▄▃▁
+│                    │
+│                    │── chrome ──────────────────────────────────────
+└────────────────────┘Tab cycles focus · ctrl+p opens the palette
+ ctrl+t switch theme  │  ctrl+n show a toast  │  ctrl+o open modal  │
+```
+*(a real frame from `examples/showcase`, captured headlessly — see [Testing](#-test-your-app-headlessly))*
 
-```bash
-./mill __.compile   # compile everything
-./mill __.test      # run all tests
-./mill examples.hello-world.run          # any example: hello-world, counter, todo-list, dashboard
-./mill show examples.counter.nativeImage # GraalVM native binary (no reflect-config needed anywhere)
+</div>
+
+---
+
+## ✨ Why glyphora
+
+- 🧠 **Signals, not spaghetti** — state lives in `Signal`/`Computed`; whatever your view *reads*, re-renders when it changes. No dispatch loops, no dependency arrays.
+- 🧱 **40+ widgets** — from `Block` and `Gauge` to `DataTable`, `TextArea` (undo, cluster-safe editing), `DirectoryTree`, `Markdown`, braille `Chart`s, and a half-block `Image`.
+- 🏛️ **App chrome built in** — `scaffold` with top bar / sidebar / status line, themes, key-binding registry, screens, toasts, and a fuzzy `Ctrl+P` command palette.
+- 🎬 **Motion** — a post-render effects engine (`fadeIn`, `coalesce`, `typewriter`, …) with easing and combinators, plus skippable splash screens.
+- 🖱️ **Mouse-aware** — click to focus/activate, wheel to scroll, drag sliders and split panes.
+- 🌍 **Unicode-correct** — display width from the Unicode Character Database: CJK, emoji ZWJ families, flags, combining marks all measure right.
+- 📦 **Native binaries** — every example compiles with `native-image --no-fallback` and **zero reflect-config**, starting in milliseconds.
+- 🧪 **Testable by design** — a headless backend + `Pilot` driver run full event/render cycles in plain unit tests.
+
+## 🚀 Quick start
+
+```scala
+// build.mill
+def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.9.0")
 ```
 
-## Planning documents
+```scala
+import io.worxbend.tui.dsl.*
 
-- [`RESEARCH.md`](RESEARCH.md) — analysis of ratatui, TamboUI, Terminus, cue4s, and Textual.
-- [`SPEC.md`](SPEC.md) — the technical specification (authoritative over `PLAN.md` where they disagree).
-- [`PLAN.md`](PLAN.md) — the phased development plan: module architecture, widget backlog,
-  execution order, acceptance criteria.
-- [`SCALA_CODE_STYLE.md`](SCALA_CODE_STYLE.md) — the house Scala style guide, from
-  [w0rxbend/ai-oop-design-patterns](https://github.com/w0rxbend/ai-oop-design-patterns).
+object Hello extends TuiApp:
+  val count = Signal(0)
 
-The five reference projects (ratatui, TamboUI, Terminus, cue4s, Textual) are **read-only
-reference material** — architecture and API shape to learn from, never a source to copy
-code from. See `PLAN.md` §2.1.
+  override def bindings = KeyBindings(
+    binding("+", "increment")(count.update(_ + 1)),
+    binding("q", "quit")(quit()),
+  )
+
+  def view(using ReactiveScope): Element =
+    scaffold(statusBar = Some(statusBar(bindings))) {
+      centered(30, 5) {
+        panel("Hello")(
+          text(s"count: ${count.get}").bold.color(Color.Cyan),
+          text("press + to bump it").dim,
+        ).rounded
+      }
+    }
+
+  def main(args: Array[String]): Unit = run().foreach(_ => ())
+```
+
+One import gives you every factory, the styling/layout extensions, and the core vocabulary.
+More recipes in the **[📖 cookbook](docs/COOKBOOK.md)**; complete apps in **[`examples/`](examples/README.md)**.
+
+## 🧩 Widget catalog
+
+| | |
+|---|---|
+| 🧱 **Layout & chrome** | `Block` (per-side borders, padding), `Row`/`Column`, `Spacer`, `Rule`, `Scrollbar`, `ScrollView`, `TabbedContent`, `Collapsible`, `SplitPane`, `layers` |
+| 📄 **Content** | `Paragraph` (cluster-safe wrap), `ListView`, `Table`, `Tabs`, `BigText`, `Log` (follow-tail), `Markdown`, `Link` (OSC 8), `Image` (half-block) |
+| ⌨️ **Input** | `TextInput`, `TextArea` (undo), `Checkbox`, `Toggle`, `Select`, `RadioGroup`, `Slider`, `NumberInput`, `MaskedInput`, `SelectionList`, `Autocomplete`, `FilePicker`, `Button`, `Form` (compile-time derived) |
+| 📊 **Data viz** | `Gauge`, `LineGauge`, `Sparkline`, `DualSparkline`, `BarChart`, `StackedBarChart`, `Chart` (braille/half-block), `PieChart`, `Heatmap`, `Canvas` + shapes, `Calendar`, `DataTable` (sort/filter) |
+| ⏳ **Motion & feedback** | `Spinner`, `Skeleton`, `IndeterminateBar`, `Marquee`, `WaveText`, `Dialog`, toasts, splash screens, the `Effect` engine |
+
+## 🏗️ Architecture
+
+```text
+ ┌────────────┐   ┌────────────┐   ┌────────────┐
+ │  tui-dsl   │──▶│tui-widgets │──▶│  tui-core  │   Element tree → Widgets → Buffer
+ └─────┬──────┘   └────────────┘   └─────▲──────┘
+       │          ┌────────────┐   ┌─────┴──────┐
+       └─────────▶│tui-runtime │──▶│tui-terminal│   signals/loop → diff → ANSI
+                  └────────────┘   └────────────┘
+```
+
+| Module | What it owns |
+|---|---|
+| [`core/`](core/README.md) | `Buffer`/`Cell`, `Style`, `Layout` solver, `Widget` traits, event ADT, `CharWidth` (UCD-generated width table) |
+| [`terminal/`](terminal/README.md) | `Backend` trait, JLine 3 impl (diff flush, input decoding), `HeadlessBackend` |
+| [`widgets/`](widgets/README.md) | every built-in widget — backend-agnostic, render-to-`Buffer` tested |
+| [`runtime/`](runtime/README.md) | `Signal`/`Computed`, render thread, runner loop, `Effect` engine |
+| [`dsl/`](dsl/README.md) | `TuiApp`, `Element` tree, focus/mouse routing, chrome presets, screens/toasts/palette |
+| [`macros/`](macros/README.md) | `deriveForm`/`bindAction` — compile-time only, keeps native-image reflect-config-free |
+| [`test-support/`](test-support/README.md) | `Pilot` driver + buffer assertions |
+
+**House rules** (CI-enforced): no `java.lang.reflect`/`Class.forName` anywhere; no
+`String.length`/`substring` for layout math outside `CharWidth`; warnings are errors;
+scalafmt owns formatting.
+
+## 🧪 Test your app headlessly
+
+```scala
+val backend = HeadlessBackend(Size(60, 16))
+val pilot   = Pilot.start(backend) { app.runWith(backend) }
+
+pilot.typeText("deploy").pressKey(KeyCode.Enter).waitForIdle()
+assert(pilot.screenText.contains("deployed ✓"))
+```
+
+Full event/render cycles, no PTY, CI-friendly. All 1,500+ tests in this repo run this way.
+
+## ⚡ Native binaries
+
+```bash
+./mill show examples.showcase.nativeImage   # → a self-contained executable
+```
+
+Every example builds with `--no-fallback` and **no reflect-config JSON** — the
+framework bridges user code with Scala 3 `inline`/`Mirror` instead of reflection.
+
+## 🛠️ Developing glyphora
+
+```bash
+./mill __.compile                                   # build everything
+./mill __.test                                      # ~1.5k tests, headless
+./mill mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
+./mill widgets.test.runMain io.worxbend.tui.widgets.RenderLoopBench      # fps check
+./mill examples.showcase.test.runMain \
+      io.worxbend.tui.examples.showcase.ScreenshotMain 70 17             # README shot
+./mill examples.showcase.run                        # drive it for real
+```
+
+**Adding a widget** — the checklist that keeps quality flat:
+1. Implement against `Widget`/`StatefulWidget[S]` in `widgets/` (state is caller-owned; all width math through `CharWidth`).
+2. Render-to-`Buffer` tests via `BufferAssertions.rendered`.
+3. DSL factory in `dsl/Element.scala` + export in `dsl.scala` (focusable elements get a `builtinKeyHandler`, mouse behavior via `builtinMouseHandler`).
+4. If interactive: an end-to-end `Pilot` test.
+
+## 📜 License
+
+[MIT](LICENSE) — go build something glyphorious. ✨

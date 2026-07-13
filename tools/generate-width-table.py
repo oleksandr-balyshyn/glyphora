@@ -5,7 +5,7 @@ Downloads EastAsianWidth.txt (latest UCD), extracts the codepoint ranges whose
 East Asian Width is Wide (W) or Fullwidth (F), merges contiguous ranges, and
 emits a sorted lookup table as Scala source.
 
-The table is standards-derived data (PLAN.md §2.1) — the lookup logic that
+The table is standards-derived data — the lookup logic that
 consumes it lives in CharWidth.scala and is original code.
 
 Usage: python3 tools/generate-width-table.py

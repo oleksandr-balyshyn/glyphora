@@ -3,7 +3,7 @@ package io.worxbend.tui.runtime
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
-/** The single-render-thread model (SPEC.md §4.2, adopted from TamboUI's JavaFX/Swing-style contract).
+/** The single-render-thread model.
   *
   * All UI state mutation must happen on the render thread — the thread running the [[Runner]] loop. The guard is
   * deliberately a no-op while no render thread is registered, so unit tests of widgets and signals need no running

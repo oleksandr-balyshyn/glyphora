@@ -8,7 +8,7 @@ import scala.collection.mutable
 import scala.concurrent.duration.Duration
 
 /** Proves the `Backend` trait has no JLine leakage: this file implements a complete fake backend without importing a
-  * single JLine type (PLAN.md §11, step 3 acceptance criterion).
+  * single JLine type.
   */
 final class FakeBackendSpec extends AnyFunSuite:
 

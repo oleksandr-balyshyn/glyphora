@@ -2,8 +2,8 @@ package io.worxbend.tui.runtime
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** Coverage categories replicated from Terminus's signals suite (PLAN.md §12): conditional dependencies,
-  * unsubscribe-on-recompute, and `peek` vs `get` semantics — as originally written tests, not ports.
+/** Coverage categories replicated from Terminus's signals suite: conditional dependencies, unsubscribe-on-recompute,
+  * and `peek` vs `get` semantics — as originally written tests, not ports.
   */
 final class ReactiveSpec extends AnyFunSuite:
 

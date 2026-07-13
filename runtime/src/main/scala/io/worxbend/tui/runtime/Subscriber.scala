@@ -2,8 +2,7 @@ package io.worxbend.tui.runtime
 
 /** Something that depends on reactive values and must be told when one of them changes.
   *
-  * `markStale` is a dirty flag, not a recomputation trigger — recomputation happens lazily on the next read (SPEC.md
-  * §4.1).
+  * `markStale` is a dirty flag, not a recomputation trigger — recomputation happens lazily on the next read.
   */
 private[runtime] trait Subscriber:
   def markStale(): Unit

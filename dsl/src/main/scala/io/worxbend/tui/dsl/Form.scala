@@ -20,9 +20,9 @@ private[dsl] object FieldBinding:
 
   final case class BoolLike(spec: FieldSpec, value: Signal[Boolean]) extends FieldBinding
 
-/** Live state for a compile-time-derived form (SPEC.md §6): text/int fields become inputs, boolean fields become
-  * checkboxes; [[submit]] runs each field's parser/validators — errors land in [[errors]] per field, a fully valid form
-  * lands in [[result]].
+/** Live state for a compile-time-derived form: text/int fields become inputs, boolean fields become checkboxes;
+  * [[submit]] runs each field's parser/validators — errors land in [[errors]] per field, a fully valid form lands in
+  * [[result]].
   *
   * Custom validation attaches per field name via cue4s-style [[Field]] composition:
   * `FormState.of(deriveForm[Signup], Field.int("age").mapValidated(...))`.

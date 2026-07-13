@@ -26,7 +26,7 @@ object `package` extends Module {
     }
   }
 
-  /** Published `tui-*` modules: shared POM metadata and the single synchronized version (SPEC.md §8). */
+  /** Published `tui-*` modules: shared POM metadata and the single synchronized version. */
   trait TuiPublishModule extends TuiModule with PublishModule {
 
     def moduleDescription: String

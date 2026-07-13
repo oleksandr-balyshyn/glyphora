@@ -5,9 +5,8 @@ import io.worxbend.tui.terminal.HeadlessBackend
 
 import scala.concurrent.duration.{Deadline, DurationInt, FiniteDuration}
 
-/** Drives a TUI app end-to-end without a terminal (adapted from Textual's `Pilot`, PLAN.md §9): the app runs on a
-  * background thread against a [[HeadlessBackend]]; the test thread posts synthetic input and asserts on the rendered
-  * buffer.
+/** Drives a TUI app end-to-end without a terminal: the app runs on a background thread against a [[HeadlessBackend]];
+  * the test thread posts synthetic input and asserts on the rendered buffer.
   *
   * All posting methods return `this` for chaining: `pilot.typeText("hi").pressKey(KeyCode.Enter).waitForIdle()`.
   */

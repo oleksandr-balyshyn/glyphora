@@ -17,9 +17,9 @@ final case class MarkdownTheme(
 /** Renders a pragmatic Markdown subset: `#`/`##`/`###`+ headings, `-`/`*` bullets, `1.` numbered items, `>`
   * blockquotes, fenced code blocks, and inline `**strong**` / `*emphasis*` / `` `code` ``.
   *
-  * Deliberately excluded (recorded in SPEC.md §9): links, images, tables, nested lists, and syntax highlighting inside
-  * code fences — this is a document *viewer* for help screens and READMEs, not a rendering-complete engine. Prose wraps
-  * at the area width (cluster-safe); code blocks render verbatim.
+  * Deliberately excluded: links, images, tables, nested lists, and syntax highlighting inside code fences — this is a
+  * document *viewer* for help screens and READMEs, not a rendering-complete engine. Prose wraps at the area width
+  * (cluster-safe); code blocks render verbatim.
   */
 final case class Markdown(
     source: String,

@@ -1,6 +1,6 @@
 # examples
 
-Runnable example apps (`PLAN.md` §8) — also the primary "how do I use this"
+Runnable example apps — also the primary "how do I use this"
 documentation and the GraalVM native-image compile targets. Each has headless `Pilot`
 end-to-end tests in its `test` submodule.
 

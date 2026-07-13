@@ -1,7 +1,7 @@
 # tui-core
 
 Foundational types for the tui library — the maximum-stability tier everything else
-builds on (`SPEC.md` §2). No dependencies, no terminal I/O, no reflection.
+builds on. No dependencies, no terminal I/O, no reflection.
 
 - **Geometry**: `Rect`, `Position`, `Size`.
 - **Frame buffer**: `Buffer` (mutable cell grid, absolute coordinates, silent clipping),
@@ -16,7 +16,7 @@ builds on (`SPEC.md` §2). No dependencies, no terminal I/O, no reflection.
   `Layout.split` solver.
 - **Widget traits**: `Widget`, `StatefulWidget[S]` — SAM-convertible.
 - **Input events**: `Event` / `KeyEvent` / `MouseEvent` ADT (defined here, not in
-  `tui-terminal`, so widgets stay backend-agnostic — `SPEC.md` §3.1).
+  `tui-terminal`, so widgets stay backend-agnostic).
 
 ## Example
 

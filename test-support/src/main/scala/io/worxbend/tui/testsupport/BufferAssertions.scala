@@ -3,7 +3,7 @@ package io.worxbend.tui.testsupport
 import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Widget}
 
 /** Renders buffers to plain strings for test assertions — the lightweight equivalent of TamboUI's buffer-assertion
-  * module (PLAN.md §6).
+  * module.
   */
 object BufferAssertions:
 

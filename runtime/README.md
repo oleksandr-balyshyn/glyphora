@@ -1,10 +1,10 @@
 # tui-runtime
 
-The mid-level framework tier (`SPEC.md` §4): the event/render loop, the render-thread
+The mid-level framework tier: the event/render loop, the render-thread
 model, and the reactive state primitives.
 
-- **`Signal[A]` / `Computed[A]` / `ReactiveScope`** — fine-grained signals
-  (Terminus-style, `RESEARCH.md`): `get` subscribes the enclosing computation via the
+- **`Signal[A]` / `Computed[A]` / `ReactiveScope`** — fine-grained signals:
+  `get` subscribes the enclosing computation via the
   `ReactiveScope` capability, `peek` reads untracked, `set` lazily marks dependents
   stale. Dependency edges are re-established on every recomputation, so conditional
   reads subscribe exactly the branch that ran.

@@ -7,7 +7,7 @@ import java.util.Arrays
   * `String.length` counts UTF-16 code units, not terminal columns: CJK characters occupy two columns, combining marks
   * occupy none, and one emoji ZWJ sequence can span many codepoints yet occupy two columns. All layout and rendering
   * math in this library must go through this object — no code outside it may use `String.length` or `String.substring`
-  * for anything that affects layout (SPEC.md §2.4).
+  * for anything that affects layout.
   *
   * Widths are derived from the Unicode Character Database: East Asian Width `W`/`F` codepoints (see [[WidthTable]]) are
   * two columns; combining marks, format controls, and conjoining Hangul jamo are zero; everything else is one.

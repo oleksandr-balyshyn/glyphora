@@ -15,7 +15,7 @@ import io.worxbend.tui.core.{
 import io.worxbend.tui.runtime.Signal
 import io.worxbend.tui.widgets as w
 
-/** A node of the retained-mode UI tree (SPEC.md §5.1).
+/** A node of the retained-mode UI tree.
   *
   * Every element ultimately renders through a `tui-core` [[Widget]] — the DSL is a declarative layer over
   * `tui-widgets`, never a parallel rendering path. The sealed hierarchy is plain data: construction tests can
@@ -1055,8 +1055,8 @@ private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEven
 private def focusStyled(props: ElementProps): Style =
   if props.focused then props.style.reverse else props.style
 
-/** The factory set (TamboUI-Toolkit-style, `RESEARCH.md`): one obvious home, re-exported at the package top level so
-  * `import io.worxbend.tui.dsl.*` brings every factory in.
+/** The factory set: one obvious home, re-exported at the package top level so `import io.worxbend.tui.dsl.*` brings
+  * every factory in.
   */
 object Element:
 

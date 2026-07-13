@@ -1,6 +1,6 @@
 # tui-dsl
 
-The high-level declarative API (`SPEC.md` §5) — what applications are expected to use
+The high-level declarative API — what applications are expected to use
 day-to-day.
 
 ```scala

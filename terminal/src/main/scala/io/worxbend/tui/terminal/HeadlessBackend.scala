@@ -6,8 +6,8 @@ import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.Duration
 
-/** An in-memory [[Backend]] for headless end-to-end testing (adapted from Textual's headless driver, PLAN.md §9):
-  * renders into a retained snapshot instead of a TTY and reads synthetic events posted by the test driver.
+/** An in-memory [[Backend]] for headless end-to-end testing: renders into a retained snapshot instead of a TTY and
+  * reads synthetic events posted by the test driver.
   *
   * Thread contract: the runner calls `readEvent`/`draw` on the render thread while a test thread posts events and
   * inspects `lastDrawn` — hence the blocking queue and volatile snapshot.

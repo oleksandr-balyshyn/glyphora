@@ -3,7 +3,7 @@ package io.worxbend.tui.core
 /** Text-attribute flags (bold, italic, …) packed into an `Int` bitset.
   *
   * An opaque bitset rather than a `Set[Modifier]` on purpose: `Style` values are created per-cell, potentially
-  * thousands of times per frame, so `Style` must stay a small value with no boxed collection inside (SPEC.md §2.3).
+  * thousands of times per frame, so `Style` must stay a small value with no boxed collection inside.
   */
 opaque type Modifiers = Int
 

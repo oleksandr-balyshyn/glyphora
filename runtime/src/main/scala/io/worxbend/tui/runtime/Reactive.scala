@@ -25,7 +25,7 @@ sealed trait Reactive[A]:
   *
   * `set`/`update` mark dependents stale and (via the root scope) schedule a redraw; nothing recomputes eagerly. Setting
   * an equal value (by `==`) notifies nobody. Must only be called from the render thread once one is registered —
-  * enforced by `RenderThread.checkRenderThread()`, which is a no-op in tests with no running runtime (SPEC.md §4.1).
+  * enforced by `RenderThread.checkRenderThread()`, which is a no-op in tests with no running runtime.
   */
 final class Signal[A] private (initial: A) extends Reactive[A], Subscribable:
 

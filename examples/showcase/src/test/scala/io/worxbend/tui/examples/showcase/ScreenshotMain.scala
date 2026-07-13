@@ -17,6 +17,7 @@ object ScreenshotMain:
     val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Enter).waitForIdle() // skip the splash
+    pilot.pressKey(KeyCode.Tab).waitForIdle()   // focus the note input
     pilot.typeText("ship it").waitForIdle()
     println(pilot.screenLines.mkString("\n"))
     pilot.pressKey(KeyCode.Escape)

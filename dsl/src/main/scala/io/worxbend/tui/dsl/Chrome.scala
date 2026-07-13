@@ -3,8 +3,8 @@ package io.worxbend.tui.dsl
 import io.worxbend.tui.core.{Constraint, Text}
 import io.worxbend.tui.widgets as w
 
-/** The app-chrome presets (ROADMAP 0.3.0): top bar, status bar, sidebar, scaffold, help overlay, and layout helpers.
-  * All of them are plain element builders over the ambient [[Theme]] — nothing here bypasses the widget layer.
+/** The app-chrome presets: top bar, status bar, sidebar, scaffold, help overlay, and layout helpers. All of them are
+  * plain element builders over the ambient [[Theme]] — nothing here bypasses the widget layer.
   */
 
 /** A one-row title bar over the theme surface: title left, optional tabs center, optional right-side text. */

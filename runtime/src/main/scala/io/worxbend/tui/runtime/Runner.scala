@@ -13,7 +13,7 @@ final case class RunnerConfig(
     mouseCapture: Boolean = false,
 )
 
-/** The mid-level API tier (SPEC.md §4.3): owns the event/render loop over a `Backend`.
+/** The mid-level API tier: owns the event/render loop over a `Backend`.
   *
   * `handleEvent` returns whether the UI should redraw; `render` fills the frame on each redraw. `run` blocks until the
   * app quits (via [[RunnerHandle.quit]]) or the backend fails, and always restores the terminal on the way out. The

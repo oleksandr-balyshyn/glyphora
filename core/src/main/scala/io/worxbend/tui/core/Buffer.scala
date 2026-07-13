@@ -6,8 +6,7 @@ package io.worxbend.tui.core
   * receive a `Rect` positioned in absolute space and write to the buffer at those coordinates. Writes outside `area`
   * are silently clipped, never errors; reads outside `area` return [[Cell.Empty]].
   *
-  * Mutability is an implementation detail of the render loop (every reference implementation uses a mutable frame
-  * buffer, SPEC.md §9.2) — it never escapes through `Widget.render`'s contract.
+  * Mutability is an implementation detail of the render loop — it never escapes through `Widget.render`'s contract.
   */
 final class Buffer(val area: Rect):
 

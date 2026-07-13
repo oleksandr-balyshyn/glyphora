@@ -12,7 +12,7 @@ object `package` extends build.TuiPublishModule {
   def moduleDeps = Seq(build.core)
 
   def mvnDeps = super.mvnDeps() ++ Seq(
-    // pinned per SPEC.md §3.2 — stay on the JLine 3.x line for v1, do not move to 4.x
+    // stay on the JLine 3.x line; 4.x is too new to be a safe default dependency yet
     mvn"org.jline:jline:3.30.13",
   )
 

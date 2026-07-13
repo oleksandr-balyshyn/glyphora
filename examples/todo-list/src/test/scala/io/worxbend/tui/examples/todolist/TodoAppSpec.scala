@@ -6,7 +6,7 @@ import io.worxbend.tui.testsupport.Pilot
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** Headless end-to-end tests for the todo list's primary interaction paths (PLAN.md §11, step 8). */
+/** Headless end-to-end tests for the todo list's primary interaction paths. */
 final class TodoAppSpec extends AnyFunSuite:
 
   private def startedApp(): (TodoApp, Pilot) =

@@ -6,8 +6,8 @@ import io.worxbend.tui.widgets.{Dataset, GraphType}
 
 import scala.concurrent.duration.DurationInt
 
-/** dashboard (PLAN.md §8, example 4): `Gauge` + `Sparkline` + `Chart` under tick-rate animation — layout composition
-  * and the tick/redraw cycle. `q` quits.
+/** dashboard: `Gauge` + `Sparkline` + `Chart` under tick-rate animation — layout composition and the tick/redraw cycle.
+  * `q` quits.
   */
 final class DashboardApp extends TuiApp:
 

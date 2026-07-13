@@ -5,7 +5,7 @@ import io.worxbend.tui.widgets.BorderType
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** DSL-construction tests (PLAN.md §9): build element trees, assert their shape and props as plain data. */
+/** DSL-construction tests: build element trees, assert their shape and props as plain data. */
 final class DslConstructionSpec extends AnyFunSuite:
 
   test("the hello-world tree has the documented shape"):

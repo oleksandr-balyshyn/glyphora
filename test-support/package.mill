@@ -3,7 +3,7 @@ package build.`test-support`
 import mill.*
 
 // Not published: shared test infrastructure (Pilot driver, Buffer assertion matchers),
-// consumed by other modules' test submodules only (PLAN.md §4).
+// consumed by other modules' test submodules only.
 object `package` extends build.TuiModule {
 
   def moduleDeps = Seq(build.core, build.terminal, build.runtime)

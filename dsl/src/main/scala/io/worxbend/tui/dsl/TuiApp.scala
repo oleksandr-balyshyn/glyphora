@@ -8,15 +8,15 @@ import io.worxbend.tui.widgets.TextInputState
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
 
-/** The application entry point for the declarative DSL (SPEC.md §5.3).
+/** The application entry point for the declarative DSL.
   *
   * `view` is re-evaluated under a tracking [[ReactiveScope]]: any `Signal` read during the last evaluation schedules a
   * redraw when it changes — state lives in signals, not in an explicitly threaded `State` value.
   *
-  * Focus and events (SPEC.md §5.4): focusable elements form a tab order in depth-first view order; `Tab` / `Shift+Tab`
-  * cycle focus and a mouse press focuses the innermost focusable under the pointer. Key events start at the focused
-  * element and bubble to its ancestors (`true` consumes), then the app's [[bindings]] run; an unconsumed `Ctrl+P` opens
-  * the command palette (when bindings exist) and `Ctrl+C` quits.
+  * Focus and events: focusable elements form a tab order in depth-first view order; `Tab` / `Shift+Tab` cycle focus and
+  * a mouse press focuses the innermost focusable under the pointer. Key events start at the focused element and bubble
+  * to its ancestors (`true` consumes), then the app's [[bindings]] run; an unconsumed `Ctrl+P` opens the command
+  * palette (when bindings exist) and `Ctrl+C` quits.
   *
   * App services: [[pushScreen]]/[[popScreen]] for modal or full-screen navigation (layers below a modal leave the tab
   * order), [[notify]] for tick-aged toasts, [[openPalette]] for the fuzzy command palette over the declared bindings.
@@ -88,7 +88,7 @@ trait TuiApp:
       case Left(error)    => Left(RunnerError.Backend(error))
       case Right(backend) => runWith(backend)
 
-  /** Runs over an explicit backend — how headless tests drive a `TuiApp` (recorded in SPEC.md §9). */
+  /** Runs over an explicit backend — how headless tests drive a `TuiApp`. */
   final def runWith(backend: Backend): Either[RunnerError, Unit] =
     var invalidated               = false
     var lastTree: Option[Element] = None

@@ -6,7 +6,7 @@ import io.worxbend.tui.testsupport.Pilot
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** Headless end-to-end test for the counter's primary interaction path (PLAN.md §11, step 8). */
+/** Headless end-to-end test for the counter's primary interaction path. */
 final class CounterAppSpec extends AnyFunSuite:
 
   test("increments and decrements re-render the count, and q quits"):

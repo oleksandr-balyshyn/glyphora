@@ -1,10 +1,9 @@
 # test-support
 
-Shared test infrastructure (not published; consumed by other modules' `test` submodules
-only — `PLAN.md` §4).
+Shared test infrastructure (not published; consumed by other modules' `test` submodules only).
 
-- **`Pilot`** — the headless end-to-end driver (adapted from Textual's `pilot.py`,
-  `PLAN.md` §9): starts an app over a `HeadlessBackend` on a background thread, then
+- **`Pilot`** — the headless end-to-end driver: starts an app over a `HeadlessBackend`
+  on a background thread, then
   `pressKey` / `typeText` / `click` / `resize` / `waitForIdle` / `screenLines` /
   `awaitTermination` from the test.
 - **`BufferAssertions`** — render-to-`Buffer` helpers: `rendered(widget, w, h)`,

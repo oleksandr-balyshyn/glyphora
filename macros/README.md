@@ -1,6 +1,6 @@
 # tui-macros
 
-Compile-time codegen (`SPEC.md` §6): everywhere the framework bridges *user-defined*
+Compile-time codegen: everywhere the framework bridges *user-defined*
 code, the bridge is generated at compile time — never runtime reflection. This is the
 constraint that keeps GraalVM native-image builds free of reflect-config JSON.
 

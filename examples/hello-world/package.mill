@@ -9,7 +9,7 @@ object `package` extends build.TuiModule with NativeImageModule {
 
   def mainClass = Some("io.worxbend.tui.examples.helloworld.Main")
 
-  // GraalVM distribution pinned per PLAN.md §7; Mill downloads it automatically.
+  // GraalVM distribution pinned; Mill downloads it automatically.
   def jvmVersion = "graalvm-community:23.0.1"
 
   def nativeImageOptions = Seq("--no-fallback")

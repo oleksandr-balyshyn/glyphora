@@ -14,14 +14,14 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - name: Reflection discipline check (PLAN.md §12)
+      - name: Reflection discipline check
         run: |
           # runtime reflection is forbidden everywhere (native-image); tui-macros uses compile-time Mirror only
           if grep -rn "java\.lang\.reflect\|Class\.forName" --include="*.scala" */src/main/scala 2>/dev/null; then
             echo "runtime reflection found in main sources" >&2
             exit 1
           fi
-      - name: CharWidth discipline check (SPEC.md §2.4)
+      - name: CharWidth discipline check
         run: |
           # String.length/.substring for layout math must go through CharWidth; the two sanctioned call sites
           # are CharWidth.scala itself and Paragraph's exact-prefix bookkeeping (documented inline)

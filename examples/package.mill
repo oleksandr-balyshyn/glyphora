@@ -2,5 +2,5 @@ package build.examples
 
 import mill.*
 
-// Aggregator only — each runnable example lives in its own sub-module (PLAN.md §8).
+// Aggregator only — each runnable example lives in its own sub-module.
 object `package` extends Module {}

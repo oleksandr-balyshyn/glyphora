@@ -2,7 +2,7 @@ package io.worxbend.tui.dsl
 
 import io.worxbend.tui.runtime.ReactiveScope
 
-/** One entry of the app's screen stack (SPEC.md §7's v1 non-goal, added in 0.4.0 by explicit decision).
+/** One entry of the app's screen stack.
   *
   * A *modal* screen renders layered over what's beneath it, with everything below removed from the tab order; a *full*
   * screen replaces the view entirely. Push/pop via `TuiApp.pushScreen`/`popScreen`.

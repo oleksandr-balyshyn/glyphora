@@ -99,8 +99,7 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
 object Layout:
   /** Constraint shorthand: a plain `Int` means `Length(cells)`, a `Double` means a fraction of the whole (`0.5` →
     * `Percentage(50)`, truncating — use `Constraint.Ratio` when exact thirds matter), and any `Constraint` passes
-    * through. A union-typed overload rather than implicit `Conversion`s so call sites need no language import (SPEC.md
-    * §2.5).
+    * through. A union-typed overload rather than implicit `Conversion`s so call sites need no language import.
     */
   def apply(direction: Direction)(constraints: (Int | Double | Constraint)*): Layout =
     Layout(
