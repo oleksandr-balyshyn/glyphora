@@ -93,7 +93,7 @@ trait TuiApp:
     var invalidated               = false
     var lastTree: Option[Element] = None
     val tracker                   = FocusTracker()
-    val scope                     = ReactiveScope.onInvalidation(() => invalidated = true)
+    val scope                     = ReactiveScope.generational(() => invalidated = true)
 
     def handleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
       if splashActive then
@@ -155,12 +155,13 @@ trait TuiApp:
       if splash.nonEmpty && config.tickRate.isEmpty then
         config.copy(tickRate = Some(scala.concurrent.duration.DurationInt(50).millis))
       else config
-    val result          = TerminalRunner(backend, effectiveConfig).run(
+    val result          = TerminalRunner(backend, effectiveConfig, redrawRequested = () => invalidated).run(
       handleEvent,
       frame =>
         invalidated = false
         if splashActive then renderSplash(frame)
         else
+          scope.beginGeneration()
           val rawTree = effectiveView(using scope)
           val keys    = FocusPass.focusKeys(rawTree)
           tracker.focusableCount = keys.size

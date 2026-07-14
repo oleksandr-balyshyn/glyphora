@@ -81,6 +81,19 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
       stale = true
       subscribers.toSeq.foreach(_.markStale())
 
+  /** Detaches this computed from its dependencies and dependents.
+    *
+    * A `Computed` created inside a repeatedly-evaluated context (a `view` body) re-subscribes on every
+    * evaluation and is otherwise never released — long-lived derived values belong outside `view`, and
+    * short-lived ones should be disposed. The app root scope prunes its own stale subscriptions
+    * automatically; this handles the computed's internal edges.
+    */
+  def dispose(): Unit =
+    dependencies.toSeq.foreach(_.unsubscribe(this))
+    dependencies.clear()
+    subscribers.clear()
+    stale = true
+
   private def recompute(): Unit =
     dependencies.toSeq.foreach(_.unsubscribe(this))
     dependencies.clear()

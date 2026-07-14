@@ -129,3 +129,35 @@ final class ReactiveSpec extends AnyFunSuite:
     assert(invalidations == 0)
     tracked.set(2)
     assert(invalidations == 1)
+
+  test("dispose detaches a computed from its dependencies"):
+    var runs   = 0
+    val signal = Signal(1)
+    val doubled = Computed {
+      runs += 1
+      signal.get * 2
+    }
+    assert(doubled.peek == 2)
+    doubled.dispose()
+    signal.set(5) // must not mark the disposed computed's (cleared) subscribers, nor leak into it
+    assert(runs == 1)
+
+  test("a generational scope drops subscriptions that stop being read"):
+    var invalidations = 0
+    val scope         = ReactiveScope.generational(() => invalidations += 1)
+    val hot           = Signal(1)
+    val cold          = Signal(1)
+
+    def evaluate(readCold: Boolean): Unit =
+      scope.beginGeneration()
+      val _ = hot.get(using scope)
+      if readCold then
+        val _ = cold.get(using scope)
+
+    evaluate(readCold = true)
+    evaluate(readCold = false)
+    evaluate(readCold = false) // cold read two generations ago is pruned here
+    cold.set(2)
+    assert(invalidations == 0)
+    hot.set(2)
+    assert(invalidations == 1)

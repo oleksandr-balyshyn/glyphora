@@ -65,3 +65,20 @@ final class RenderThreadSpec extends AnyFunSuite:
       RenderThread.drainPending()
       assert(ran)
     finally RenderThread.unregister()
+
+  test("two render threads can be registered at once without racing each other"):
+    RenderThread.register(Thread.currentThread())
+    try
+      @volatile var otherOk = false
+      val other = Thread { () =>
+        RenderThread.register(Thread.currentThread())
+        try
+          RenderThread.checkRenderThread() // both threads are render threads
+          otherOk = true
+        finally RenderThread.unregister()
+      }
+      other.start()
+      other.join()
+      assert(otherOk)
+      RenderThread.checkRenderThread() // still registered here after the other unregistered itself
+    finally RenderThread.unregister()

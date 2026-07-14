@@ -1,7 +1,6 @@
 package io.worxbend.tui.runtime
 
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicReference
 
 /** The single-render-thread model.
   *
@@ -11,13 +10,13 @@ import java.util.concurrent.atomic.AtomicReference
   */
 object RenderThread:
 
-  private val registered = AtomicReference[Option[Thread]](None)
+  // a concurrent set: several runners may live in one JVM (parallel test suites, embedded apps) and must
+  // not race on a single registration slot
+  private val registered = java.util.concurrent.ConcurrentHashMap.newKeySet[Thread]()
   private val pending    = ConcurrentLinkedQueue[() => Unit]()
 
   def isRenderThread: Boolean =
-    registered.get() match
-      case None         => true
-      case Some(thread) => Thread.currentThread() eq thread
+    registered.isEmpty || registered.contains(Thread.currentThread())
 
   /** Defect-detection assertion: throws `IllegalStateException` when called off the render thread while one is
     * registered. A programming error, not a recoverable condition — hence throw, not `Either`.
@@ -36,9 +35,11 @@ object RenderThread:
   def runLater(body: => Unit): Unit =
     val _ = pending.add(() => body)
 
-  private[tui] def register(thread: Thread): Unit = registered.set(Some(thread))
+  private[tui] def register(thread: Thread): Unit =
+    val _ = registered.add(thread)
 
-  private[tui] def unregister(): Unit = registered.set(None)
+  private[tui] def unregister(): Unit =
+    val _ = registered.remove(Thread.currentThread())
 
   private[tui] def drainPending(): Unit =
     var task = pending.poll()

@@ -14,6 +14,7 @@ final class TerminalRunner(
     backend: Backend,
     config: RunnerConfig = RunnerConfig(),
     nanoTime: () => Long = () => System.nanoTime(),
+    redrawRequested: () => Boolean = () => false,
 ) extends Runner:
 
   def run(
@@ -68,6 +69,8 @@ final class TerminalRunner(
     redraw()
     while running && failure.isEmpty do
       RenderThread.drainPending()
+      // queued work (runLater/runOnRenderThread) may have invalidated state between events
+      if redrawRequested() && running && failure.isEmpty then redraw()
       backend.readEvent(pollTimeout(lastTick)) match
         case Left(error)        => failure = Some(error)
         case Right(Some(event)) =>

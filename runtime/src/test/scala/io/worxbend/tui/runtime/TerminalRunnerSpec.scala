@@ -131,3 +131,31 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     assert(wasRenderThread)
     pilot.pressKey(KeyCode.Char('q'))
     assert(pilot.awaitTermination())
+
+  test("work queued via runLater triggers a redraw without any input event"):
+    val backend = HeadlessBackend(Size(20, 2))
+    @volatile var message = "before"
+    @volatile var dirty   = false
+    val pilot = Pilot.start(backend) {
+      val _ = TerminalRunner(backend, redrawRequested = () => dirty).run(
+        quitOnQ,
+        frame =>
+          dirty = false
+          frame.renderWidget(
+            (area, buffer) => buffer.setString(area.x, area.y, message, io.worxbend.tui.core.Style.Default),
+            frame.area,
+          ),
+      )
+    }
+    pilot.waitForIdle()
+    assert(pilot.screenLines.head.startsWith("before"))
+    RenderThread.runLater {
+      message = "after"
+      dirty = true
+    }
+    val deadline = System.nanoTime() + scala.concurrent.duration.DurationInt(3).seconds.toNanos
+    while !pilot.screenLines.headOption.exists(_.startsWith("after")) && System.nanoTime() < deadline do
+      Thread.sleep(20)
+    assert(pilot.screenLines.head.startsWith("after"))
+    pilot.pressKey(KeyCode.Char('q'))
+    assert(pilot.awaitTermination())
