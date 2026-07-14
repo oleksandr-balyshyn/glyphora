@@ -29,6 +29,12 @@ final case class Markdown(
   def render(area: Rect, buffer: Buffer): Unit =
     Paragraph(MarkdownParser.parse(source, theme), wrap = true).render(area, buffer)
 
+object Markdown:
+
+  /** The rows the rendered markdown occupies at `width` — the measurement counterpart of rendering. */
+  def heightOf(source: String, width: Int, theme: MarkdownTheme = MarkdownTheme()): Int =
+    Paragraph.heightOf(MarkdownParser.parse(source, theme), width)
+
 private[widgets] object MarkdownParser:
 
   def parse(source: String, theme: MarkdownTheme): Text =

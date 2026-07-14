@@ -16,7 +16,7 @@ final case class Paragraph(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val lines = if wrap then text.lines.flatMap(wrapLine(_, area.width)) else text.lines
+      val lines = if wrap then text.lines.flatMap(Paragraph.wrapLine(_, area.width)) else text.lines
       lines.take(area.height).zipWithIndex.foreach { (line, row) =>
         val lineWidth = math.min(line.width, area.width)
         val startX    = alignment match
@@ -26,7 +26,14 @@ final case class Paragraph(
         val _         = LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, style)
       }
 
-  private def wrapLine(line: Line, width: Int): Seq[Line] =
+object Paragraph:
+
+  /** How many rows `text` occupies at `width` — the measurement counterpart of rendering. */
+  def heightOf(text: Text, width: Int, wrap: Boolean = true): Int =
+    if !wrap || width <= 0 then text.lines.size
+    else text.lines.map(line => math.max(1, wrapLine(line, width).size)).sum
+
+  private[widgets] def wrapLine(line: Line, width: Int): Seq[Line] =
     if width <= 0 then Seq.empty
     else if line.width <= width then Seq(line)
     else

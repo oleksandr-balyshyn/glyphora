@@ -46,9 +46,16 @@ final class Buffer(val area: Rect):
     val clipped = region.intersection(source.area)
     var dy      = 0
     while dy < clipped.height do
+      val y = clipped.y + dy
       var dx = 0
       while dx < clipped.width do
-        set(at.x + dx, at.y + dy, source.get(clipped.x + dx, clipped.y + dy))
+        val cell = source.get(clipped.x + dx, y)
+        val safe =
+          // a wide grapheme cut in half by the window edge would render torn — blank the half instead
+          if dx == 0 && CharWidth.of(source.get(clipped.x - 1, y).symbol) == 2 then Cell.Empty
+          else if dx == clipped.width - 1 && CharWidth.of(cell.symbol) == 2 then Cell.Empty
+          else cell
+        set(at.x + dx, at.y + dy, safe)
         dx += 1
       dy += 1
 

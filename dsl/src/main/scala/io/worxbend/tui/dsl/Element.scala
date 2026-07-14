@@ -53,6 +53,16 @@ sealed trait Element:
     val _ = direction
     Constraint.Fill(1)
 
+  /** The rows this element needs at `width`, when knowable — the measurement pass scroll views and
+    * auto-sizing containers use. Defaults to a fixed vertical preferred size; content-driven elements
+    * override it.
+    */
+  private[dsl] def intrinsicHeight(width: Int): Option[Int] =
+    val _ = width
+    props.constraint.getOrElse(preferredSize(Direction.Vertical)) match
+      case Constraint.Length(cells) => Some(cells)
+      case _                        => None
+
   private[dsl] final def layoutItem(direction: Direction): w.LayoutItem =
     w.LayoutItem(props.constraint.getOrElse(preferredSize(direction)), widget)
 
@@ -78,6 +88,9 @@ final case class PanelElement(
       w.Column(children.map(_.layoutItem(Direction.Vertical))).render(block.inner(area), buffer)
   private[dsl] def withProps(props: ElementProps): PanelElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PanelElement = copy(children = children)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+    val heights = children.map(_.intrinsicHeight(math.max(0, width - 2)))
+    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + 2) else None
 
 final case class RowElement(
     override val children: Seq[Element],
@@ -87,6 +100,9 @@ final case class RowElement(
   def widget: Widget = w.Row(children.map(_.layoutItem(Direction.Horizontal)), spacing)
   private[dsl] def withProps(props: ElementProps): RowElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): RowElement = copy(children = children)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+    val heights = children.map(_.intrinsicHeight(width))
+    if heights.forall(_.nonEmpty) then heights.flatten.maxOption else None
 
 final case class ColumnElement(
     override val children: Seq[Element],
@@ -94,6 +110,10 @@ final case class ColumnElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   def widget: Widget = w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+    val heights = children.map(_.intrinsicHeight(width))
+    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + spacing * math.max(0, children.size - 1))
+    else None
   private[dsl] def withProps(props: ElementProps): ColumnElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): ColumnElement = copy(children = children)
 
@@ -147,10 +167,18 @@ final case class TableElement(
     w.Table(rows.map(_.map(Line.raw)), widths, header.map(_.map(Line.raw)), style = props.style)
   private[dsl] def withProps(props: ElementProps): TableElement = copy(props = props)
 
-/** Escape hatch: any core [[Widget]] as a leaf element (its rendering ignores the element style). */
-final case class WidgetElement(wrapped: Widget, props: ElementProps = ElementProps()) extends Element:
+/** Escape hatch: any core [[Widget]] as a leaf element (its rendering ignores the element style). `measure`
+  * lets width-dependent content (wrapped markdown, images) report its height to the measurement pass.
+  */
+final case class WidgetElement(
+    wrapped: Widget,
+    props: ElementProps = ElementProps(),
+    measure: Int => Option[Int] = _ => None,
+) extends Element:
   def widget: Widget                                             = wrapped
   private[dsl] def withProps(props: ElementProps): WidgetElement = copy(props = props)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+    measure(width).orElse(super.intrinsicHeight(width))
 
 // ---- interactive (focusable) elements ----
 
@@ -370,9 +398,12 @@ final case class ScrollViewElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   override def children: Seq[Element]                                               = Seq(content)
-  def widget: Widget                                                                =
-    val view = w.ScrollView(content.widget, contentHeight)
-    (area, buffer) => view.render(area, buffer, state)
+  def widget: Widget =
+    (area, buffer) =>
+      val resolved =
+        if contentHeight > 0 then contentHeight
+        else content.intrinsicHeight(math.max(1, area.width - 1)).getOrElse(area.height)
+      w.ScrollView(content.widget, resolved).render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): ScrollViewElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): ScrollViewElement =
     copy(content = children.headOption.getOrElse(content))
@@ -1217,7 +1248,10 @@ object Element:
     )
 
   def markdown(source: String): WidgetElement =
-    WidgetElement(w.Markdown(source))
+    WidgetElement(
+      w.Markdown(source),
+      measure = width => Some(w.Markdown.heightOf(source, width)),
+    )
 
   def dataTable(
       table: io.worxbend.tui.widgets.DataTable,
@@ -1244,6 +1278,12 @@ object Element:
       state: io.worxbend.tui.widgets.ScrollViewState,
   ): ScrollViewElement =
     ScrollViewElement(content, contentHeight, state)
+
+  /** Scroll view that measures its content's height itself (falls back to the viewport height when the
+    * content is unmeasurable — fill-sized children).
+    */
+  def scrollView(content: Element, state: io.worxbend.tui.widgets.ScrollViewState): ScrollViewElement =
+    ScrollViewElement(content, contentHeight = -1, state)
 
   /** `tabbedContent("One" -> pageOne, "Two" -> pageTwo)(selected)` — the selected page is picked at view construction,
     * so the tree always holds exactly the visible page.

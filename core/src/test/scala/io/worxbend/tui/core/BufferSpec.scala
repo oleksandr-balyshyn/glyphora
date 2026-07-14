@@ -118,3 +118,13 @@ final class BufferSpec extends AnyFunSuite:
     val next     = buffer(3, 1)
     next.setString(0, 0, "abc", Style.Default)
     assert(previous.diff(next).size == 3)
+
+  test("blit blanks wide graphemes cut in half at the window edges"):
+    val source = buffer(6, 1)
+    source.setString(0, 0, "a你b你", Style.Default) // cells: a 你 · b 你 ·
+    val target = buffer(4, 1)
+    // window starts at x=2 (the continuation of the first 你) and ends at x=5 (splitting the second 你)
+    target.blit(source, Position(0, 0), Rect(2, 0, 3, 1))
+    assert(target.get(0, 0) == Cell.Empty) // torn left half dropped
+    assert(target.get(1, 0).symbol == "b")
+    assert(target.get(2, 0) == Cell.Empty) // wide char whose continuation was cut off dropped
