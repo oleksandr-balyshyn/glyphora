@@ -59,6 +59,10 @@ private[terminal] final class InputDecoder(read: Long => Int):
         case 'H' => Event.Key(KeyEvent(KeyCode.Home, modifiers))
         case 'F' => Event.Key(KeyEvent(KeyCode.End, modifiers))
         case 'Z' => Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Shift))
+        case 'I' => Event.FocusGained
+        case 'O' => Event.FocusLost
+        case 'u' => decodeKittyKey(numbers)
+        case '~' if numbers.headOption.contains(PasteStart) => decodePaste()
         case '~' => decodeTilde(numbers)
         case _   => key(KeyCode.Escape)
 
@@ -78,6 +82,36 @@ private[terminal] final class InputDecoder(read: Long => Int):
       case Some(24)                      => KeyCode.F(12)
       case _                             => KeyCode.Escape
     Event.Key(KeyEvent(code, modifiers))
+
+  /** Kitty keyboard protocol `CSI codepoint ; modifiers u`: unambiguous keys, no Esc timeout heuristic. */
+  private def decodeKittyKey(numbers: Seq[Int]): Event =
+    val modifiers = numbers.drop(1).headOption.map(modifiersFromCode).getOrElse(KeyModifiers.None)
+    val code      = numbers.headOption match
+      case Some(27)  => KeyCode.Escape
+      case Some(13)  => KeyCode.Enter
+      case Some(9)   => KeyCode.Tab
+      case Some(127) => KeyCode.Backspace
+      case Some(cp) if cp >= 32 && cp <= 0xffff => KeyCode.Char(cp.toChar)
+      case _         => KeyCode.Escape
+    Event.Key(KeyEvent(code, modifiers))
+
+  /** Bracketed paste: everything between `CSI 200~` and `CSI 201~` is one paste payload. */
+  private def decodePaste(): Event =
+    val content = StringBuilder()
+    var done    = false
+    while !done && content.length < PasteLimit do
+      val c = read(PasteTimeoutMillis)
+      if c < 0 then done = true
+      else if c == 0x1B then
+        // possible terminator: ESC [ 2 0 1 ~
+        val tail       = Array(read(EscapeTimeoutMillis), read(EscapeTimeoutMillis), read(EscapeTimeoutMillis), read(EscapeTimeoutMillis), read(EscapeTimeoutMillis))
+        val terminator = tail.sameElements(Array('['.toInt, '2'.toInt, '0'.toInt, '1'.toInt, '~'.toInt))
+        if terminator then done = true
+        else
+          content.append(0x1B.toChar)
+          tail.filter(_ >= 0).foreach(t => content.append(t.toChar))
+      else content.append(c.toChar)
+    Event.Paste(content.result())
 
   /** SS3 sequences (`ESC O x`): F1–F4 and some terminals' Home/End. */
   private def decodeSs3(): Event =
@@ -125,3 +159,6 @@ private[terminal] final class InputDecoder(read: Long => Int):
     Event.Key(KeyEvent(code, KeyModifiers.None))
 
   private val EscapeTimeoutMillis = 50L
+  private val PasteTimeoutMillis  = 200L
+  private val PasteLimit          = 1 << 20
+  private val PasteStart          = 200

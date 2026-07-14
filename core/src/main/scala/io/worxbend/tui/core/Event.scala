@@ -10,3 +10,9 @@ enum Event:
   case Mouse(event: MouseEvent)
   case Resize(size: Size)
   case Tick
+
+  /** A bracketed paste: the whole pasted text arrives as one event instead of a storm of key events. */
+  case Paste(text: String)
+
+  /** The terminal window gained or lost focus (mode 1004 reporting). */
+  case FocusGained, FocusLost

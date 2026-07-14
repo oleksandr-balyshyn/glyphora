@@ -22,6 +22,7 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
   private var mouseCaptureActive                                     = false
   private var cursorHidden                                           = false
   private val pendingResize                                          = AtomicReference[Option[Size]](None)
+  private val colorDepth = ColorDepth.detect()
   private val decoder = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
 
   terminal.handle(
@@ -35,13 +36,14 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
     attempt {
       val previous                    = lastFlushed.getOrElse(Buffer(buffer.area))
       val output                      = StringBuilder()
+      output ++= AnsiSequences.BeginSynchronized
       var expectedX                   = -1
       var currentY                    = -1
       var currentStyle                = ""
       var currentLink: Option[String] = None
       previous.diff(buffer).foreach { (pos, cell) =>
         if pos.y != currentY || pos.x != expectedX then output ++= AnsiSequences.moveTo(pos.x, pos.y)
-        val sgr = AnsiSequences.sgr(cell.style)
+        val sgr = AnsiSequences.sgr(cell.style, colorDepth)
         if sgr != currentStyle then
           output ++= sgr
           currentStyle = sgr
@@ -55,6 +57,7 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
       }
       if currentLink.nonEmpty then output ++= AnsiSequences.LinkClose
       output ++= AnsiSequences.ResetStyle
+      output ++= AnsiSequences.EndSynchronized
       terminal.writer().write(output.result())
       terminal.writer().flush()
       lastFlushed = Some(buffer.snapshot)
@@ -63,6 +66,10 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
   def enableRawMode(): Either[BackendError, Unit] =
     attempt {
       savedAttributes = Some(terminal.enterRawMode())
+      // modern input modes; terminals without support ignore them and keep legacy behavior
+      write(AnsiSequences.EnableBracketedPaste)
+      write(AnsiSequences.EnableFocusReporting)
+      write(AnsiSequences.PushKittyKeyboard)
     }
 
   def disableRawMode(): Either[BackendError, Unit] =
@@ -70,6 +77,9 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
       case None             => Left(BackendError.NotInRawMode)
       case Some(attributes) =>
         attempt {
+          write(AnsiSequences.PopKittyKeyboard)
+          write(AnsiSequences.DisableFocusReporting)
+          write(AnsiSequences.DisableBracketedPaste)
           terminal.setAttributes(attributes)
           savedAttributes = None
         }

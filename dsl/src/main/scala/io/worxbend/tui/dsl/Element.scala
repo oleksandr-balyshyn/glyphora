@@ -43,6 +43,9 @@ sealed trait Element:
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     None
 
+  /** Framework paste behavior: how a bracketed paste lands in this element while focused. */
+  private[dsl] def builtinPasteHandler: Option[String => Boolean] = None
+
   /** The space this element claims along `direction` inside a container when the user set nothing explicit — one-row
     * widgets claim one row vertically but their natural width (or a fill) horizontally.
     */
@@ -168,6 +171,12 @@ final case class InputElement(
       case Direction.Vertical   => Constraint.Length(1)
       case Direction.Horizontal => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
+  private[dsl] override def builtinPasteHandler: Option[String => Boolean]  = Some { text =>
+    if props.focused then
+      state.insert(text.replace("\r", "").replace("\n", " ")) // single-line input: fold newlines to spaces
+      true
+    else false
+  }
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
@@ -338,6 +347,7 @@ final case class FilledElement(
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     inner.builtinMouseHandler
+  private[dsl] override def builtinPasteHandler: Option[String => Boolean] = inner.builtinPasteHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint     = inner.preferredSize(direction)
 
 /** Z-ordered stacking: every child renders over the full area in order, so later children paint over earlier ones — the
@@ -904,6 +914,12 @@ final case class TextAreaElement(
     state: w.TextAreaState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
+  private[dsl] override def builtinPasteHandler: Option[String => Boolean] = Some { text =>
+    if props.focused then
+      state.insert(text.replace("\r", ""))
+      true
+    else false
+  }
   def widget: Widget                                                       =
     val editor = w.TextArea(showCursor = props.focused, style = props.style)
     (area, buffer) => editor.render(area, buffer, state)
@@ -1013,6 +1029,7 @@ private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     inner.builtinMouseHandler
+  private[dsl] override def builtinPasteHandler: Option[String => Boolean] = inner.builtinPasteHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint      = inner.preferredSize(direction)
 
 /** A mouse press activates the control (focus already moved on the press). */

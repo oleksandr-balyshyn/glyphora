@@ -40,6 +40,12 @@ private[dsl] object EventRouter:
           .map(pathToTracked(_, index))
           .collectFirst { case Some(path) => path :+ element }
 
+  /** Delivers a bracketed paste to the focused element's paste behavior. */
+  def dispatchPaste(root: Element, text: String): Boolean =
+    pathToFocused(root) match
+      case Some(leafToRoot) => leafToRoot.head.builtinPasteHandler.exists(_(text))
+      case None             => false
+
   private def handlesKey(element: Element, event: KeyEvent): Boolean =
     element.props.onKey.exists(_(event)) || element.builtinKeyHandler.exists(_(event))
 

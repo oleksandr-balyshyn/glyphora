@@ -36,6 +36,9 @@ trait TuiApp:
     */
   def onTick(): Unit = ()
 
+  /** Called when the terminal window gains or loses focus (terminals with mode-1004 reporting). */
+  def onTerminalFocus(focused: Boolean): Unit = ()
+
   /** The app's declared keys (see [[binding]]): consulted for any key event no element consumed, and the source for
     * `statusBar(bindings)` hints, [[helpOverlay]], and the command palette.
     */
@@ -143,6 +146,15 @@ trait TuiApp:
       event match
         case Event.Key(key)     => handleKey(key, handle) || invalidated
         case Event.Mouse(mouse) => handleMouse(mouse) || invalidated
+        case Event.Paste(text) =>
+          val consumed = lastTree.exists(EventRouter.dispatchPaste(_, text))
+          consumed || invalidated
+        case Event.FocusGained =>
+          onTerminalFocus(true)
+          invalidated
+        case Event.FocusLost =>
+          onTerminalFocus(false)
+          invalidated
         case Event.Resize(_)    => true
         case Event.Tick         =>
           ageToasts()

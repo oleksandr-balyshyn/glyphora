@@ -178,25 +178,6 @@ object Effect:
       )
     )
 
-  /** RGB approximation for every color model — good enough for fades, not for color management. */
+  /** RGB approximation, delegated to the shared core table. */
   private[runtime] def approximateRgb(color: Color): (Int, Int, Int) =
-    color match
-      case Color.Rgb(r, g, b)   => (r, g, b)
-      case Color.Black          => (0, 0, 0)
-      case Color.Red            => (205, 49, 49)
-      case Color.Green          => (13, 188, 121)
-      case Color.Yellow         => (229, 229, 16)
-      case Color.Blue           => (36, 114, 200)
-      case Color.Magenta        => (188, 63, 188)
-      case Color.Cyan           => (17, 168, 205)
-      case Color.White          => (229, 229, 229)
-      case Color.Reset          => (192, 192, 192)
-      case Color.Indexed(index) =>
-        if index < 16 then if index < 8 then (index * 24, index * 24, index * 24) else (192, 192, 192)
-        else if index >= 232 then
-          val gray = 8 + (index - 232) * 10
-          (gray, gray, gray)
-        else
-          val cube  = index - 16
-          val steps = Vector(0, 95, 135, 175, 215, 255)
-          (steps(cube / 36), steps(cube / 6 % 6), steps(cube % 6))
+    Color.approximateRgb(color)

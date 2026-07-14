@@ -15,6 +15,19 @@ private[terminal] object AnsiSequences:
   val EnableMouseCapture: String   = s"$Esc[?1000h$Esc[?1002h$Esc[?1006h"
   val DisableMouseCapture: String  = s"$Esc[?1006l$Esc[?1002l$Esc[?1000l"
   val ResetStyle: String           = s"$Esc[0m"
+  val EnableBracketedPaste: String  = s"$Esc[?2004h"
+  val DisableBracketedPaste: String = s"$Esc[?2004l"
+  val EnableFocusReporting: String  = s"$Esc[?1004h"
+  val DisableFocusReporting: String = s"$Esc[?1004l"
+  val BeginSynchronized: String     = s"$Esc[?2026h"
+  val EndSynchronized: String       = s"$Esc[?2026l"
+
+  /** Kitty keyboard protocol, progressive enhancement flag 1 (disambiguate escape codes): a lone Esc arrives
+    * as `CSI 27 u` instead of a bare ESC byte, removing the read-timeout heuristic on terminals that support
+    * it. Unsupported terminals ignore the sequence and keep sending legacy encoding.
+    */
+  val PushKittyKeyboard: String = s"$Esc[>1u"
+  val PopKittyKeyboard: String  = s"$Esc[<u"
   val LinkClose: String            = s"$Esc]8;;$Esc\\"
 
   /** OSC 8 hyperlink opener; pair every open with [[LinkClose]]. */
@@ -24,12 +37,14 @@ private[terminal] object AnsiSequences:
   def moveTo(x: Int, y: Int): String =
     s"$Esc[${y + 1};${x + 1}H"
 
-  /** Full SGR sequence for `style`, starting from a reset so no previous attribute leaks through. */
-  def sgr(style: Style): String =
+  /** Full SGR sequence for `style`, starting from a reset so no previous attribute leaks through; colors are
+    * downsampled to what `depth` can display.
+    */
+  def sgr(style: Style, depth: ColorDepth = ColorDepth.TrueColor): String =
     val codes = List.newBuilder[String]
     codes += "0"
-    style.fg.foreach(color => codes += foregroundCode(color))
-    style.bg.foreach(color => codes += backgroundCode(color))
+    style.fg.foreach(color => codes += foregroundCode(ColorDepth.downsample(color, depth)))
+    style.bg.foreach(color => codes += backgroundCode(ColorDepth.downsample(color, depth)))
     modifierCodes(style.modifiers).foreach(code => codes += code)
     codes.result().mkString(s"$Esc[", ";", "m")
 

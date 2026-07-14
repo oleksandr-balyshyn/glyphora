@@ -91,3 +91,24 @@ final class InputDecoderSpec extends AnyFunSuite:
 
   test("a torn escape sequence degrades to the Escape key instead of hanging"):
     assert(decoded(0x1b, '[') == Event.Key(KeyEvent.of(KeyCode.Escape)))
+
+  test("kitty CSI-u sequences decode without the escape timeout heuristic"):
+    assert(decoded(csi("27u")*) == Event.Key(KeyEvent.of(KeyCode.Escape)))
+    assert(decoded(csi("13u")*) == Event.Key(KeyEvent.of(KeyCode.Enter)))
+    assert(decoded(csi("120;5u")*) == Event.Key(KeyEvent(KeyCode.Char('x'), KeyModifiers.Ctrl)))
+    assert(decoded(csi("9;2u")*) == Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Shift)))
+
+  test("terminal focus reports decode to focus events"):
+    assert(decoded(csi("I")*) == Event.FocusGained)
+    assert(decoded(csi("O")*) == Event.FocusLost)
+
+  test("a bracketed paste arrives as one event with the payload intact"):
+    val payload = "hello\nworld"
+    val bytes   = csi("200~") ++ payload.map(_.toInt) ++ csi("201~")
+    assert(decoded(bytes*) == Event.Paste("hello\nworld"))
+
+  test("paste content containing a stray escape survives"):
+    val bytes = csi("200~") ++ Seq('a'.toInt, 0x1B, 'b'.toInt) ++ csi("201~")
+    decoded(bytes*) match
+      case Event.Paste(text) => assert(text.startsWith("a") && text.contains("b"))
+      case other             => fail(s"expected paste, got $other")
