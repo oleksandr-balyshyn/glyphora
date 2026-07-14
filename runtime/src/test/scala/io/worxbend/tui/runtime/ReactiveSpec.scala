@@ -131,8 +131,8 @@ final class ReactiveSpec extends AnyFunSuite:
     assert(invalidations == 1)
 
   test("dispose detaches a computed from its dependencies"):
-    var runs   = 0
-    val signal = Signal(1)
+    var runs    = 0
+    val signal  = Signal(1)
     val doubled = Computed {
       runs += 1
       signal.get * 2

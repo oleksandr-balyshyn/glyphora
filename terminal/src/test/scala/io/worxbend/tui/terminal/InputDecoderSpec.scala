@@ -108,7 +108,7 @@ final class InputDecoderSpec extends AnyFunSuite:
     assert(decoded(bytes*) == Event.Paste("hello\nworld"))
 
   test("paste content containing a stray escape survives"):
-    val bytes = csi("200~") ++ Seq('a'.toInt, 0x1B, 'b'.toInt) ++ csi("201~")
+    val bytes = csi("200~") ++ Seq('a'.toInt, 0x1b, 'b'.toInt) ++ csi("201~")
     decoded(bytes*) match
       case Event.Paste(text) => assert(text.startsWith("a") && text.contains("b"))
       case other             => fail(s"expected paste, got $other")

@@ -77,8 +77,8 @@ final case class DataTable(
         val sorted = filtered.sortWith((a, b) => cellLess(a.lift(column), b.lift(column)))
         if state.sortAscending then sorted else sorted.reverse
 
-  /** The rows the widget is currently showing: filtered, sorted, and windowed to the current page — what a
-    * selection indexes.
+  /** The rows the widget is currently showing: filtered, sorted, and windowed to the current page — what a selection
+    * indexes.
     */
   def visibleRows(state: DataTableState): Seq[Seq[String]] =
     val all = filteredRows(state)

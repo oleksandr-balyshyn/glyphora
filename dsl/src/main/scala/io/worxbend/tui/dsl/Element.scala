@@ -53,9 +53,8 @@ sealed trait Element:
     val _ = direction
     Constraint.Fill(1)
 
-  /** The rows this element needs at `width`, when knowable — the measurement pass scroll views and
-    * auto-sizing containers use. Defaults to a fixed vertical preferred size; content-driven elements
-    * override it.
+  /** The rows this element needs at `width`, when knowable — the measurement pass scroll views and auto-sizing
+    * containers use. Defaults to a fixed vertical preferred size; content-driven elements override it.
     */
   private[dsl] def intrinsicHeight(width: Int): Option[Int] =
     val _ = width
@@ -88,7 +87,7 @@ final case class PanelElement(
       w.Column(children.map(_.layoutItem(Direction.Vertical))).render(block.inner(area), buffer)
   private[dsl] def withProps(props: ElementProps): PanelElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PanelElement = copy(children = children)
-  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]           =
     val heights = children.map(_.intrinsicHeight(math.max(0, width - 2)))
     if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + 2) else None
 
@@ -100,7 +99,7 @@ final case class RowElement(
   def widget: Widget = w.Row(children.map(_.layoutItem(Direction.Horizontal)), spacing)
   private[dsl] def withProps(props: ElementProps): RowElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): RowElement = copy(children = children)
-  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]         =
     val heights = children.map(_.intrinsicHeight(width))
     if heights.forall(_.nonEmpty) then heights.flatten.maxOption else None
 
@@ -110,7 +109,7 @@ final case class ColumnElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   def widget: Widget = w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing)
-  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]            =
     val heights = children.map(_.intrinsicHeight(width))
     if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + spacing * math.max(0, children.size - 1))
     else None
@@ -167,16 +166,16 @@ final case class TableElement(
     w.Table(rows.map(_.map(Line.raw)), widths, header.map(_.map(Line.raw)), style = props.style)
   private[dsl] def withProps(props: ElementProps): TableElement = copy(props = props)
 
-/** Escape hatch: any core [[Widget]] as a leaf element (its rendering ignores the element style). `measure`
-  * lets width-dependent content (wrapped markdown, images) report its height to the measurement pass.
+/** Escape hatch: any core [[Widget]] as a leaf element (its rendering ignores the element style). `measure` lets
+  * width-dependent content (wrapped markdown, images) report its height to the measurement pass.
   */
 final case class WidgetElement(
     wrapped: Widget,
     props: ElementProps = ElementProps(),
     measure: Int => Option[Int] = _ => None,
 ) extends Element:
-  def widget: Widget                                             = wrapped
-  private[dsl] def withProps(props: ElementProps): WidgetElement = copy(props = props)
+  def widget: Widget                                                 = wrapped
+  private[dsl] def withProps(props: ElementProps): WidgetElement     = copy(props = props)
   private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
     measure(width).orElse(super.intrinsicHeight(width))
 
@@ -375,7 +374,7 @@ final case class FilledElement(
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     inner.builtinMouseHandler
-  private[dsl] override def builtinPasteHandler: Option[String => Boolean] = inner.builtinPasteHandler
+  private[dsl] override def builtinPasteHandler: Option[String => Boolean]      = inner.builtinPasteHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint     = inner.preferredSize(direction)
 
 /** Z-ordered stacking: every child renders over the full area in order, so later children paint over earlier ones — the
@@ -398,7 +397,7 @@ final case class ScrollViewElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   override def children: Seq[Element]                                               = Seq(content)
-  def widget: Widget =
+  def widget: Widget                                                                =
     (area, buffer) =>
       val resolved =
         if contentHeight > 0 then contentHeight
@@ -964,7 +963,7 @@ final case class TextAreaElement(
         case KeyEvent(KeyCode.Char('z'), modifiers) if modifiers.has(KeyModifiers.Ctrl)                   =>
           state.undo()
           true
-        case KeyEvent(KeyCode.Char('y'), modifiers) if modifiers.has(KeyModifiers.Ctrl) =>
+        case KeyEvent(KeyCode.Char('y'), modifiers) if modifiers.has(KeyModifiers.Ctrl)                   =>
           state.redo()
           true
         case KeyEvent(KeyCode.Char(c), modifiers) if modifiers.isEmpty || modifiers == KeyModifiers.Shift =>
@@ -1038,10 +1037,10 @@ final case class DataTableElement(
     if !props.focused then false
     else
       event.code match
-        case KeyCode.Down =>
+        case KeyCode.Down                                =>
           state.selectNext(table.visibleRows(state).size)
           true
-        case KeyCode.Up   =>
+        case KeyCode.Up                                  =>
           state.selectPrevious(table.visibleRows(state).size)
           true
         case KeyCode.PageDown if state.pageSize.nonEmpty =>
@@ -1050,7 +1049,7 @@ final case class DataTableElement(
         case KeyCode.PageUp if state.pageSize.nonEmpty   =>
           state.previousPage()
           true
-        case _            => false
+        case _                                           => false
 
 /** Wraps a focusable element during the focus pass so its rendered area is recorded for click-to-focus hit-testing.
   * Transparent for everything else: props, children, and handlers delegate to the wrapped node.
@@ -1069,7 +1068,7 @@ private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker
   private[dsl] override def builtinMouseHandler
       : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
     inner.builtinMouseHandler
-  private[dsl] override def builtinPasteHandler: Option[String => Boolean] = inner.builtinPasteHandler
+  private[dsl] override def builtinPasteHandler: Option[String => Boolean]       = inner.builtinPasteHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint      = inner.preferredSize(direction)
 
 /** A mouse press activates the control (focus already moved on the press). */
@@ -1108,8 +1107,8 @@ private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEven
           true
         case _                                 => false
 
-/** Focused interactive elements render with the focus style (the theme's, once the focus pass ran) layered
-  * over their own, so the user can see where keystrokes go.
+/** Focused interactive elements render with the focus style (the theme's, once the focus pass ran) layered over their
+  * own, so the user can see where keystrokes go.
   */
 private def focusStyled(props: ElementProps): Style =
   if props.focused then props.style.patch(props.focusStyle) else props.style
@@ -1288,8 +1287,8 @@ object Element:
   ): ScrollViewElement =
     ScrollViewElement(content, contentHeight, state)
 
-  /** Scroll view that measures its content's height itself (falls back to the viewport height when the
-    * content is unmeasurable — fill-sized children).
+  /** Scroll view that measures its content's height itself (falls back to the viewport height when the content is
+    * unmeasurable — fill-sized children).
     */
   def scrollView(content: Element, state: io.worxbend.tui.widgets.ScrollViewState): ScrollViewElement =
     ScrollViewElement(content, contentHeight = -1, state)

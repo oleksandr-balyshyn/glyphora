@@ -46,7 +46,7 @@ final class Buffer(val area: Rect):
     val clipped = region.intersection(source.area)
     var dy      = 0
     while dy < clipped.height do
-      val y = clipped.y + dy
+      val y  = clipped.y + dy
       var dx = 0
       while dx < clipped.width do
         val cell = source.get(clipped.x + dx, y)

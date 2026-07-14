@@ -153,6 +153,13 @@ framework bridges user code with Scala 3 `inline`/`Mirror` instead of reflection
 3. DSL factory in `dsl/Element.scala` + export in `dsl.scala` (focusable elements get a `builtinKeyHandler`, mouse behavior via `builtinMouseHandler`).
 4. If interactive: an end-to-end `Pilot` test.
 
+## 🔖 Versioning
+
+Pre-1.0: minor versions (`0.x`) may break APIs, patches never do. `tui-core` is the
+stability anchor — additive changes only since 0.2. Releases are git tags (`vX.Y.Z`);
+pushing a tag publishes all modules to Maven Central via the `Publish` workflow
+(binary-compatibility gates via MiMa arrive with the first Central release as baseline).
+
 ## 📜 License
 
 [MIT](LICENSE) — go build something glyphorious. ✨

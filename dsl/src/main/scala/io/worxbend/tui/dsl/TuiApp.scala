@@ -146,13 +146,13 @@ trait TuiApp:
       event match
         case Event.Key(key)     => handleKey(key, handle) || invalidated
         case Event.Mouse(mouse) => handleMouse(mouse) || invalidated
-        case Event.Paste(text) =>
+        case Event.Paste(text)  =>
           val consumed = lastTree.exists(EventRouter.dispatchPaste(_, text))
           consumed || invalidated
-        case Event.FocusGained =>
+        case Event.FocusGained  =>
           onTerminalFocus(true)
           invalidated
-        case Event.FocusLost =>
+        case Event.FocusLost    =>
           onTerminalFocus(false)
           invalidated
         case Event.Resize(_)    => true

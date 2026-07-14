@@ -52,19 +52,19 @@ private[terminal] final class InputDecoder(read: Long => Int):
       val numbers   = params.split(';').toSeq.filter(_.nonEmpty).flatMap(_.toIntOption)
       val modifiers = numbers.drop(1).headOption.map(modifiersFromCode).getOrElse(KeyModifiers.None)
       finalByte match
-        case 'A' => Event.Key(KeyEvent(KeyCode.Up, modifiers))
-        case 'B' => Event.Key(KeyEvent(KeyCode.Down, modifiers))
-        case 'C' => Event.Key(KeyEvent(KeyCode.Right, modifiers))
-        case 'D' => Event.Key(KeyEvent(KeyCode.Left, modifiers))
-        case 'H' => Event.Key(KeyEvent(KeyCode.Home, modifiers))
-        case 'F' => Event.Key(KeyEvent(KeyCode.End, modifiers))
-        case 'Z' => Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Shift))
-        case 'I' => Event.FocusGained
-        case 'O' => Event.FocusLost
-        case 'u' => decodeKittyKey(numbers)
+        case 'A'                                            => Event.Key(KeyEvent(KeyCode.Up, modifiers))
+        case 'B'                                            => Event.Key(KeyEvent(KeyCode.Down, modifiers))
+        case 'C'                                            => Event.Key(KeyEvent(KeyCode.Right, modifiers))
+        case 'D'                                            => Event.Key(KeyEvent(KeyCode.Left, modifiers))
+        case 'H'                                            => Event.Key(KeyEvent(KeyCode.Home, modifiers))
+        case 'F'                                            => Event.Key(KeyEvent(KeyCode.End, modifiers))
+        case 'Z'                                            => Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Shift))
+        case 'I'                                            => Event.FocusGained
+        case 'O'                                            => Event.FocusLost
+        case 'u'                                            => decodeKittyKey(numbers)
         case '~' if numbers.headOption.contains(PasteStart) => decodePaste()
-        case '~' => decodeTilde(numbers)
-        case _   => key(KeyCode.Escape)
+        case '~'                                            => decodeTilde(numbers)
+        case _                                              => key(KeyCode.Escape)
 
   /** `CSI n ~` navigation/function keys; the modifier, when present, is the second parameter. */
   private def decodeTilde(numbers: Seq[Int]): Event =
@@ -87,12 +87,12 @@ private[terminal] final class InputDecoder(read: Long => Int):
   private def decodeKittyKey(numbers: Seq[Int]): Event =
     val modifiers = numbers.drop(1).headOption.map(modifiersFromCode).getOrElse(KeyModifiers.None)
     val code      = numbers.headOption match
-      case Some(27)  => KeyCode.Escape
-      case Some(13)  => KeyCode.Enter
-      case Some(9)   => KeyCode.Tab
-      case Some(127) => KeyCode.Backspace
+      case Some(27)                             => KeyCode.Escape
+      case Some(13)                             => KeyCode.Enter
+      case Some(9)                              => KeyCode.Tab
+      case Some(127)                            => KeyCode.Backspace
       case Some(cp) if cp >= 32 && cp <= 0xffff => KeyCode.Char(cp.toChar)
-      case _         => KeyCode.Escape
+      case _                                    => KeyCode.Escape
     Event.Key(KeyEvent(code, modifiers))
 
   /** Bracketed paste: everything between `CSI 200~` and `CSI 201~` is one paste payload. */
@@ -102,13 +102,19 @@ private[terminal] final class InputDecoder(read: Long => Int):
     while !done && content.length < PasteLimit do
       val c = read(PasteTimeoutMillis)
       if c < 0 then done = true
-      else if c == 0x1B then
+      else if c == 0x1b then
         // possible terminator: ESC [ 2 0 1 ~
-        val tail       = Array(read(EscapeTimeoutMillis), read(EscapeTimeoutMillis), read(EscapeTimeoutMillis), read(EscapeTimeoutMillis), read(EscapeTimeoutMillis))
+        val tail       = Array(
+          read(EscapeTimeoutMillis),
+          read(EscapeTimeoutMillis),
+          read(EscapeTimeoutMillis),
+          read(EscapeTimeoutMillis),
+          read(EscapeTimeoutMillis),
+        )
         val terminator = tail.sameElements(Array('['.toInt, '2'.toInt, '0'.toInt, '1'.toInt, '~'.toInt))
         if terminator then done = true
         else
-          content.append(0x1B.toChar)
+          content.append(0x1b.toChar)
           tail.filter(_ >= 0).foreach(t => content.append(t.toChar))
       else content.append(c.toChar)
     Event.Paste(content.result())

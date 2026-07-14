@@ -70,7 +70,7 @@ final class RenderThreadSpec extends AnyFunSuite:
     RenderThread.register(Thread.currentThread())
     try
       @volatile var otherOk = false
-      val other = Thread { () =>
+      val other             = Thread { () =>
         RenderThread.register(Thread.currentThread())
         try
           RenderThread.checkRenderThread() // both threads are render threads

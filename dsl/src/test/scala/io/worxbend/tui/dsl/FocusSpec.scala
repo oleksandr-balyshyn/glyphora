@@ -124,19 +124,19 @@ final class FocusSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("a focus key keeps focus on the same element when the tree changes shape"):
-    val backend  = HeadlessBackend(Size(30, 6))
-    val first    = TextInputState()
-    val second   = TextInputState()
-    val showTop  = io.worxbend.tui.runtime.Signal(false)
-    val app      = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(
+    val backend = HeadlessBackend(Size(30, 6))
+    val first   = TextInputState()
+    val second  = TextInputState()
+    val showTop = io.worxbend.tui.runtime.Signal(false)
+    val app     = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(
         binding("ctrl+o", "insert element above")(showTop.set(true)),
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element =
         val top = if showTop.get then Seq(input(first).key("first")) else Seq.empty
         column((top :+ input(second).key("second"))*)
-    val pilot    = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("a").waitForIdle()
     assert(second.value == "a") // 'second' is the only focusable, so it has focus
@@ -151,12 +151,12 @@ final class FocusSpec extends AnyFunSuite:
     val backend = HeadlessBackend(Size(20, 3))
     val agreed  = io.worxbend.tui.runtime.Signal(false)
     val app     = new TuiApp:
-      override def theme: Theme          = Theme.HighContrast
-      override def bindings: KeyBindings = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      override def theme: Theme              = Theme.HighContrast
+      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = checkbox("agree", agreed)
     val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
-    val cell = pilot.backend.lastDrawn.map(_.get(0, 0)).getOrElse(fail("no frame"))
+    val cell    = pilot.backend.lastDrawn.map(_.get(0, 0)).getOrElse(fail("no frame"))
     // HighContrast focus = reverse + bold: proves the theme's focus style is applied, not a hardcoded reverse
     assert(cell.style.modifiers.has(io.worxbend.tui.core.Modifiers.Reverse))
     assert(cell.style.modifiers.has(io.worxbend.tui.core.Modifiers.Bold))

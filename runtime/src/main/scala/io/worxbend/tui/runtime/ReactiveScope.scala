@@ -4,14 +4,13 @@ package io.worxbend.tui.runtime
   * whoever owns the scope learns what was read and can subscribe to changes. Reads that should not subscribe anything
   * use `peek` instead — or [[ReactiveScope.untracked]] when an API demands a scope.
   */
-/** A tracking scope for a repeatedly re-evaluated computation (an app's `view`): reads subscribe
-  * `onInvalidate`, and [[beginGeneration]] — called before each re-evaluation — unsubscribes from values that
-  * stopped being read, so signals owned by closed screens or discarded branches do not accumulate stale
-  * subscriptions.
+/** A tracking scope for a repeatedly re-evaluated computation (an app's `view`): reads subscribe `onInvalidate`, and
+  * [[beginGeneration]] — called before each re-evaluation — unsubscribes from values that stopped being read, so
+  * signals owned by closed screens or discarded branches do not accumulate stale subscriptions.
   */
 final class GenerationalScope private[runtime] (onInvalidate: () => Unit) extends ReactiveScope:
 
-  private val subscriber: Subscriber                          = () => onInvalidate()
+  private val subscriber: Subscriber                               = () => onInvalidate()
   private var previous: scala.collection.mutable.Set[Subscribable] = scala.collection.mutable.Set.empty
   private var current: scala.collection.mutable.Set[Subscribable]  = scala.collection.mutable.Set.empty
 
@@ -41,8 +40,8 @@ object ReactiveScope:
   /** Reads through this scope subscribe nothing — equivalent to `peek`, for tests and non-reactive contexts. */
   val untracked: ReactiveScope = _ => ()
 
-  /** An [[onInvalidation]] scope that also prunes subscriptions not renewed each generation — the right scope
-    * for a render loop's repeatedly evaluated view.
+  /** An [[onInvalidation]] scope that also prunes subscriptions not renewed each generation — the right scope for a
+    * render loop's repeatedly evaluated view.
     */
   def generational(onInvalidate: () => Unit): GenerationalScope =
     GenerationalScope(onInvalidate)

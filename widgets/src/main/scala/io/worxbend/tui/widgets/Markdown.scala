@@ -18,10 +18,9 @@ final case class MarkdownTheme(
 /** Renders a pragmatic Markdown subset: `#`/`##`/`###`+ headings, `-`/`*` bullets, `1.` numbered items, `>`
   * blockquotes, fenced code blocks, and inline `**strong**` / `*emphasis*` / `` `code` ``.
   *
-  * Inline `[label](url)` links render underlined with an OSC 8 target. Deliberately excluded: images, tables,
-  * nested lists, and syntax highlighting inside code fences — this is a
-  * document *viewer* for help screens and READMEs, not a rendering-complete engine. Prose wraps at the area width
-  * (cluster-safe); code blocks render verbatim.
+  * Inline `[label](url)` links render underlined with an OSC 8 target. Deliberately excluded: images, tables, nested
+  * lists, and syntax highlighting inside code fences — this is a document *viewer* for help screens and READMEs, not a
+  * rendering-complete engine. Prose wraps at the area width (cluster-safe); code blocks render verbatim.
   */
 final case class Markdown(
     source: String,
@@ -98,10 +97,12 @@ private[widgets] object MarkdownParser:
   /** A styled run starting exactly at `index`, with how many chars it consumed, or `None`. */
   private def styledRun(text: String, index: Int, theme: MarkdownTheme): Option[(Span, Int)] =
     linkRun(text, index, theme)
-      .orElse(delimited(text, index, "**")
-      .map((content, consumed) => (Span(content, theme.strong), consumed))
-      .orElse(delimited(text, index, "*").map((content, consumed) => (Span(content, theme.emphasis), consumed)))
-      .orElse(delimited(text, index, "`").map((content, consumed) => (Span(content, theme.code), consumed))))
+      .orElse(
+        delimited(text, index, "**")
+          .map((content, consumed) => (Span(content, theme.strong), consumed))
+          .orElse(delimited(text, index, "*").map((content, consumed) => (Span(content, theme.emphasis), consumed)))
+          .orElse(delimited(text, index, "`").map((content, consumed) => (Span(content, theme.code), consumed)))
+      )
 
   /** `[label](url)`: the label renders link-styled with the OSC 8 target attached. */
   private def linkRun(text: String, index: Int, theme: MarkdownTheme): Option[(Span, Int)] =

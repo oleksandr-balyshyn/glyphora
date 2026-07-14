@@ -22,7 +22,7 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
   private var mouseCaptureActive                                     = false
   private var cursorHidden                                           = false
   private val pendingResize                                          = AtomicReference[Option[Size]](None)
-  private val colorDepth = ColorDepth.detect()
+  private val colorDepth                                             = ColorDepth.detect()
   private val decoder = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
 
   terminal.handle(

@@ -79,3 +79,8 @@ final class CharWidthSpec extends AnyFunSuite:
   test("isWideCodePoint rejects ASCII and halfwidth forms"):
     assert(!CharWidth.isWideCodePoint('a'.toInt))
     assert(!CharWidth.isWideCodePoint(0xff61)) // halfwidth ideographic full stop
+
+  test("a regional indicator with a combining mark is not a flag (regression from property testing)"):
+    val loneRiWithMark = "🇺" + "́"
+    assert(CharWidth.of(loneRiWithMark) == 1)
+    assert(CharWidth.of("🇺" + "́" + "🇦") == CharWidth.of("🇺" + "́") + CharWidth.of("🇦"))

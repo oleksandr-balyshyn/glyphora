@@ -101,8 +101,8 @@ extension (element: Element)
   def focusable: Element =
     element.withProps(element.props.copy(focusable = true))
 
-  /** A stable focus identity: focus follows this key across renders even when the tree changes shape
-    * (without a key, focus is positional and can jump when elements appear or disappear).
+  /** A stable focus identity: focus follows this key across renders even when the tree changes shape (without a key,
+    * focus is positional and can jump when elements appear or disappear).
     */
   def key(name: String): Element =
     element.withProps(element.props.copy(focusKey = Some(name)))

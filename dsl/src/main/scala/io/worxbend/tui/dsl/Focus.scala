@@ -13,7 +13,7 @@ private[dsl] final class FocusTracker:
   var focusedIndex: Int          = 0
   var focusableCount: Int        = 0
   var focusedKey: Option[String] = None
-  private val areas       = mutable.Map[Int, Rect]()
+  private val areas              = mutable.Map[Int, Rect]()
 
   def record(index: Int, area: Rect): Unit =
     areas(index) = area
@@ -54,8 +54,8 @@ private[dsl] object FocusPass:
     val own = if element.props.focusable then 1 else 0
     own + element.children.map(countFocusables).sum
 
-  /** The focus keys of every focusable in depth-first order (`None` for unkeyed ones) — what lets focus
-    * follow an element across renders when the tree changes shape.
+  /** The focus keys of every focusable in depth-first order (`None` for unkeyed ones) — what lets focus follow an
+    * element across renders when the tree changes shape.
     */
   def focusKeys(element: Element): Vector[Option[String]] =
     val own = if element.props.focusable then Vector(element.props.focusKey) else Vector.empty
@@ -70,7 +70,7 @@ private[dsl] object FocusPass:
     def transform(element: Element): Element =
       val current =
         if element.props.focusable then
-          val index = counter
+          val index  = counter
           counter += 1
           val marked =
             if index == tracker.focusedIndex then

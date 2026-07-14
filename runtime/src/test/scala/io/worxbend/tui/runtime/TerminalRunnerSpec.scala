@@ -133,10 +133,10 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("work queued via runLater triggers a redraw without any input event"):
-    val backend = HeadlessBackend(Size(20, 2))
+    val backend           = HeadlessBackend(Size(20, 2))
     @volatile var message = "before"
     @volatile var dirty   = false
-    val pilot = Pilot.start(backend) {
+    val pilot             = Pilot.start(backend) {
       val _ = TerminalRunner(backend, redrawRequested = () => dirty).run(
         quitOnQ,
         frame =>
@@ -153,7 +153,7 @@ final class TerminalRunnerSpec extends AnyFunSuite:
       message = "after"
       dirty = true
     }
-    val deadline = System.nanoTime() + scala.concurrent.duration.DurationInt(3).seconds.toNanos
+    val deadline          = System.nanoTime() + scala.concurrent.duration.DurationInt(3).seconds.toNanos
     while !pilot.screenLines.headOption.exists(_.startsWith("after")) && System.nanoTime() < deadline do
       Thread.sleep(20)
     assert(pilot.screenLines.head.startsWith("after"))

@@ -7,14 +7,14 @@ private[terminal] object AnsiSequences:
 
   private val Esc = "\u001b"
 
-  val EnterAlternateScreen: String = s"$Esc[?1049h"
-  val LeaveAlternateScreen: String = s"$Esc[?1049l"
-  val ClearScreen: String          = s"$Esc[2J"
-  val HideCursor: String           = s"$Esc[?25l"
-  val ShowCursor: String           = s"$Esc[?25h"
-  val EnableMouseCapture: String   = s"$Esc[?1000h$Esc[?1002h$Esc[?1006h"
-  val DisableMouseCapture: String  = s"$Esc[?1006l$Esc[?1002l$Esc[?1000l"
-  val ResetStyle: String           = s"$Esc[0m"
+  val EnterAlternateScreen: String  = s"$Esc[?1049h"
+  val LeaveAlternateScreen: String  = s"$Esc[?1049l"
+  val ClearScreen: String           = s"$Esc[2J"
+  val HideCursor: String            = s"$Esc[?25l"
+  val ShowCursor: String            = s"$Esc[?25h"
+  val EnableMouseCapture: String    = s"$Esc[?1000h$Esc[?1002h$Esc[?1006h"
+  val DisableMouseCapture: String   = s"$Esc[?1006l$Esc[?1002l$Esc[?1000l"
+  val ResetStyle: String            = s"$Esc[0m"
   val EnableBracketedPaste: String  = s"$Esc[?2004h"
   val DisableBracketedPaste: String = s"$Esc[?2004l"
   val EnableFocusReporting: String  = s"$Esc[?1004h"
@@ -22,13 +22,13 @@ private[terminal] object AnsiSequences:
   val BeginSynchronized: String     = s"$Esc[?2026h"
   val EndSynchronized: String       = s"$Esc[?2026l"
 
-  /** Kitty keyboard protocol, progressive enhancement flag 1 (disambiguate escape codes): a lone Esc arrives
-    * as `CSI 27 u` instead of a bare ESC byte, removing the read-timeout heuristic on terminals that support
-    * it. Unsupported terminals ignore the sequence and keep sending legacy encoding.
+  /** Kitty keyboard protocol, progressive enhancement flag 1 (disambiguate escape codes): a lone Esc arrives as
+    * `CSI 27 u` instead of a bare ESC byte, removing the read-timeout heuristic on terminals that support it.
+    * Unsupported terminals ignore the sequence and keep sending legacy encoding.
     */
   val PushKittyKeyboard: String = s"$Esc[>1u"
   val PopKittyKeyboard: String  = s"$Esc[<u"
-  val LinkClose: String            = s"$Esc]8;;$Esc\\"
+  val LinkClose: String         = s"$Esc]8;;$Esc\\"
 
   /** OSC 8 hyperlink opener; pair every open with [[LinkClose]]. */
   def linkOpen(url: String): String = s"$Esc]8;;$url$Esc\\"

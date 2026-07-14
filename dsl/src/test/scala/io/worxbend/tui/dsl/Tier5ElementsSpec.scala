@@ -52,17 +52,17 @@ final class Tier5ElementsSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("a paste lands whole in the focused textArea and folds to one line in an input"):
-    val backend   = HeadlessBackend(Size(30, 6))
-    val inputSt   = io.worxbend.tui.widgets.TextInputState()
-    val editorSt  = TextAreaState()
-    val app       = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(binding("ctrl+q", "quit")(quit()))
+    val backend  = HeadlessBackend(Size(30, 6))
+    val inputSt  = io.worxbend.tui.widgets.TextInputState()
+    val editorSt = TextAreaState()
+    val app      = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = column(input(inputSt), textArea(editorSt))
-    val pilot     = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot    = Pilot.start(backend) { val _ = app.runWith(backend) }
     pilot.waitForIdle()
     backend.postEvent(io.worxbend.tui.core.Event.Paste("one\ntwo"))
     pilot.waitForIdle()
-    assert(inputSt.value == "one two") // focused single-line input folds the newline
+    assert(inputSt.value == "one two")      // focused single-line input folds the newline
     pilot.pressKey(KeyCode.Tab).waitForIdle()
     backend.postEvent(io.worxbend.tui.core.Event.Paste("three\nfour"))
     pilot.waitForIdle()

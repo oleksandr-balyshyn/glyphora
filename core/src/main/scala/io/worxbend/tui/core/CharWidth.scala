@@ -86,10 +86,15 @@ object CharWidth:
     else if containsCodePoint(cluster, EmojiPresentationSelector) then 2
     else
       val base = cluster.codePointAt(0)
-      if isRegionalIndicator(base) && Character.codePointCount(cluster, 0, cluster.length) >= 2 then 2
+      // a flag is exactly two regional indicators; an RI followed by anything else (a combining mark) is not one
+      if isRegionalIndicator(base) && secondCodePointIsRegionalIndicator(cluster, base) then 2
       else if isZeroWidth(base) || Character.isISOControl(base) then 0
       else if isWideCodePoint(base) then 2
       else 1
+
+  private def secondCodePointIsRegionalIndicator(cluster: String, base: Int): Boolean =
+    val next = Character.charCount(base)
+    next < cluster.length && isRegionalIndicator(cluster.codePointAt(next))
 
   private def isClusterContinuation(cp: Int): Boolean =
     isZeroWidth(cp) || isEmojiModifier(cp)
