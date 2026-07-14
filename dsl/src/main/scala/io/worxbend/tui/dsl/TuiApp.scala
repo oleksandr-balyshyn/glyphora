@@ -162,12 +162,16 @@ trait TuiApp:
         if splashActive then renderSplash(frame)
         else
           val rawTree = effectiveView(using scope)
-          tracker.focusableCount = FocusPass.countFocusables(rawTree)
+          val keys    = FocusPass.focusKeys(rawTree)
+          tracker.focusableCount = keys.size
+          // a keyed element keeps focus across renders even when its position changed
+          tracker.focusedKey.map(k => keys.indexOf(Some(k))).filter(_ >= 0).foreach(tracker.focusedIndex = _)
           if tracker.focusableCount > 0 then
             tracker.focusedIndex = math.max(0, math.min(tracker.focusedIndex, tracker.focusableCount - 1))
           else tracker.focusedIndex = 0
+          tracker.focusedKey = keys.lift(tracker.focusedIndex).flatten
           tracker.clearAreas()
-          val tree    = FocusPass.decorate(rawTree, tracker)
+          val tree    = FocusPass.decorate(rawTree, tracker, theme.focus)
           lastTree = Some(tree)
           frame.renderWidget(tree.widget, frame.area)
           processEffects(frame),

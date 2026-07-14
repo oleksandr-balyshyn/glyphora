@@ -10,8 +10,9 @@ import scala.collection.mutable
   */
 private[dsl] final class FocusTracker:
 
-  var focusedIndex: Int   = 0
-  var focusableCount: Int = 0
+  var focusedIndex: Int          = 0
+  var focusableCount: Int        = 0
+  var focusedKey: Option[String] = None
   private val areas       = mutable.Map[Int, Rect]()
 
   def record(index: Int, area: Rect): Unit =
@@ -53,18 +54,28 @@ private[dsl] object FocusPass:
     val own = if element.props.focusable then 1 else 0
     own + element.children.map(countFocusables).sum
 
+  /** The focus keys of every focusable in depth-first order (`None` for unkeyed ones) — what lets focus
+    * follow an element across renders when the tree changes shape.
+    */
+  def focusKeys(element: Element): Vector[Option[String]] =
+    val own = if element.props.focusable then Vector(element.props.focusKey) else Vector.empty
+    own ++ element.children.flatMap(focusKeys)
+
   /** Rebuilds the tree with the focused element marked (`props.focused = true`) and every focusable wrapped in a
     * [[TrackedElement]] that records its rendered area. Indices are assigned in depth-first pre-order — the tab order.
     */
-  def decorate(root: Element, tracker: FocusTracker): Element =
+  def decorate(root: Element, tracker: FocusTracker, focusStyle: io.worxbend.tui.core.Style): Element =
     var counter = 0
 
     def transform(element: Element): Element =
       val current =
         if element.props.focusable then
-          val index  = counter
+          val index = counter
           counter += 1
-          val marked = element.withProps(element.props.copy(focused = index == tracker.focusedIndex))
+          val marked =
+            if index == tracker.focusedIndex then
+              element.withProps(element.props.copy(focused = true, focusStyle = focusStyle))
+            else element
           TrackedElement(marked, index, tracker)
         else element
       current.withChildren(current.children.map(transform))

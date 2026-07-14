@@ -1051,9 +1051,11 @@ private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEven
           true
         case _                                 => false
 
-/** Focused interactive elements render reversed so the user can see where keystrokes go. */
+/** Focused interactive elements render with the focus style (the theme's, once the focus pass ran) layered
+  * over their own, so the user can see where keystrokes go.
+  */
 private def focusStyled(props: ElementProps): Style =
-  if props.focused then props.style.reverse else props.style
+  if props.focused then props.style.patch(props.focusStyle) else props.style
 
 /** The factory set: one obvious home, re-exported at the package top level so `import io.worxbend.tui.dsl.*` brings
   * every factory in.

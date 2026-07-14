@@ -16,4 +16,6 @@ final case class ElementProps(
     onMouse: Option[MouseEvent => Boolean] = None,
     focusable: Boolean = false,
     focused: Boolean = false,
+    focusKey: Option[String] = None,
+    focusStyle: Style = Style.Default.reverse,
 )
