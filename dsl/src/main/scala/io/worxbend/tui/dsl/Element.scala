@@ -964,6 +964,9 @@ final case class TextAreaElement(
         case KeyEvent(KeyCode.Char('z'), modifiers) if modifiers.has(KeyModifiers.Ctrl)                   =>
           state.undo()
           true
+        case KeyEvent(KeyCode.Char('y'), modifiers) if modifiers.has(KeyModifiers.Ctrl) =>
+          state.redo()
+          true
         case KeyEvent(KeyCode.Char(c), modifiers) if modifiers.isEmpty || modifiers == KeyModifiers.Shift =>
           state.insert(c.toString)
           true
@@ -1040,6 +1043,12 @@ final case class DataTableElement(
           true
         case KeyCode.Up   =>
           state.selectPrevious(table.visibleRows(state).size)
+          true
+        case KeyCode.PageDown if state.pageSize.nonEmpty =>
+          state.nextPage(table.filteredRows(state).size)
+          true
+        case KeyCode.PageUp if state.pageSize.nonEmpty   =>
+          state.previousPage()
           true
         case _            => false
 

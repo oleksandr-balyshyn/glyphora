@@ -73,3 +73,22 @@ final class DataTableSpec extends AnyFunSuite:
     state.setFilter("zzz")
     val lines = trimmedLines(renderedWith(state))
     assert(lines == Seq("name     size", "", "", ""))
+
+  test("a page size windows the visible rows and paging clamps at the ends"):
+    val state = DataTableState()
+    state.pageSize = Some(2)
+    assert(table.visibleRows(state).map(_.head) == Seq("beta", "alpha"))
+    state.nextPage(table.filteredRows(state).size)
+    assert(state.page == 1)
+    assert(table.visibleRows(state).map(_.head) == Seq("gamma"))
+    state.nextPage(table.filteredRows(state).size) // clamped: already the last page
+    assert(state.page == 1)
+    state.previousPage()
+    assert(state.page == 0)
+
+  test("filtering shrinks the page domain and visibleRows re-clamps the page"):
+    val state = DataTableState()
+    state.pageSize = Some(2)
+    state.page = 1
+    state.setFilter("alph")
+    assert(table.visibleRows(state).map(_.head) == Seq("alpha")) // page snapped back into range

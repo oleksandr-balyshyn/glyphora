@@ -13,6 +13,23 @@ final class DataTableState:
   var filter: String          = ""
   var selected: Option[Int]   = None
   var offset: Int             = 0
+  var pageSize: Option[Int]   = None
+  var page: Int               = 0
+
+  /** Moves to the next/previous page (no-ops without a `pageSize`); `totalFiltered` bounds the last page. */
+  def nextPage(totalFiltered: Int): Unit =
+    pageSize.foreach { size =>
+      val lastPage = math.max(0, (totalFiltered - 1) / math.max(1, size))
+      page = math.min(page + 1, lastPage)
+      selected = None
+      offset = 0
+    }
+
+  def previousPage(): Unit =
+    if pageSize.nonEmpty then
+      page = math.max(0, page - 1)
+      selected = None
+      offset = 0
 
   /** Sorts by `column`; sorting the same column again flips the direction. */
   def sortBy(column: Int): Unit =
@@ -47,8 +64,8 @@ final case class DataTable(
     highlightStyle: Style = Style.Default.reverse,
 ) extends StatefulWidget[DataTableState]:
 
-  /** The rows the widget is currently showing, filtered and sorted per `state` — what a selection indexes. */
-  def visibleRows(state: DataTableState): Seq[Seq[String]] =
+  /** Every row surviving the filter, in sort order — the domain paging windows over. */
+  def filteredRows(state: DataTableState): Seq[Seq[String]] =
     val filtered =
       if state.filter.isEmpty then rows
       else
@@ -59,6 +76,18 @@ final case class DataTable(
       case Some(column) =>
         val sorted = filtered.sortWith((a, b) => cellLess(a.lift(column), b.lift(column)))
         if state.sortAscending then sorted else sorted.reverse
+
+  /** The rows the widget is currently showing: filtered, sorted, and windowed to the current page — what a
+    * selection indexes.
+    */
+  def visibleRows(state: DataTableState): Seq[Seq[String]] =
+    val all = filteredRows(state)
+    state.pageSize match
+      case None       => all
+      case Some(size) =>
+        val lastPage = math.max(0, (all.size - 1) / math.max(1, size))
+        state.page = math.min(state.page, lastPage)
+        all.slice(state.page * size, (state.page + 1) * size)
 
   def render(area: Rect, buffer: Buffer, state: DataTableState): Unit =
     if !area.isEmpty then

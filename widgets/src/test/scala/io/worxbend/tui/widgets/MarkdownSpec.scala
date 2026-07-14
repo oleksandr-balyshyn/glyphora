@@ -46,3 +46,18 @@ final class MarkdownSpec extends AnyFunSuite:
     val buffer = rendered(Markdown("hello wide 你好 world"), 8, 3)
     assert(trimmedLines(buffer).size == 3)
     assert(trimmedLines(buffer).head == "hello wi")
+
+  test("inline links render their label with the url attached"):
+    val buffer = rendered(Markdown("see [the docs](https://example.com) here"), 40, 1)
+    assert(trimmedLines(buffer).head == "see the docs here")
+    assert(buffer.get(4, 0).style.link.contains("https://example.com"))
+    assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Underline))
+    assert(buffer.get(0, 0).style.link.isEmpty)
+
+  test("a malformed link renders literally"):
+    val buffer = rendered(Markdown("just [brackets] here"), 30, 1)
+    assert(trimmedLines(buffer).head == "just [brackets] here")
+
+  test("heightOf measures wrapped markdown"):
+    assert(Markdown.heightOf("1234567890 1234567890", 30) == 1)
+    assert(Markdown.heightOf("1234567890 1234567890", 10) >= 2)

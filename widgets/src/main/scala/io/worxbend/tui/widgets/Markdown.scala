@@ -12,12 +12,14 @@ final case class MarkdownTheme(
     code: Style = Style.Default.withFg(Color.Yellow),
     quote: Style = Style.Default.dim.italic,
     bullet: Style = Style.Default.withFg(Color.Cyan),
+    link: Style = Style.Default.withFg(Color.Blue).underline,
 )
 
 /** Renders a pragmatic Markdown subset: `#`/`##`/`###`+ headings, `-`/`*` bullets, `1.` numbered items, `>`
   * blockquotes, fenced code blocks, and inline `**strong**` / `*emphasis*` / `` `code` ``.
   *
-  * Deliberately excluded: links, images, tables, nested lists, and syntax highlighting inside code fences — this is a
+  * Inline `[label](url)` links render underlined with an OSC 8 target. Deliberately excluded: images, tables,
+  * nested lists, and syntax highlighting inside code fences — this is a
   * document *viewer* for help screens and READMEs, not a rendering-complete engine. Prose wraps at the area width
   * (cluster-safe); code blocks render verbatim.
   */
@@ -95,10 +97,24 @@ private[widgets] object MarkdownParser:
 
   /** A styled run starting exactly at `index`, with how many chars it consumed, or `None`. */
   private def styledRun(text: String, index: Int, theme: MarkdownTheme): Option[(Span, Int)] =
-    delimited(text, index, "**")
+    linkRun(text, index, theme)
+      .orElse(delimited(text, index, "**")
       .map((content, consumed) => (Span(content, theme.strong), consumed))
       .orElse(delimited(text, index, "*").map((content, consumed) => (Span(content, theme.emphasis), consumed)))
-      .orElse(delimited(text, index, "`").map((content, consumed) => (Span(content, theme.code), consumed)))
+      .orElse(delimited(text, index, "`").map((content, consumed) => (Span(content, theme.code), consumed))))
+
+  /** `[label](url)`: the label renders link-styled with the OSC 8 target attached. */
+  private def linkRun(text: String, index: Int, theme: MarkdownTheme): Option[(Span, Int)] =
+    if text.charAt(index) != '[' then None
+    else
+      val close = text.indexOf("](", index + 1)
+      val end   = if close < 0 then -1 else text.indexOf(')', close + 2)
+      if close < 0 || end < 0 then None
+      else
+        val label = text.slice(index + 1, close)
+        val url   = text.slice(close + 2, end)
+        if label.isEmpty || url.isEmpty then None
+        else Some((Span(label, theme.link.withLink(url)), end + 1 - index))
 
   /** Non-empty text between `marker` at `index` and its next occurrence. */
   private def delimited(text: String, index: Int, marker: String): Option[(String, Int)] =

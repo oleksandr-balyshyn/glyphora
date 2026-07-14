@@ -19,6 +19,7 @@ final class TextAreaState(initial: String = ""):
   private[widgets] var scrollRow: Int       = 0
   private[widgets] var scrollColumn: Int    = 0
   private val undoStack                     = mutable.Stack[(Vector[Vector[String]], Int, Int)]()
+  private val redoStack                     = mutable.Stack[(Vector[Vector[String]], Int, Int)]()
 
   def value: String = lines.map(_.mkString).mkString("\n")
 
@@ -95,12 +96,23 @@ final class TextAreaState(initial: String = ""):
   /** Restores the text and cursor from before the most recent edit; no-op on an empty history. */
   def undo(): Unit =
     if undoStack.nonEmpty then
+      redoStack.push((lines, line, column))
       val (savedLines, savedLine, savedColumn) = undoStack.pop()
       lines = savedLines
       line = savedLine
       column = savedColumn
 
+  /** Re-applies the most recently undone edit; a fresh edit clears the redo history. */
+  def redo(): Unit =
+    if redoStack.nonEmpty then
+      undoStack.push((lines, line, column))
+      val (savedLines, savedLine, savedColumn) = redoStack.pop()
+      lines = savedLines
+      line = savedLine
+      column = savedColumn
+
   private def pushUndo(): Unit =
+    redoStack.clear()
     undoStack.push((lines, line, column))
     if undoStack.size > TextAreaState.UndoLimit then
       val kept = undoStack.take(TextAreaState.UndoLimit)

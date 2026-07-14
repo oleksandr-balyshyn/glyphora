@@ -101,3 +101,20 @@ final class TextAreaSpec extends AnyFunSuite:
     val buffer = renderedWith(state, width = 5, height = 1)
     assert(state.scrollColumn > 0)
     assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Reverse))
+
+  test("redo re-applies undone edits and a fresh edit clears the redo history"):
+    val state = TextAreaState("a")
+    state.insert("b")
+    state.insert("c")
+    assert(state.value == "abc")
+    state.undo()
+    state.undo()
+    assert(state.value == "a")
+    state.redo()
+    assert(state.value == "ab")
+    state.redo()
+    assert(state.value == "abc")
+    state.undo()
+    state.insert("X") // new edit invalidates the redo branch
+    state.redo()
+    assert(state.value == "abX")
