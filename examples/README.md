@@ -11,6 +11,7 @@ end-to-end tests in its `test` submodule.
 | `todo-list` | `./mill examples.todo-list.run` | `input` + `list`, Tab focus switching |
 | `dashboard` | `./mill examples.dashboard.run` | `gauge`/`sparkline`/`chart`, tick-rate animation |
 | `form-demo` | `./mill examples.form-demo.run` | `deriveForm` + `Field.mapValidated` validation |
+| `weather` | `./mill examples.weather.run` | live public HTTP API call bridged into `Signal` via `RenderThread.runOnRenderThread` |
 
 Native binaries: `./mill show examples.<name>.nativeImage` (GraalVM community 23.0.1,
 `--no-fallback`, no reflect-config needed).
