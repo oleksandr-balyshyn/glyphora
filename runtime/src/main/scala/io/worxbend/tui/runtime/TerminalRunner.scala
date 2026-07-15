@@ -27,10 +27,18 @@ final class TerminalRunner(
         Left(RunnerError.Backend(error))
       case Right(())   =>
         RenderThread.register(Thread.currentThread())
+        // a `try/finally` alone only protects against exceptions unwinding this thread; a signal that terminates the
+        // JVM directly (SIGTERM, SIGHUP) skips straight to shutdown hooks and would otherwise leave the terminal in
+        // raw mode / the alternate screen. `close()` is idempotent (each teardown step is guarded by its own flag),
+        // so the hook racing the normal-path close below is harmless either way.
+        val restoreOnShutdown = new Thread(() => backend.close(), "glyphora-terminal-restore")
+        Runtime.getRuntime.addShutdownHook(restoreOnShutdown)
         try loop(handleEvent, render).left.map(RunnerError.Backend(_))
         finally
           RenderThread.unregister()
           backend.close()
+          try Runtime.getRuntime.removeShutdownHook(restoreOnShutdown)
+          catch case _: IllegalStateException => () // the JVM is already shutting down; the hook will just no-op
 
   private def setup(): Either[BackendError, Unit] =
     for
