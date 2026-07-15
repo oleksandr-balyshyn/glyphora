@@ -1,0 +1,44 @@
+.heroBanner {
+  padding: 4rem 0 3rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.wordmark {
+  max-width: 560px;
+  width: 100%;
+  height: auto;
+  margin-bottom: 1rem;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.secondaryButton {
+  color: white;
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.features {
+  padding: 2rem 0 3rem;
+}
+
+.feature {
+  margin-bottom: 2rem;
+}
+
+.quickStart {
+  padding: 1rem 0 4rem;
+}

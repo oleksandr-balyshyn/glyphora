@@ -8,6 +8,7 @@
 animations, mouse support, and first-class GraalVM native-image binaries.
 
 [![CI](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml/badge.svg)](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml)
+[![Docs](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/docs.yml/badge.svg)](https://oleksandr-balyshyn.github.io/glyphora/)
 [![Release](https://img.shields.io/github/v/tag/oleksandr-balyshyn/glyphora?label=release&color=e879f9)](https://github.com/oleksandr-balyshyn/glyphora/tags)
 [![Scala](https://img.shields.io/badge/Scala-3.7-DC322F?logo=scala&logoColor=white)](https://scala-lang.org)
 [![Mill](https://img.shields.io/badge/build-Mill-1E90FF)](https://mill-build.org)
@@ -29,6 +30,8 @@ animations, mouse support, and first-class GraalVM native-image binaries.
  ctrl+t switch theme  │  ctrl+n show a toast  │  ctrl+o open modal  │
 ```
 *(a real frame from `examples/showcase`, captured headlessly — see [Testing](#-test-your-app-headlessly))*
+
+**📖 [oleksandr-balyshyn.github.io/glyphora](https://oleksandr-balyshyn.github.io/glyphora/)** — the full guide, cookbook, and per-module API reference.
 
 </div>
 
@@ -77,7 +80,8 @@ object Hello extends TuiApp:
 ```
 
 One import gives you every factory, the styling/layout extensions, and the core vocabulary.
-More recipes in the **[📖 cookbook](docs/COOKBOOK.md)**; complete apps in **[`examples/`](examples/README.md)**.
+More recipes in the **[📖 cookbook](docs/COOKBOOK.md)**; complete apps in **[`examples/`](examples/README.md)**;
+the full guide and API reference are on the **[docs site](https://oleksandr-balyshyn.github.io/glyphora/)**.
 
 ## 🧩 Widget catalog
 
@@ -109,6 +113,8 @@ More recipes in the **[📖 cookbook](docs/COOKBOOK.md)**; complete apps in **[`
 | [`dsl/`](dsl/README.md) | `TuiApp`, `Element` tree, focus/mouse routing, chrome presets, screens/toasts/palette |
 | [`macros/`](macros/README.md) | `deriveForm`/`bindAction` — compile-time only, keeps native-image reflect-config-free |
 | [`test-support/`](test-support/README.md) | `Pilot` driver + buffer assertions |
+
+Per-module Scaladoc for every published module is on the [docs site's API reference](https://oleksandr-balyshyn.github.io/glyphora/api/).
 
 **House rules** (CI-enforced): no `java.lang.reflect`/`Class.forName` anywhere; no
 `String.length`/`substring` for layout math outside `CharWidth`; warnings are errors;
