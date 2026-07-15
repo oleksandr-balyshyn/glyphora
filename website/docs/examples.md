@@ -15,6 +15,7 @@ compile targets. Each has headless `Pilot` end-to-end tests in its `test` submod
 | `todo-list` | `./mill examples.todo-list.run` | `input` + `list`, Tab focus switching |
 | `dashboard` | `./mill examples.dashboard.run` | `gauge`/`sparkline`/`chart`, tick-rate animation |
 | `form-demo` | `./mill examples.form-demo.run` | `deriveForm` + `Field.mapValidated` validation |
+| `weather` | `./mill examples.weather.run` | live public HTTP API call bridged into `Signal` via `RenderThread.runOnRenderThread` |
 | `showcase` | `./mill examples.showcase.run` | full app chrome: scaffold, themes, palette, toasts, modals |
 
 Native binaries: `./mill show examples.<name>.nativeImage` (GraalVM community 23.0.1,
