@@ -1,0 +1,42 @@
+<svg width="560" height="200" viewBox="0 0 560 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="glyphora">
+  <defs>
+    <linearGradient id="glyph" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="55%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#e879f9"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#164e63"/>
+      <stop offset="100%" stop-color="#3b0764"/>
+    </linearGradient>
+  </defs>
+
+  <!-- terminal window -->
+  <rect x="8" y="8" width="544" height="184" rx="16" fill="#0b1120" stroke="url(#edge)" stroke-width="2"/>
+  <rect x="8" y="8" width="544" height="40" rx="16" fill="#111a2e"/>
+  <rect x="8" y="32" width="544" height="16" fill="#111a2e"/>
+
+  <!-- traffic lights -->
+  <circle cx="34" cy="28" r="7" fill="#f87171"/>
+  <circle cx="58" cy="28" r="7" fill="#fbbf24"/>
+  <circle cx="82" cy="28" r="7" fill="#34d399"/>
+  <text x="276" y="33" text-anchor="middle" font-family="ui-monospace, 'JetBrains Mono', Menlo, monospace"
+        font-size="13" fill="#475569">~/glyphora — tui</text>
+
+  <!-- prompt + wordmark -->
+  <text x="44" y="118" font-family="ui-monospace, 'JetBrains Mono', Menlo, monospace"
+        font-size="46" font-weight="700" fill="#34d399">❯</text>
+  <text x="84" y="118" font-family="ui-monospace, 'JetBrains Mono', Menlo, monospace"
+        font-size="46" font-weight="700" fill="url(#glyph)" letter-spacing="2">glyphora</text>
+  <rect x="332" y="84" width="22" height="40" fill="#22d3ee">
+    <animate attributeName="opacity" values="1;1;0;0;1" dur="1.6s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- tagline -->
+  <text x="44" y="156" font-family="ui-monospace, 'JetBrains Mono', Menlo, monospace"
+        font-size="15" fill="#64748b">terminal UIs in Scala 3 — signals · widgets · effects · native-image</text>
+
+  <!-- decorative sparkline -->
+  <text x="44" y="180" font-family="ui-monospace, 'JetBrains Mono', Menlo, monospace"
+        font-size="14" fill="#334155">▁▂▄▆█▆▄▂▁▂▄▆█▆▄▂▁▂▄▆█▆▄▂▁▂▄▆█▆▄▂▁▂▄▆█</text>
+</svg>

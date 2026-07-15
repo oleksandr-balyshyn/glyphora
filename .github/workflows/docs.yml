@@ -1,0 +1,82 @@
+# Builds the Docusaurus guide + per-module Scaladoc API reference and deploys the
+# combined site to GitHub Pages (https://<org>.github.io/glyphora/).
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - "core/**"
+      - "terminal/**"
+      - "widgets/**"
+      - "runtime/**"
+      - "dsl/**"
+      - "macros/**"
+      - "build.mill"
+      - "**/package.mill"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/mill
+            ~/.cache/coursier
+          key: mill-docs-${{ runner.os }}-${{ hashFiles('.mill-version', 'build.mill', '**/package.mill') }}
+          restore-keys: mill-docs-${{ runner.os }}-
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Build Docusaurus site
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+
+      - name: Generate Scaladoc for every published module
+        run: |
+          set -euo pipefail
+          for m in core terminal widgets runtime dsl macros; do
+            jar=$(./mill show "${m}.docJar" | tail -1 | sed -E 's/^"ref:v0:[^:]+:(.*)"$/\1/')
+            mkdir -p "website/build/api/${m}"
+            unzip -oq "$jar" -d "website/build/api/${m}"
+          done
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
