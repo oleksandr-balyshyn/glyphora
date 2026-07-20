@@ -4,6 +4,10 @@ title: Introduction
 
 # glyphora
 
+<p align="center">
+  <img src="/glyphora/banner.svg" alt="glyphora — terminal interfaces for Scala 3" width="100%" />
+</p>
+
 **Build expressive terminal UIs in Scala 3** — a signals-driven widget toolkit with app
 chrome, animations, mouse support, and first-class GraalVM native-image binaries.
 

@@ -43,6 +43,11 @@ function wikiFileName(id, title) {
 
 function rewriteForWiki(markdown, pages) {
   let result = markdown.replace(
+    /src="\/glyphora\/banner\.svg"/g,
+    `src="https://raw.githubusercontent.com/oleksandr-balyshyn/glyphora/main/docs/assets/banner.svg"`,
+  );
+
+  result = result.replace(
     /\]\(pathname:\/\/\/api(\/[^)]*)?\)/g,
     (_, path = '/') => `](${pagesUrl}/api${path})`,
   );

@@ -13,6 +13,9 @@ const config = {
   organizationName: 'oleksandr-balyshyn',
   projectName: 'glyphora',
 
+  // Serve the same brand assets used by README and the generated GitHub Wiki.
+  staticDirectories: ['static', '../docs/assets'],
+
   onBrokenLinks: 'throw',
   markdown: {
     mermaid: true,

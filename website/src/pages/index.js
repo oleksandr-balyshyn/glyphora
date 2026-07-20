@@ -67,11 +67,15 @@ const features = [
 
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
-  const wordmark = useBaseUrl('img/wordmark.svg');
+  const banner = useBaseUrl('banner.svg');
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
-        <img src={wordmark} alt="glyphora" className={styles.wordmark} />
+        <img
+          src={banner}
+          alt="glyphora — terminal interfaces for Scala 3"
+          className={styles.wordmark}
+        />
         <p className="hero__subtitle">{siteConfig.tagline}</p>
         <div className={styles.buttons}>
           <Link className="button button--secondary button--lg" to="/getting-started">
