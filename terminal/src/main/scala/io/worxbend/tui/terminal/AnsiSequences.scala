@@ -54,8 +54,10 @@ private[terminal] object AnsiSequences:
       style.fg.foreach(color => codes += foregroundCode(ColorDepth.downsample(color, depth)))
       style.bg.foreach(color => codes += backgroundCode(ColorDepth.downsample(color, depth)))
     modifierCodes(style.modifiers).foreach(code => codes += code)
+    // the styled-underline selector is a text attribute (kept under NoColor); the underline color is a color (dropped)
     underlineStyleCode(style.underlineStyle).foreach(code => codes += code)
-    style.underlineColor.foreach(color => codes += underlineColorCode(ColorDepth.downsample(color, depth)))
+    if depth != ColorDepth.NoColor then
+      style.underlineColor.foreach(color => codes += underlineColorCode(ColorDepth.downsample(color, depth)))
     codes.result().mkString(s"$Esc[", ";", "m")
 
   /** SGR 4:n styled-underline selectors; `None`/`Straight` defer to the plain `4` from [[modifierCodes]]. */
