@@ -9,7 +9,12 @@ package io.worxbend.tui.core
   * are truncated (possibly to zero width) rather than failing — consistent with the library-wide silent-clipping
   * philosophy.
   */
-final case class Layout(direction: Direction, constraints: Seq[Constraint], spacing: Int = 0):
+final case class Layout(
+    direction: Direction,
+    constraints: Seq[Constraint],
+    spacing: Int = 0,
+    flex: Flex = Flex.Start,
+):
 
   def split(area: Rect): Seq[Rect] =
     if constraints.isEmpty then Seq.empty
@@ -19,7 +24,7 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
         case Direction.Vertical   => area.height
       val available = math.max(0, total - spacing * (constraints.size - 1))
       val sizes     = solve(available)
-      positioned(area, sizes)
+      positioned(area, sizes, total)
 
   private def solve(available: Int): IndexedSeq[Int] =
     val fixed    = constraints.map(fixedDemand(_, available)).toArray
@@ -82,19 +87,59 @@ final case class Layout(direction: Direction, constraints: Seq[Constraint], spac
       }
       weights.indices.map(i => math.min(shares(i), limits(i)))
 
-  private def positioned(area: Rect, sizes: IndexedSeq[Int]): Seq[Rect] =
+  private def positioned(area: Rect, sizes: IndexedSeq[Int], total: Int): Seq[Rect] =
     val (axisStart, axisEnd) = direction match
       case Direction.Horizontal => (area.x, area.right)
       case Direction.Vertical   => (area.y, area.bottom)
-    var offset               = axisStart
-    sizes.map { size =>
+    val (leading, gaps)      = flexOffsets(sizes, total)
+    var offset               = axisStart + leading
+    sizes.indices.map { i =>
+      val size        = sizes(i)
       val start       = math.min(offset, axisEnd)
       val clampedSize = math.max(0, math.min(size, axisEnd - start))
-      offset = start + size + spacing
+      val gapAfter    = if i < sizes.size - 1 then gaps(i) else 0
+      offset = start + size + gapAfter
       direction match
         case Direction.Horizontal => Rect(start, area.y, clampedSize, area.height)
         case Direction.Vertical   => Rect(area.x, start, area.width, clampedSize)
     }
+
+  /** The leading offset and the inter-segment gaps (each already including the base `spacing`) that realize the current
+    * [[flex]] mode, given the solved `sizes` and the axis `total`. `free` is the space the segments and base spacing
+    * leave over — zero when a `Fill`/`Min` constraint already consumed everything, which makes every mode collapse to
+    * `Start`.
+    */
+  private def flexOffsets(sizes: IndexedSeq[Int], total: Int): (Int, IndexedSeq[Int]) =
+    val n        = sizes.size
+    val baseGaps = spacing * math.max(0, n - 1)
+    val free     = math.max(0, total - sizes.sum - baseGaps)
+    val betweens = IndexedSeq.fill(math.max(0, n - 1))(spacing)
+    if free == 0 then (0, betweens)
+    else
+      flex match
+        case Flex.Start        => (0, betweens)
+        case Flex.End          => (free, betweens)
+        case Flex.Center       => (free / 2, betweens)
+        case Flex.SpaceBetween =>
+          if n <= 1 then (0, betweens)
+          else (0, addSpacing(evenSplit(free, n - 1)))
+        case Flex.SpaceEvenly  =>
+          val slots = evenSplit(free, n + 1)
+          (slots(0), addSpacing((1 until n).map(i => slots(i)).toIndexedSeq))
+        case Flex.SpaceAround  =>
+          val halves = evenSplit(free, 2 * n)
+          val gaps   = (1 until n).map(i => halves(2 * i - 1) + halves(2 * i)).toIndexedSeq
+          (halves(0), addSpacing(gaps))
+
+  /** Splits `total` cells into `parts` as evenly as possible, giving the remainder to the earliest slots. */
+  private def evenSplit(total: Int, parts: Int): IndexedSeq[Int] =
+    if parts <= 0 then IndexedSeq.empty
+    else
+      val base = total / parts
+      val rem  = total % parts
+      (0 until parts).map(i => if i < rem then base + 1 else base).toIndexedSeq
+
+  private def addSpacing(gaps: IndexedSeq[Int]): IndexedSeq[Int] = gaps.map(_ + spacing)
 
 object Layout:
   /** Constraint shorthand: a plain `Int` means `Length(cells)`, a `Double` means a fraction of the whole (`0.5` →

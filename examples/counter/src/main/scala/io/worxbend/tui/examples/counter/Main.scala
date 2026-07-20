@@ -14,18 +14,11 @@ final class CounterApp extends TuiApp:
       text(s"Count: ${count.get}").bold.color(Color.Green),
       spacer,
       text("'+' increment · '-' decrement · 'q' quit").dim,
-    ).rounded.onKeyEvent {
-      case KeyEvent(KeyCode.Char('+'), _) =>
-        count.update(_ + 1)
-        true
-      case KeyEvent(KeyCode.Char('-'), _) =>
-        count.update(_ - 1)
-        true
-      case KeyEvent(KeyCode.Char('q'), _) =>
-        quit()
-        true
-      case _                              => false
-    }
+    ).rounded
+      // named keys + `onKey` hide the `KeyEvent`/`true`/`false` ceremony; the calls compose
+      .onKey(Key.char('+')) { count.update(_ + 1) }
+      .onKey(Key.char('-')) { count.update(_ - 1) }
+      .onKey(Key.char('q')) { quit() }
 
 object Main:
   def main(args: Array[String]): Unit =

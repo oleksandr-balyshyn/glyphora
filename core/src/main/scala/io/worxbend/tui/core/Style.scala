@@ -25,6 +25,23 @@ final case class Style(
   def hidden: Style                = copy(modifiers = modifiers | Modifiers.Hidden)
   def crossedOut: Style            = copy(modifiers = modifiers | Modifiers.CrossedOut)
 
+  /** Clears specific text-attribute flags (ratatui's `sub_modifier`) — e.g. `style.without(Modifiers.Bold)` un-bolds a
+    * style inherited from a theme or parent.
+    */
+  def without(flags: Modifiers): Style = copy(modifiers = modifiers.without(flags))
+
+  def notBold: Style      = without(Modifiers.Bold)
+  def notDim: Style       = without(Modifiers.Dim)
+  def notItalic: Style    = without(Modifiers.Italic)
+  def notUnderline: Style = without(Modifiers.Underline)
+  def notReverse: Style   = without(Modifiers.Reverse)
+
+  /** Drops the foreground color, restoring the terminal default. */
+  def withoutFg: Style = copy(fg = None)
+
+  /** Drops the background color, restoring the terminal default. */
+  def withoutBg: Style = copy(bg = None)
+
   /** This style with `other`'s explicit choices layered on top: `other`'s colors win where set, modifiers union. */
   def patch(other: Style): Style =
     Style(

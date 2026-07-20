@@ -22,3 +22,6 @@ object Modifiers:
     def |(other: Modifiers): Modifiers = (m: Int) | (other: Int)
     def has(flag: Modifiers): Boolean  = ((m: Int) & (flag: Int)) != 0
     def isEmpty: Boolean               = (m: Int) == 0
+
+    /** This bitset with every flag in `flags` cleared (ratatui's `sub_modifier`). */
+    def without(flags: Modifiers): Modifiers = (m: Int) & ~(flags: Int)

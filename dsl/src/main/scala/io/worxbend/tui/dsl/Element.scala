@@ -4,6 +4,7 @@ import io.worxbend.tui.core.{
   CharWidth,
   Constraint,
   Direction,
+  Flex,
   KeyCode,
   KeyEvent,
   KeyModifiers,
@@ -94,9 +95,10 @@ final case class PanelElement(
 final case class RowElement(
     override val children: Seq[Element],
     spacing: Int = 0,
+    flex: Flex = Flex.Start,
     props: ElementProps = ElementProps(),
 ) extends Element:
-  def widget: Widget = w.Row(children.map(_.layoutItem(Direction.Horizontal)), spacing)
+  def widget: Widget = w.Row(children.map(_.layoutItem(Direction.Horizontal)), spacing, flex)
   private[dsl] def withProps(props: ElementProps): RowElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): RowElement = copy(children = children)
   private[dsl] override def intrinsicHeight(width: Int): Option[Int]         =
@@ -106,9 +108,10 @@ final case class RowElement(
 final case class ColumnElement(
     override val children: Seq[Element],
     spacing: Int = 0,
+    flex: Flex = Flex.Start,
     props: ElementProps = ElementProps(),
 ) extends Element:
-  def widget: Widget = w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing)
+  def widget: Widget = w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing, flex)
   private[dsl] override def intrinsicHeight(width: Int): Option[Int]            =
     val heights = children.map(_.intrinsicHeight(width))
     if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + spacing * math.max(0, children.size - 1))

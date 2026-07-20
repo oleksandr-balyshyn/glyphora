@@ -36,6 +36,39 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
     if shrunkWidth == 0 || shrunkHeight == 0 then Rect(x + width / 2, y + height / 2, 0, 0)
     else Rect(x + margin, y + margin, shrunkWidth, shrunkHeight)
 
+  /** This rectangle shrunk by `horizontal` cells on the left/right and `vertical` on the top/bottom (ratatui's per-axis
+    * `Margin`); zero-sized on an axis the margin exhausts.
+    */
+  def inner(horizontal: Int, vertical: Int): Rect =
+    val shrunkWidth  = math.max(0, width - 2 * horizontal)
+    val shrunkHeight = math.max(0, height - 2 * vertical)
+    if shrunkWidth == 0 || shrunkHeight == 0 then Rect(x + width / 2, y + height / 2, 0, 0)
+    else Rect(x + horizontal, y + vertical, shrunkWidth, shrunkHeight)
+
+  /** Moves this rectangle by `dx`/`dy` without resizing it. */
+  def offset(dx: Int, dy: Int): Rect = copy(x = x + dx, y = y + dy)
+
+  /** A `width`×`height` rectangle centered inside this one, clamped so it never exceeds these bounds. */
+  def centered(w: Int, h: Int): Rect =
+    val cw = math.min(w, width)
+    val ch = math.min(h, height)
+    Rect(x + (width - cw) / 2, y + (height - ch) / 2, cw, ch)
+
+  /** True when the two rectangles share at least one cell. */
+  def intersects(other: Rect): Boolean =
+    x < other.right && other.x < right && y < other.bottom && other.y < bottom
+
+  /** The smallest rectangle covering both (their bounding box). */
+  def union(other: Rect): Rect =
+    if isEmpty then other
+    else if other.isEmpty then this
+    else
+      val left   = math.min(x, other.x)
+      val top    = math.min(y, other.y)
+      val right2 = math.max(right, other.right)
+      val bot2   = math.max(bottom, other.bottom)
+      Rect(left, top, right2 - left, bot2 - top)
+
 object Rect:
   val Zero: Rect = Rect(0, 0, 0, 0)
 
