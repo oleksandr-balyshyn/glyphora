@@ -13,6 +13,25 @@ final class ColorDepthSpec extends AnyFunSuite:
     assert(ColorDepth.detect(Map("TERM" -> "vt100")) == ColorDepth.Ansi16)
     assert(ColorDepth.detect(Map.empty) == ColorDepth.Ansi16)
 
+  test("NO_COLOR disables color regardless of terminal capability"):
+    assert(ColorDepth.detect(Map("NO_COLOR" -> "1", "COLORTERM" -> "truecolor")) == ColorDepth.NoColor)
+    assert(ColorDepth.detect(Map("NO_COLOR" -> "anything")) == ColorDepth.NoColor)
+
+  test("an empty NO_COLOR does not disable color (per the no-color.org convention)"):
+    assert(ColorDepth.detect(Map("NO_COLOR" -> "", "COLORTERM" -> "truecolor")) == ColorDepth.TrueColor)
+
+  test("CLICOLOR_FORCE overrides NO_COLOR"):
+    assert(
+      ColorDepth.detect(
+        Map("NO_COLOR" -> "1", "CLICOLOR_FORCE" -> "1", "COLORTERM" -> "truecolor")
+      ) == ColorDepth.TrueColor
+    )
+    assert(ColorDepth.detect(Map("NO_COLOR" -> "1", "CLICOLOR_FORCE" -> "0")) == ColorDepth.NoColor)
+
+  test("NoColor drops color codes from SGR but keeps text attributes"):
+    val style = Style.Default.withFg(Color.Rgb(255, 0, 0)).withBg(Color.Blue).bold.underline
+    assert(AnsiSequences.sgr(style, ColorDepth.NoColor) == "[0;1;4m")
+
   test("truecolor passes rgb through; 256 maps rgb into the palette"):
     val red = Color.Rgb(255, 0, 0)
     assert(ColorDepth.downsample(red, ColorDepth.TrueColor) == red)

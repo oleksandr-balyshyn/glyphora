@@ -2,25 +2,45 @@ package io.worxbend.tui.terminal
 
 import io.worxbend.tui.core.Color
 
-/** How many colors the terminal can actually show; RGB output is downsampled to fit. */
+/** How many colors the terminal can actually show; RGB output is downsampled to fit.
+  *
+  * [[NoColor]] is not a device capability but an explicit opt-out: when it is in effect the backend emits text
+  * attributes (bold, underline, …) but no foreground/background color at all. It is what honoring the `NO_COLOR`
+  * convention resolves to.
+  */
 enum ColorDepth:
-  case TrueColor, Ansi256, Ansi16
+  case TrueColor, Ansi256, Ansi16, NoColor
 
 object ColorDepth:
 
-  /** Conventional environment-based detection: `COLORTERM=truecolor|24bit` wins, a `256color` TERM falls back to the
-    * 256 palette, everything else to the classic 16.
+  /** Resolves the effective color depth from the environment.
+    *
+    * Precedence follows the widely-adopted conventions:
+    *   1. `NO_COLOR` set to any non-empty value disables color entirely (see https://no-color.org) — unless
+    *   2. `CLICOLOR_FORCE` is set to a non-zero value, which forces color on even when `NO_COLOR` asks for none or the
+    *      output is not a TTY.
+    *   3. Otherwise `COLORTERM=truecolor|24bit` wins, a `256color` `TERM` falls back to the 256 palette, and everything
+    *      else to the classic 16.
     */
   def detect(env: Map[String, String] = sys.env): ColorDepth =
+    val forced   = env.get("CLICOLOR_FORCE").exists(value => value.nonEmpty && value != "0")
+    val disabled = env.get("NO_COLOR").exists(_.nonEmpty)
+    if disabled && !forced then NoColor
+    else capability(env)
+
+  private def capability(env: Map[String, String]): ColorDepth =
     val colorterm = env.getOrElse("COLORTERM", "").toLowerCase
     if colorterm.contains("truecolor") || colorterm.contains("24bit") then TrueColor
     else if env.getOrElse("TERM", "").contains("256") then Ansi256
     else Ansi16
 
-  /** Reduces `color` to something `depth` can represent (identity for capable terminals). */
+  /** Reduces `color` to something `depth` can represent (identity for capable terminals). [[NoColor]] is handled by the
+    * SGR encoder dropping color codes, so this returns the color unchanged for it.
+    */
   def downsample(color: Color, depth: ColorDepth): Color =
     depth match
       case TrueColor => color
+      case NoColor   => color
       case Ansi256   =>
         color match
           case rgb: Color.Rgb => Color.Indexed(nearestIndexed(rgb))

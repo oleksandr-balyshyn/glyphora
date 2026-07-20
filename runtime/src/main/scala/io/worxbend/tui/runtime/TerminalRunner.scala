@@ -60,6 +60,8 @@ final class TerminalRunner(
     val handle = new RunnerHandle:
       def quit(): Unit                           = running = false
       def runOnRenderThread(body: => Unit): Unit = RenderThread.runOnRenderThread(body)
+      def copyToClipboard(text: String): Unit    =
+        backend.copyToClipboard(text).left.foreach(error => failure = Some(error))
 
     def redraw(): Unit =
       val drawn =

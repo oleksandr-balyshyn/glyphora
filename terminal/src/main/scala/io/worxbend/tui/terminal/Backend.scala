@@ -31,6 +31,16 @@ trait Backend:
   /** Blocks up to `timeout` for the next input event; `Right(None)` means the timeout elapsed quietly. */
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]]
 
+  /** Copies `text` to the system clipboard via the OSC 52 terminal sequence.
+    *
+    * Support is terminal-dependent (and often opt-in for security reasons); terminals that don't understand OSC 52
+    * ignore the sequence, so this is best-effort and reports success as long as the write itself succeeds. The default
+    * implementation is a no-op for backends without a real terminal.
+    */
+  def copyToClipboard(text: String): Either[BackendError, Unit] =
+    val _ = text
+    Right(())
+
   def close(): Unit
 
 enum BackendError:

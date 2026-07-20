@@ -25,10 +25,15 @@ trait Runner:
       render: Frame => Unit,
   ): Either[RunnerError, Unit]
 
-/** Handed to event handlers: request loop exit or marshal work onto the render thread. */
+/** Handed to event handlers: request loop exit, marshal work onto the render thread, or reach the backend for
+  * out-of-band terminal operations like clipboard access.
+  */
 trait RunnerHandle:
   def quit(): Unit
   def runOnRenderThread(body: => Unit): Unit
+
+  /** Copies `text` to the system clipboard (OSC 52). Best-effort; unsupported terminals ignore it. */
+  def copyToClipboard(text: String): Unit
 
 enum RunnerError:
   case Backend(error: BackendError)
