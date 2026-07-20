@@ -19,6 +19,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -31,14 +32,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cache/mill
@@ -46,11 +47,16 @@ jobs:
           key: mill-docs-${{ runner.os }}-${{ hashFiles('.mill-version', 'build.mill', '**/package.mill') }}
           restore-keys: mill-docs-${{ runner.os }}-
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: website/package-lock.json
+
+      # Validates that Pages is enabled and exposes the repository's Pages URL.
+      # Repository Settings → Pages → Source must be set to "GitHub Actions".
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
 
       - name: Build Docusaurus site
         working-directory: website
@@ -67,7 +73,7 @@ jobs:
             unzip -oq "$jar" -d "website/build/api/${m}"
           done
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: website/build
 
@@ -79,4 +85,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
