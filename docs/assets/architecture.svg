@@ -1,0 +1,17 @@
+<svg width="1000" height="340" viewBox="0 0 1000 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">glyphora architecture</title><desc id="desc">Data flows from the DSL through widgets and core to terminal output, while runtime signals drive rendering.</desc>
+  <defs><linearGradient id="g" x1="70" y1="40" x2="930" y2="300" gradientUnits="userSpaceOnUse"><stop stop-color="#22D3EE"/><stop offset=".5" stop-color="#818CF8"/><stop offset="1" stop-color="#E879F9"/></linearGradient><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#64748B"/></marker></defs>
+  <rect width="1000" height="340" rx="20" fill="#0B1120"/>
+  <g fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"><path d="M242 103H310"/><path d="M490 103H558"/><path d="M738 103H806"/><path d="M650 248V155"/><path d="M242 248H558"/></g>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+    <text x="70" y="50" fill="#64748B" font-size="14" letter-spacing="2">RENDER PIPELINE</text>
+    <g><rect x="62" y="69" width="180" height="68" rx="10" fill="#111A2E" stroke="#22D3EE"/><text x="152" y="98" text-anchor="middle" fill="#22D3EE" font-size="18" font-weight="700">tui-dsl</text><text x="152" y="120" text-anchor="middle" fill="#94A3B8" font-size="10">elements · focus · chrome</text></g>
+    <g><rect x="310" y="69" width="180" height="68" rx="10" fill="#111A2E" stroke="#818CF8"/><text x="400" y="98" text-anchor="middle" fill="#A5B4FC" font-size="18" font-weight="700">tui-widgets</text><text x="400" y="120" text-anchor="middle" fill="#94A3B8" font-size="10">render · layout · input</text></g>
+    <g><rect x="558" y="69" width="180" height="68" rx="10" fill="#111A2E" stroke="#E879F9"/><text x="648" y="98" text-anchor="middle" fill="#F0ABFC" font-size="18" font-weight="700">tui-core</text><text x="648" y="120" text-anchor="middle" fill="#94A3B8" font-size="10">buffer · cells · style</text></g>
+    <g><rect x="806" y="69" width="132" height="68" rx="10" fill="#111A2E" stroke="#34D399"/><text x="872" y="98" text-anchor="middle" fill="#6EE7B7" font-size="18" font-weight="700">terminal</text><text x="872" y="120" text-anchor="middle" fill="#94A3B8" font-size="12">diff → ANSI</text></g>
+    <text x="70" y="201" fill="#64748B" font-size="14" letter-spacing="2">REACTIVE ENGINE</text>
+    <g><rect x="62" y="216" width="180" height="68" rx="10" fill="#111A2E" stroke="#FBBF24"/><text x="152" y="245" text-anchor="middle" fill="#FCD34D" font-size="18" font-weight="700">Signal</text><text x="152" y="267" text-anchor="middle" fill="#94A3B8" font-size="12">tracked state changes</text></g>
+    <g><rect x="558" y="216" width="180" height="68" rx="10" fill="#111A2E" stroke="url(#g)"/><text x="648" y="245" text-anchor="middle" fill="#E2E8F0" font-size="18" font-weight="700">tui-runtime</text><text x="648" y="267" text-anchor="middle" fill="#94A3B8" font-size="10">loop · effects · scheduling</text></g>
+    <text x="500" y="319" text-anchor="middle" fill="#64748B" font-size="13">compile-time composition • backend-independent widgets • zero reflection</text>
+  </g>
+</svg>
