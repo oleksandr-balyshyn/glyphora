@@ -13,6 +13,7 @@ final case class MarkdownTheme(
     quote: Style = Style.Default.dim.italic,
     bullet: Style = Style.Default.withFg(Color.Cyan),
     link: Style = Style.Default.withFg(Color.Blue).underline,
+    syntax: SyntaxTheme = SyntaxTheme(),
 )
 
 /** Renders a pragmatic Markdown subset: `#`/`##`/`###`+ headings, `-`/`*` bullets, `1.` numbered items, `>`
@@ -39,13 +40,17 @@ object Markdown:
 private[widgets] object MarkdownParser:
 
   def parse(source: String, theme: MarkdownTheme): Text =
-    var inCodeFence = false
-    val lines       = source.split("\n", -1).toSeq.map { raw =>
+    var fenceLanguage: Option[Language] = None
+    val lines                           = source.split("\n", -1).toSeq.map { raw =>
       if raw.trim.startsWith("```") then
-        inCodeFence = !inCodeFence
+        fenceLanguage = if fenceLanguage.isDefined then None else Some(Language.of(raw.trim.drop(3)))
         Line(Seq.empty)
-      else if inCodeFence then Line.styled(raw, theme.code)
-      else blockLine(raw, theme)
+      else
+        fenceLanguage match
+          // an untagged (or unknown-language) fence renders verbatim, as before; a tagged one is highlighted
+          case Some(Language.Generic) => Line.styled(raw, theme.code)
+          case Some(language)         => SyntaxHighlighter.highlightLine(raw, language, theme.syntax)
+          case None                   => blockLine(raw, theme)
     }
     Text(lines)
 

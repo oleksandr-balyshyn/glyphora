@@ -35,10 +35,12 @@ export Element.{
   markdown,
   maskedInput,
   marquee,
+  menu,
   numberInput,
   paginator,
   panel,
   pieChart,
+  positioned,
   radioGroup,
   row,
   rule,
@@ -57,11 +59,13 @@ export Element.{
   text,
   textArea,
   toggle,
+  tooltip,
   tree,
   widget,
 }
 export io.worxbend.tui.core.{Color, Constraint, Flex, KeyCode, KeyEvent, KeyModifiers, MouseEvent, Style}
 export io.worxbend.tui.runtime.{Async, Cancelable, Computed, Easing, Effect, ReactiveScope, Signal, Tween}
+export io.worxbend.tui.widgets.{Language, MenuItem, MenuState, SyntaxHighlighter, SyntaxTheme}
 
 /** The shape of an app's `view` (and any sub-view helper): a computation, run under a tracking [[ReactiveScope]], that
   * produces the current [[Element]] tree. Reading a `Signal` inside it subscribes the next redraw. Mirrors terminus's
