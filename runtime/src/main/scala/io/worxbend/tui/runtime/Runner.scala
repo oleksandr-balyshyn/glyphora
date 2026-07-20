@@ -35,5 +35,13 @@ trait RunnerHandle:
   /** Copies `text` to the system clipboard (OSC 52). Best-effort; unsupported terminals ignore it. */
   def copyToClipboard(text: String): Unit
 
+  /** Hands the terminal to `body` (leaving the app's screen) and restores afterward — e.g. launch `$EDITOR`. Call it
+    * from an event handler (already on the render thread). Default: just runs `body`.
+    */
+  def suspend(body: => Unit): Unit = body
+
+  /** Prints `lines` into the terminal scrollback above the live UI (durable log output). Default: a no-op. */
+  def printAbove(lines: Seq[String]): Unit = ()
+
 enum RunnerError:
   case Backend(error: BackendError)

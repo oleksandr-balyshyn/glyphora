@@ -12,6 +12,13 @@ enum Color:
   case Rgb(r: Int, g: Int, b: Int)
   case Indexed(index: Int)
 
+/** A pair of colors picked by the terminal's background: `light` on a light terminal, `dark` on a dark one (Lip Gloss's
+  * `AdaptiveColor`). Resolve it against the theme or a detected background before styling — the render path only ever
+  * sees a concrete [[Color]].
+  */
+final case class AdaptiveColor(light: Color, dark: Color):
+  def resolve(darkBackground: Boolean): Color = if darkBackground then dark else light
+
 object Color:
 
   /** Builds an [[Rgb]] color, clamping each channel to `0..255`. */
@@ -54,6 +61,11 @@ object Color:
     */
   def blend(foreground: Color, background: Color, alpha: Double): Color =
     mix(background, foreground, alpha)
+
+  /** `steps` evenly-spaced colors from `from` to `to` inclusive (a 1-step gradient is just `from`). Builds on [[mix]]. */
+  def gradient(from: Color, to: Color, steps: Int): Seq[Color] =
+    if steps <= 1 then Seq(mix(from, to, 0))
+    else Seq.tabulate(steps)(i => mix(from, to, i.toDouble / (steps - 1)))
 
   /** RGB approximation for every color model — good enough for fades and capability downsampling, not for color
     * management. Named colors use common terminal palette values; indexed colors decode the xterm 256-color cube and

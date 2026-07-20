@@ -202,6 +202,18 @@ trait TuiApp:
   protected final def copyToClipboard(text: String): Unit =
     activeHandle.get().foreach(_.copyToClipboard(text))
 
+  /** Hands the terminal to `body` — leaving the app's alternate screen and raw mode — then restores the UI and forces a
+    * full repaint. The place to launch an external program like `$EDITOR` or a shell. Call from an event handler.
+    */
+  protected final def suspend(body: => Unit): Unit =
+    activeHandle.get().foreach(_.suspend(body))
+
+  /** Prints `lines` into the terminal scrollback above the live UI (durable after the app exits) — a `tea.Println`
+    * equivalent for surfacing occasional log output. Call from an event handler.
+    */
+  protected final def printAbove(lines: String*): Unit =
+    activeHandle.get().foreach(_.printAbove(lines))
+
   // ---- composite view: base -> screens -> palette -> toasts ----
 
   private def effectiveView(using scope: ReactiveScope): Element =

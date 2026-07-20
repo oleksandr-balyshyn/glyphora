@@ -41,6 +41,22 @@ trait Backend:
     val _ = text
     Right(())
 
+  /** Temporarily hands the real terminal back so `body` can own it — leave the alternate screen, drop raw mode and
+    * mouse capture, run `body` (e.g. launch `$EDITOR`), then restore the app's screen and force a full repaint. Must
+    * run on the render thread. The default just runs `body` without touching the terminal, so headless/basic backends
+    * stay correct.
+    */
+  def suspend[A](body: => A): Either[BackendError, A] =
+    Right(body)
+
+  /** Emits `lines` into the terminal's scrollback *above* the live UI (like Bubble Tea's `tea.Println` / ratatui's
+    * `insert_before`) — durable log lines that remain after the app exits. Must run on the render thread. The default
+    * is a no-op.
+    */
+  def printAbove(lines: Seq[String]): Either[BackendError, Unit] =
+    val _ = lines
+    Right(())
+
   def close(): Unit
 
 enum BackendError:
