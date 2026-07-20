@@ -17,29 +17,37 @@ this field.
 
 ## Recently closed gaps
 
-Delivered in the `feat/gap-analysis-widgets` line of work:
+Some of the survey's gaps were closed in parallel on `main` (PR #3): ratatui-style **`Flex`**
+distribution (`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`/`SpaceEvenly`) with the `.flex`/
+`.center`/`.spaceBetween`/… DSL, `Rect.inner`/`offset`/`centered`, **`Color` math** (`mix`/`blend`/
+`lighten`/`darken`/`rgb`/`hex` + the 8 `Bright*` colors), `Style.without`/`not*`, a **structured async**
+primitive (`Async.run`/`runCatching`/`after`/`every` + `Cancelable`), and a terminus-style `View`/
+grammar.
 
-- **Layout** — ratatui-style `Flex` distribution (`Start`/`End`/`Center`/`SpaceBetween`/`SpaceAround`/
-  `SpaceEvenly`/`Legacy`), layout `Margin`, and a Lip-Gloss-style `place`/`Align` primitive with
-  styled-whitespace fill.
+The remaining gaps were closed in the `feat/gap-analysis-widgets` line of work, layered on top of
+main's primitives:
+
 - **Style** — separate underline color (SGR 58) and styled underlines (SGR `4:n`: curly / dotted /
-  dashed / double).
+  dashed / double), correctly suppressed under `NoColor`.
+- **Layout** — a Lip-Gloss-style `place`/`Align` primitive with styled-whitespace fill (`centered`
+  now delegates to it).
 - **Widgets** — `Menu` (dropdown / context menu, with a `PositionedElement` anchor), `Tooltip`, and a
   dependency-free `SyntaxHighlighter` (Scala / JSON / Bash / generic) wired into Markdown code fences.
 - **Motion** — the full Penner easing set plus a Harmonica-style damped `Spring`.
 - **Runtime/UX** — `Stopwatch`/`Timer`, `Backend.suspend` (`$EDITOR`/subprocess handoff) and
-  `printAbove` (durable scrollback above the UI), `Color` math (`blend`/`lighten`/`darken`/`gradient`)
-  and `AdaptiveColor`, and a screen-reader-friendly `Form.accessible` rendering.
+  `printAbove` (durable scrollback above the UI), `Color.gradient` + `AdaptiveColor` (building on
+  main's `mix`), and a screen-reader-friendly `Form.accessible` rendering.
 
 ## Deferred — larger architectural bets
 
 These are the two axes where Terminus genuinely out-reaches glyphora today. They are **consciously
 deferred**, not overlooked; each is a module-sized effort with API-surface implications.
 
-1. **Effect-system interop (cats-effect / ZIO).** Terminus ships a cats-effect event-loop layer
-   (`ui-ce`). A first-class `tui-cats` (and/or `tui-zio`) module — an effectful `Runner`/`Program`
-   bridge plus `Signal` ↔ `Ref`/`SignallingRef` adapters — would neutralize this and appeal to the
-   FP-heavy Scala audience. glyphora's core stays effect-agnostic; this is additive.
+1. **Effect-system interop (cats-effect / ZIO).** main's `Async` gives structured, thread-based
+   background work, but Terminus ships a cats-effect event-loop layer (`ui-ce`). A first-class
+   `tui-cats` (and/or `tui-zio`) module — an effectful `Runner`/`Program` bridge plus `Signal` ↔
+   `Ref`/`SignallingRef` adapters — would neutralize this and appeal to the FP-heavy Scala audience.
+   glyphora's core stays effect-agnostic; this is additive.
 2. **Cross-platform targets (Scala.js / Scala Native).** Terminus runs on Scala.js (xterm.js) and
    Scala Native (termios), not just the JVM + native-image. Reaching them needs a pluggable `Backend`
    seam and cross-building `core`/`widgets`/`runtime` (which are already backend-agnostic) — `terminal`

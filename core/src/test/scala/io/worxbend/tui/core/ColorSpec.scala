@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 
 final class ColorSpec extends AnyFunSuite:
 
-<<<<<<< HEAD
   test("hex parses #rrggbb"):
     assert(Color.hex("#ff8800") == Some(Color.Rgb(255, 136, 0)))
 

@@ -26,10 +26,6 @@ final class LayoutExtrasSpec extends AnyFunSuite:
     val out = render(el, 5, 1)
     assert(out.head == "A   B")
 
-  test("row .margin trims the area before layout"):
-    val out = render(row(text("AB").length(2)).margin(1, 0), 6, 1)
-    assert(out.head == " AB   ")
-
-  test("column .spacing inserts blank rows between children"):
-    val out = render(column(text("A").length(1), text("B").length(1)).spacing(1), 1, 3)
+  test("column .gap inserts blank rows between children"):
+    val out = render(column(text("A").length(1), text("B").length(1)).gap(1), 1, 3)
     assert(out == Seq("A", " ", "B"))

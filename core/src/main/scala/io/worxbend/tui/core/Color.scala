@@ -62,7 +62,8 @@ object Color:
   def blend(foreground: Color, background: Color, alpha: Double): Color =
     mix(background, foreground, alpha)
 
-  /** `steps` evenly-spaced colors from `from` to `to` inclusive (a 1-step gradient is just `from`). Builds on [[mix]]. */
+  /** `steps` evenly-spaced colors from `from` to `to` inclusive (a 1-step gradient is just `from`). Builds on [[mix]].
+    */
   def gradient(from: Color, to: Color, steps: Int): Seq[Color] =
     if steps <= 1 then Seq(mix(from, to, 0))
     else Seq.tabulate(steps)(i => mix(from, to, i.toDouble / (steps - 1)))
