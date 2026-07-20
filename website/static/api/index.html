@@ -1,74 +1,85 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>glyphora — API reference</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  :root {
-    color-scheme: light dark;
-    --bg: #ffffff;
-    --fg: #1c1e21;
-    --muted: #606770;
-    --card-bg: #f5f6f7;
-    --border: #e3e5e8;
-    --accent: #4f46e5;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0b1120;
-      --fg: #e3e5e8;
-      --muted: #a5b4fc;
-      --card-bg: #111a2e;
-      --border: #1f2a44;
-      --accent: #818cf8;
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    padding: 3rem 1.5rem;
-    background: var(--bg);
-    color: var(--fg);
-    font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
-  }
-  .wrap { max-width: 760px; margin: 0 auto; }
-  h1 {
-    font-size: 1.75rem;
-    margin-bottom: 0.25rem;
-    background: linear-gradient(90deg, #22d3ee 0%, #818cf8 55%, #e879f9 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  p.lead { color: var(--muted); margin-top: 0; }
-  a.back { color: var(--accent); text-decoration: none; }
-  a.back:hover { text-decoration: underline; }
-  ul.modules { list-style: none; padding: 0; margin: 2rem 0 0; display: grid; gap: 0.75rem; }
-  ul.modules li {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--card-bg);
-    padding: 1rem 1.25rem;
-  }
-  ul.modules a { color: var(--fg); text-decoration: none; font-weight: 700; font-size: 1.05rem; }
-  ul.modules a:hover { color: var(--accent); }
-  ul.modules p { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.9rem; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b13">
+  <meta name="description" content="Scaladoc API reference for every published glyphora Scala 3 module.">
+  <title>glyphora / API reference</title>
+  <link rel="icon" href="../img/favicon.svg">
+  <!-- glyphora-api-theme -->
+  <link rel="stylesheet" href="glyphora-api.css">
 </head>
-<body>
-  <div class="wrap">
-    <p><a class="back" href="../">&larr; back to docs</a></p>
-    <h1>glyphora API reference</h1>
-    <p class="lead">Scaladoc for every published module, generated from source on each deploy.</p>
-    <ul class="modules">
-      <li><a href="core/io/worxbend/tui/core.html">tui-core</a><p>Buffer, Cell, Style, Layout solver, Widget traits, event ADT, CharWidth.</p></li>
-      <li><a href="terminal/io/worxbend/tui/terminal.html">tui-terminal</a><p>Backend trait, JLine 3 implementation, HeadlessBackend.</p></li>
-      <li><a href="widgets/io/worxbend/tui/widgets.html">tui-widgets</a><p>Every built-in widget.</p></li>
-      <li><a href="runtime/io/worxbend/tui/runtime.html">tui-runtime</a><p>Signal/Computed, render thread, runner loop, Effect engine.</p></li>
-      <li><a href="dsl/io/worxbend/tui/dsl.html">tui-dsl</a><p>TuiApp, Element tree, chrome presets, screens/toasts/palette.</p></li>
-      <li><a href="macros/io/worxbend/tui/macros.html">tui-macros</a><p>deriveForm / bindAction compile-time codegen.</p></li>
-    </ul>
-  </div>
+<body class="glyphora-api-index">
+  <header class="api-nav">
+    <a class="api-brand" href="../">
+      <img src="../img/logo.svg" alt="">
+      <strong>glyphora</strong>
+    </a>
+    <nav aria-label="API navigation">
+      <a href="../">Guide</a>
+      <a href="https://github.com/oleksandr-balyshyn/glyphora">GitHub ↗</a>
+    </nav>
+  </header>
+
+  <main class="api-wrap">
+    <section class="api-hero">
+      <div class="api-kicker"><i></i> SCALA 3 / GENERATED FROM SOURCE</div>
+      <p class="api-index-number">API / 0.10.0</p>
+      <h1>Exact types.<br><span>Zero guesswork.</span></h1>
+      <p class="api-lead">
+        Scaladoc for each published glyphora layer. Start at the application DSL or
+        drop directly into buffers, widgets, the reactive runtime, or terminal backends.
+      </p>
+      <div class="api-actions">
+        <a class="api-primary" href="dsl/io/worxbend/tui/dsl.html">Open tui-dsl →</a>
+        <a class="api-secondary" href="../architecture">Understand the stack ↗</a>
+      </div>
+    </section>
+
+    <section class="api-modules" aria-labelledby="modules-heading">
+      <div class="api-section-heading">
+        <span>MODULE INDEX</span>
+        <h2 id="modules-heading">Choose your layer.</h2>
+      </div>
+      <div class="api-grid">
+        <a class="api-card coral" href="dsl/io/worxbend/tui/dsl.html">
+          <span>01 / APP</span><strong>tui-dsl</strong>
+          <p>TuiApp, Element, focus, chrome, screens, toasts, palette, forms.</p>
+          <code>import io.worxbend.tui.dsl.*</code>
+        </a>
+        <a class="api-card cyan" href="widgets/io/worxbend/tui/widgets.html">
+          <span>02 / UI</span><strong>tui-widgets</strong>
+          <p>Backend-independent layout, content, controls, tables, trees, and charts.</p>
+          <code>Widget · StatefulWidget[S]</code>
+        </a>
+        <a class="api-card violet" href="core/io/worxbend/tui/core.html">
+          <span>03 / FOUNDATION</span><strong>tui-core</strong>
+          <p>Buffer, Cell, Style, geometry, layout constraints, events, and CharWidth.</p>
+          <code>Buffer → Cell → ANSI</code>
+        </a>
+        <a class="api-card amber" href="runtime/io/worxbend/tui/runtime.html">
+          <span>04 / STATE</span><strong>tui-runtime</strong>
+          <p>Signal, Computed, render thread, async work, timers, easing, and effects.</p>
+          <code>Signal[A] · Computed[A]</code>
+        </a>
+        <a class="api-card mint" href="terminal/io/worxbend/tui/terminal.html">
+          <span>05 / BACKEND</span><strong>tui-terminal</strong>
+          <p>Backend contract, JLine 3, diff flushing, input decoding, headless tests.</p>
+          <code>JLine3Backend · HeadlessBackend</code>
+        </a>
+        <a class="api-card magenta" href="macros/io/worxbend/tui/macros.html">
+          <span>06 / COMPILE TIME</span><strong>tui-macros</strong>
+          <p>Reflection-free case-class form and direct action derivation.</p>
+          <code>deriveForm[A] · bindAction[A]</code>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="api-footer">
+    <span>glyphora / typed terminal interfaces</span>
+    <span>generated on every docs deploy</span>
+  </footer>
 </body>
 </html>

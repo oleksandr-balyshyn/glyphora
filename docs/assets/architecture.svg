@@ -1,17 +1,114 @@
-<svg width="1000" height="340" viewBox="0 0 1000 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">glyphora architecture</title><desc id="desc">Data flows from the DSL through widgets and core to terminal output, while runtime signals drive rendering.</desc>
-  <defs><linearGradient id="g" x1="70" y1="40" x2="930" y2="300" gradientUnits="userSpaceOnUse"><stop stop-color="#22D3EE"/><stop offset=".5" stop-color="#818CF8"/><stop offset="1" stop-color="#E879F9"/></linearGradient><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#64748B"/></marker></defs>
-  <rect width="1000" height="340" rx="20" fill="#0B1120"/>
-  <g fill="none" stroke="#64748B" stroke-width="2" marker-end="url(#arrow)"><path d="M242 103H310"/><path d="M490 103H558"/><path d="M738 103H806"/><path d="M650 248V155"/><path d="M242 248H558"/></g>
+<svg width="1200" height="520" viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">glyphora architecture — one typed render pipeline</title>
+  <desc id="desc">Six Scala modules flow from declarative elements through backend-independent widgets and buffers to a terminal or headless test backend.</desc>
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0D1220"/><stop offset=".56" stop-color="#070910"/><stop offset="1" stop-color="#140A20"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="42" y1="30" x2="1160" y2="490" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EF3340"/><stop offset=".38" stop-color="#22D3EE"/><stop offset=".72" stop-color="#A78BFA"/><stop offset="1" stop-color="#34D399"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#94A3B8" stroke-opacity=".045"/>
+    </pattern>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0L8 4L0 8Z" fill="#66758C"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="520" rx="26" fill="url(#canvas)"/>
+  <rect width="1200" height="520" rx="26" fill="url(#grid)"/>
+  <rect x="18" y="18" width="1164" height="484" rx="19" fill="none" stroke="url(#edge)" stroke-width="2"/>
+
+  <g aria-label="glyphora mark" transform="translate(54 48)">
+    <rect width="68" height="68" rx="18" fill="#0A0E19" stroke="#303B52" stroke-width="2"/>
+    <path d="M14 23C25 17 35 21 48 16V26C35 31 25 27 14 33Z" fill="#FF5C64"/>
+    <path d="M14 36C25 30 35 34 48 29V39C35 44 25 40 14 46Z" fill="#EF3340"/>
+    <path d="M14 49C25 43 35 47 48 42V52C35 57 25 53 14 59Z" fill="#C91F3A"/>
+    <rect x="55" y="21" width="6" height="34" rx="3" fill="#22D3EE"/><circle cx="58" cy="61" r="3" fill="#34D399"/>
+  </g>
+
   <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
-    <text x="70" y="50" fill="#64748B" font-size="14" letter-spacing="2">RENDER PIPELINE</text>
-    <g><rect x="62" y="69" width="180" height="68" rx="10" fill="#111A2E" stroke="#22D3EE"/><text x="152" y="98" text-anchor="middle" fill="#22D3EE" font-size="18" font-weight="700">tui-dsl</text><text x="152" y="120" text-anchor="middle" fill="#94A3B8" font-size="10">elements · focus · chrome</text></g>
-    <g><rect x="310" y="69" width="180" height="68" rx="10" fill="#111A2E" stroke="#818CF8"/><text x="400" y="98" text-anchor="middle" fill="#A5B4FC" font-size="18" font-weight="700">tui-widgets</text><text x="400" y="120" text-anchor="middle" fill="#94A3B8" font-size="10">render · layout · input</text></g>
-    <g><rect x="558" y="69" width="180" height="68" rx="10" fill="#111A2E" stroke="#E879F9"/><text x="648" y="98" text-anchor="middle" fill="#F0ABFC" font-size="18" font-weight="700">tui-core</text><text x="648" y="120" text-anchor="middle" fill="#94A3B8" font-size="10">buffer · cells · style</text></g>
-    <g><rect x="806" y="69" width="132" height="68" rx="10" fill="#111A2E" stroke="#34D399"/><text x="872" y="98" text-anchor="middle" fill="#6EE7B7" font-size="18" font-weight="700">terminal</text><text x="872" y="120" text-anchor="middle" fill="#94A3B8" font-size="12">diff → ANSI</text></g>
-    <text x="70" y="201" fill="#64748B" font-size="14" letter-spacing="2">REACTIVE ENGINE</text>
-    <g><rect x="62" y="216" width="180" height="68" rx="10" fill="#111A2E" stroke="#FBBF24"/><text x="152" y="245" text-anchor="middle" fill="#FCD34D" font-size="18" font-weight="700">Signal</text><text x="152" y="267" text-anchor="middle" fill="#94A3B8" font-size="12">tracked state changes</text></g>
-    <g><rect x="558" y="216" width="180" height="68" rx="10" fill="#111A2E" stroke="url(#g)"/><text x="648" y="245" text-anchor="middle" fill="#E2E8F0" font-size="18" font-weight="700">tui-runtime</text><text x="648" y="267" text-anchor="middle" fill="#94A3B8" font-size="10">loop · effects · scheduling</text></g>
-    <text x="500" y="319" text-anchor="middle" fill="#64748B" font-size="13">compile-time composition • backend-independent widgets • zero reflection</text>
+    <text x="142" y="72" fill="#FF737B" font-size="13" font-weight="700" letter-spacing="2.5">GLYPHORA / ARCHITECTURE</text>
+    <text x="142" y="105" fill="#F5F7FA" font-size="25" font-weight="700">one typed pipeline · six focused modules</text>
+    <text x="1140" y="79" text-anchor="end" fill="#66758C" font-size="12">Scala 3 / zero reflection</text>
+
+    <text x="56" y="165" fill="#6F7C91" font-size="11" font-weight="700" letter-spacing="2">APPLICATION → CELL</text>
+
+    <g fill="none" stroke="#66758C" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M296 238H341"/><path d="M561 238H606"/><path d="M826 238H871"/>
+      <path d="M231 398C231 358 231 343 231 324"/><path d="M496 398C496 356 441 349 441 324"/>
+      <path d="M761 398C761 355 716 349 716 324"/>
+      <path d="M1026 324V398"/>
+    </g>
+
+    <g transform="translate(56 186)">
+      <rect width="240" height="138" rx="10" fill="#101725" stroke="#EF5260" stroke-opacity=".8"/>
+      <text x="18" y="25" fill="#FF7079" font-size="10" font-weight="700">01 / APP LAYER</text>
+      <text x="18" y="64" fill="#F8FAFC" font-size="24" font-weight="700">tui-dsl</text>
+      <text x="18" y="89" fill="#A1ADBE" font-size="12">Element · TuiApp · focus</text>
+      <text x="18" y="109" fill="#A1ADBE" font-size="12">chrome · screens · forms</text>
+      <rect x="184" y="19" width="38" height="38" rx="8" fill="#281219"/>
+      <path d="M194 30H212M194 38H217M194 46H208" stroke="#FF6573" stroke-width="3" stroke-linecap="round"/>
+    </g>
+
+    <g transform="translate(341 186)">
+      <rect width="220" height="138" rx="10" fill="#101725" stroke="#22D3EE" stroke-opacity=".75"/>
+      <text x="18" y="25" fill="#5CE6F8" font-size="10" font-weight="700">02 / RENDERERS</text>
+      <text x="18" y="64" fill="#F8FAFC" font-size="24" font-weight="700">tui-widgets</text>
+      <text x="18" y="89" fill="#A1ADBE" font-size="12">layout · content · input</text>
+      <text x="18" y="109" fill="#A1ADBE" font-size="12">charts · controls · state</text>
+      <g transform="translate(166 20)" fill="none" stroke="#22D3EE" stroke-width="3">
+        <rect width="16" height="16" rx="3"/><rect x="23" width="16" height="10" rx="3"/><rect y="23" width="20" height="10" rx="3"/><rect x="27" y="17" width="12" height="16" rx="3"/>
+      </g>
+    </g>
+
+    <g transform="translate(606 186)">
+      <rect width="220" height="138" rx="10" fill="#101725" stroke="#A78BFA" stroke-opacity=".78"/>
+      <text x="18" y="25" fill="#BCA9FF" font-size="10" font-weight="700">03 / FOUNDATION</text>
+      <text x="18" y="64" fill="#F8FAFC" font-size="24" font-weight="700">tui-core</text>
+      <text x="18" y="89" fill="#A1ADBE" font-size="12">Buffer · Cell · Style</text>
+      <text x="18" y="109" fill="#A1ADBE" font-size="12">Layout · Event · CharWidth</text>
+      <g transform="translate(170 19)">
+        <rect width="34" height="34" rx="7" fill="#1C1834" stroke="#A78BFA"/>
+        <path d="M9 9H15V15H9ZM19 9H25V15H19ZM9 19H15V25H9ZM19 19H25V25H19Z" fill="#BCA9FF"/>
+      </g>
+    </g>
+
+    <g transform="translate(871 186)">
+      <rect width="273" height="138" rx="10" fill="#101725" stroke="#34D399" stroke-opacity=".78"/>
+      <text x="18" y="25" fill="#6EE7B7" font-size="10" font-weight="700">04 / BACKEND</text>
+      <text x="18" y="64" fill="#F8FAFC" font-size="24" font-weight="700">tui-terminal</text>
+      <text x="18" y="89" fill="#A1ADBE" font-size="12">JLine 3 · input decode</text>
+      <text x="18" y="109" fill="#A1ADBE" font-size="12">minimal diff → ANSI</text>
+      <rect x="214" y="20" width="41" height="33" rx="6" fill="#0D281F" stroke="#34D399"/>
+      <path d="M223 31L229 37L223 43M234 43H245" fill="none" stroke="#6EE7B7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <text x="56" y="374" fill="#6F7C91" font-size="11" font-weight="700" letter-spacing="2">SUPPORTING SYSTEMS</text>
+
+    <g transform="translate(56 398)">
+      <rect width="240" height="75" rx="9" fill="#0E1421" stroke="#FBBF24" stroke-opacity=".62"/>
+      <text x="15" y="23" fill="#FCD34D" font-size="10" font-weight="700">05 / tui-runtime</text>
+      <text x="15" y="49" fill="#E9EDF4" font-size="13" font-weight="700">Signal · loop · Async · Effect</text>
+    </g>
+
+    <g transform="translate(341 398)">
+      <rect width="310" height="75" rx="9" fill="#0E1421" stroke="#E879F9" stroke-opacity=".62"/>
+      <text x="15" y="23" fill="#F0ABFC" font-size="10" font-weight="700">06 / tui-macros</text>
+      <text x="15" y="49" fill="#E9EDF4" font-size="13" font-weight="700">Mirror → direct calls at compile time</text>
+    </g>
+
+    <g transform="translate(696 398)">
+      <rect width="240" height="75" rx="9" fill="#0E1421" stroke="#67E8F9" stroke-opacity=".55"/>
+      <text x="15" y="23" fill="#67E8F9" font-size="10" font-weight="700">TEST SURFACE</text>
+      <text x="15" y="49" fill="#E9EDF4" font-size="13" font-weight="700">Pilot · BufferAssertions</text>
+    </g>
+
+    <g transform="translate(981 398)">
+      <rect width="163" height="75" rx="9" fill="#0E1421" stroke="#34D399" stroke-opacity=".55"/>
+      <text x="15" y="23" fill="#6EE7B7" font-size="10" font-weight="700">SAME FRAME</text>
+      <text x="15" y="49" fill="#E9EDF4" font-size="13" font-weight="700">HeadlessBackend</text>
+    </g>
   </g>
 </svg>

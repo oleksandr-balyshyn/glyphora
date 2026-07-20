@@ -4,7 +4,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'glyphora',
-  tagline: 'Build expressive terminal UIs in Scala 3',
+  tagline: 'Terminal UI, written like Scala',
   favicon: 'img/favicon.svg',
 
   url: 'https://oleksandr-balyshyn.github.io',
@@ -52,6 +52,14 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
+      image: 'social-card.svg',
+      metadata: [
+        {
+          name: 'keywords',
+          content: 'Scala 3, terminal UI, TUI, reactive widgets, GraalVM native-image',
+        },
+        {name: 'theme-color', content: '#080b13'},
+      ],
       colorMode: {
         defaultMode: 'dark',
         respectPrefersColorScheme: true,
@@ -71,17 +79,17 @@ const config = {
           },
           {
             href: 'pathname:///api/',
-            label: 'API',
+            label: 'API ↗',
             position: 'left',
           },
           {
             href: 'https://github.com/oleksandr-balyshyn/glyphora/wiki',
-            label: 'Wiki',
+            label: 'Wiki ↗',
             position: 'left',
           },
           {
             href: 'https://github.com/oleksandr-balyshyn/glyphora',
-            label: 'GitHub',
+            label: 'GitHub ↗',
             position: 'right',
           },
         ],
@@ -117,7 +125,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} glyphora contributors. MIT licensed.`,
+        copyright: `glyphora / Scala 3 terminal UI / © ${new Date().getFullYear()} contributors / MIT`,
       },
       prism: {
         theme: prismThemes.oneLight,

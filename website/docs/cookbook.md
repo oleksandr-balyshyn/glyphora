@@ -1,110 +1,334 @@
 ---
 title: Cookbook
+description: Copy practical glyphora recipes for layout, state, search, commands, modals, async data, tables, timers, forms, scrolling, and tests.
 ---
 
 # Cookbook
 
-Short recipes for the common shapes. Every snippet assumes
-`import io.worxbend.tui.dsl.*`; the [examples](./examples) are complete runnable
-versions of these patterns.
+These recipes solve common application shapes with the high-level DSL. Unless a
+snippet shows additional imports, assume:
 
-## A minimal app
+```scala
+import io.worxbend.tui.dsl.*
+```
+
+State objects shown as fields belong on the app or owning screen—never recreate them
+inside `view`.
+
+## Minimal app with concise keys
 
 ```scala
 object Hello extends TuiApp:
   def view(using ReactiveScope): Element =
-    panel("Hello")(text("Welcome!").bold.color(Color.Cyan)).rounded
-  override def bindings = KeyBindings(binding("q", "quit")(quit()))
+    centered(36, 7) {
+      panel("Hello")(
+        text("Welcome to glyphora").bold.color(Color.Cyan),
+        text("q quit").dim,
+      ).rounded.onKey(Key.char('q')) { quit() }
+    }
+
+  def main(args: Array[String]): Unit =
+    run().foreach(_ => ())
 ```
 
-## State: signals, not threading
+Use `.onKey` for exact key/action pairs; use `.onKeyEvent` only when the handler must
+inspect modifiers or decide whether to consume.
 
-State lives in `Signal`s; any signal the view *reads* re-renders it when set.
+## Fixed sidebar, fluid content
 
 ```scala
-val count = Signal(0)
-def view(using ReactiveScope) = text(s"count: ${count.get}")
-// in a binding/handler (render thread): count.update(_ + 1)
+row(
+  panel("Projects")(projectList).length(26),
+  panel("Workspace")(workspace).fill,
+).gap(1)
 ```
 
-More in [State & signals](./state-and-signals).
+Inside a row, `.length(26)` means columns. Inside a column, it means rows. `.fill`
+claims what fixed and percentage siblings leave behind.
 
-## The app shell
+## Weighted dashboard columns
 
 ```scala
-scaffold(
-  topBar = Some(topBar("myapp", tabs = Seq("Files", "Logs"), selectedTab = tab.get)),
-  sidebar = Some(sidebar(directoryTree(treeState), width = 28)),
-  statusBar = Some(statusBar(bindings)),
-)(content)
+row(
+  panel("Queue")(queueGauge).fill(1),
+  panel("Throughput")(throughputChart).fill(2),
+  panel("Errors")(errorCount).fill(1),
+).gap(1).length(12)
 ```
 
-`Theme.Dark`/`Light`/`HighContrast` are ambient (`given Theme`); override `TuiApp.theme`
-and re-render to switch at runtime. More in [The app shell](./app-shell).
+The middle panel gets twice the remaining width of either side panel.
 
-## Keys once, everywhere
+## Filter a list as the user types
+
+```scala
+import io.worxbend.tui.widgets.{ListState, TextInputState}
+
+private val query = TextInputState()
+private val selection = ListState()
+private val projects = Signal(Vector("atlas", "borealis", "glyphora"))
+
+def projectPicker(using ReactiveScope): Element =
+  val needle = query.value.trim.toLowerCase
+  val visible = projects.get.filter(_.toLowerCase.contains(needle))
+
+  column(
+    input(query, placeholder = "filter projects").key("project-query"),
+    rule(s"${visible.size} matches"),
+    list(visible, selection).key("project-list").fill,
+  )
+```
+
+Input's built-in handler requests a redraw after editing, so `query.value` is fresh
+on the next `view`. Keep derived filtering local unless several parts of the app need
+the result.
+
+## Keep commands in one registry
 
 ```scala
 override def bindings = KeyBindings(
-  binding("ctrl+s", "save")(save()),
-  binding("?", "help")(pushScreen(Screen(helpOverlay(bindings)))),
+  binding("ctrl+r", "refresh data")(reload()),
+  binding("ctrl+s", "save changes")(save()),
+  binding("?", "show keyboard help") {
+    pushScreen(Screen(centered(48, 12)(helpOverlay(bindings))))
+  },
   binding("esc", "quit")(quit()),
 )
+
+def view(using ReactiveScope): Element =
+  scaffold(statusBar = Some(statusBar(bindings)))(content)
 ```
 
-One declaration drives dispatch, the status-bar hints, the `?` overlay, and the
-`Ctrl+P` command palette (fuzzy-filtered, Enter runs the command).
+The same declarations dispatch commands, render status hints, populate help, and
+feed the `Ctrl+P` palette.
 
-## Navigation, dialogs, toasts
+## Confirm an action in a modal
 
 ```scala
-pushScreen(Screen { centered(40, 7)(panel("Confirm")(...)) }) // modal: base loses focus
-pushScreen(Screen.full(settingsView))                         // replaces the view
-popScreen()
-notify("Saved", ToastLevel.Success)                           // needs config.tickRate
+private def confirmDelete(name: String): Unit =
+  pushScreen(Screen {
+    centered(44, 8) {
+      panel("Delete deployment?")(
+        text(name).bold,
+        text("This cannot be undone.").color(Color.Red),
+        text("Enter confirm · Esc cancel").dim,
+      ).rounded
+        .onKey(Key.Enter) {
+          delete(name)
+          popScreen()
+          notify("Deployment deleted", ToastLevel.Success)
+        }
+        .onKey(Key.Escape) { popScreen() }
+    }
+  })
 ```
 
-## Splash & animation
+The modal removes the underlying view from tab order automatically.
+
+## Load data without blocking the UI
 
 ```scala
-override def splash = Some(SplashScreen(
-  centered(36, 5)(bigText("MYAPP").color(Color.Cyan)),
-  effect = Effect.coalesce(800.millis),
-))
-runEffect(Effect.parallel(Effect.fadeIn(300.millis), Effect.sweepIn(300.millis)))
+private enum LoadState[+A]:
+  case Idle, Loading
+  case Ready(value: A)
+  case Failed(message: String)
+
+private val rows = Signal[LoadState[Vector[Row]]](LoadState.Idle)
+
+private def reload(): Unit =
+  rows.set(LoadState.Loading)
+  Async.runCatching(api.loadRows()) {
+    case Right(value) => rows.set(LoadState.Ready(value))
+    case Left(error)  => rows.set(LoadState.Failed(error.getMessage))
+  }
+
+def rowsView(using ReactiveScope): Element = rows.get match
+  case LoadState.Idle            => text("Press r to load.").dim
+  case LoadState.Loading         => row(spinner(0), text(" loading…"))
+  case LoadState.Ready(value)    => renderRows(value)
+  case LoadState.Failed(message) => text(s"Error: $message").color(Color.Red)
 ```
 
-Effects are post-render buffer transforms; compose with `sequence`/`parallel`/
-`delay`/`repeat` and `Easing`. `Tween` animates plain values from `onTick`. More in
-[Motion](./motion).
+`Async.runCatching` performs work on a daemon worker and delivers the `Either` on the
+render thread.
 
-## Forms with compile-time derivation
+## Poll with cancellation
 
 ```scala
-final case class Signup(username: String, age: Int, subscribe: Boolean)
-val form = FormState.of(
-  deriveForm[Signup],
-  Field.int("age").mapValidated(a => if a >= 18 then Right(a) else Left("must be 18+")),
+import scala.concurrent.duration.*
+
+private var poller: Cancelable = Cancelable.noop
+
+private def startPolling(): Unit =
+  poller.cancel()
+  poller = Async.every(15.seconds) { reload() }
+
+private def stopPolling(): Unit =
+  poller.cancel()
+```
+
+Make the component or screen that starts work responsible for canceling it.
+
+## Sort, filter, and select tabular data
+
+```scala
+import io.worxbend.tui.widgets.{DataTable, DataTableState}
+
+private val tableState = DataTableState()
+private val table = DataTable(
+  columns = Seq("Service", "Status", "Replicas"),
+  rows = Seq(
+    Seq("api", "ready", "3"),
+    Seq("worker", "scaling", "12"),
+  ),
+  widths = Seq(
+    Constraint.Fill(2),
+    Constraint.Fill(1),
+    Constraint.Length(9),
+  ),
 )
-// view: Form(form)   submit: form.submit()   result: form.result / form.errors
+
+def deployments: Element =
+  dataTable(table, tableState).onKey(Key.Enter) {
+    tableState.selected
+      .flatMap(table.visibleRows(tableState).lift)
+      .foreach(openDeployment)
+  }
 ```
 
-## Testing headlessly
+Selection indexes the filtered/sorted `visibleRows`, which is why the action maps
+through that method.
+
+## Build tabs with reactive selection
 
 ```scala
-val backend = HeadlessBackend(Size(60, 16))
-val pilot = Pilot.start(backend) { app.runWith(backend) }
-pilot.typeText("hi").pressKey(KeyCode.Enter).waitForIdle()
-assert(pilot.screenText.contains("hi"))
+private val activeTab = Signal(0)
+
+def workspace(using ReactiveScope): Element =
+  tabbedContent(
+    "Overview" -> overview,
+    "Events"   -> eventLog,
+    "Settings" -> settings,
+  )(activeTab)
 ```
 
-More in [Testing](./testing).
+The element tree contains only the selected page. Arrow/click behavior updates the
+selection signal and rebuilds the correct branch.
 
-## Charts
+## Scroll measured Markdown
 
 ```scala
-chart(Seq(Dataset("cpu", points)), xBounds = (0, 60), yBounds = (0, 100))
-  // smoother: Chart(..., resolution = CanvasResolution.Braille, showLabels = true)
-pieChart(Seq("a" -> 3.0, "b" -> 1.0)); heatmap(grid); stackedBarChart(series)
-image(Image.fromFile(path).toOption.get)  // half-block raster
+import io.worxbend.tui.widgets.ScrollViewState
+
+private val scroll = ScrollViewState()
+
+def releaseNotes: Element =
+  panel("Release notes")(
+    scrollView(markdown(notesSource), scroll)
+  ).rounded
 ```
+
+`markdown` reports its height for the current width, so the two-argument
+`scrollView` can measure it automatically and show a scrollbar only when needed.
+
+## Create and validate a case-class form
+
+```scala
+import io.worxbend.tui.macros.{deriveForm, Field}
+
+final case class Deploy(name: String, replicas: Int, dryRun: Boolean)
+
+private val form = FormState.of(
+  deriveForm[Deploy],
+  Field.text("name").mapValidated { value =>
+    if value.trim.nonEmpty then Right(value.trim) else Left("required")
+  },
+  Field.int("replicas").mapValidated { value =>
+    if value >= 1 && value <= 20 then Right(value)
+    else Left("must be from 1 to 20")
+  },
+)
+
+def formView(using ReactiveScope): Element =
+  Form(form).onKey(Key.CtrlS) { form.submit() }
+```
+
+Read `form.result.get` to react to valid submission and `form.errors.get` when you
+need custom error presentation.
+
+## Switch themes at runtime
+
+```scala
+private val themes = Vector(Theme.Dark, Theme.Light, Theme.HighContrast)
+private val themeIndex = Signal(0)
+
+override def theme = themes(themeIndex.peek)
+
+override def bindings = KeyBindings(
+  binding("ctrl+t", "switch theme") {
+    themeIndex.update(i => (i + 1) % themes.size)
+  }
+)
+
+def view(using ReactiveScope): Element =
+  given Theme = theme
+  val _ = themeIndex.get
+  scaffold(statusBar = Some(statusBar(bindings)))(content)
+```
+
+The explicit tracked read invalidates the tree; semantic theme roles repaint the
+chrome.
+
+## Add a countdown
+
+```scala
+import io.worxbend.tui.runtime.{RunnerConfig, Timer}
+import scala.concurrent.duration.*
+
+private val timer = Timer(30.seconds)
+
+override def config = RunnerConfig(tickRate = Some(100.millis))
+
+override def onTick(): Unit =
+  timer.tick(100.millis)
+  if timer.justExpired() then notify("Time is up", ToastLevel.Warning)
+
+def clock: Element = text(timer.formatted).bold
+```
+
+Call `timer.start()`, `stop()`, `toggle()`, or `reset()` from handlers.
+
+## Test an interaction end to end
+
+```scala
+val backend = HeadlessBackend(Size(50, 10))
+val app = TodoApp()
+val pilot = Pilot.start(backend) {
+  val _ = app.runWith(backend)
+}
+
+pilot
+  .waitForIdle()
+  .typeText("ship docs")
+  .pressKey(KeyCode.Enter)
+  .waitForIdle()
+
+assert(pilot.screenText.contains("· ship docs"))
+```
+
+`Pilot` is currently repository test support; the same pattern can be implemented
+directly over the public `HeadlessBackend`. See [Testing](./testing).
+
+## Render a custom widget through the DSL
+
+```scala
+import io.worxbend.tui.core.*
+import io.worxbend.tui.widgets.Paragraph
+
+val raw = Paragraph(Text.raw("custom renderer"), wrap = true)
+
+def view(using ReactiveScope): Element =
+  panel("Embedded")(widget(raw).fill).rounded
+```
+
+The element wrapper is an escape hatch, not a second rendering system. For a reusable
+interactive widget, follow the checklist in [Contributing](./contributing).

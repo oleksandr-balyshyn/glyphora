@@ -8,6 +8,7 @@ on:
     paths:
       - "website/**"
       - "scripts/export-wiki.mjs"
+      - "scripts/style-scaladoc.mjs"
       - "core/**"
       - "terminal/**"
       - "widgets/**"
@@ -76,6 +77,9 @@ jobs:
             mkdir -p "website/build/api/${m}"
             unzip -oq "$jar" -d "website/build/api/${m}"
           done
+
+      - name: Apply glyphora style to Scaladoc
+        run: node scripts/style-scaladoc.mjs website/build/api
 
       - uses: actions/upload-pages-artifact@v5
         with:

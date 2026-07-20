@@ -1,8 +1,17 @@
 ---
 title: Architecture
+description: Follow glyphora from reactive state through elements, widgets, buffers, terminal diffs, tests, and compile-time derivation.
 ---
 
 # Architecture
+
+glyphora is a stack of small modules joined by one render pipeline. Applications can
+use the complete DSL or stop at any lower tier; widgets never depend on a terminal,
+and the terminal never knows about signals.
+
+<p align="center">
+  <img src="/glyphora/architecture.svg" alt="glyphora module and render pipeline architecture" width="100%" />
+</p>
 
 ```mermaid
 flowchart LR
@@ -14,7 +23,7 @@ flowchart LR
   Macros["tui-macros<br/>compile-time derivation"] -. generated calls .-> DSL
 ```
 
-Each arrow is a real Mill module dependency — nothing above `tui-core` reaches back
+Each arrow in the module graph is a real Mill dependency — nothing above `tui-core` reaches back
 down into a layer above it, so you can also depend on any single tier directly (for
 example, `tui-widgets` with a backend of your own, skipping the DSL entirely).
 

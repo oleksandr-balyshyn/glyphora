@@ -6,26 +6,42 @@
  * in website/docs.
  */
 export const docsNavigation = [
-  'intro',
-  'getting-started',
-  'architecture',
   {
     type: 'category',
-    label: 'Core guide',
+    label: 'Start here',
     collapsed: false,
-    items: ['state-and-signals', 'app-shell', 'widgets', 'motion', 'mouse'],
+    items: ['intro', 'getting-started', 'examples'],
   },
   {
     type: 'category',
-    label: 'Build and ship',
+    label: 'Fundamentals',
     collapsed: false,
-    items: ['cookbook', 'examples', 'testing', 'native-image'],
+    items: [
+      'state-and-signals',
+      'layout-and-style',
+      'widgets',
+      'mouse',
+      'unicode-and-accessibility',
+      'architecture',
+    ],
   },
   {
     type: 'category',
-    label: 'Help',
+    label: 'Build applications',
     collapsed: false,
-    items: ['troubleshooting', 'faq'],
+    items: [
+      'app-shell',
+      'forms-and-validation',
+      'async-and-timers',
+      'motion',
+      'cookbook',
+    ],
+  },
+  {
+    type: 'category',
+    label: 'Ship with confidence',
+    collapsed: false,
+    items: ['testing', 'native-image', 'troubleshooting', 'faq'],
   },
   {
     type: 'category',
