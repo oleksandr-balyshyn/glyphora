@@ -60,24 +60,24 @@ object SyntaxHighlighter:
       val c = line.charAt(i)
       spec.lineComment match
         case Some(marker) if line.startsWith(marker, i) =>
-          emit(line.substring(i), theme.comment)
+          emit(line.drop(i), theme.comment)
           i = n
         case _                                          =>
           if spec.stringDelims.contains(c) then
             val end = scanString(line, i, c)
-            emit(line.substring(i, end), theme.string)
+            emit(line.slice(i, end), theme.string)
             i = end
           else if c == '$' && spec.shellVariables && i + 1 < n && isIdentChar(line.charAt(i + 1)) then
             val end = scanWhile(line, i + 1, isIdentChar)
-            emit(line.substring(i, end), theme.variable)
+            emit(line.slice(i, end), theme.variable)
             i = end
           else if c.isDigit && !isIdentChar(prevChar(line, i)) then
             val end = scanWhile(line, i, ch => ch.isDigit || ch == '.' || ch == 'x' || ch == 'e' || ch == '_')
-            emit(line.substring(i, end), theme.number)
+            emit(line.slice(i, end), theme.number)
             i = end
           else if isIdentStart(c) then
             val end    = scanWhile(line, i, isIdentChar)
-            val word   = line.substring(i, end)
+            val word   = line.slice(i, end)
             val isCall = end < n && line.charAt(end) == '('
             if spec.keywords.contains(word) then emit(word, theme.keyword)
             else if isCall then emit(word, theme.function)

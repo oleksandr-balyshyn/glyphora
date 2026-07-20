@@ -100,11 +100,11 @@ the full guide and API reference are on the **[docs site](https://oleksandr-baly
 
 | | |
 |---|---|
-| 🧱 **Layout & chrome** | `Block` (per-side borders, padding), `Row`/`Column`, `Spacer`, `Rule`, `Scrollbar`, `ScrollView`, `TabbedContent`, `Collapsible`, `SplitPane`, `layers` |
-| 📄 **Content** | `Paragraph` (cluster-safe wrap), `ListView`, `Table`, `Tabs`, `BigText`, `Log` (follow-tail), `Markdown`, `Link` (OSC 8), `Image` (half-block) |
-| ⌨️ **Input** | `TextInput`, `TextArea` (undo), `Checkbox`, `Toggle`, `Select`, `RadioGroup`, `Slider`, `NumberInput`, `MaskedInput`, `SelectionList`, `Autocomplete`, `FilePicker`, `Button`, `Form` (compile-time derived) |
+| 🧱 **Layout & chrome** | `Block` (per-side borders, padding), `Row`/`Column` (`Flex` packing, margins), `place`/`Align`, `Spacer`, `Rule`, `Scrollbar`, `ScrollView`, `TabbedContent`, `Collapsible`, `SplitPane`, `Menu` (dropdown / context), `layers` |
+| 📄 **Content** | `Paragraph` (cluster-safe wrap), `ListView`, `Table`, `Tabs`, `BigText`, `Log` (follow-tail), `Markdown` (syntax-highlighted fences), `Link` (OSC 8), `Image` (half-block) |
+| ⌨️ **Input** | `TextInput`, `TextArea` (undo), `Checkbox`, `Toggle`, `Select`, `RadioGroup`, `Slider`, `NumberInput`, `MaskedInput`, `SelectionList`, `Autocomplete`, `FilePicker`, `Button`, `Form` (compile-time derived, accessible mode) |
 | 📊 **Data viz** | `Gauge`, `LineGauge`, `Sparkline`, `DualSparkline`, `BarChart`, `StackedBarChart`, `Chart` (braille/half-block), `PieChart`, `Heatmap`, `Canvas` + shapes, `Calendar`, `DataTable` (sort/filter) |
-| ⏳ **Motion & feedback** | `Spinner`, `Skeleton`, `IndeterminateBar`, `Marquee`, `WaveText`, `Dialog`, toasts, splash screens, the `Effect` engine |
+| ⏳ **Motion & feedback** | `Spinner`, `Skeleton`, `IndeterminateBar`, `Marquee`, `WaveText`, `Tooltip`, `Dialog`, toasts, splash screens, `Stopwatch`/`Timer`, the `Effect` engine (full easing set + `Spring` physics) |
 
 ## 🏗️ Architecture
 
