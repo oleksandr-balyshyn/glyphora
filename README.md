@@ -42,7 +42,9 @@ The showcase combines app chrome, reactive widgets, input routing, and effects i
 terminal-native render pipeline. See [`examples/showcase`](examples/showcase/) and
 [headless testing](#-test-your-app-headlessly).
 
-**📖 [oleksandr-balyshyn.github.io/glyphora](https://oleksandr-balyshyn.github.io/glyphora/)** — the full guide, cookbook, and per-module API reference.
+**📖 [Styled guide](https://oleksandr-balyshyn.github.io/glyphora/)** ·
+**[GitHub Wiki](https://github.com/oleksandr-balyshyn/glyphora/wiki)** ·
+**[Scaladoc API](https://oleksandr-balyshyn.github.io/glyphora/api/)**
 
 </div>
 
@@ -93,7 +95,7 @@ object Hello extends TuiApp:
 ```
 
 One import gives you every factory, the styling/layout extensions, and the core vocabulary.
-More recipes in the **[📖 cookbook](docs/COOKBOOK.md)**; complete apps in **[`examples/`](examples/README.md)**;
+More recipes in the **[📖 cookbook](website/docs/cookbook.md)**; complete apps in **[`examples/`](examples/README.md)**;
 the full guide and API reference are on the **[docs site](https://oleksandr-balyshyn.github.io/glyphora/)**.
 
 ## 🧩 Widget catalog

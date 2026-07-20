@@ -1,0 +1,58 @@
+# Publishes the canonical Docusaurus Markdown to the repository's GitHub Wiki.
+# One-time setup: enable the Wiki and add a WIKI_TOKEN repository secret.
+name: Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/docs/**"
+      - "website/docs-navigation.mjs"
+      - "scripts/export-wiki.mjs"
+      - ".github/workflows/wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Export Wiki Markdown
+        run: node scripts/export-wiki.mjs --output .wiki-export
+
+      - name: Publish to GitHub Wiki
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WIKI_TOKEN}" ]; then
+            echo "WIKI_TOKEN is not configured. See docs/DOCUMENTATION.md." >&2
+            exit 1
+          fi
+
+          wiki_dir="${RUNNER_TEMP}/glyphora-wiki"
+          git clone "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" "${wiki_dir}"
+          rsync -a --delete --exclude=.git/ .wiki-export/ "${wiki_dir}/"
+
+          git -C "${wiki_dir}" add -A
+          if git -C "${wiki_dir}" diff --cached --quiet; then
+            echo "Wiki is already up to date."
+            exit 0
+          fi
+
+          git -C "${wiki_dir}" config user.name "github-actions[bot]"
+          git -C "${wiki_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "${wiki_dir}" commit -m "Sync documentation from ${GITHUB_SHA}"
+          git -C "${wiki_dir}" push origin master

@@ -4,12 +4,8 @@ import {themes as prismThemes} from 'prism-react-renderer';
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'glyphora',
-  tagline: 'Build swaggy terminal UIs in Scala 3',
+  tagline: 'Build expressive terminal UIs in Scala 3',
   favicon: 'img/favicon.svg',
-
-  future: {
-    v4: true,
-  },
 
   url: 'https://oleksandr-balyshyn.github.io',
   baseUrl: '/glyphora/',
@@ -18,7 +14,14 @@ const config = {
   projectName: 'glyphora',
 
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'warn',
+  markdown: {
+    mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'throw',
+    },
+  },
+
+  themes: ['@docusaurus/theme-mermaid'],
 
   i18n: {
     defaultLocale: 'en',
@@ -69,6 +72,11 @@ const config = {
             position: 'left',
           },
           {
+            href: 'https://github.com/oleksandr-balyshyn/glyphora/wiki',
+            label: 'Wiki',
+            position: 'left',
+          },
+          {
             href: 'https://github.com/oleksandr-balyshyn/glyphora',
             label: 'GitHub',
             position: 'right',
@@ -100,6 +108,7 @@ const config = {
             title: 'More',
             items: [
               {label: 'GitHub', href: 'https://github.com/oleksandr-balyshyn/glyphora'},
+              {label: 'Wiki', href: 'https://github.com/oleksandr-balyshyn/glyphora/wiki'},
               {label: 'Releases', href: 'https://github.com/oleksandr-balyshyn/glyphora/tags'},
               {label: 'Maven Central', href: 'https://search.maven.org/search?q=g:io.worxbend'},
             ],

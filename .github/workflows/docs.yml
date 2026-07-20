@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - "website/**"
+      - "scripts/export-wiki.mjs"
       - "core/**"
       - "terminal/**"
       - "widgets/**"
@@ -57,6 +58,9 @@ jobs:
       # Repository Settings → Pages → Source must be set to "GitHub Actions".
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
+
+      - name: Validate GitHub Wiki export
+        run: node scripts/export-wiki.mjs --output build/wiki
 
       - name: Build Docusaurus site
         working-directory: website

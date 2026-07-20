@@ -7,3 +7,5 @@ out/
 *.iml
 .scala-build/
 /cs
+build/wiki/
+.wiki-export/

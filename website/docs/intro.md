@@ -4,24 +4,23 @@ title: Introduction
 
 # glyphora
 
-**Build swaggy terminal UIs in Scala 3** — a signals-driven widget toolkit with app
+**Build expressive terminal UIs in Scala 3** — a signals-driven widget toolkit with app
 chrome, animations, mouse support, and first-class GraalVM native-image binaries.
 
-```text
- glyphora   Widgets │ Log │ About
-┌Menu────────────────┐Widgets │ Log │ About
-│  dashboard         │
-│  deployments       │  note: type here…
-│  services          │
-│  settings          │                      10%
-│                    │██▇▅▄▂▁   ▁▃▄▆▇██▇▆▅▃▂▁  ▁▂▃▅▆▇██▇▆▄▃▁
-│                    │
-│                    │── chrome ──────────────────────────────────────
-└────────────────────┘Tab cycles focus · ctrl+p opens the palette
- ctrl+t switch theme  │  ctrl+n show a toast  │  ctrl+o open modal  │
+```mermaid
+flowchart LR
+  Input["keyboard + mouse"] --> Router["focus & event routing"]
+  Router --> View["Element tree"]
+  Signals["Signal / Computed"] -. invalidate .-> View
+  View --> Widgets["widgets + app chrome"]
+  Effects["effects engine"] -. animate .-> Widgets
+  Widgets --> Buffer["headless Buffer"]
+  Buffer --> Diff["minimal diff"]
+  Diff --> Terminal["ANSI terminal"]
 ```
 
-*(a real frame from `examples/showcase`, captured headlessly)*
+The same pipeline runs against a real terminal or a deterministic headless backend,
+so full applications can be tested without a PTY.
 
 ## Why glyphora
 

@@ -4,13 +4,14 @@ title: Architecture
 
 # Architecture
 
-```text
- ┌────────────┐   ┌────────────┐   ┌────────────┐
- │  tui-dsl   │──▶│tui-widgets │──▶│  tui-core  │   Element tree → Widgets → Buffer
- └─────┬──────┘   └────────────┘   └─────▲──────┘
-       │          ┌────────────┐   ┌─────┴──────┐
-       └─────────▶│tui-runtime │──▶│tui-terminal│   signals/loop → diff → ANSI
-                  └────────────┘   └────────────┘
+```mermaid
+flowchart LR
+  DSL["tui-dsl<br/>elements · focus · chrome"] --> Widgets["tui-widgets<br/>render · layout · input"]
+  Widgets --> Core["tui-core<br/>buffer · cells · style"]
+  Core --> Terminal["tui-terminal<br/>diff → ANSI"]
+  Runtime["tui-runtime<br/>signals · loop · effects"] --> Core
+  DSL --> Runtime
+  Macros["tui-macros<br/>compile-time derivation"] -. generated calls .-> DSL
 ```
 
 Each arrow is a real Mill module dependency — nothing above `tui-core` reaches back
