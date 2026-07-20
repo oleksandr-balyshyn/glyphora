@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Color, Constraint, KeyEvent, MouseEvent, Style}
+import io.worxbend.tui.core.{Color, Constraint, Flex, KeyEvent, MouseEvent, Style}
 import io.worxbend.tui.widgets.BorderType
 
 // One import to rule them all: `import io.worxbend.tui.dsl.*` brings in TuiApp, Element, every factory,
@@ -60,8 +60,38 @@ export Element.{
   tree,
   widget,
 }
-export io.worxbend.tui.core.{Color, Constraint, KeyCode, KeyEvent, KeyModifiers, MouseEvent, Style}
-export io.worxbend.tui.runtime.{Computed, Easing, Effect, ReactiveScope, Signal, Tween}
+export io.worxbend.tui.core.{Color, Constraint, Flex, KeyCode, KeyEvent, KeyModifiers, MouseEvent, Style}
+export io.worxbend.tui.runtime.{Async, Cancelable, Computed, Easing, Effect, ReactiveScope, Signal, Tween}
+
+/** The shape of an app's `view` (and any sub-view helper): a computation, run under a tracking [[ReactiveScope]], that
+  * produces the current [[Element]] tree. Reading a `Signal` inside it subscribes the next redraw. Mirrors terminus's
+  * `type Program[A] = Terminal ?=> A` — one named shape every view has.
+  */
+type View = ReactiveScope ?=> Element
+
+/** Row/Column flex alignment and inter-child spacing. `flex`/`center`/`spaceBetween`/… only bite on `row`/`column`
+  * containers whose children leave leftover space (no `fill` child); elsewhere they are the identity.
+  */
+extension (element: Element)
+
+  def flex(mode: Flex): Element =
+    element match
+      case r: RowElement    => r.copy(flex = mode)
+      case c: ColumnElement => c.copy(flex = mode)
+      case other            => other
+
+  /** Extra blank cells inserted between a row/column's children. */
+  def gap(cells: Int): Element =
+    element match
+      case r: RowElement    => r.copy(spacing = math.max(0, cells))
+      case c: ColumnElement => c.copy(spacing = math.max(0, cells))
+      case other            => other
+
+  def center: Element       = flex(Flex.Center)
+  def spaceBetween: Element = flex(Flex.SpaceBetween)
+  def spaceAround: Element  = flex(Flex.SpaceAround)
+  def spaceEvenly: Element  = flex(Flex.SpaceEvenly)
+  def flexEnd: Element      = flex(Flex.End)
 
 /** Fluent styling — each call returns a new element. */
 extension (element: Element)
