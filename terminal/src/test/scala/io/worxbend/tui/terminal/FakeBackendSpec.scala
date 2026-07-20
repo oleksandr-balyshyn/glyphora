@@ -57,3 +57,13 @@ final class FakeBackendSpec extends AnyFunSuite:
     assert(backend.disableRawMode() == Left(BackendError.NotInRawMode))
     assert(backend.enableRawMode().isRight)
     assert(backend.disableRawMode().isRight)
+
+  test("copyToClipboard defaults to a successful no-op for backends without a terminal"):
+    val backend: Backend = FakeBackend()
+    assert(backend.copyToClipboard("anything").isRight)
+
+  test("the headless backend records clipboard writes for assertions"):
+    val backend = HeadlessBackend(Size(20, 5))
+    assert(backend.clipboardContents.isEmpty)
+    assert(backend.copyToClipboard("copied text").isRight)
+    assert(backend.clipboardContents.contains("copied text"))

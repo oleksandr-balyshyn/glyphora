@@ -43,6 +43,10 @@ final class ShowcaseApp extends TuiApp:
     binding("ctrl+t", "switch theme")(themeIndex.update(index => (index + 1) % themes.size)),
     binding("ctrl+n", "show a toast")(notify("hello from glyphora", ToastLevel.Success)),
     binding("ctrl+o", "open modal")(openModal()),
+    binding("ctrl+y", "copy note to clipboard") {
+      copyToClipboard(noteField.value)
+      notify("copied to clipboard", ToastLevel.Info)
+    },
     binding("esc", "quit")(quit()),
   )
 

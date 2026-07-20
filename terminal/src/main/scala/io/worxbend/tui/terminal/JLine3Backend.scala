@@ -14,7 +14,7 @@ import scala.util.control.NonFatal
   * (which restores cooked mode, the main screen, and cursor visibility if still active). `draw` keeps a snapshot of the
   * last flushed frame and writes only the diff.
   */
-final class JLine3Backend private (terminal: Terminal) extends Backend:
+final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) extends Backend:
 
   private var savedAttributes: Option[org.jline.terminal.Attributes] = None
   private var lastFlushed: Option[Buffer]                            = None
@@ -22,7 +22,6 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
   private var mouseCaptureActive                                     = false
   private var cursorHidden                                           = false
   private val pendingResize                                          = AtomicReference[Option[Size]](None)
-  private val colorDepth                                             = ColorDepth.detect()
   private val decoder = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
 
   terminal.handle(
@@ -127,6 +126,9 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
       case Some(resized) => Right(Some(Event.Resize(resized)))
       case None          => attempt(decoder.decode(timeout.toMillis))
 
+  override def copyToClipboard(text: String): Either[BackendError, Unit] =
+    attempt(write(AnsiSequences.clipboardCopy(text)))
+
   def close(): Unit =
     // best-effort teardown in reverse acquisition order; a failing step must not block the ones after it
     if mouseCaptureActive then bestEffort(disableMouseCapture())
@@ -153,12 +155,16 @@ final class JLine3Backend private (terminal: Terminal) extends Backend:
 
 object JLine3Backend:
 
-  /** Opens the process's controlling terminal. Fails with `UnsupportedTerminal` when there is no usable TTY. */
-  def create(): Either[BackendError, JLine3Backend] =
+  /** Opens the process's controlling terminal. Fails with `UnsupportedTerminal` when there is no usable TTY.
+    *
+    * `colorDepth` defaults to environment-based detection (honoring `NO_COLOR`/`CLICOLOR_FORCE`); pass an explicit
+    * value to force a palette regardless of the environment.
+    */
+  def create(colorDepth: ColorDepth = ColorDepth.detect()): Either[BackendError, JLine3Backend] =
     try
       val terminal = TerminalBuilder.builder().system(true).build()
       if terminal.getType == Terminal.TYPE_DUMB || terminal.getType == Terminal.TYPE_DUMB_COLOR then
         terminal.close()
         Left(BackendError.UnsupportedTerminal("dumb terminal (no TTY attached)"))
-      else Right(JLine3Backend(terminal))
+      else Right(JLine3Backend(terminal, colorDepth))
     catch case NonFatal(error) => Left(BackendError.Io(error))

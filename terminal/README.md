@@ -4,12 +4,16 @@ The terminal backend layer: the `Backend` trait plus the JLine 3 implementation.
 Everything above (`tui-runtime`, widgets, DSL) talks to `Backend` only.
 
 - **`Backend`** — raw mode, alternate screen, cursor visibility, mouse capture,
-  diff-based `draw(buffer)`, `readEvent(timeout)`. All fallible operations return
-  `Either[BackendError, A]`.
+  diff-based `draw(buffer)`, `readEvent(timeout)`, `copyToClipboard(text)` (OSC 52).
+  All fallible operations return `Either[BackendError, A]`.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline` 3.30.x
   (pinned; JLine 4.x is too new to be a safe default). Keeps a snapshot of the last
   flushed frame and writes only changed cells, batched into one ANSI string per
-  frame, with OSC 8 hyperlink transitions.
+  frame, with OSC 8 hyperlink transitions. `create(colorDepth)` takes an optional
+  color-depth override; the default honors `NO_COLOR`/`CLICOLOR_FORCE`.
+- **`ColorDepth`** — `TrueColor`/`Ansi256`/`Ansi16`/`NoColor`, with environment
+  detection (`COLORTERM`, `TERM`, and the `NO_COLOR`/`CLICOLOR_FORCE` conventions)
+  and RGB downsampling to the nearest palette entry.
 - **`InputDecoder`** — ANSI/CSI/SS3/SGR-mouse decoder, injected with a plain
   `read(timeoutMillis) => Int` function so it is fully unit-tested without a TTY.
 - **`HeadlessBackend`** — in-memory backend for the `Pilot` end-to-end test harness:

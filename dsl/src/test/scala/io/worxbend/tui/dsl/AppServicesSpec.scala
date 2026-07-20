@@ -117,6 +117,22 @@ final class AppServicesSpec extends AnyFunSuite:
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
 
+  test("copyToClipboard reaches the backend through the runner"):
+    val backend = HeadlessBackend(Size(30, 5))
+    val app     = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(
+        binding("c", "copy")(copyToClipboard("clipboard payload")),
+        binding("ctrl+q", "quit")(quit()),
+      )
+      def view(using ReactiveScope): Element = text("content")
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    pilot.waitForIdle()
+    assert(backend.clipboardContents.isEmpty)
+    pilot.pressKey(KeyCode.Char('c')).waitForIdle()
+    assert(backend.clipboardContents.contains("clipboard payload"))
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
   test("escape closes the palette without running anything"):
     val backend = HeadlessBackend(Size(60, 16))
     var fired   = false

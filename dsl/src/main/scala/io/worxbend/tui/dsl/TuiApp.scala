@@ -196,6 +196,12 @@ trait TuiApp:
   protected final def quit(): Unit =
     activeHandle.get().foreach(_.quit())
 
+  /** Copies `text` to the system clipboard via OSC 52. Best-effort — terminals without OSC 52 support ignore it, and it
+    * is a no-op when the app is not running.
+    */
+  protected final def copyToClipboard(text: String): Unit =
+    activeHandle.get().foreach(_.copyToClipboard(text))
+
   // ---- composite view: base -> screens -> palette -> toasts ----
 
   private def effectiveView(using scope: ReactiveScope): Element =

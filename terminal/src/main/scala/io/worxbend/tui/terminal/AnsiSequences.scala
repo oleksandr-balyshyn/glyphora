@@ -33,6 +33,13 @@ private[terminal] object AnsiSequences:
   /** OSC 8 hyperlink opener; pair every open with [[LinkClose]]. */
   def linkOpen(url: String): String = s"$Esc]8;;$url$Esc\\"
 
+  /** OSC 52 clipboard write: sets the system clipboard (`c`) to `text`, base64-encoded per the protocol. Terminals that
+    * don't support OSC 52 ignore it.
+    */
+  def clipboardCopy(text: String): String =
+    val encoded = java.util.Base64.getEncoder.encodeToString(text.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+    s"$Esc]52;c;$encoded$Esc\\"
+
   /** Moves the cursor to an absolute zero-based position (ANSI rows/columns are one-based). */
   def moveTo(x: Int, y: Int): String =
     s"$Esc[${y + 1};${x + 1}H"
@@ -43,8 +50,9 @@ private[terminal] object AnsiSequences:
   def sgr(style: Style, depth: ColorDepth = ColorDepth.TrueColor): String =
     val codes = List.newBuilder[String]
     codes += "0"
-    style.fg.foreach(color => codes += foregroundCode(ColorDepth.downsample(color, depth)))
-    style.bg.foreach(color => codes += backgroundCode(ColorDepth.downsample(color, depth)))
+    if depth != ColorDepth.NoColor then
+      style.fg.foreach(color => codes += foregroundCode(ColorDepth.downsample(color, depth)))
+      style.bg.foreach(color => codes += backgroundCode(ColorDepth.downsample(color, depth)))
     modifierCodes(style.modifiers).foreach(code => codes += code)
     codes.result().mkString(s"$Esc[", ";", "m")
 

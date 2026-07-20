@@ -14,15 +14,16 @@ import scala.concurrent.duration.Duration
   */
 final class HeadlessBackend(initialSize: Size) extends Backend:
 
-  private val events                              = LinkedBlockingQueue[Event]()
-  @volatile private var terminalSize              = initialSize
-  @volatile private var lastFrame: Option[Buffer] = None
-  @volatile private var rawMode                   = false
-  @volatile private var alternateScreen           = false
-  @volatile private var mouseCapture              = false
-  @volatile private var cursorVisible             = true
-  private val drawCounter                         = AtomicLong(0)
-  private val idleReadCounter                     = AtomicLong(0)
+  private val events                                  = LinkedBlockingQueue[Event]()
+  @volatile private var terminalSize                  = initialSize
+  @volatile private var lastFrame: Option[Buffer]     = None
+  @volatile private var rawMode                       = false
+  @volatile private var alternateScreen               = false
+  @volatile private var mouseCapture                  = false
+  @volatile private var cursorVisible                 = true
+  @volatile private var lastClipboard: Option[String] = None
+  private val drawCounter                             = AtomicLong(0)
+  private val idleReadCounter                         = AtomicLong(0)
 
   def size: Either[BackendError, Size] = Right(terminalSize)
 
@@ -73,6 +74,10 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
       val _ = idleReadCounter.incrementAndGet()
     Right(polled)
 
+  override def copyToClipboard(text: String): Either[BackendError, Unit] =
+    lastClipboard = Some(text)
+    Right(())
+
   def close(): Unit = ()
 
   // ---- test-driver surface ----
@@ -100,3 +105,6 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   def isAlternateScreen: Boolean = alternateScreen
   def isMouseCaptured: Boolean   = mouseCapture
   def isCursorVisible: Boolean   = cursorVisible
+
+  /** The text most recently sent to the clipboard via [[copyToClipboard]], if any. */
+  def clipboardContents: Option[String] = lastClipboard
