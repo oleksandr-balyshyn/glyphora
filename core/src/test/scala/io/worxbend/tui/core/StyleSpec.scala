@@ -48,3 +48,18 @@ final class StyleSpec extends AnyFunSuite:
     val patched = base.patch(Style.Default.bold)
     assert(patched.fg.contains(Color.Red))
     assert(patched.bg.contains(Color.Blue))
+
+  test("underline color and style are independent fields, defaulting to unset"):
+    assert(Style.Default.underlineColor.isEmpty)
+    assert(Style.Default.underlineStyle == UnderlineStyle.None)
+    val styled = Style.Default.withUnderlineColor(Color.Red).curlyUnderline
+    assert(styled.underlineColor.contains(Color.Red))
+    assert(styled.underlineStyle == UnderlineStyle.Curly)
+
+  test("patch layers the other style's underline color and non-None underline style on top"):
+    val base    = Style.Default.withUnderlineColor(Color.Red).doubleUnderline
+    val patched = base.patch(Style.Default.dashedUnderline)
+    assert(patched.underlineColor.contains(Color.Red))      // other left it unset → base kept
+    assert(patched.underlineStyle == UnderlineStyle.Dashed) // other set it → other wins
+    val kept = base.patch(Style.Default)
+    assert(kept.underlineStyle == UnderlineStyle.Double) // other None → base kept

@@ -74,14 +74,31 @@ def masterDetail(master: Element, detail: Element, masterWidth: Int = 30): Eleme
 
 /** `content` at a fixed size, centered both ways in whatever space is available. */
 def centered(width: Int, height: Int)(content: Element): Element =
-  Element.column(
-    Element.spacer,
-    Element
-      .row(
-        Element.spacer,
-        content.withProps(content.props.copy(constraint = Some(Constraint.Length(width)))),
-        Element.spacer,
-      )
-      .length(height),
-    Element.spacer,
-  )
+  place(width, height)(content)
+
+/** Where a fixed-size block sits inside a larger area along one axis. */
+enum Align:
+  case Start, Center, End
+
+/** Positions `content` (sized `width` x `height`) inside whatever area it is given, aligned `horizontal` x `vertical`
+  * (both `Center` by default — the [[centered]] case). Pass `fill` to paint the surrounding whitespace with a style
+  * (Lip Gloss `Place`-style), e.g. a dimmed backdrop behind a dialog.
+  */
+def place(
+    width: Int,
+    height: Int,
+    horizontal: Align = Align.Center,
+    vertical: Align = Align.Center,
+    fill: Option[Style] = None,
+)(content: Element): Element =
+  def bracket(align: Align, block: Element): Seq[Element] =
+    align match
+      case Align.Start  => Seq(block, Element.spacer)
+      case Align.Center => Seq(Element.spacer, block, Element.spacer)
+      case Align.End    => Seq(Element.spacer, block)
+  val sized = content.withProps(content.props.copy(constraint = Some(Constraint.Length(width))))
+  val row                                                 = Element.row(bracket(horizontal, sized)*).length(height)
+  val placed                                              = Element.column(bracket(vertical, row)*)
+  fill match
+    case Some(style) => FilledElement(placed, style)
+    case None        => placed
