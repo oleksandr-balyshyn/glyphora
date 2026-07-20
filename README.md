@@ -1,10 +1,8 @@
 <div align="center">
 
-<img src="docs/assets/logo.svg" alt="glyphora" width="560"/>
+<img src="docs/assets/banner.svg" alt="glyphora — terminal interfaces for Scala 3" width="100%"/>
 
-# ⚡ glyphora
-
-**Build swaggy terminal UIs in Scala 3** — a signals-driven widget toolkit with app chrome,
+**Build expressive terminal UIs in Scala 3** — a signals-driven widget toolkit with app chrome,
 animations, mouse support, and first-class GraalVM native-image binaries.
 
 [![CI](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml/badge.svg)](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml)
@@ -38,6 +36,8 @@ animations, mouse support, and first-class GraalVM native-image binaries.
 ---
 
 ## ✨ Why glyphora
+
+<p align="center"><img src="docs/assets/capabilities.svg" alt="40+ widgets, reactive signals, motion and effects, and native binaries" width="900"/></p>
 
 - 🧠 **Signals, not spaghetti** — state lives in `Signal`/`Computed`; whatever your view *reads*, re-renders when it changes. No dispatch loops, no dependency arrays.
 - 🧱 **40+ widgets** — from `Block` and `Gauge` to `DataTable`, `TextArea` (undo, cluster-safe editing), `DirectoryTree`, `Markdown`, braille `Chart`s, and a half-block `Image`.
@@ -95,14 +95,7 @@ the full guide and API reference are on the **[docs site](https://oleksandr-baly
 
 ## 🏗️ Architecture
 
-```text
- ┌────────────┐   ┌────────────┐   ┌────────────┐
- │  tui-dsl   │──▶│tui-widgets │──▶│  tui-core  │   Element tree → Widgets → Buffer
- └─────┬──────┘   └────────────┘   └─────▲──────┘
-       │          ┌────────────┐   ┌─────┴──────┐
-       └─────────▶│tui-runtime │──▶│tui-terminal│   signals/loop → diff → ANSI
-                  └────────────┘   └────────────┘
-```
+<p align="center"><img src="docs/assets/architecture.svg" alt="glyphora render pipeline and reactive engine architecture" width="900"/></p>
 
 | Module | What it owns |
 |---|---|
