@@ -14,20 +14,33 @@ animations, mouse support, and first-class GraalVM native-image binaries.
 [![Zero Reflection](https://img.shields.io/badge/reflection-zero-818cf8)](#-architecture)
 [![License](https://img.shields.io/github/license/oleksandr-balyshyn/glyphora?color=fbbf24)](LICENSE)
 
-```text
- glyphora   Widgets │ Log │ About
-┌Menu────────────────┐Widgets │ Log │ About
-│  dashboard         │
-│  deployments       │  note: type here…
-│  services          │
-│  settings          │                      10%
-│                    │██▇▅▄▂▁   ▁▃▄▆▇██▇▆▅▃▂▁  ▁▂▃▅▆▇██▇▆▄▃▁
-│                    │
-│                    │── chrome ──────────────────────────────────────
-└────────────────────┘Tab cycles focus · ctrl+p opens the palette
- ctrl+t switch theme  │  ctrl+n show a toast  │  ctrl+o open modal  │
+```mermaid
+flowchart LR
+  Input["⌨️ keyboard + mouse"] --> Router["focus & event routing"]
+  Router --> Chrome
+
+  subgraph Chrome["application scaffold"]
+    direction TB
+    Top["top bar · tabs · command palette"]
+    Sidebar["sidebar · navigation"]
+    Content["widgets · charts · forms"]
+    Status["status line · shortcuts · toasts"]
+    Top --> Content
+    Sidebar --> Content
+    Content --> Status
+  end
+
+  Chrome --> Buffer["headless buffer"]
+  Buffer --> Diff["minimal terminal diff"]
+  Diff --> ANSI["ANSI output"]
+
+  Signals["Signal / Computed"] -. "invalidate" .-> Content
+  Effects["effects engine"] -. "animate" .-> Content
 ```
-*(a real frame from `examples/showcase`, captured headlessly — see [Testing](#-test-your-app-headlessly))*
+
+The showcase combines app chrome, reactive widgets, input routing, and effects in one
+terminal-native render pipeline. See [`examples/showcase`](examples/showcase/) and
+[headless testing](#-test-your-app-headlessly).
 
 **📖 [oleksandr-balyshyn.github.io/glyphora](https://oleksandr-balyshyn.github.io/glyphora/)** — the full guide, cookbook, and per-module API reference.
 
