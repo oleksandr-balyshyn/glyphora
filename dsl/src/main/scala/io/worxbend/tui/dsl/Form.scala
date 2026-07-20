@@ -90,3 +90,31 @@ object Form:
       field +: error.toSeq
     }
     Element.column(rows*)
+
+  /** A screen-reader-friendly rendering of the same [[FormState]] (Huh's `WithAccessible`): every field on its own
+    * labeled line announced as "Field N of M", checkbox state spelled out as text, and validation failures prefixed
+    * with "Error:" rather than signalled by color alone. Pair with a plain Tab/Enter key flow for assistive tech.
+    */
+  def accessible[A](state: FormState[A])(using ReactiveScope): Element =
+    val currentErrors = state.errors.get
+    val total         = state.bindings.size
+    val rows          = state.bindings.zipWithIndex.flatMap { case (binding, index) =>
+      val position = s"Field ${index + 1} of $total"
+      val field    = binding match
+        case FieldBinding.TextLike(spec, inputState, _) =>
+          Element.column(
+            Element.text(s"$position: ${spec.name}").length(1),
+            Element.input(inputState).fill.length(1),
+          )
+        case FieldBinding.BoolLike(spec, value)         =>
+          val announced = if value.get then "checked" else "unchecked"
+          Element.column(
+            Element.text(s"$position: ${spec.name} ($announced)").length(1),
+            Element.checkbox(spec.name, value).length(1),
+          )
+      val error    = currentErrors.get(binding.spec.name).map { message =>
+        Element.text(s"Error: $message").color(Color.Red).length(1)
+      }
+      field +: error.toSeq
+    }
+    Element.column(rows*)

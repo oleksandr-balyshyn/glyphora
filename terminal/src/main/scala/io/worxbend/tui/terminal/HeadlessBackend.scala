@@ -24,6 +24,8 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   @volatile private var lastClipboard: Option[String] = None
   private val drawCounter                             = AtomicLong(0)
   private val idleReadCounter                         = AtomicLong(0)
+  private val suspendCounter                          = AtomicLong(0)
+  private val printedLines                            = scala.collection.mutable.ArrayBuffer.empty[String]
 
   def size: Either[BackendError, Size] = Right(terminalSize)
 
@@ -78,6 +80,21 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     lastClipboard = Some(text)
     Right(())
 
+  override def suspend[A](body: => A): Either[BackendError, A] =
+    val _      = suspendCounter.incrementAndGet()
+    val wasAlt = alternateScreen
+    val wasRaw = rawMode
+    alternateScreen = false // observable to `body` so tests can assert the terminal was handed back
+    rawMode = false
+    try Right(body)
+    finally
+      alternateScreen = wasAlt
+      rawMode = wasRaw
+
+  override def printAbove(lines: Seq[String]): Either[BackendError, Unit] =
+    printedLines.synchronized { printedLines ++= lines }
+    Right(())
+
   def close(): Unit = ()
 
   // ---- test-driver surface ----
@@ -100,6 +117,12 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   def idleReads: Long = idleReadCounter.get()
 
   def pendingEvents: Int = events.size()
+
+  /** How many times the app suspended the terminal (see [[suspend]]). */
+  def suspendCount: Long = suspendCounter.get()
+
+  /** The lines emitted above the app via [[printAbove]], in order. */
+  def printedAbove: Seq[String] = printedLines.synchronized(printedLines.toSeq)
 
   def isRawMode: Boolean         = rawMode
   def isAlternateScreen: Boolean = alternateScreen

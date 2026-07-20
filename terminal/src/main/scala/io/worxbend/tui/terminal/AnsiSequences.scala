@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Color, Modifiers, Style}
+import io.worxbend.tui.core.{Color, Modifiers, Style, UnderlineStyle}
 
 /** ANSI escape sequences the backend emits. Pure string construction, no I/O — separately testable. */
 private[terminal] object AnsiSequences:
@@ -54,7 +54,29 @@ private[terminal] object AnsiSequences:
       style.fg.foreach(color => codes += foregroundCode(ColorDepth.downsample(color, depth)))
       style.bg.foreach(color => codes += backgroundCode(ColorDepth.downsample(color, depth)))
     modifierCodes(style.modifiers).foreach(code => codes += code)
+    // the styled-underline selector is a text attribute (kept under NoColor); the underline color is a color (dropped)
+    underlineStyleCode(style.underlineStyle).foreach(code => codes += code)
+    if depth != ColorDepth.NoColor then
+      style.underlineColor.foreach(color => codes += underlineColorCode(ColorDepth.downsample(color, depth)))
     codes.result().mkString(s"$Esc[", ";", "m")
+
+  /** SGR 4:n styled-underline selectors; `None`/`Straight` defer to the plain `4` from [[modifierCodes]]. */
+  private def underlineStyleCode(style: UnderlineStyle): Option[String] =
+    style match
+      case UnderlineStyle.None | UnderlineStyle.Straight => scala.None
+      case UnderlineStyle.Double                         => Some("4:2")
+      case UnderlineStyle.Curly                          => Some("4:3")
+      case UnderlineStyle.Dotted                         => Some("4:4")
+      case UnderlineStyle.Dashed                         => Some("4:5")
+
+  /** SGR 58 sets the underline color independently of the foreground; 256/truecolor forms mirror SGR 38. */
+  private def underlineColorCode(color: Color): String =
+    color match
+      case Color.Indexed(index) => s"58:5:$index"
+      case Color.Rgb(r, g, b)   => s"58:2::$r:$g:$b"
+      case named                =>
+        val (r, g, b) = Color.approximateRgb(named)
+        s"58:2::$r:$g:$b"
 
   private def foregroundCode(color: Color): String =
     color match

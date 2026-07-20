@@ -62,6 +62,10 @@ final class TerminalRunner(
       def runOnRenderThread(body: => Unit): Unit = RenderThread.runOnRenderThread(body)
       def copyToClipboard(text: String): Unit    =
         backend.copyToClipboard(text).left.foreach(error => failure = Some(error))
+      // both run on the render thread (handlers are invoked there); the backend forces a full repaint afterward
+      override def suspend(body: => Unit): Unit  = backend.suspend(body).left.foreach(error => failure = Some(error))
+      override def printAbove(lines: Seq[String]): Unit =
+        backend.printAbove(lines).left.foreach(error => failure = Some(error))
 
     def redraw(): Unit =
       val drawn =

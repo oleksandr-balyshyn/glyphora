@@ -32,6 +32,11 @@ final class ColorDepthSpec extends AnyFunSuite:
     val style = Style.Default.withFg(Color.Rgb(255, 0, 0)).withBg(Color.Blue).bold.underline
     assert(AnsiSequences.sgr(style, ColorDepth.NoColor) == "[0;1;4m")
 
+  test("NoColor keeps the styled-underline attribute but drops the underline color"):
+    val style = Style.Default.curlyUnderline.withUnderlineColor(Color.Rgb(255, 0, 0))
+    assert(AnsiSequences.sgr(style, ColorDepth.NoColor) == "[0;4:3m") // 4:3 attr kept, 58 color gone
+    assert(AnsiSequences.sgr(style, ColorDepth.TrueColor) == "[0;4:3;58:2::255:0:0m")
+
   test("truecolor passes rgb through; 256 maps rgb into the palette"):
     val red = Color.Rgb(255, 0, 0)
     assert(ColorDepth.downsample(red, ColorDepth.TrueColor) == red)

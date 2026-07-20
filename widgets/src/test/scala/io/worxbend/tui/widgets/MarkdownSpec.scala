@@ -61,3 +61,16 @@ final class MarkdownSpec extends AnyFunSuite:
   test("heightOf measures wrapped markdown"):
     assert(Markdown.heightOf("1234567890 1234567890", 30) == 1)
     assert(Markdown.heightOf("1234567890 1234567890", 10) >= 2)
+
+  test("a language-tagged code fence is syntax-highlighted"):
+    val theme = MarkdownTheme()
+    val text  = MarkdownParser.parse("```scala\nval x = 1\n```", theme)
+    val code  = text.lines(1) // the `val x = 1` row
+    val kw    = code.spans.find(_.content == "val").getOrElse(fail("no keyword span"))
+    assert(kw.style == theme.syntax.keyword)
+    assert(code.spans.exists(s => s.content == "1" && s.style == theme.syntax.number))
+
+  test("an untagged code fence still renders verbatim in the code style"):
+    val theme = MarkdownTheme()
+    val text  = MarkdownParser.parse("```\nplain text\n```", theme)
+    assert(text.lines(1) == io.worxbend.tui.core.Line.styled("plain text", theme.code))

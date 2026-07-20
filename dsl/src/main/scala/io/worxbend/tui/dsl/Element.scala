@@ -351,6 +351,85 @@ final case class TreeElement(
           true
         case _             => false
 
+/** A vertical menu / dropdown / context menu popup. Up/Down move the highlight (skipping separators and disabled
+  * items), Enter (or a click) fires `onSelect` with the chosen index, the wheel scrolls. Escape is left unconsumed so
+  * an enclosing app can close it.
+  */
+final case class MenuElement(
+    items: Seq[w.MenuItem],
+    state: w.MenuState,
+    onSelect: Int => Unit,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  def widget: Widget                                                        =
+    val menu = w.Menu(items, style = props.style, highlightStyle = props.focusStyle)
+    (area, buffer) => menu.render(area, buffer, state)
+  private[dsl] def withProps(props: ElementProps): MenuElement              = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(items.size + 2)
+      case Direction.Horizontal => Constraint.Length(w.Menu(items).width)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
+  private[dsl] override def builtinMouseHandler
+      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+    Some(handleMouse)
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !props.focused then false
+    else
+      event.code match
+        case KeyCode.Down                      =>
+          state.selectNext(items)
+          true
+        case KeyCode.Up                        =>
+          state.selectPrevious(items)
+          true
+        case KeyCode.Enter | KeyCode.Char(' ') =>
+          if items.lift(state.selected).exists(_.selectable) then onSelect(state.selected)
+          true
+        case _                                 =>
+          false
+
+  private def handleMouse(event: io.worxbend.tui.core.MouseEvent, area: io.worxbend.tui.core.Rect): Boolean =
+    import io.worxbend.tui.core.MouseEventKind
+    event.kind match
+      case MouseEventKind.ScrollUp   =>
+        state.selectPrevious(items)
+        true
+      case MouseEventKind.ScrollDown =>
+        state.selectNext(items)
+        true
+      case MouseEventKind.Down       =>
+        val row = event.y - (area.y + 1) + state.offset // +1 skips the top border
+        if row >= 0 && row < items.size && items(row).selectable then
+          state.selected = row
+          onSelect(row)
+        true
+      case _                         => false
+
+/** Renders `content` at an absolute offset inside whatever area it is given, sized `width` x `height` (clipped to the
+  * area). The building block for context menus and tooltips anchored at a mouse or widget position — compose it over a
+  * base with [[Element.layers]].
+  */
+final case class PositionedElement(
+    dx: Int,
+    dy: Int,
+    width: Int,
+    height: Int,
+    content: Element,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  override def children: Seq[Element]                                               = Seq(content)
+  def widget: Widget                                                                =
+    (area, buffer) =>
+      val target = io.worxbend.tui.core
+        .Rect(area.x + dx, area.y + dy, width, height)
+        .intersection(area)
+      if !target.isEmpty then content.widget.render(target, buffer)
+  private[dsl] def withProps(props: ElementProps): PositionedElement                = copy(props = props)
+  private[dsl] override def withChildren(children: Seq[Element]): PositionedElement =
+    copy(content = children.headOption.getOrElse(content))
+
 /** Fills its whole area with `fill` (a solid background) before rendering `inner` — what the chrome bars use to read as
   * continuous surfaces. Transparent to focus and event routing.
   */
@@ -1329,3 +1408,17 @@ object Element:
       w.BigText(content),
       ElementProps(constraint = Some(Constraint.Length(w.BigText.GlyphHeight))),
     )
+
+  /** A menu / dropdown / context-menu popup over `items`; `onSelect` fires with the index chosen by Enter or a click.
+    */
+  def menu(items: Seq[w.MenuItem], state: w.MenuState)(onSelect: Int => Unit): MenuElement =
+    MenuElement(items, state, onSelect)
+
+  /** A bordered popup of help text sized to its content — overlay it near what it describes (see [[positioned]]). */
+  def tooltip(text: String): WidgetElement =
+    val tip = w.Tooltip(text)
+    WidgetElement(tip, ElementProps(constraint = Some(Constraint.Length(tip.height))))
+
+  /** Places `content` at an absolute `(dx, dy)` offset inside its area, sized `width` x `height`. */
+  def positioned(dx: Int, dy: Int, width: Int, height: Int)(content: Element): PositionedElement =
+    PositionedElement(dx, dy, width, height, content)

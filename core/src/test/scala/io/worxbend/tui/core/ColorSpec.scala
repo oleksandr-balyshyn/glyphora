@@ -40,3 +40,18 @@ final class ColorSpec extends AnyFunSuite:
     assert(Color.approximateRgb(Color.BrightRed) == (255, 0, 0))
     assert(Color.approximateRgb(Color.BrightWhite) == (255, 255, 255))
     assert(Color.approximateRgb(Color.BrightBlack) == (127, 127, 127))
+
+  test("gradient yields evenly spaced stops from first to last inclusive"):
+    val stops = Color.gradient(Color.Rgb(0, 0, 0), Color.Rgb(0, 0, 100), 5)
+    assert(stops.size == 5)
+    assert(stops.head == Color.Rgb(0, 0, 0))
+    assert(stops.last == Color.Rgb(0, 0, 100))
+    assert(stops(2) == Color.Rgb(0, 0, 50))
+
+  test("a single-step gradient is just the start color"):
+    assert(Color.gradient(Color.Red, Color.Blue, 1) == Seq(Color.mix(Color.Red, Color.Blue, 0)))
+
+  test("AdaptiveColor resolves by terminal background"):
+    val adaptive = AdaptiveColor(light = Color.Black, dark = Color.White)
+    assert(adaptive.resolve(darkBackground = true) == Color.White)
+    assert(adaptive.resolve(darkBackground = false) == Color.Black)

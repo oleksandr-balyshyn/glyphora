@@ -129,6 +129,37 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     attempt(write(AnsiSequences.clipboardCopy(text)))
 
+  override def suspend[A](body: => A): Either[BackendError, A] =
+    attempt {
+      val hadRaw          = savedAttributes.nonEmpty
+      val wasAlt          = alternateScreenActive
+      val wasCursorHidden = cursorHidden
+      val wasMouse        = mouseCaptureActive
+      // hand the terminal back in reverse setup order
+      if wasMouse then bestEffort(disableMouseCapture())
+      if wasCursorHidden then bestEffort(showCursor())
+      if wasAlt then bestEffort(leaveAlternateScreen())
+      if hadRaw then bestEffort(disableRawMode())
+      terminal.writer().flush()
+      try body
+      finally
+        if hadRaw then bestEffort(enableRawMode())
+        if wasAlt then bestEffort(enterAlternateScreen()) // clears + sets lastFlushed = None (full repaint)
+        if wasCursorHidden then bestEffort(hideCursor())
+        if wasMouse then bestEffort(enableMouseCapture())
+        lastFlushed = None
+    }
+
+  override def printAbove(lines: Seq[String]): Either[BackendError, Unit] =
+    // step out to the primary screen so the lines land in real scrollback, print them, then step back in and repaint
+    suspend {
+      lines.foreach { line =>
+        terminal.writer().write(line)
+        terminal.writer().write("\r\n")
+      }
+      terminal.writer().flush()
+    }
+
   def close(): Unit =
     // best-effort teardown in reverse acquisition order; a failing step must not block the ones after it
     if mouseCaptureActive then bestEffort(disableMouseCapture())

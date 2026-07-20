@@ -26,3 +26,16 @@ final class AnsiSequencesSpec extends AnyFunSuite:
   test("sgr encodes modifiers after colors"):
     val style = Style.Default.withFg(Color.Red).bold.underline
     assert(AnsiSequences.sgr(style) == s"$Esc[0;31;1;4m")
+
+  test("sgr encodes a styled underline via the colon SGR-4 extension"):
+    import io.worxbend.tui.core.UnderlineStyle
+    assert(AnsiSequences.sgr(Style.Default.curlyUnderline) == s"$Esc[0;4:3m")
+    assert(AnsiSequences.sgr(Style.Default.withUnderlineStyle(UnderlineStyle.Double)) == s"$Esc[0;4:2m")
+
+  test("sgr encodes a separate underline color with SGR 58"):
+    assert(AnsiSequences.sgr(Style.Default.withUnderlineColor(Color.Indexed(200))) == s"$Esc[0;58:5:200m")
+    assert(AnsiSequences.sgr(Style.Default.withUnderlineColor(Color.Rgb(1, 2, 3))) == s"$Esc[0;58:2::1:2:3m")
+
+  test("plain underline modifier still emits bare 4, styled underline adds the 4:n selector"):
+    assert(AnsiSequences.sgr(Style.Default.underline) == s"$Esc[0;4m")
+    assert(AnsiSequences.sgr(Style.Default.underline.curlyUnderline) == s"$Esc[0;4;4:3m")

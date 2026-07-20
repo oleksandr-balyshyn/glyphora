@@ -18,13 +18,26 @@ final class EffectSpec extends AnyFunSuite:
       .map(y => (0 until buffer.area.width).count(x => !buffer.get(x, y).isBlank))
       .sum
 
-  test("easing curves are monotone and hit both endpoints"):
+  test("easing curves hit both endpoints; the non-overshoot families are monotone"):
+    // Back/Elastic/Bounce intentionally overshoot or bounce, so they are excluded from the monotonicity check.
+    val overshoots = Set(
+      Easing.BackIn,
+      Easing.BackOut,
+      Easing.BackInOut,
+      Easing.ElasticIn,
+      Easing.ElasticOut,
+      Easing.ElasticInOut,
+      Easing.BounceIn,
+      Easing.BounceOut,
+      Easing.BounceInOut,
+    )
     Easing.values.foreach { easing =>
-      assert(easing(0.0) == 0.0, easing)
+      assert(math.abs(easing(0.0)) < 1e-9, easing)
       assert(math.abs(easing(1.0) - 1.0) < 1e-9, easing)
-      assert(easing(-1.0) == 0.0)
-      val samples = (0 to 10).map(i => easing(i / 10.0))
-      assert(samples.zip(samples.tail).forall(_ <= _), s"$easing not monotone: $samples")
+      assert(easing(-1.0) == easing(0.0)) // inputs below 0 clamp to the start
+      if !overshoots.contains(easing) then
+        val samples = (0 to 10).map(i => easing(i / 10.0))
+        assert(samples.zip(samples.tail).forall(_ <= _), s"$easing not monotone: $samples")
     }
 
   test("a tween interpolates between endpoints and reports completion"):
