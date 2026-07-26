@@ -25,6 +25,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val drawCounter                             = AtomicLong(0)
   private val idleReadCounter                         = AtomicLong(0)
   private val suspendCounter                          = AtomicLong(0)
+  private val wakeCounter                             = AtomicLong(0)
   private val printedLines                            = scala.collection.mutable.ArrayBuffer.empty[String]
 
   def size: Either[BackendError, Size] = Right(terminalSize)
@@ -69,12 +70,23 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     Right(())
 
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
+    // the same contract the real backend enforces: a zero timeout there means "block forever", so it must never be
+    // silently absorbed here — that divergence is what let a wedged event loop pass the whole test suite
+    require(!timeout.isFinite || timeout.toNanos > 0, s"readEvent timeout must be positive or infinite, got $timeout")
     val polled =
       if timeout.isFinite then Option(events.poll(timeout.toMillis, TimeUnit.MILLISECONDS))
       else Some(events.take())
     if polled.isEmpty then
       val _ = idleReadCounter.incrementAndGet()
     Right(polled)
+
+  /** Records the wake so tests can assert that queued render-thread work asked for one.
+    *
+    * Deliberately does not disturb the event queue: headless reads use short timeouts, so waiting one out costs
+    * nothing, and injecting a synthetic event to break the poll would show up as input the app never received.
+    */
+  override def wake(): Unit =
+    val _ = wakeCounter.incrementAndGet()
 
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     lastClipboard = Some(text)
@@ -95,7 +107,12 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     printedLines.synchronized { printedLines ++= lines }
     Right(())
 
-  def close(): Unit = ()
+  /** Releases the simulated terminal, so a test can assert the runner tore everything down on its way out. */
+  def close(): Unit =
+    mouseCapture = false
+    cursorVisible = true
+    alternateScreen = false
+    rawMode = false
 
   // ---- test-driver surface ----
 
@@ -120,6 +137,9 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** How many times the app suspended the terminal (see [[suspend]]). */
   def suspendCount: Long = suspendCounter.get()
+
+  /** How many times [[wake]] was called — i.e. how often background work asked the render thread to look again. */
+  def wakeCount: Long = wakeCounter.get()
 
   /** The lines emitted above the app via [[printAbove]], in order. */
   def printedAbove: Seq[String] = printedLines.synchronized(printedLines.toSeq)

@@ -25,17 +25,28 @@ final class Buffer(val area: Rect):
     * character before them in `text`) are skipped.
     */
   def setString(x: Int, y: Int, text: String, style: Style): Unit =
-    var column   = x
-    val clusters = CharWidth.graphemeClusters(text)
-    while clusters.hasNext && column < area.right do
-      val cluster = clusters.next()
-      val width   = CharWidth.of(cluster)
-      if width > 0 && column + width <= area.right then
-        set(column, y, Cell(cluster, style))
-        if width == 2 then set(column + 1, y, Cell.Empty)
-        column += width
-      else if width > 0 then column = area.right // wide cluster that only half-fits: stop
-    end while
+    if CharWidth.isPrintableAscii(text) then setAsciiString(x, y, text, style)
+    else
+      var column   = x
+      val clusters = CharWidth.graphemeClusters(text)
+      while clusters.hasNext && column < area.right do
+        val cluster = clusters.next()
+        val width   = CharWidth.of(cluster)
+        if width > 0 && column + width <= area.right then
+          set(column, y, Cell(cluster, style))
+          if width == 2 then set(column + 1, y, Cell.Empty)
+          column += width
+        else if width > 0 then column = area.right // wide cluster that only half-fits: stop
+      end while
+
+  /** Allocation-free [[setString]] for printable ASCII: one column per char, symbols taken from a shared table. */
+  private def setAsciiString(x: Int, y: Int, text: String, style: Style): Unit =
+    var index  = 0
+    var column = x
+    while index < text.length && column < area.right do
+      set(column, y, Cell(CharWidth.asciiSymbol(text.charAt(index)), style))
+      column += 1
+      index += 1
 
   /** Copies `region` of `source` into this buffer with the region's top-left landing at `at`.
     *
@@ -85,19 +96,37 @@ final class Buffer(val area: Rect):
     * columns. If the two buffers cover different areas (e.g. after a resize), every cell of `next` is emitted.
     */
   def diff(next: Buffer): Iterator[(Position, Cell)] =
-    val emitAll   = area != next.area
-    val positions =
-      for
-        y <- Iterator.range(next.area.y, next.area.bottom)
-        x <- Iterator.range(next.area.x, next.area.right)
-      yield Position(x, y)
-    positions
-      .filter(pos => emitAll || get(pos.x, pos.y) != next.get(pos.x, pos.y))
-      .filterNot(pos => next.isContinuation(pos))
-      .map(pos => (pos, next.get(pos.x, pos.y)))
+    val changes = Iterator.newBuilder[(Position, Cell)]
+    diff(next, (x, y, cell) => changes += ((Position(x, y), cell)))
+    changes.result()
 
-  private def isContinuation(pos: Position): Boolean =
-    pos.x > area.x && CharWidth.of(get(pos.x - 1, pos.y).symbol) == 2
+  /** [[diff]] without the intermediate objects: calls `emit(x, y, cell)` for each changed cell, in row-major order.
+    *
+    * This is what backends use on the hot path — it allocates nothing per cell (no `Position`, no tuple, no iterator
+    * state), which matters because a 200x50 frame is 10 000 cells and runs at the tick rate.
+    */
+  def diff(next: Buffer, emit: (Int, Int, Cell) => Unit): Unit =
+    val emitAll = area != next.area
+    var y       = next.area.y
+    while y < next.area.bottom do
+      var x = next.area.x
+      while x < next.area.right do
+        val candidate = next.cellAt(x, y)
+        // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
+        val changed   = emitAll || !sameCell(cellAt(x, y), candidate)
+        if changed && !next.isContinuationAt(x, y) then emit(x, y, candidate)
+        x += 1
+      y += 1
+
+  private def sameCell(a: Cell, b: Cell): Boolean =
+    (a.asInstanceOf[AnyRef] eq b.asInstanceOf[AnyRef]) || a == b
+
+  /** Like [[get]] but without the `Position` allocation `Rect.contains` would need. */
+  private def cellAt(x: Int, y: Int): Cell =
+    if x >= area.x && x < area.right && y >= area.y && y < area.bottom then cells(indexOf(x, y)) else Cell.Empty
+
+  private def isContinuationAt(x: Int, y: Int): Boolean =
+    x > area.x && CharWidth.of(cellAt(x - 1, y).symbol) == 2
 
   private def indexOf(x: Int, y: Int): Int =
     (y - area.y) * area.width + (x - area.x)

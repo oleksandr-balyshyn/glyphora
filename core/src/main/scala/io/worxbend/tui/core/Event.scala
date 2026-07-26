@@ -16,3 +16,10 @@ enum Event:
 
   /** The terminal window gained or lost focus (mode 1004 reporting). */
   case FocusGained, FocusLost
+
+  /** An interrupt signal (SIGINT/SIGQUIT — typically `Ctrl+C`) reached the process.
+    *
+    * Delivered as an ordinary event rather than killing the JVM, so the runner unwinds through its normal teardown and
+    * the terminal is restored. An application that does not consume it quits cleanly.
+    */
+  case Interrupt

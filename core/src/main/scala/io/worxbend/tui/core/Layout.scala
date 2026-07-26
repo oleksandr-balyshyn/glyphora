@@ -32,7 +32,31 @@ final case class Layout(
     if leftover <= 0 then fixed.toIndexedSeq
     else
       val extras = distributeLeftover(leftover)
-      fixed.indices.map(i => fixed(i) + extras(i))
+      val shared = fixed.indices.map(i => fixed(i) + extras(i))
+      if extras.sum > 0 then shared else absorbProportionalRemainder(shared, available - shared.sum)
+
+  /** Hands the integer-division remainder to the proportional segments so they fill the container exactly.
+    *
+    * `Percentage(33) x 3` at width 100 truncates to 33+33+33 and would otherwise leave a stray column at the right
+    * edge. This only applies when *every* constraint is proportional — with a `Length` or `Fill` in the mix the
+    * leftover is real free space that [[flex]] positions, not a rounding artifact.
+    */
+  private def absorbProportionalRemainder(sizes: IndexedSeq[Int], remainder: Int): IndexedSeq[Int] =
+    val proportional = constraints.forall {
+      case Constraint.Percentage(_) | Constraint.Ratio(_, _) => true
+      case _                                                 => false
+    }
+    if remainder <= 0 || !proportional || sizes.isEmpty then sizes
+    else
+      // one cell at a time to the earliest segments, so the distribution is deterministic and differs by at most one
+      val granted = sizes.toArray
+      var pending = remainder
+      var index   = 0
+      while pending > 0 do
+        granted(index % granted.length) += 1
+        pending -= 1
+        index += 1
+      granted.toIndexedSeq
 
   private def fixedDemand(constraint: Constraint, available: Int): Int =
     constraint match

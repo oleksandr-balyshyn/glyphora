@@ -18,13 +18,37 @@ object CharWidth:
 
   /** Display width of `text` in terminal columns. Control characters count as zero. */
   def of(text: String): Int =
-    var total    = 0
-    val clusters = graphemeClusters(text)
-    while clusters.hasNext do total += clusterWidth(clusters.next())
-    total
+    if isPrintableAscii(text) then text.length
+    else
+      var total    = 0
+      val clusters = graphemeClusters(text)
+      while clusters.hasNext do total += clusterWidth(clusters.next())
+      total
+
+  /** Whether every char of `text` is printable US-ASCII (`0x20`–`0x7E`), i.e. exactly one column each.
+    *
+    * The fast path that keeps the overwhelmingly common case allocation-free: no iterator, no per-cluster `String`.
+    * Deliberately excludes control characters (width 0) and DEL, so it can never disagree with the general path.
+    */
+  def isPrintableAscii(text: String): Boolean =
+    var index = 0
+    var plain = true
+    while plain && index < text.length do
+      val c = text.charAt(index)
+      if c < 0x20 || c > 0x7e then plain = false
+      index += 1
+    plain
+
+  /** A shared single-character `String` for a printable-ASCII char, so filling a buffer with ASCII allocates nothing.
+    *
+    * Returns `null` for anything outside `0x20`–`0x7E`; callers on the fast path have already checked.
+    */
+  def asciiSymbol(c: Char): String =
+    if c >= 0x20 && c <= 0x7e then AsciiSymbols(c - 0x20) else null
 
   /** The longest prefix of `text` that fits in `maxWidth` columns; never splits a grapheme cluster. */
   def substringByWidth(text: String, maxWidth: Int): String =
+    if isPrintableAscii(text) then return text.substring(0, math.max(0, math.min(text.length, maxWidth)))
     val clusters  = graphemeClusters(text)
     val prefix    = StringBuilder()
     var used      = 0
@@ -130,3 +154,7 @@ object CharWidth:
   private val ZeroWidthJoiner           = 0x200d
   private val TextPresentationSelector  = 0xfe0e
   private val EmojiPresentationSelector = 0xfe0f
+
+  /** Interned one-char strings for `0x20`–`0x7E`, indexed by `codePoint - 0x20`. */
+  private val AsciiSymbols: Array[String] =
+    Array.tabulate(0x7f - 0x20)(offset => (0x20 + offset).toChar.toString)

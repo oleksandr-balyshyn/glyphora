@@ -16,7 +16,9 @@ final case class Paragraph(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val lines = if wrap then text.lines.flatMap(Paragraph.wrapLine(_, area.width)) else text.lines
+      // lazily: wrapping the whole document to draw one screenful makes render cost scale with the text, not the area
+      val lines =
+        if wrap then text.lines.iterator.flatMap(Paragraph.wrapLine(_, area.width)) else text.lines.iterator
       lines.take(area.height).zipWithIndex.foreach { (line, row) =>
         val lineWidth = math.min(line.width, area.width)
         val startX    = alignment match

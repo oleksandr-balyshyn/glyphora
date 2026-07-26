@@ -35,10 +35,37 @@ loop. The DSL wraps the same renderers; it is not a parallel implementation.
 
 ## Which terminals are supported?
 
-Production rendering uses JLine 3 and ANSI capabilities. Modern Unix terminals and
-Windows Terminal are the intended environments. Exact color, hyperlink, mouse,
-focus-reporting, and emoji behavior depends on the emulator and installed fonts.
-glyphora detects a missing controlling TTY and exits safely.
+**The assumed minimum is an xterm-compatible terminal** that understands the DEC
+private modes glyphora sets — `1049` (alternate screen), `25` (cursor visibility),
+`2004` (bracketed paste), `1004` (focus reporting), `1006`/`1002`/`1000` (mouse) — plus
+SGR colours. Escape sequences are hardcoded rather than read from terminfo, with one
+exception: the alternate screen is gated on terminfo's `smcup`, so a terminal without
+one (the Linux console) fails loudly at startup instead of painting over your
+scrollback.
+
+Output is always written as UTF-8, regardless of the process locale. Every border and
+glyph in `tui-widgets` is non-ASCII, and there is no ASCII fallback border set.
+
+This table records what was **actually verified**, not what is expected to work. Empty
+cells mean untested — contributions welcome.
+
+| Environment | Renders | Alt screen | Restore on exit | Restore on Ctrl+C | Truecolor | UTF-8 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Linux PTY, `TERM=xterm-256color` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Linux PTY, `TERM=linux` | ✅ | n/a — refused, no `smcup` | ✅ | | | ✅ |
+| Linux PTY, unknown `TERM` | ✅ | ✅ | ✅ | | | ✅ |
+| Linux PTY, no terminfo database | ✅ | ✅ | ✅ | | | ✅ |
+| Linux PTY, `LC_ALL=C` | ✅ | ✅ | ✅ | | | ✅ |
+| GraalVM native binary, Linux PTY | ✅ | ✅ | ✅ | | ✅ | ✅ |
+| xterm / kitty / WezTerm / Alacritty | | | | | | |
+| tmux / screen | | | | | | |
+| macOS Terminal.app / iTerm2 | | | | | | |
+| Windows Terminal / conhost | | | | | | |
+
+Colour depth, hyperlink (OSC 8), clipboard (OSC 52), focus reporting and emoji width
+all remain emulator- and font-dependent. glyphora detects a missing controlling TTY —
+piped output, `TERM=dumb`, a backgrounded process group — and exits with a message
+rather than writing escape sequences into your log file.
 
 ## Does it work on Windows?
 

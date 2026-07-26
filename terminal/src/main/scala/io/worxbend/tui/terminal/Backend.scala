@@ -28,8 +28,32 @@ trait Backend:
   def hideCursor(): Either[BackendError, Unit]
   def showCursor(): Either[BackendError, Unit]
 
-  /** Blocks up to `timeout` for the next input event; `Right(None)` means the timeout elapsed quietly. */
+  /** Blocks up to `timeout` for the next input event; `Right(None)` means nothing arrived.
+    *
+    * `timeout` must be **strictly positive**, or infinite to block until an event arrives. Zero is rejected rather than
+    * treated as "poll once": the underlying JLine reader treats a non-positive timeout as an unbounded blocking read,
+    * so a zero here would wedge the event loop until the user happened to press a key.
+    *
+    * `Right(None)` covers both an elapsed timeout and input that decoded to nothing (a device-attributes reply, a torn
+    * sequence) — callers must treat it as "no event this round", never as end-of-input.
+    */
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]]
+
+  /** Interrupts an in-flight [[readEvent]] so the caller can re-check its own state promptly. Safe from any thread.
+    *
+    * Without this, work queued onto the render thread from a background thread (an `Async` result, a timer) is
+    * invisible until the current poll expires. The default is a no-op for backends whose reads are already cheap to
+    * wait out.
+    */
+  def wake(): Unit = ()
+
+  /** Restores the terminal by the shortest path available, for callers that may be racing the backend's own teardown.
+    *
+    * Unlike `close()` this makes no attempt to be tidy and keeps no state: it exists for a JVM shutdown hook, where the
+    * normal machinery may already have been torn down underneath it. Must be idempotent and must never throw. The
+    * default is a no-op for backends with no real terminal to restore.
+    */
+  def emergencyRestore(): Unit = ()
 
   /** Copies `text` to the system clipboard via the OSC 52 terminal sequence.
     *

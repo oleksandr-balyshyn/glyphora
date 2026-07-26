@@ -144,9 +144,31 @@ compile-time Scala 3 macros and require no reflection config. See
 
 ## The screen is corrupted after a crash
 
-The normal runner restores cooked mode, cursor visibility, mouse capture, and the
-alternate screen in a `finally` path. If the process is killed ungracefully, run
-`reset` in the shell.
+It should not be. glyphora owns the terminal's signal handling instead of leaving it
+to JLine's defaults, so every ordinary way of ending a TUI restores the terminal.
+Measured on a real PTY with `examples/hello-world`:
+
+| How the app ended | termios | alternate screen | cursor | paste / focus / kitty modes |
+|---|:---:|:---:|:---:|:---:|
+| normal return (`q`) | ✅ | ✅ | ✅ | ✅ |
+| uncaught exception from `view` | ✅ | ✅ | ✅ | ✅ |
+| `Ctrl+C` (SIGINT) | ✅ | ✅ | ✅ | ✅ |
+| `SIGQUIT` | ✅ | ✅ | ✅ | ✅ |
+| `SIGTERM` | ✅ | ✅ | ✅ | ✅ |
+| `SIGHUP` (window closed) | ✅ | ✅ | ✅ | ✅ |
+| `System.exit` from a handler | ✅ | ✅ | ✅ | ✅ |
+| `SIGKILL` | ❌ | ❌ | ❌ | ❌ |
+
+`Ctrl+C` arrives as `Event.Interrupt` and quits through the same teardown as any other
+exit; override `TuiApp.onInterrupt()` and return `true` to intercept it (to confirm, or
+to cancel in-flight work) instead. Signal-terminated exits additionally go through a
+JVM shutdown hook that writes the mode-reset sequences straight to the stdout
+descriptor, so restoration does not depend on the backend still being intact.
+
+`SIGKILL` cannot be caught by anything; after `kill -9`, run `reset`.
+
+Set `GLYPHORA_DEBUG=1` to have failed teardown steps report themselves on stderr rather
+than being swallowed.
 
 When launching an external interactive program, use `TuiApp.suspend { ... }` so the
 terminal is deliberately handed over and restored.

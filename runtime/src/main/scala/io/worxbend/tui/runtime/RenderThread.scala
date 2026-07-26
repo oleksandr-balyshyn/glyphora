@@ -1,22 +1,46 @@
 package io.worxbend.tui.runtime
 
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 /** The single-render-thread model.
   *
-  * All UI state mutation must happen on the render thread — the thread running the [[Runner]] loop. The guard is
+  * All UI state mutation must happen on a render thread — the thread running a [[Runner]] loop. The guard is
   * deliberately a no-op while no render thread is registered, so unit tests of widgets and signals need no running
   * runtime.
+  *
+  * Each runner owns its own work queue rather than sharing one process-wide, so two runners in the same JVM (parallel
+  * test suites, an embedded app) never execute each other's queued work on the wrong thread.
   */
 object RenderThread:
 
-  // a concurrent set: several runners may live in one JVM (parallel test suites, embedded apps) and must
-  // not race on a single registration slot
-  private val registered = java.util.concurrent.ConcurrentHashMap.newKeySet[Thread]()
-  private val pending    = ConcurrentLinkedQueue[() => Unit]()
+  /** One runner's queue of work waiting to run on its render thread. */
+  final class RenderLoop private[runtime] (wake: () => Unit):
+
+    private val pending = ConcurrentLinkedQueue[() => Unit]()
+
+    /** Queues `body` and nudges the runner, so it is picked up on the next iteration rather than at the next poll. */
+    private[runtime] def enqueue(body: () => Unit): Unit =
+      val _ = pending.add(body)
+      wake()
+
+    private[runtime] def drain(): Unit =
+      var task = pending.poll()
+      while task != null do
+        task()
+        task = pending.poll()
+
+    private[runtime] def isEmpty: Boolean = pending.isEmpty
+
+  // several runners may live in one JVM and must not race on a single registration slot
+  private val loops = ConcurrentHashMap[Thread, RenderLoop]()
+
+  /** Work queued when the caller belongs to no runner and more than one is running — genuinely ambiguous, so it is
+    * drained by whichever render thread gets there first. With zero or one runner the routing is exact.
+    */
+  private val detached = RenderLoop(() => ())
 
   def isRenderThread: Boolean =
-    registered.isEmpty || registered.contains(Thread.currentThread())
+    loops.isEmpty || loops.containsKey(Thread.currentThread())
 
   /** Defect-detection assertion: throws `IllegalStateException` when called off the render thread while one is
     * registered. A programming error, not a recoverable condition — hence throw, not `Either`.
@@ -33,16 +57,45 @@ object RenderThread:
 
   /** Always queues `body`; the runner executes queued work at the start of each loop iteration. */
   def runLater(body: => Unit): Unit =
-    val _ = pending.add(() => body)
+    capture().enqueue(() => body)
 
-  private[tui] def register(thread: Thread): Unit =
-    val _ = registered.add(thread)
+  /** The loop that should receive work queued from *this* thread.
+    *
+    * Background workers must call this while still on the render thread (before they go async) so their continuation
+    * comes back to the runner that started it — see [[Async]].
+    */
+  def capture(): RenderLoop =
+    val own = loops.get(Thread.currentThread())
+    if own != null then own
+    else
+      val all = loops.values.iterator
+      if !all.hasNext then detached
+      else
+        val first = all.next()
+        if all.hasNext then detached else first
+
+  private[tui] def register(thread: Thread, wake: () => Unit): RenderLoop =
+    val loop = RenderLoop(wake)
+    loops.put(thread, loop)
+    loop
+
+  /** Registers `thread` without a wake-up channel — for drivers that poll instead of blocking. */
+  private[tui] def register(thread: Thread): RenderLoop =
+    register(thread, () => ())
 
   private[tui] def unregister(): Unit =
-    val _ = registered.remove(Thread.currentThread())
+    val _ = loops.remove(Thread.currentThread())
 
+  /** Runs everything queued for `loop`, plus anything that could not be attributed to a specific runner. */
+  private[tui] def drainPending(loop: RenderLoop): Unit =
+    loop.drain()
+    detached.drain()
+
+  /** Drains whatever is queued for the calling thread, plus unattributed work. */
   private[tui] def drainPending(): Unit =
-    var task = pending.poll()
-    while task != null do
-      task()
-      task = pending.poll()
+    val own = loops.get(Thread.currentThread())
+    if own != null then own.drain()
+    detached.drain()
+
+  private[tui] def hasPending(loop: RenderLoop): Boolean =
+    !loop.isEmpty || !detached.isEmpty

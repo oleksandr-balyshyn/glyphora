@@ -47,6 +47,28 @@ MiMa binary-compatibility gates are planned once a first published baseline is
 selected. Until then, recompile downstream code on upgrade even when moving between
 patch versions.
 
+### Types that will break when they grow
+
+Adding a field to a `case class` changes the signatures of `apply`, `copy` and
+`unapply`, so downstream code compiled against the old shape fails with
+`NoSuchMethodError` — recompiling fixes it, but only if you know to. These public
+types are the ones most likely to gain fields, and are the reason the table above says
+"not yet" rather than "yes":
+
+| Type | Module | Why it will grow |
+|---|---|---|
+| `Style` | `tui-core` | new text attributes as terminals gain them |
+| `ElementProps` | `tui-dsl` | every new element modifier lands here |
+| `Theme` | `tui-dsl` | new semantic roles |
+| `RunnerConfig` | `tui-runtime` | new loop options |
+| `Layout` | `tui-core` | new constraint or flex behaviour |
+
+Before 1.0 these should move to a `final class` with a private constructor plus `with*`
+builders — the builder style `Style` already uses — so a new field is additive. The
+genuinely closed value types (`Position`, `Size`, `Rect`, `Cell`, `KeyEvent`,
+`MouseEvent`) are expected to stay `case class`es: their shape is fixed by what a
+terminal cell and a coordinate are.
+
 ## Release process
 
 Releases are Git tags named `vX.Y.Z`. Pushing a tag runs the Publish workflow, which

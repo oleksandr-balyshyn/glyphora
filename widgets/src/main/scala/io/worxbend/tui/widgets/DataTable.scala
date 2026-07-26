@@ -38,6 +38,25 @@ final class DataTableState:
       sortColumn = Some(column)
       sortAscending = true
 
+  /** Drops the memoized filtered/sorted view.
+    *
+    * Only needed when the row data changes without changing its length — the cache key cannot see through a `Seq` to
+    * its contents, so `DataTable(columns, updatedRows, widths)` with the same row count would otherwise keep showing
+    * the previous ordering.
+    */
+  def invalidate(): Unit = view = None
+
+  private var view: Option[(DataTableState.ViewKey, Seq[Seq[String]])] = None
+
+  /** Returns the cached view when `key` still matches, otherwise recomputes and stores it. */
+  private[widgets] def cachedView(key: DataTableState.ViewKey)(compute: => Seq[Seq[String]]): Seq[Seq[String]] =
+    view match
+      case Some((cached, rows)) if cached == key => rows
+      case _                                     =>
+        val fresh = compute
+        view = Some((key, fresh))
+        fresh
+
   def setFilter(text: String): Unit =
     filter = text
     selected = None
@@ -48,6 +67,15 @@ final class DataTableState:
 
   def selectPrevious(visibleCount: Int): Unit =
     if visibleCount > 0 then selected = Some(selected.fold(0)(index => math.max(index - 1, 0)))
+
+object DataTableState:
+  /** Everything that can change the filtered/sorted view, used as the memoization key. */
+  private[widgets] final case class ViewKey(
+      sortColumn: Option[Int],
+      sortAscending: Boolean,
+      filter: String,
+      rowCount: Int,
+  )
 
 /** A sortable, filterable table with a selectable, scrollable body (the Tier 5 upgrade over [[Table]]).
   *
@@ -64,18 +92,26 @@ final case class DataTable(
     highlightStyle: Style = Style.Default.reverse,
 ) extends StatefulWidget[DataTableState]:
 
-  /** Every row surviving the filter, in sort order — the domain paging windows over. */
+  /** Every row surviving the filter, in sort order — the domain paging windows over.
+    *
+    * Memoized on `state`: scrolling changes only the offset, and re-sorting ten thousand rows on every frame is what
+    * pushes a redraw past the tick budget. The cache key covers everything that can change the result, with the row
+    * count standing in for the data itself — see [[DataTableState.invalidate]] for when that is not enough.
+    */
   def filteredRows(state: DataTableState): Seq[Seq[String]] =
-    val filtered =
-      if state.filter.isEmpty then rows
-      else
-        val needle = state.filter.toLowerCase
-        rows.filter(_.exists(_.toLowerCase.contains(needle)))
-    state.sortColumn match
-      case None         => filtered
-      case Some(column) =>
-        val sorted = filtered.sortWith((a, b) => cellLess(a.lift(column), b.lift(column)))
-        if state.sortAscending then sorted else sorted.reverse
+    val key = DataTableState.ViewKey(state.sortColumn, state.sortAscending, state.filter, rows.size)
+    state.cachedView(key) {
+      val filtered =
+        if state.filter.isEmpty then rows
+        else
+          val needle = state.filter.toLowerCase
+          rows.filter(_.exists(_.toLowerCase.contains(needle)))
+      state.sortColumn match
+        case None         => filtered
+        case Some(column) =>
+          val sorted = filtered.sortWith((a, b) => cellLess(a.lift(column), b.lift(column)))
+          if state.sortAscending then sorted else sorted.reverse
+    }
 
   /** The rows the widget is currently showing: filtered, sorted, and windowed to the current page — what a selection
     * indexes.

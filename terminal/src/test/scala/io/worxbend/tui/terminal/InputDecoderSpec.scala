@@ -89,8 +89,10 @@ final class InputDecoderSpec extends AnyFunSuite:
     assert(decoded(csi("<16;2;2M")*) == Event.Mouse(MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.Ctrl)))
     assert(decoded(csi("<4;2;2M")*) == Event.Mouse(MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.Shift)))
 
-  test("a torn escape sequence degrades to the Escape key instead of hanging"):
-    assert(decoded(0x1b, '[') == Event.Key(KeyEvent.of(KeyCode.Escape)))
+  test("a torn escape sequence is dropped rather than reported as a key"):
+    // reporting Escape here would mean a half-arrived arrow key silently closes the user's dialog
+    assert(decoderFor(0x1b, '[').decode(10).isEmpty)
+    assert(decoderFor(csi("1;5")*).decode(10).isEmpty)
 
   test("kitty CSI-u sequences decode without the escape timeout heuristic"):
     assert(decoded(csi("27u")*) == Event.Key(KeyEvent.of(KeyCode.Escape)))

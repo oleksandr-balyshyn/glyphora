@@ -29,11 +29,13 @@ object Async:
     * through `onError` (default: rethrow on the worker thread) — see [[runCatching]] for an `Either` result.
     */
   def run[A](work: => A)(onResult: A => Unit)(using onError: AsyncErrorHandler = AsyncErrorHandler.rethrow): Unit =
-    val _ = worker.submit(new Runnable {
+    // captured here, while still on the caller's thread, so the continuation returns to the runner that started it
+    val target = RenderThread.capture()
+    val _      = worker.submit(new Runnable {
       def run(): Unit =
         try
           val result = work
-          RenderThread.runLater(onResult(result))
+          target.enqueue(() => onResult(result))
         catch case NonFatal(error) => onError.handle(error)
     })
 
@@ -41,18 +43,20 @@ object Async:
     * handler needed. The idiomatic way to drive a load into `Signal[Either[Throwable, A]]` (or a loading/error state).
     */
   def runCatching[A](work: => A)(onDone: Either[Throwable, A] => Unit): Unit =
-    val _ = worker.submit(new Runnable {
+    val target = RenderThread.capture()
+    val _      = worker.submit(new Runnable {
       def run(): Unit =
         val outcome =
           try Right(work)
           catch case NonFatal(error) => Left(error)
-        RenderThread.runLater(onDone(outcome))
+        target.enqueue(() => onDone(outcome))
     })
 
   /** Runs `body` on the render thread once, after `delay`. Returns a handle to cancel it before it fires. */
   def after(delay: FiniteDuration)(body: => Unit): Cancelable =
+    val target = RenderThread.capture()
     val future = scheduler.schedule(
-      (() => RenderThread.runLater(body)): Runnable,
+      (() => target.enqueue(() => body)): Runnable,
       delay.toMillis,
       TimeUnit.MILLISECONDS,
     )
@@ -63,8 +67,9 @@ object Async:
     */
   def every(interval: FiniteDuration)(body: => Unit): Cancelable =
     val millis = math.max(1L, interval.toMillis)
+    val target = RenderThread.capture()
     val future = scheduler.scheduleAtFixedRate(
-      (() => RenderThread.runLater(body)): Runnable,
+      (() => target.enqueue(() => body)): Runnable,
       millis,
       millis,
       TimeUnit.MILLISECONDS,

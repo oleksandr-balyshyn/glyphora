@@ -213,7 +213,7 @@ final case class InputElement(
     else
       event.code match
         case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
-          state.insert(c.toString)
+          state.insert(Character.toString(c))
           true
         case KeyCode.Backspace                                                                   =>
           state.backspace()
@@ -671,7 +671,7 @@ final case class AutocompleteElement(
     else
       event.code match
         case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
-          state.input.insert(c.toString)
+          state.input.insert(Character.toString(c))
           state.highlighted = 0
           true
         case KeyCode.Backspace                                                                   =>
@@ -864,7 +864,7 @@ final case class NumberInputElement(
     else
       event.code match
         case KeyCode.Char(c) if event.modifiers.isEmpty =>
-          if accepts(c) then state.insert(c.toString)
+          if accepts(c) then state.insert(Character.toString(c))
           true // swallow rejected characters too: they must not bubble as global keys while typing
         case KeyCode.Backspace =>
           state.backspace()
@@ -886,10 +886,10 @@ final case class NumberInputElement(
           true
         case _                 => false
 
-  private def accepts(c: Char): Boolean =
-    if c.isDigit then true
-    else if c == '-' then state.cursor == 0 && !state.value.startsWith("-")
-    else if c == '.' then allowDecimal && !state.value.contains('.')
+  private def accepts(codePoint: Int): Boolean =
+    if Character.isDigit(codePoint) then true
+    else if codePoint == '-' then state.cursor == 0 && !state.value.startsWith("-")
+    else if codePoint == '.' then allowDecimal && !state.value.contains('.')
     else false
 
 /** A template-driven input (`##/##/####`): `#` accepts a digit, `A` a letter, literals insert themselves. */
@@ -920,14 +920,15 @@ final case class MaskedInputElement(
           true
         case _                                          => false
 
-  private def typeChar(c: Char): Unit =
+  private def typeChar(codePoint: Int): Unit =
     state.moveEnd()
     var position = currentLength
     // literals between fillable slots insert themselves
     while position < mask.length && !isSlot(mask.charAt(position)) do
       state.insert(mask.charAt(position).toString)
       position += 1
-    if position < mask.length && slotAccepts(mask.charAt(position), c) then state.insert(c.toString)
+    if position < mask.length && slotAccepts(mask.charAt(position), codePoint) then
+      state.insert(Character.toString(codePoint))
 
   private def eraseSlot(): Unit =
     state.moveEnd()
@@ -938,8 +939,8 @@ final case class MaskedInputElement(
 
   private def isSlot(m: Char): Boolean = m == '#' || m == 'A'
 
-  private def slotAccepts(m: Char, c: Char): Boolean =
-    (m == '#' && c.isDigit) || (m == 'A' && c.isLetter)
+  private def slotAccepts(m: Char, codePoint: Int): Boolean =
+    (m == '#' && Character.isDigit(codePoint)) || (m == 'A' && Character.isLetter(codePoint))
 
 /** A page indicator: Left/Right change the page while focused. */
 final case class PaginatorElement(
@@ -1049,7 +1050,7 @@ final case class TextAreaElement(
           state.redo()
           true
         case KeyEvent(KeyCode.Char(c), modifiers) if modifiers.isEmpty || modifiers == KeyModifiers.Shift =>
-          state.insert(c.toString)
+          state.insert(Character.toString(c))
           true
         case KeyEvent(KeyCode.Enter, _)                                                                   =>
           state.newline()

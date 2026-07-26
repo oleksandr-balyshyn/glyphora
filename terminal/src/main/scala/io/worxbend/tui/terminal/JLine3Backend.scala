@@ -3,8 +3,10 @@ package io.worxbend.tui.terminal
 import io.worxbend.tui.core.{Buffer, CharWidth, Event, Size}
 
 import org.jline.terminal.{Terminal, TerminalBuilder}
+import org.jline.utils.InfoCmp
 
-import java.util.concurrent.atomic.AtomicReference
+import java.io.InterruptedIOException
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
@@ -13,52 +15,75 @@ import scala.util.control.NonFatal
   * Owns the JLine `Terminal` for its whole lifetime: construct via [[JLine3Backend.create]], release with `close()`
   * (which restores cooked mode, the main screen, and cursor visibility if still active). `draw` keeps a snapshot of the
   * last flushed frame and writes only the diff.
+  *
+  * Signals are owned here rather than left to JLine's defaults. `INT`/`QUIT` become [[Event.Interrupt]] so the runner
+  * unwinds through its normal teardown; `TSTP`/`CONT` hand the terminal back to the shell and take it again on resume;
+  * `WINCH` posts a coalesced resize. See [[JLine3Backend.create]] for why the defaults are unusable.
   */
 final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) extends Backend:
 
-  private var savedAttributes: Option[org.jline.terminal.Attributes] = None
-  private var lastFlushed: Option[Buffer]                            = None
-  private var alternateScreenActive                                  = false
-  private var mouseCaptureActive                                     = false
-  private var cursorHidden                                           = false
-  private val pendingResize                                          = AtomicReference[Option[Size]](None)
-  private val decoder = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
+  // written on the render thread, read by JLine's signal-dispatch thread and by the shutdown hook
+  @volatile private var savedAttributes: Option[org.jline.terminal.Attributes] = None
+  @volatile private var alternateScreenActive                                  = false
+  @volatile private var mouseCaptureActive                                     = false
+  @volatile private var cursorHidden                                           = false
+  @volatile private var suspendedState                                         = TerminalState.None
 
-  terminal.handle(
-    Terminal.Signal.WINCH,
-    _ => pendingResize.set(Some(currentSize)),
-  )
+  private var lastFlushed: Option[Buffer] = scala.None
+
+  private val pendingResize    = AtomicReference[Option[Size]](scala.None)
+  private val pendingInterrupt = AtomicBoolean(false)
+  private val woken            = AtomicBoolean(false)
+  private val pollingThread    = AtomicReference[Thread](null)
+  private val decoder          = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
+
+  private val supportsAlternateScreen =
+    terminal.getStringCapability(InfoCmp.Capability.enter_ca_mode) != null
+
+  terminal.handle(Terminal.Signal.WINCH, _ => onResize())
+  // INT/QUIT must not kill the JVM: the process would die before any teardown and hand back a raw, alt-screen terminal
+  terminal.handle(Terminal.Signal.INT, _ => onInterrupt())
+  terminal.handle(Terminal.Signal.QUIT, _ => onInterrupt())
+  terminal.handle(Terminal.Signal.TSTP, _ => onStop())
+  terminal.handle(Terminal.Signal.CONT, _ => onContinue())
 
   def size: Either[BackendError, Size] = attempt(currentSize)
 
   def draw(buffer: Buffer): Either[BackendError, Unit] =
     attempt {
       val previous                    = lastFlushed.getOrElse(Buffer(buffer.area))
-      val output                      = StringBuilder()
-      output ++= AnsiSequences.BeginSynchronized
+      val body                        = StringBuilder()
       var expectedX                   = -1
       var currentY                    = -1
       var currentStyle                = ""
-      var currentLink: Option[String] = None
-      previous.diff(buffer).foreach { (pos, cell) =>
-        if pos.y != currentY || pos.x != expectedX then output ++= AnsiSequences.moveTo(pos.x, pos.y)
-        val sgr = AnsiSequences.sgr(cell.style, colorDepth)
-        if sgr != currentStyle then
-          output ++= sgr
-          currentStyle = sgr
-        if cell.style.link != currentLink then
-          if currentLink.nonEmpty then output ++= AnsiSequences.LinkClose
-          cell.style.link.foreach(url => output ++= AnsiSequences.linkOpen(url))
-          currentLink = cell.style.link
-        output ++= cell.symbol
-        currentY = pos.y
-        expectedX = pos.x + math.max(1, CharWidth.of(cell.symbol))
-      }
-      if currentLink.nonEmpty then output ++= AnsiSequences.LinkClose
-      output ++= AnsiSequences.ResetStyle
-      output ++= AnsiSequences.EndSynchronized
-      terminal.writer().write(output.result())
-      terminal.writer().flush()
+      var currentLink: Option[String] = scala.None
+      previous.diff(
+        buffer,
+        (x, y, cell) => {
+          if y != currentY || x != expectedX then body ++= AnsiSequences.moveTo(x, y)
+          val sgr = AnsiSequences.sgr(cell.style, colorDepth)
+          if sgr != currentStyle then
+            body ++= sgr
+            currentStyle = sgr
+          if cell.style.link != currentLink then
+            if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
+            cell.style.link.foreach(url => body ++= AnsiSequences.linkOpen(url))
+            currentLink = cell.style.link
+          body ++= cell.symbol
+          currentY = y
+          expectedX = x + math.max(1, CharWidth.of(cell.symbol))
+        },
+      )
+      // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent
+      if body.nonEmpty then
+        if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
+        val output = StringBuilder()
+        output ++= AnsiSequences.BeginSynchronized
+        output ++= body.result()
+        output ++= AnsiSequences.ResetStyle
+        output ++= AnsiSequences.EndSynchronized
+        terminal.writer().write(output.result())
+        terminal.writer().flush()
       lastFlushed = Some(buffer.snapshot)
     }
 
@@ -73,23 +98,31 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   def disableRawMode(): Either[BackendError, Unit] =
     savedAttributes match
-      case None             => Left(BackendError.NotInRawMode)
+      case scala.None       => Left(BackendError.NotInRawMode)
       case Some(attributes) =>
         attempt {
           write(AnsiSequences.PopKittyKeyboard)
           write(AnsiSequences.DisableFocusReporting)
           write(AnsiSequences.DisableBracketedPaste)
           terminal.setAttributes(attributes)
-          savedAttributes = None
+          savedAttributes = scala.None
         }
 
+  /** Enters the alternate screen, or reports that the terminal has none.
+    *
+    * Gated on terminfo's `smcup`: the Linux console (`TERM=linux`) has no alternate screen, so emitting `CSI ?1049h`
+    * there paints the app over the user's scrollback and never gives it back. Failing loudly beats destroying history.
+    */
   def enterAlternateScreen(): Either[BackendError, Unit] =
-    attempt {
-      write(AnsiSequences.EnterAlternateScreen)
-      write(AnsiSequences.ClearScreen)
-      alternateScreenActive = true
-      lastFlushed = None // the alternate screen starts blank; the next draw must repaint everything
-    }
+    if !supportsAlternateScreen then
+      Left(BackendError.UnsupportedTerminal(s"${terminal.getType} has no alternate screen (no smcup capability)"))
+    else
+      attempt {
+        write(AnsiSequences.EnterAlternateScreen)
+        write(AnsiSequences.ClearScreen)
+        alternateScreenActive = true
+        lastFlushed = scala.None // the alternate screen starts blank; the next draw must repaint everything
+      }
 
   def leaveAlternateScreen(): Either[BackendError, Unit] =
     attempt {
@@ -122,59 +155,118 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     }
 
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
-    pendingResize.getAndSet(None) match
-      case Some(resized) => Right(Some(Event.Resize(resized)))
-      case None          => attempt(decoder.decode(timeout.toMillis))
+    require(!timeout.isFinite || timeout.toNanos > 0, s"readEvent timeout must be positive or infinite, got $timeout")
+    if pendingInterrupt.getAndSet(false) then Right(Some(Event.Interrupt))
+    else
+      pendingResize.getAndSet(scala.None) match
+        case Some(resized) => Right(Some(Event.Resize(resized)))
+        case scala.None    =>
+          // something queued render-thread work while we were away: go round the loop instead of blocking again
+          if woken.getAndSet(false) then Right(scala.None) else blockingRead(timeout)
+
+  private def blockingRead(timeout: Duration): Either[BackendError, Option[Event]] =
+    pollingThread.set(Thread.currentThread())
+    try Right(decoder.decode(timeout.toMillis))
+    catch
+      case _: InterruptedIOException => Right(scala.None) // woken deliberately by `wake()`
+      case NonFatal(error)           => Left(BackendError.Io(error))
+    finally
+      pollingThread.set(null)
+      val _ = Thread.interrupted() // drop an interrupt that landed after the read completed
+
+  /** Cuts short an in-flight [[readEvent]].
+    *
+    * JLine's reader waits on a monitor and converts an interrupt into an `InterruptedIOException` that it throws *and
+    * clears* (`NonBlockingReaderImpl.read`), so the reader stays usable and no buffered input is lost.
+    */
+  override def wake(): Unit =
+    woken.set(true)
+    val blocked = pollingThread.get()
+    if blocked != null && (blocked ne Thread.currentThread()) then blocked.interrupt()
 
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     attempt(write(AnsiSequences.clipboardCopy(text)))
 
   override def suspend[A](body: => A): Either[BackendError, A] =
     attempt {
-      val hadRaw          = savedAttributes.nonEmpty
-      val wasAlt          = alternateScreenActive
-      val wasCursorHidden = cursorHidden
-      val wasMouse        = mouseCaptureActive
-      // hand the terminal back in reverse setup order
-      if wasMouse then bestEffort(disableMouseCapture())
-      if wasCursorHidden then bestEffort(showCursor())
-      if wasAlt then bestEffort(leaveAlternateScreen())
-      if hadRaw then bestEffort(disableRawMode())
-      terminal.writer().flush()
+      val released = releaseTerminal()
       try body
-      finally
-        if hadRaw then bestEffort(enableRawMode())
-        if wasAlt then bestEffort(enterAlternateScreen()) // clears + sets lastFlushed = None (full repaint)
-        if wasCursorHidden then bestEffort(hideCursor())
-        if wasMouse then bestEffort(enableMouseCapture())
-        lastFlushed = None
+      finally reacquireTerminal(released)
     }
 
   override def printAbove(lines: Seq[String]): Either[BackendError, Unit] =
     // step out to the primary screen so the lines land in real scrollback, print them, then step back in and repaint
     suspend {
       lines.foreach { line =>
-        terminal.writer().write(line)
+        // these strings reach the terminal uninterpreted, so they get the same control-stripping as link targets
+        terminal.writer().write(AnsiSequences.stripControls(line))
         terminal.writer().write("\r\n")
       }
       terminal.writer().flush()
     }
 
   def close(): Unit =
-    // best-effort teardown in reverse acquisition order; a failing step must not block the ones after it
-    if mouseCaptureActive then bestEffort(disableMouseCapture())
-    if cursorHidden then bestEffort(showCursor())
-    if alternateScreenActive then bestEffort(leaveAlternateScreen())
-    if savedAttributes.nonEmpty then bestEffort(disableRawMode())
+    val _ = releaseTerminal()
     try terminal.close()
     catch case NonFatal(_) => ()
+
+  /** Last-resort restore, for a shutdown hook that may be racing JLine's own terminal closer.
+    *
+    * Writes straight to the process's stdout descriptor rather than through the JLine writer: once JLine's
+    * `ShutdownHooks` closer has run, `terminal.writer()` throws `IllegalStateException: Terminal has been closed` and
+    * every teardown write is silently discarded. Every sequence emitted is an idempotent mode *reset*, so this is safe
+    * to call even when nothing was enabled, and safe to call twice.
+    */
+  override def emergencyRestore(): Unit =
+    try
+      val out = java.io.FileOutputStream(java.io.FileDescriptor.out)
+      out.write(AnsiSequences.RestoreAll.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+      out.flush()
+    catch case NonFatal(_) => ()
+
+  /** Hands the terminal back to the shell, returning what was active so [[reacquireTerminal]] can restore it. */
+  private def releaseTerminal(): TerminalState =
+    val state = TerminalState(savedAttributes.nonEmpty, alternateScreenActive, cursorHidden, mouseCaptureActive)
+    if state.mouse then bestEffort(disableMouseCapture())
+    if state.cursorHidden then bestEffort(showCursor())
+    if state.alternateScreen then bestEffort(leaveAlternateScreen())
+    if state.raw then bestEffort(disableRawMode())
+    try terminal.writer().flush()
+    catch case NonFatal(_) => ()
+    state
+
+  private def reacquireTerminal(state: TerminalState): Unit =
+    if state.raw then bestEffort(enableRawMode())
+    if state.alternateScreen then bestEffort(enterAlternateScreen())
+    if state.cursorHidden then bestEffort(hideCursor())
+    if state.mouse then bestEffort(enableMouseCapture())
+    lastFlushed = scala.None // whatever ran in between owned the screen: repaint everything
+
+  private def onResize(): Unit =
+    pendingResize.set(Some(currentSize))
+    wake()
+
+  private def onInterrupt(): Unit =
+    pendingInterrupt.set(true)
+    wake()
+
+  /** SIGTSTP: undress the terminal, then stop for real by re-raising with the default disposition. */
+  private def onStop(): Unit =
+    suspendedState = releaseTerminal()
+    JLine3Backend.stopSelf()
+
+  /** SIGCONT: take the terminal back and force a full repaint at whatever size it is now. */
+  private def onContinue(): Unit =
+    reacquireTerminal(suspendedState)
+    suspendedState = TerminalState.None
+    onResize()
 
   private def currentSize: Size =
     val jlineSize = terminal.getSize
     Size(jlineSize.getColumns, jlineSize.getRows)
 
   private def bestEffort(step: Either[BackendError, Unit]): Unit =
-    val _ = step
+    step.left.foreach(JLine3Backend.logTeardownFailure)
 
   private def write(sequence: String): Unit =
     terminal.writer().write(sequence)
@@ -183,6 +275,17 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   private def attempt[A](body: => A): Either[BackendError, A] =
     try Right(body)
     catch case NonFatal(error) => Left(BackendError.Io(error))
+
+/** Which terminal modes were active at a given moment, so they can be restored in the same shape. */
+private[terminal] final case class TerminalState(
+    raw: Boolean,
+    alternateScreen: Boolean,
+    cursorHidden: Boolean,
+    mouse: Boolean,
+)
+
+private[terminal] object TerminalState:
+  val None: TerminalState = TerminalState(false, false, false, false)
 
 object JLine3Backend:
 
@@ -193,9 +296,48 @@ object JLine3Backend:
     */
   def create(colorDepth: ColorDepth = ColorDepth.detect()): Either[BackendError, JLine3Backend] =
     try
-      val terminal = TerminalBuilder.builder().system(true).build()
+      val terminal = TerminalBuilder
+        .builder()
+        .system(true)
+        // With JLine's default SIG_DFL handler, PosixSysTerminal calls sun.misc.Signal.handle(sig, SIG_DFL) for every
+        // Terminal.Signal, which strips the JVM's own SIGINT handler: Ctrl+C then terminates the process outright, no
+        // shutdown hook runs, and the terminal is handed back raw and on the alternate screen. Any non-SIG_DFL value
+        // makes JLine install Java-level handlers instead, which `terminal.handle` can route into the event loop.
+        .signalHandler(Terminal.SignalHandler.SIG_IGN)
+        // Never inherit the platform charset: every border and glyph in tui-widgets is non-ASCII, and under a POSIX
+        // locale a locale-derived encoder renders the entire UI as '?'. All three must be set — `encoding` is only
+        // the fallback JLine consults *after* the `stdin.encoding`/`stdout.encoding` system properties, so on its own
+        // it is silently ignored wherever the JDK derived those from the locale.
+        .encoding(java.nio.charset.StandardCharsets.UTF_8)
+        .stdinEncoding(java.nio.charset.StandardCharsets.UTF_8)
+        .stdoutEncoding(java.nio.charset.StandardCharsets.UTF_8)
+        .build()
       if terminal.getType == Terminal.TYPE_DUMB || terminal.getType == Terminal.TYPE_DUMB_COLOR then
         terminal.close()
         Left(BackendError.UnsupportedTerminal("dumb terminal (no TTY attached)"))
       else Right(JLine3Backend(terminal, colorDepth))
     catch case NonFatal(error) => Left(BackendError.Io(error))
+
+  /** Stops this process the way the shell expects, after the TSTP handler has handed the terminal back.
+    *
+    * JLine replaced SIGTSTP's default disposition when the terminal was built — that is what makes
+    * `Terminal.Signal.TSTP` routable at all — so returning from the handler would otherwise leave the app running after
+    * Ctrl+Z.
+    *
+    * SIGSTOP rather than re-raising SIGTSTP: it cannot be caught, blocked or ignored, so it always stops us, whereas
+    * `sun.misc.Signal.raise` needs a Java handler still installed for the signal it is raising — exactly what we just
+    * removed. Sending it costs a `fork` per Ctrl+Z, which is invisible at human speed. If this fails (no `kill`, or
+    * Windows, which has no SIGTSTP at all) the app simply keeps running with its terminal restored — the same behaviour
+    * as before, never a wedged or half-torn-down state.
+    */
+  private[terminal] def stopSelf(): Unit =
+    try
+      val pid     = ProcessHandle.current().pid()
+      val stopped = ProcessBuilder("kill", "-STOP", pid.toString).start()
+      val _       = stopped.waitFor()
+    catch case NonFatal(_) => ()
+
+  /** Teardown steps are best-effort, but a silent failure is how a corrupted terminal goes unnoticed for months. */
+  private[terminal] def logTeardownFailure(error: BackendError): Unit =
+    if System.getenv("GLYPHORA_DEBUG") != null then
+      System.err.println(s"glyphora: terminal teardown step failed: $error")

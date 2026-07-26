@@ -30,8 +30,33 @@ private[terminal] object AnsiSequences:
   val PopKittyKeyboard: String  = s"$Esc[<u"
   val LinkClose: String         = s"$Esc]8;;$Esc\\"
 
-  /** OSC 8 hyperlink opener; pair every open with [[LinkClose]]. */
-  def linkOpen(url: String): String = s"$Esc]8;;$url$Esc\\"
+  /** Every mode the backend can turn on, turned off, in reverse acquisition order.
+    *
+    * Emitted verbatim by the shutdown hook straight to the process's stdout descriptor, so a terminal left dressed up
+    * by a signal-terminated process is still handed back usable. Every sequence here is a DEC private-mode *reset*
+    * (XTerm `ctlseqs.ms`, "DEC Private Mode Reset"), which is idempotent — resetting a mode that was never set is a
+    * no-op, so the hook needs no knowledge of what was actually enabled.
+    */
+  val RestoreAll: String =
+    s"$DisableMouseCapture$ShowCursor$LeaveAlternateScreen$PopKittyKeyboard$DisableFocusReporting" +
+      s"$DisableBracketedPaste$ResetStyle"
+
+  /** OSC 8 hyperlink opener; pair every open with [[LinkClose]].
+    *
+    * The URL is stripped of C0/C1 controls and DEL: an OSC string ends at BEL or ST (XTerm `ctlseqs.ms`, "Operating
+    * System Commands"), so an `ESC \` inside the target would close the hyperlink early and let the rest of the string
+    * execute as terminal commands. Link targets routinely come from untrusted text (Markdown, log lines, API
+    * responses), which makes this a security boundary, not a cosmetic one. RFC 3986 §2 forbids these bytes in a URI, so
+    * nothing legitimate is lost.
+    */
+  def linkOpen(url: String): String = s"$Esc]8;;${stripControls(url)}$Esc\\"
+
+  /** Removes C0 controls, DEL and C1 controls from `text`, keeping tab. */
+  def stripControls(text: String): String =
+    if text.forall(isSafeText) then text else text.filter(isSafeText)
+
+  private def isSafeText(c: Char): Boolean =
+    c == '\t' || (c >= 0x20 && c != 0x7f && !(c >= 0x80 && c <= 0x9f))
 
   /** OSC 52 clipboard write: sets the system clipboard (`c`) to `text`, base64-encoded per the protocol. Terminals that
     * don't support OSC 52 ignore it.

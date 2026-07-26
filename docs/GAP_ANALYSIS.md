@@ -13,6 +13,13 @@ feature-complete in the Scala ecosystem. It already ships things *no other JVM/S
 library has*: the kitty keyboard protocol, bracketed paste, DEC-2026 synchronized
 output, OSC 8 hyperlinks, and — crucially — real **grapheme-cluster shaping** (ZWJ
 emoji families, flags, combining marks), which terminus explicitly does *not* do.
+
+Scope of the kitty claim, so it is not read as more than it is: glyphora requests
+progressive-enhancement **flag 1 only** (`CSI > 1 u`, disambiguate escape codes) and
+decodes the `CSI u` form — including astral code points and the functional-key block
+(F13–F35, keypad), which it maps onto its own `KeyCode` vocabulary. It does not
+request or decode key event types (press/repeat/release), alternate-key reporting, or
+associated text; see the roadmap entry for `KeyEventKind`.
 It pairs that with a documented signals runtime, a 40+ widget catalog, a constraint
 layout solver, mouse support (terminus has none), an animation/effects engine,
 native-image support with zero reflection, and a headless test harness.
@@ -25,7 +32,7 @@ document enumerates them and proposes an order of attack.
 
 | Capability | glyphora | terminus | tamboui | tui-scala | Lanterna |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Kitty keyboard protocol | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Kitty keyboard protocol (flag 1) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Bracketed paste | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Synchronized output (mode 2026) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Focus reporting (mode 1004) | ✅ | ❌ | ❌ | ❌ | ❌ |

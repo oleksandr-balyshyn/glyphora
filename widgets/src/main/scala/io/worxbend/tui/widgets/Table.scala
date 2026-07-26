@@ -25,10 +25,10 @@ final case class Table(
           renderRow(buffer, columns, cells, y, headerStyle)
           y += 1
       }
-      rows.foreach { cells =>
-        if y < area.bottom then
-          renderRow(buffer, columns, cells, y, style)
-          y += 1
+      // bounded by the area, not the data: drawing 50 visible rows must not walk a 10 000-row Seq
+      rows.iterator.take(math.max(0, area.bottom - y)).foreach { cells =>
+        renderRow(buffer, columns, cells, y, style)
+        y += 1
       }
 
   private def renderRow(buffer: Buffer, columns: Seq[Rect], cells: Seq[Line], y: Int, rowStyle: Style): Unit =

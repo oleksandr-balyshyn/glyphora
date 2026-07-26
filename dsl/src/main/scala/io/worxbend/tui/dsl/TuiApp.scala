@@ -39,6 +39,17 @@ trait TuiApp:
   /** Called when the terminal window gains or loses focus (terminals with mode-1004 reporting). */
   def onTerminalFocus(focused: Boolean): Unit = ()
 
+  /** Called when an interrupt (`Ctrl+C`, i.e. SIGINT/SIGQUIT) reaches the app.
+    *
+    * Return `true` to consume it and keep running — the place to ask "really quit?" or cancel in-flight work. The
+    * default declines, so the app exits through its normal teardown and the terminal is restored.
+    *
+    * Note that `Ctrl+C` arrives here as a signal on most terminals, but as an ordinary `Ctrl+C` key event on terminals
+    * that speak the kitty keyboard protocol (which reports the key instead of letting the line discipline raise a
+    * signal). Both routes end in a clean quit; override this and the `Ctrl+C` binding together if you change that.
+    */
+  def onInterrupt(): Boolean = false
+
   /** The app's declared keys (see [[binding]]): consulted for any key event no element consumed, and the source for
     * `statusBar(bindings)` hints, [[helpOverlay]], and the command palette.
     */
@@ -155,6 +166,7 @@ trait TuiApp:
         case Event.FocusLost    =>
           onTerminalFocus(false)
           invalidated
+        case Event.Interrupt    => onInterrupt()
         case Event.Resize(_)    => true
         case Event.Tick         =>
           ageToasts()

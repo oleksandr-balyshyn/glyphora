@@ -26,14 +26,19 @@ final class TerminalRunner(
         backend.close()
         Left(RunnerError.Backend(error))
       case Right(())   =>
-        RenderThread.register(Thread.currentThread())
+        val loop              = RenderThread.register(Thread.currentThread(), () => backend.wake())
         // a `try/finally` alone only protects against exceptions unwinding this thread; a signal that terminates the
-        // JVM directly (SIGTERM, SIGHUP) skips straight to shutdown hooks and would otherwise leave the terminal in
-        // raw mode / the alternate screen. `close()` is idempotent (each teardown step is guarded by its own flag),
-        // so the hook racing the normal-path close below is harmless either way.
-        val restoreOnShutdown = new Thread(() => backend.close(), "glyphora-terminal-restore")
+        // JVM directly (SIGTERM, SIGHUP) skips straight to shutdown hooks. `close()` is the tidy path, but by the time
+        // a hook runs the backend's own resources may already have been torn down underneath it — so follow up with
+        // `emergencyRestore()`, which takes the shortest path to a usable terminal and cannot fail.
+        val restoreOnShutdown = new Thread(
+          () =>
+            try backend.close()
+            finally backend.emergencyRestore(),
+          "glyphora-terminal-restore",
+        )
         Runtime.getRuntime.addShutdownHook(restoreOnShutdown)
-        try loop(handleEvent, render).left.map(RunnerError.Backend(_))
+        try runLoop(handleEvent, render, loop).left.map(RunnerError.Backend(_))
         finally
           RenderThread.unregister()
           backend.close()
@@ -48,9 +53,10 @@ final class TerminalRunner(
       _ <- if config.mouseCapture then backend.enableMouseCapture() else Right(())
     yield ()
 
-  private def loop(
+  private def runLoop(
       handleEvent: (Event, RunnerHandle) => Boolean,
       render: Frame => Unit,
+      loop: RenderThread.RenderLoop,
   ): Either[BackendError, Unit] =
     var running                       = true
     var failure: Option[BackendError] = None
@@ -80,19 +86,32 @@ final class TerminalRunner(
         yield ()
       drawn.left.foreach(error => failure = Some(error))
 
+    /** Dispatches one event; `true` when the frame should be repainted afterward. */
+    def dispatch(event: Event): Boolean =
+      event match
+        case Event.Interrupt =>
+          // an app that does not consume Ctrl+C quits cleanly, so teardown runs on the normal path
+          if handleEvent(event, handle) then true
+          else
+            handle.quit()
+            false
+        case _               =>
+          val wantsRedraw = handleEvent(event, handle)
+          wantsRedraw || event.isInstanceOf[Event.Resize]
+
     redraw()
     while running && failure.isEmpty do
-      RenderThread.drainPending()
+      RenderThread.drainPending(loop)
       // queued work (runLater/runOnRenderThread) may have invalidated state between events
       if redrawRequested() && running && failure.isEmpty then redraw()
       backend.readEvent(pollTimeout(lastTick)) match
         case Left(error)        => failure = Some(error)
         case Right(Some(event)) =>
-          val wantsRedraw = handleEvent(event, handle)
-          val isResize    = event match
-            case Event.Resize(_) => true
-            case _               => false
-          if (wantsRedraw || isResize) && running && failure.isEmpty then redraw()
+          // deliberately one event per redraw: the element tree that routes focus and hit-testing is published *by*
+          // rendering, so folding several key events into one frame would dispatch the later ones against a stale
+          // tree — Tab would move focus and the next keystroke would still go to the previous element. Floods are
+          // bounded anyway: a paste arrives as a single `Event.Paste`, and resizes coalesce inside the backend.
+          if dispatch(event) && running && failure.isEmpty then redraw()
         case Right(None)        => ()
       config.tickRate.foreach { rate =>
         if nanoTime() - lastTick >= rate.toNanos then
@@ -103,13 +122,19 @@ final class TerminalRunner(
 
   /** Block on input at most until the next tick is due (or a coarse default poll when there is no tick rate), so ticks
     * stay on schedule while input stays responsive.
+    *
+    * Never returns zero: [[Backend.readEvent]] treats a non-positive timeout as "block until an event arrives", so an
+    * overrunning frame would otherwise wedge the loop until the user happened to press a key.
     */
   private def pollTimeout(lastTick: Long): FiniteDuration =
     config.tickRate match
       case None       => DefaultPollTimeout
       case Some(rate) =>
         val remainingNanos = rate.toNanos - (nanoTime() - lastTick)
-        val clamped        = math.max(0L, math.min(remainingNanos, rate.toNanos))
+        val clamped        = math.max(MinPollNanos, math.min(remainingNanos, rate.toNanos))
         Duration.fromNanos(clamped)
 
   private val DefaultPollTimeout: FiniteDuration = 100.millis
+
+  /** The floor for any poll: short enough to be indistinguishable from "check now", never zero. */
+  private val MinPollNanos: Long = 1_000_000L
