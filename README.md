@@ -108,6 +108,37 @@ Use the complete `tui-dsl` stack for applications or stop at a lower layer for a
 custom backend, renderer, or widget library. No widget depends on a terminal and no
 terminal backend knows about signals.
 
+The modules above are the structure; this is what one frame actually does:
+
+```mermaid
+flowchart LR
+  Input["⌨️ keyboard + mouse"] --> Router["focus & event routing"]
+  Router --> Chrome
+
+  subgraph Chrome["application scaffold"]
+    direction TB
+    Top["top bar · tabs · command palette"]
+    Sidebar["sidebar · navigation"]
+    Content["widgets · charts · forms"]
+    Status["status line · shortcuts · toasts"]
+    Top --> Content
+    Sidebar --> Content
+    Content --> Status
+  end
+
+  Chrome --> Buffer["headless buffer"]
+  Buffer --> Diff["minimal terminal diff"]
+  Diff --> ANSI["ANSI output"]
+
+  Signals["Signal / Computed"] -. "invalidate" .-> Content
+  Effects["effects engine"] -. "animate" .-> Content
+```
+
+Only the cells that changed reach the terminal, and the whole path up to `ANSI output`
+runs without one — which is what makes
+[headless testing](#-test-the-terminal-without-a-terminal) exact rather than
+approximate.
+
 **[Architecture guide →](website/docs/architecture.md)**
 
 ## 🧩 Widget atlas
