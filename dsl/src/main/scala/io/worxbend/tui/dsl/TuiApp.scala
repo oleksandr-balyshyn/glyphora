@@ -268,13 +268,8 @@ trait TuiApp:
     centered(46, math.min(4 + matches.size, 14))(body)
 
   private def paletteMatches: Seq[KeyBinding] =
-    val query = paletteQuery.value.toLowerCase
-    bindings.bindings.filter(bound => isSubsequence(query, bound.description.toLowerCase))
-
-  private def isSubsequence(needle: String, haystack: String): Boolean =
-    var i = 0
-    haystack.foreach(c => if i < needle.length && needle.charAt(i) == c then i += 1)
-    i == needle.length
+    val accepts = Fuzzy.matcher(paletteQuery.value)
+    bindings.bindings.filter(bound => accepts(bound.description))
 
   private def toastsElement(active: Vector[ActiveToast])(using theme: Theme): Element =
     Element.widget { (area, buffer) =>

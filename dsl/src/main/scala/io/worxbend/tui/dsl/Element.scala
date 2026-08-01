@@ -611,16 +611,9 @@ final case class AutocompleteElement(
 ) extends Element:
 
   private def matches: Seq[String] =
-    val query = state.input.value.toLowerCase
+    val query = state.input.value
     if query.isEmpty then Seq.empty
-    else
-      suggestions
-        .filter { candidate =>
-          var i = 0
-          candidate.toLowerCase.foreach(c => if i < query.length && query.charAt(i) == c then i += 1)
-          i == query.length
-        }
-        .take(maxSuggestions)
+    else suggestions.filter(Fuzzy.matcher(query)).take(maxSuggestions)
 
   def widget: Widget                                                        =
     val visible   = matches
