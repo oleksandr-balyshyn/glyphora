@@ -4,6 +4,9 @@ package io.worxbend.tui.runtime
   * whoever owns the scope learns what was read and can subscribe to changes. Reads that should not subscribe anything
   * use `peek` instead — or [[ReactiveScope.untracked]] when an API demands a scope.
   */
+trait ReactiveScope:
+  private[runtime] def track(dependency: Subscribable): Unit
+
 /** A tracking scope for a repeatedly re-evaluated computation (an app's `view`): reads subscribe `onInvalidate`, and
   * [[beginGeneration]] — called before each re-evaluation — unsubscribes from values that stopped being read, so
   * signals owned by closed screens or discarded branches do not accumulate stale subscriptions.
@@ -23,9 +26,6 @@ final class GenerationalScope private[runtime] (onInvalidate: () => Unit) extend
     previous.filterNot(current.contains).foreach(_.unsubscribe(subscriber))
     previous = current
     current = scala.collection.mutable.Set.empty
-
-trait ReactiveScope:
-  private[runtime] def track(dependency: Subscribable): Unit
 
 object ReactiveScope:
 
