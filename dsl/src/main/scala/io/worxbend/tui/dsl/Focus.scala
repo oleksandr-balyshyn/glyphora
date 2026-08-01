@@ -20,6 +20,17 @@ private[dsl] final class FocusTracker:
 
   def clearAreas(): Unit = areas.clear()
 
+  /** Re-anchors focus against the focus keys of the tree that is about to render (depth-first order, `None` for unkeyed
+    * focusables): a keyed element keeps focus even when its position moved, and the index is clamped into the new
+    * range. Areas recorded for the previous frame are dropped — this frame's render re-records them.
+    */
+  def reconcile(keys: Seq[Option[String]]): Unit =
+    focusableCount = keys.size
+    focusedKey.map(key => keys.indexOf(Some(key))).filter(_ >= 0).foreach(focusedIndex = _)
+    focusedIndex = if focusableCount > 0 then math.max(0, math.min(focusedIndex, focusableCount - 1)) else 0
+    focusedKey = keys.lift(focusedIndex).flatten
+    clearAreas()
+
   def focusNext(): Boolean =
     if focusableCount > 1 then
       focusedIndex = (focusedIndex + 1) % focusableCount

@@ -111,11 +111,12 @@ trait TuiApp:
 
     def handleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
       if splashActive then
-        splashSkipped = true
+        splashSkipped = true // any key skips the intro; it never reaches the view
         true
-      else splashHandleKey(key, handle)
+      else routeKey(key, handle)
 
-    def splashHandleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
+    /** Focused element first, then its ancestors, then the app bindings, then the framework's own keys. */
+    def routeKey(key: KeyEvent, handle: RunnerHandle): Boolean =
       val consumed   = lastTree.exists(EventRouter.dispatchKey(_, key))
       val bound      = !consumed && !paletteOpen.peek && bindings.handle(key)
       var focusMoved = false
@@ -187,15 +188,7 @@ trait TuiApp:
         else
           scope.beginGeneration()
           val rawTree = effectiveView(using scope)
-          val keys    = FocusPass.focusKeys(rawTree)
-          tracker.focusableCount = keys.size
-          // a keyed element keeps focus across renders even when its position changed
-          tracker.focusedKey.map(k => keys.indexOf(Some(k))).filter(_ >= 0).foreach(tracker.focusedIndex = _)
-          if tracker.focusableCount > 0 then
-            tracker.focusedIndex = math.max(0, math.min(tracker.focusedIndex, tracker.focusableCount - 1))
-          else tracker.focusedIndex = 0
-          tracker.focusedKey = keys.lift(tracker.focusedIndex).flatten
-          tracker.clearAreas()
+          tracker.reconcile(FocusPass.focusKeys(rawTree))
           val tree    = FocusPass.decorate(rawTree, tracker, theme.focus)
           lastTree = Some(tree)
           frame.renderWidget(tree.widget, frame.area)
