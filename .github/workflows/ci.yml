@@ -76,7 +76,15 @@ jobs:
           key: mill-native-${{ runner.os }}-${{ hashFiles('.mill-version', 'build.mill', '**/package.mill') }}
           restore-keys: mill-native-${{ runner.os }}-
       - name: Build native images for every example
-        run: ./mill examples.hello-world.nativeImage examples.counter.nativeImage examples.todo-list.nativeImage examples.dashboard.nativeImage examples.form-demo.nativeImage examples.showcase.nativeImage
+        # `+` separates tasks; without it Mill runs only the first selector and
+        # swallows the rest as arguments to it, silently building one image.
+        run: >-
+          ./mill examples.hello-world.nativeImage
+          + examples.counter.nativeImage
+          + examples.todo-list.nativeImage
+          + examples.dashboard.nativeImage
+          + examples.form-demo.nativeImage
+          + examples.showcase.nativeImage
       - name: "Run each binary (headless: must detect the missing TTY and exit cleanly)"
         run: |
           for ex in hello-world counter todo-list dashboard form-demo showcase; do
