@@ -56,7 +56,12 @@ final case class Style(
     */
   def withUnderlineColor(color: Color): Style = copy(underlineColor = Some(color))
 
-  /** Picks a styled underline (straight/double/curly/dotted/dashed); anything but `None` also underlines. */
+  /** Picks a styled underline.
+    *
+    * `Double`/`Curly`/`Dotted`/`Dashed` emit the SGR `4:n` selector, which draws the line on its own. `Straight` (like
+    * `None`) emits nothing extra and defers to the plain [[Modifiers.Underline]] flag — combine it with [[underline]]
+    * if you want a line.
+    */
   def withUnderlineStyle(style: UnderlineStyle): Style = copy(underlineStyle = style)
   def doubleUnderline: Style                           = withUnderlineStyle(UnderlineStyle.Double)
   def curlyUnderline: Style                            = withUnderlineStyle(UnderlineStyle.Curly)

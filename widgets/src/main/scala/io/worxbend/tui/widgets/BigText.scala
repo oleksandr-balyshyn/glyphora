@@ -29,8 +29,10 @@ final case class BigText(
 
 object BigText:
 
-  /** Rows x columns of one glyph. */
-  val GlyphWidth: Int  = 3
+  /** Columns one glyph occupies (glyphs are separated by one further blank column). */
+  val GlyphWidth: Int = 3
+
+  /** Rows one glyph occupies — the natural height of a [[BigText]] line. */
   val GlyphHeight: Int = 5
 
   private[widgets] val Blank: Vector[String] = Vector("...", "...", "...", "...", "...")

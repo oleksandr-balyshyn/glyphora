@@ -7,7 +7,9 @@ import java.time.{DayOfWeek, LocalDate, YearMonth}
 import java.util.Locale
 
 /** A month grid: title row, weekday header (weeks start Monday), and day numbers with an optional highlighted day.
-  * Needs 20 columns and `3 + weeks` rows to show fully; overflow clips like everything else.
+  *
+  * Needs 20 columns (seven three-column day slots, the last one two wide) and `2 + weeks` rows — the title, the weekday
+  * header, then one row per week the month touches, so up to 8. Overflow clips like everything else.
   */
 final case class Calendar(
     year: Int,

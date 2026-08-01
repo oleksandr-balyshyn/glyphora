@@ -228,6 +228,7 @@ final case class InputElement(
           true
         case _                                                                                   => false
 
+/** A labelled checkbox over a caller-owned `Signal`. Space/Enter (or a click) flips it while focused. */
 final case class CheckboxElement(
     label: String,
     checked: Signal[Boolean],
@@ -241,6 +242,7 @@ final case class CheckboxElement(
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(clickActivates(() => checked.update(value => !value)))
 
+/** A labelled on/off switch — a [[CheckboxElement]] in switch clothing, with the same Space/Enter/click activation. */
 final case class ToggleElement(
     label: String,
     on: Signal[Boolean],
@@ -254,6 +256,9 @@ final case class ToggleElement(
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(clickActivates(() => on.update(value => !value)))
 
+/** A one-row option cycler. Left/Right step through `options` while focused (wrapping at both ends) and a click
+  * advances one; the selection is an index into `options`, so it survives nothing but a stable option list.
+  */
 final case class SelectElement(
     options: Seq[String],
     selected: Signal[Int],
@@ -278,6 +283,9 @@ final case class SelectElement(
           true
         case _             => false
 
+/** A scrollable single-selection list. Up/Down move the selection while focused, the wheel does the same on hover; the
+  * widget scrolls to keep the selection visible. `state` is caller-owned, so the app can read or set the selection.
+  */
 final case class ListElement(
     items: Seq[String],
     state: w.ListState,
@@ -304,6 +312,9 @@ final case class ListElement(
           true
         case _            => false
 
+/** A collapsible tree over an in-memory node list. Up/Down move the selection through the *visible* rows and Enter
+  * expands or collapses the selected branch (a no-op on a leaf), all while focused.
+  */
 final case class TreeElement(
     nodes: Seq[w.TreeNode],
     state: w.TreeState,
@@ -969,7 +980,8 @@ final case class LogElement(
         case _                => false
 
 /** Multi-line editor element. While focused it consumes printable characters, Enter (newline), Backspace, Delete,
-  * arrows, Home/End, and Ctrl+Z (undo) — Tab stays free for focus traversal.
+  * arrows, Home/End, Ctrl+Z (undo) and Ctrl+Y (redo) — Tab stays free for focus traversal. A bracketed paste lands as
+  * one edit, with carriage returns stripped.
   */
 final case class TextAreaElement(
     state: w.TextAreaState,
@@ -1029,6 +1041,9 @@ final case class TextAreaElement(
           true
         case _                                                                                            => false
 
+/** A filesystem browser. Up/Down move the selection, Enter expands or collapses the selected directory, while focused.
+  * Listings are read lazily and cached in `state` — it touches the disk on expansion, never per frame.
+  */
 final case class DirectoryTreeElement(
     state: w.DirectoryTreeState,
     props: ElementProps = ElementProps(focusable = true),
@@ -1054,6 +1069,10 @@ final case class DirectoryTreeElement(
           true
         case _             => false
 
+/** A sortable, filterable table. Up/Down move the row selection while focused, and PageUp/PageDown turn the page once
+  * `state.pageSize` is set (they are left unconsumed otherwise, so they keep bubbling). Sorting and filtering have no
+  * built-in keys — drive `state.sortBy`/`state.setFilter` from the app's own bindings.
+  */
 final case class DataTableElement(
     table: w.DataTable,
     state: w.DataTableState,

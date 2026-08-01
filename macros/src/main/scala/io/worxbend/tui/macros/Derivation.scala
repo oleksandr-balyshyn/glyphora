@@ -3,8 +3,7 @@ package io.worxbend.tui.macros
 import scala.compiletime.{constValueTuple, erasedValue, error}
 import scala.deriving.Mirror
 
-/** Handles an application action value. Bound at compile time via [[bindAction]] — never through runtime reflection .
-  */
+/** Handles an application action value. Bound at compile time via [[bindAction]] — never through runtime reflection. */
 trait ActionHandler[A]:
   def handle(action: A): Unit
 

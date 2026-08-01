@@ -48,7 +48,7 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
   /** Moves this rectangle by `dx`/`dy` without resizing it. */
   def offset(dx: Int, dy: Int): Rect = copy(x = x + dx, y = y + dy)
 
-  /** A `width`×`height` rectangle centered inside this one, clamped so it never exceeds these bounds. */
+  /** A `w`×`h` rectangle centered inside this one, clamped so it never exceeds these bounds. */
   def centered(w: Int, h: Int): Rect =
     val cw = math.min(w, width)
     val ch = math.min(h, height)

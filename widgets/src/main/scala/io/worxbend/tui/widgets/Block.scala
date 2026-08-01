@@ -2,6 +2,10 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, Line, Rect, Style, Widget}
 
+/** The box-drawing set a [[Block]] frames itself with: `┌─┐`, `╭─╮`, `╔═╗`, or `┏━┓`.
+  *
+  * All four are single-column glyphs, so the border never changes a block's [[Block.inner]] geometry — only its look.
+  */
 enum BorderType:
   case Plain, Rounded, Double, Thick
 

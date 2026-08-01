@@ -2,6 +2,11 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
 
+/** How a [[Dataset]]'s points are drawn: `Line` joins consecutive points with segments, `Scatter` plots them alone.
+  *
+  * `Line` follows the points in the order the dataset lists them — it does not sort by x, so an unsorted series draws
+  * as a zig-zag rather than a function plot.
+  */
 enum GraphType:
   case Line, Scatter
 
