@@ -1,12 +1,21 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{CharWidth, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind}
-import io.worxbend.tui.runtime.{ReactiveScope, RunnerConfig, RunnerError, RunnerHandle, Signal, TerminalRunner}
+import io.worxbend.tui.core.{CharWidth, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Style}
+import io.worxbend.tui.runtime.{
+  Effect,
+  Frame,
+  ReactiveScope,
+  RunnerConfig,
+  RunnerError,
+  RunnerHandle,
+  Signal,
+  TerminalRunner,
+}
 import io.worxbend.tui.terminal.{Backend, JLine3Backend}
 import io.worxbend.tui.widgets.TextInputState
 
 import java.util.concurrent.atomic.AtomicReference
-import scala.concurrent.duration.{DurationLong, FiniteDuration}
+import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 
 /** The application entry point for the declarative DSL.
   *
@@ -61,7 +70,7 @@ trait TuiApp:
   /** Starts a post-render [[Effect]] over the whole frame. Needs a `config.tickRate` to animate; the effect is dropped
     * once done.
     */
-  protected final def runEffect(effect: io.worxbend.tui.runtime.Effect): Unit =
+  protected final def runEffect(effect: Effect): Unit =
     activeEffects = (effect, System.nanoTime()) :: activeEffects
 
   // ---- navigation ----
@@ -111,11 +120,12 @@ trait TuiApp:
 
     def handleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
       if splashActive then
-        splashSkipped = true
+        splashSkipped = true // any key skips the intro; it never reaches the view
         true
-      else splashHandleKey(key, handle)
+      else routeKey(key, handle)
 
-    def splashHandleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
+    /** Focused element first, then its ancestors, then the app bindings, then the framework's own keys. */
+    def routeKey(key: KeyEvent, handle: RunnerHandle): Boolean =
       val consumed   = lastTree.exists(EventRouter.dispatchKey(_, key))
       val bound      = !consumed && !paletteOpen.peek && bindings.handle(key)
       var focusMoved = false
@@ -176,8 +186,7 @@ trait TuiApp:
           invalidated || activeEffects.nonEmpty || splashActive || splashJustFinished || effectsJustFinished
 
     val effectiveConfig =
-      if splash.nonEmpty && config.tickRate.isEmpty then
-        config.copy(tickRate = Some(scala.concurrent.duration.DurationInt(50).millis))
+      if splash.nonEmpty && config.tickRate.isEmpty then config.copy(tickRate = Some(50.millis))
       else config
     val result          = TerminalRunner(backend, effectiveConfig, redrawRequested = () => invalidated).run(
       handleEvent,
@@ -187,15 +196,7 @@ trait TuiApp:
         else
           scope.beginGeneration()
           val rawTree = effectiveView(using scope)
-          val keys    = FocusPass.focusKeys(rawTree)
-          tracker.focusableCount = keys.size
-          // a keyed element keeps focus across renders even when its position changed
-          tracker.focusedKey.map(k => keys.indexOf(Some(k))).filter(_ >= 0).foreach(tracker.focusedIndex = _)
-          if tracker.focusableCount > 0 then
-            tracker.focusedIndex = math.max(0, math.min(tracker.focusedIndex, tracker.focusableCount - 1))
-          else tracker.focusedIndex = 0
-          tracker.focusedKey = keys.lift(tracker.focusedIndex).flatten
-          tracker.clearAreas()
+          tracker.reconcile(FocusPass.focusKeys(rawTree))
           val tree    = FocusPass.decorate(rawTree, tracker, theme.focus)
           lastTree = Some(tree)
           frame.renderWidget(tree.widget, frame.area)
@@ -275,13 +276,8 @@ trait TuiApp:
     centered(46, math.min(4 + matches.size, 14))(body)
 
   private def paletteMatches: Seq[KeyBinding] =
-    val query = paletteQuery.value.toLowerCase
-    bindings.bindings.filter(bound => isSubsequence(query, bound.description.toLowerCase))
-
-  private def isSubsequence(needle: String, haystack: String): Boolean =
-    var i = 0
-    haystack.foreach(c => if i < needle.length && needle.charAt(i) == c then i += 1)
-    i == needle.length
+    val accepts = Fuzzy.matcher(paletteQuery.value)
+    bindings.bindings.filter(bound => accepts(bound.description))
 
   private def toastsElement(active: Vector[ActiveToast])(using theme: Theme): Element =
     Element.widget { (area, buffer) =>
@@ -293,7 +289,7 @@ trait TuiApp:
       }
     }
 
-  private def toastStyle(level: ToastLevel)(using theme: Theme): io.worxbend.tui.core.Style =
+  private def toastStyle(level: ToastLevel)(using theme: Theme): Style =
     val base = level match
       case ToastLevel.Info    => theme.accent
       case ToastLevel.Success => theme.success
@@ -315,7 +311,7 @@ trait TuiApp:
   private def splashActive: Boolean               =
     splash.nonEmpty && !splashFinished && !splashSkipped
 
-  private def renderSplash(frame: io.worxbend.tui.runtime.Frame): Unit =
+  private def renderSplash(frame: Frame): Unit =
     splash.foreach { intro =>
       if splashStartNanos == 0L then splashStartNanos = System.nanoTime()
       val elapsed = (System.nanoTime() - splashStartNanos).nanos
@@ -323,7 +319,7 @@ trait TuiApp:
       frame.applyEffect(intro.effect, elapsed)
     }
 
-  private def processEffects(frame: io.worxbend.tui.runtime.Frame): Unit =
+  private def processEffects(frame: Frame): Unit =
     if activeEffects.nonEmpty then
       val now = System.nanoTime()
       activeEffects.foreach((effect, started) => frame.applyEffect(effect, (now - started).nanos))
@@ -351,8 +347,8 @@ trait TuiApp:
         else false
       case _                                                     => false
 
-  private var activeEffects: List[(io.worxbend.tui.runtime.Effect, Long)] = Nil
-  private var splashStartNanos: Long                                      = 0L
-  private var splashFinished: Boolean                                     = false
-  private var splashSkipped: Boolean                                      = false
-  private val activeHandle                                                = AtomicReference[Option[RunnerHandle]](None)
+  private var activeEffects: List[(Effect, Long)] = Nil
+  private var splashStartNanos: Long              = 0L
+  private var splashFinished: Boolean             = false
+  private var splashSkipped: Boolean              = false
+  private val activeHandle                        = AtomicReference[Option[RunnerHandle]](None)

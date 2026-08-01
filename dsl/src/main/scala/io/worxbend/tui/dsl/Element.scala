@@ -1,6 +1,7 @@
 package io.worxbend.tui.dsl
 
 import io.worxbend.tui.core.{
+  Cell,
   CharWidth,
   Constraint,
   Direction,
@@ -9,12 +10,18 @@ import io.worxbend.tui.core.{
   KeyEvent,
   KeyModifiers,
   Line,
+  MouseEvent,
+  MouseEventKind,
+  Rect,
   Style,
   Text,
   Widget,
 }
 import io.worxbend.tui.runtime.Signal
 import io.worxbend.tui.widgets as w
+
+/** Framework mouse behavior: the event plus the element's rendered area, `true` when the event is consumed. */
+private[dsl] type BuiltinMouseHandler = (MouseEvent, Rect) => Boolean
 
 /** A node of the retained-mode UI tree.
   *
@@ -40,9 +47,7 @@ sealed trait Element:
   /** Framework mouse behavior (click-to-activate, wheel scrolling, drags), given the event and the element's rendered
     * area. Runs after the user's `onMouseEvent` declined; only ever called on the hit element.
     */
-  private[dsl] def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
-    None
+  private[dsl] def builtinMouseHandler: Option[BuiltinMouseHandler] = None
 
   /** Framework paste behavior: how a bracketed paste lands in this element while focused. */
   private[dsl] def builtinPasteHandler: Option[String => Boolean] = None
@@ -130,10 +135,7 @@ final case class GaugeElement(
 ) extends Element:
   def widget: Widget = w.Gauge(ratio, label, props.style, filledStyle = props.style.reverse)
   private[dsl] def withProps(props: ElementProps): GaugeElement             = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
 
 final case class SparklineElement(
     data: Seq[Long],
@@ -142,10 +144,7 @@ final case class SparklineElement(
 ) extends Element:
   def widget: Widget                                                        = w.Sparkline(data, max, props.style)
   private[dsl] def withProps(props: ElementProps): SparklineElement         = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
 
 final case class TabsElement(
     titles: Seq[String],
@@ -154,10 +153,7 @@ final case class TabsElement(
 ) extends Element:
   def widget: Widget                                           = w.Tabs(titles.map(Line.raw), selected, props.style)
   private[dsl] def withProps(props: ElementProps): TabsElement = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
 
 final case class TableElement(
     rows: Seq[Seq[String]],
@@ -196,10 +192,7 @@ final case class InputElement(
     val input = w.TextInput(placeholder, showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): InputElement             = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
   private[dsl] override def builtinPasteHandler: Option[String => Boolean]  = Some { text =>
     if props.focused then
@@ -242,14 +235,10 @@ final case class CheckboxElement(
 ) extends Element:
   def widget: Widget                                               = w.Checkbox(label, checked.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): CheckboxElement = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  =
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
     Some(toggleOnActivate(props, () => checked.update(value => !value)))
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(clickActivates(() => checked.update(value => !value)))
 
 final case class ToggleElement(
@@ -259,14 +248,10 @@ final case class ToggleElement(
 ) extends Element:
   def widget: Widget                                             = w.Toggle(label, on.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): ToggleElement = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  =
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
     Some(toggleOnActivate(props, () => on.update(value => !value)))
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(clickActivates(() => on.update(value => !value)))
 
 final case class SelectElement(
@@ -274,16 +259,12 @@ final case class SelectElement(
     selected: Signal[Int],
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(clickActivates(() => if options.nonEmpty then selected.update(index => (index + 1) % options.size)))
-  def widget: Widget                                             = w.Select(options, selected.peek, focusStyled(props))
-  private[dsl] def withProps(props: ElementProps): SelectElement = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
+  def widget: Widget = w.Select(options, selected.peek, focusStyled(props))
+  private[dsl] def withProps(props: ElementProps): SelectElement             = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused || options.isEmpty then false
@@ -302,15 +283,14 @@ final case class ListElement(
     state: w.ListState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(wheelScrolls(() => state.selectPrevious(items.size), () => state.selectNext(items.size)))
   def widget: Widget =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
     val view = w.ListView(items.map(Line.raw), style = props.style)
     (area, buffer) => view.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): ListElement             = copy(props = props)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] def withProps(props: ElementProps): ListElement               = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
@@ -361,17 +341,16 @@ final case class MenuElement(
     onSelect: Int => Unit,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget                                                        =
+  def widget: Widget                                                         =
     val menu = w.Menu(items, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => menu.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): MenuElement              = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
+  private[dsl] def withProps(props: ElementProps): MenuElement               = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint  =
     direction match
       case Direction.Vertical   => Constraint.Length(items.size + 2)
       case Direction.Horizontal => Constraint.Length(w.Menu(items).width)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(handleMouse)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -390,8 +369,7 @@ final case class MenuElement(
         case _                                 =>
           false
 
-  private def handleMouse(event: io.worxbend.tui.core.MouseEvent, area: io.worxbend.tui.core.Rect): Boolean =
-    import io.worxbend.tui.core.MouseEventKind
+  private def handleMouse(event: MouseEvent, area: Rect): Boolean =
     event.kind match
       case MouseEventKind.ScrollUp   =>
         state.selectPrevious(items)
@@ -422,9 +400,7 @@ final case class PositionedElement(
   override def children: Seq[Element]                                               = Seq(content)
   def widget: Widget                                                                =
     (area, buffer) =>
-      val target = io.worxbend.tui.core
-        .Rect(area.x + dx, area.y + dy, width, height)
-        .intersection(area)
+      val target = Rect(area.x + dx, area.y + dy, width, height).intersection(area)
       if !target.isEmpty then content.widget.render(target, buffer)
   private[dsl] def withProps(props: ElementProps): PositionedElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PositionedElement =
@@ -445,7 +421,7 @@ final case class FilledElement(
       while y < area.bottom do
         var x = area.x
         while x < area.right do
-          buffer.set(x, y, io.worxbend.tui.core.Cell(" ", fill))
+          buffer.set(x, y, Cell(" ", fill))
           x += 1
         y += 1
       inner.widget.render(area, buffer)
@@ -453,8 +429,7 @@ final case class FilledElement(
   private[dsl] override def withChildren(children: Seq[Element]): FilledElement =
     copy(inner = inner.withChildren(children))
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]      = inner.builtinKeyHandler
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler]    =
     inner.builtinMouseHandler
   private[dsl] override def builtinPasteHandler: Option[String => Boolean]      = inner.builtinPasteHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint     = inner.preferredSize(direction)
@@ -489,8 +464,7 @@ final case class ScrollViewElement(
   private[dsl] override def withChildren(children: Seq[Element]): ScrollViewElement =
     copy(content = children.headOption.getOrElse(content))
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]          = Some(handleKey)
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler]        =
     Some(wheelScrolls(() => state.scrollUp(), () => state.scrollDown()))
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -586,10 +560,9 @@ final case class SplitPaneElement(
     horizontal: Boolean = true,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler]       =
     Some { (event, area) =>
-      if event.kind == io.worxbend.tui.core.MouseEventKind.Drag then
+      if event.kind == MouseEventKind.Drag then
         val fraction =
           if horizontal then (event.x - area.x).toDouble / math.max(1, area.width)
           else (event.y - area.y).toDouble / math.max(1, area.height)
@@ -638,23 +611,16 @@ final case class AutocompleteElement(
 ) extends Element:
 
   private def matches: Seq[String] =
-    val query = state.input.value.toLowerCase
+    val query = state.input.value
     if query.isEmpty then Seq.empty
-    else
-      suggestions
-        .filter { candidate =>
-          var i = 0
-          candidate.toLowerCase.foreach(c => if i < query.length && query.charAt(i) == c then i += 1)
-          i == query.length
-        }
-        .take(maxSuggestions)
+    else suggestions.filter(Fuzzy.matcher(query)).take(maxSuggestions)
 
   def widget: Widget                                                        =
     val visible   = matches
     val highlight = math.max(0, math.min(state.highlighted, math.max(0, visible.size - 1)))
     val input     = w.TextInput(showCursor = props.focused, style = props.style)
     (area, buffer) =>
-      input.render(io.worxbend.tui.core.Rect(area.x, area.y, area.width, 1), buffer, state.input)
+      input.render(Rect(area.x, area.y, area.width, 1), buffer, state.input)
       visible.zipWithIndex.foreach { (candidate, index) =>
         val rowStyle = if index == highlight && props.focused then props.style.reverse else props.style.dim
         buffer.setString(area.x + 2, area.y + 1 + index, candidate, rowStyle)
@@ -709,7 +675,7 @@ final case class FilePickerElement(
   def widget: Widget                                                       =
     val tree = w.DirectoryTree(style = props.style)
     (area, buffer) =>
-      val treeArea   = io.worxbend.tui.core.Rect(area.x, area.y, area.width, math.max(0, area.height - 1))
+      val treeArea   = Rect(area.x, area.y, area.width, math.max(0, area.height - 1))
       tree.render(treeArea, buffer, state.tree)
       val chosenLine = state.chosen.peek.map(path => s"→ $path").getOrElse("→ (nothing selected)")
       buffer.setString(area.x, area.bottom - 1, chosenLine, props.style.dim)
@@ -771,24 +737,20 @@ final case class SliderElement(
     step: Int = 5,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some { (event, area) =>
       event.kind match
-        case io.worxbend.tui.core.MouseEventKind.Down | io.worxbend.tui.core.MouseEventKind.Drag =>
+        case MouseEventKind.Down | MouseEventKind.Drag =>
           if area.width > 3 then
             val fraction = (event.x - area.x - 1).toDouble / (area.width - 3)
             value.set(min + math.round(math.max(0.0, math.min(1.0, fraction)) * (max - min)).toInt)
           true
-        case _                                                                                   => false
+        case _                                         => false
     }
   def widget: Widget = w.Slider(value.peek, min, max, props.style, focusStyled(props).bold)
-  private[dsl] def withProps(props: ElementProps): SliderElement            = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
+  private[dsl] def withProps(props: ElementProps): SliderElement             = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
@@ -853,10 +815,7 @@ final case class NumberInputElement(
     val input = w.TextInput(showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): NumberInputElement       = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -902,10 +861,7 @@ final case class MaskedInputElement(
     val input = w.TextInput(placeholder = mask, showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): MaskedInputElement       = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -950,10 +906,7 @@ final case class PaginatorElement(
 ) extends Element:
   def widget: Widget = w.Paginator(current.peek, total, props.style, focusStyled(props).bold)
   private[dsl] def withProps(props: ElementProps): PaginatorElement         = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -974,16 +927,12 @@ final case class ButtonElement(
     action: () => Unit,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  def widget: Widget                                                        = w.Button(label, focusStyled(props))
-  private[dsl] def withProps(props: ElementProps): ButtonElement            = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  =
+  def widget: Widget                                                         = w.Button(label, focusStyled(props))
+  private[dsl] def withProps(props: ElementProps): ButtonElement             = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
     Some(toggleOnActivate(props, action))
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(clickActivates(action))
 
 /** A scrollable log panel: Up/Down (and PageUp/PageDown) scroll while focused; the tail re-follows when scrolled back
@@ -993,14 +942,13 @@ final case class LogElement(
     state: w.LogState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(wheelScrolls(() => state.scrollUp(), () => state.scrollDown()))
-  def widget: Widget                                                       =
+  def widget: Widget                                                         =
     val log = w.Log(props.style)
     (area, buffer) => log.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): LogElement              = copy(props = props)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
+  private[dsl] def withProps(props: ElementProps): LogElement                = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
     if !props.focused then false
@@ -1148,36 +1096,38 @@ private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker
   private[dsl] override def withChildren(children: Seq[Element]): TrackedElement =
     copy(inner = inner.withChildren(children))
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]       = inner.builtinKeyHandler
-  private[dsl] override def builtinMouseHandler
-      : Option[(io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean] =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler]     =
     inner.builtinMouseHandler
   private[dsl] override def builtinPasteHandler: Option[String => Boolean]       = inner.builtinPasteHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint      = inner.preferredSize(direction)
 
+/** What a one-line control claims from its container: exactly one row when stacked vertically, whatever width is going
+  * when laid out horizontally.
+  */
+private def singleRow(direction: Direction): Constraint =
+  direction match
+    case Direction.Vertical   => Constraint.Length(1)
+    case Direction.Horizontal => Constraint.Fill(1)
+
 /** A mouse press activates the control (focus already moved on the press). */
-private def clickActivates(
-    activate: () => Unit
-): (io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean =
+private def clickActivates(activate: () => Unit): BuiltinMouseHandler =
   (event, _) =>
-    if event.kind == io.worxbend.tui.core.MouseEventKind.Down then
+    if event.kind == MouseEventKind.Down then
       activate()
       true
     else false
 
 /** Wheel events scroll by one step. */
-private def wheelScrolls(
-    up: () => Unit,
-    down: () => Unit,
-): (io.worxbend.tui.core.MouseEvent, io.worxbend.tui.core.Rect) => Boolean =
+private def wheelScrolls(up: () => Unit, down: () => Unit): BuiltinMouseHandler =
   (event, _) =>
     event.kind match
-      case io.worxbend.tui.core.MouseEventKind.ScrollUp   =>
+      case MouseEventKind.ScrollUp   =>
         up()
         true
-      case io.worxbend.tui.core.MouseEventKind.ScrollDown =>
+      case MouseEventKind.ScrollDown =>
         down()
         true
-      case _                                              => false
+      case _                         => false
 
 /** Space/Enter activates a focused two-state control. */
 private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEvent => Boolean =

@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{KeyEvent, MouseEvent}
+import io.worxbend.tui.core.{KeyEvent, MouseEvent, Rect}
 
 /** Event routing.
   *
@@ -22,7 +22,7 @@ private[dsl] object EventRouter:
   /** Routes a mouse event to the hit tracked element (user handler, then built-in behavior with the element's rendered
     * area), bubbling unconsumed events up its ancestors' `onMouseEvent` handlers.
     */
-  def dispatchMouseAt(root: Element, index: Int, area: io.worxbend.tui.core.Rect, event: MouseEvent): Boolean =
+  def dispatchMouseAt(root: Element, index: Int, area: Rect, event: MouseEvent): Boolean =
     pathToTracked(root, index) match
       case Some(leafToRoot) =>
         val leaf         = leafToRoot.head

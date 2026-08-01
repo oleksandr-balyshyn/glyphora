@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.Rect
+import io.worxbend.tui.core.{Position, Rect, Style}
 
 import scala.collection.mutable
 
@@ -19,6 +19,17 @@ private[dsl] final class FocusTracker:
     areas(index) = area
 
   def clearAreas(): Unit = areas.clear()
+
+  /** Re-anchors focus against the focus keys of the tree that is about to render (depth-first order, `None` for unkeyed
+    * focusables): a keyed element keeps focus even when its position moved, and the index is clamped into the new
+    * range. Areas recorded for the previous frame are dropped — this frame's render re-records them.
+    */
+  def reconcile(keys: Seq[Option[String]]): Unit =
+    focusableCount = keys.size
+    focusedKey.map(key => keys.indexOf(Some(key))).filter(_ >= 0).foreach(focusedIndex = _)
+    focusedIndex = if focusableCount > 0 then math.max(0, math.min(focusedIndex, focusableCount - 1)) else 0
+    focusedKey = keys.lift(focusedIndex).flatten
+    clearAreas()
 
   def focusNext(): Boolean =
     if focusableCount > 1 then
@@ -42,11 +53,11 @@ private[dsl] final class FocusTracker:
     focusedIndex = index
     focusedKey = None
 
-  def areaOf(index: Int): Option[io.worxbend.tui.core.Rect] = areas.get(index)
+  def areaOf(index: Int): Option[Rect] = areas.get(index)
 
   /** The innermost focusable rendered at this position, if any. */
   def hitTest(x: Int, y: Int): Option[Int] =
-    val hits = areas.filter((_, area) => area.contains(io.worxbend.tui.core.Position(x, y)))
+    val hits = areas.filter((_, area) => area.contains(Position(x, y)))
     hits.minByOption((_, area) => area.area).map((index, _) => index)
 
 private[dsl] object FocusPass:
@@ -59,13 +70,8 @@ private[dsl] object FocusPass:
       if element.props.focusable then element.withProps(element.props.copy(focusable = false)) else element
     cleared.withChildren(cleared.children.map(suppressFocus))
 
-  /** Number of focusable elements in depth-first order — the domain of [[FocusTracker.focusedIndex]]. */
-  def countFocusables(element: Element): Int =
-    val own = if element.props.focusable then 1 else 0
-    own + element.children.map(countFocusables).sum
-
-  /** The focus keys of every focusable in depth-first order (`None` for unkeyed ones) — what lets focus follow an
-    * element across renders when the tree changes shape.
+  /** The focus keys of every focusable in depth-first order (`None` for unkeyed ones) — the domain of
+    * [[FocusTracker.focusedIndex]], and what lets focus follow an element across renders when the tree changes shape.
     */
   def focusKeys(element: Element): Vector[Option[String]] =
     val own = if element.props.focusable then Vector(element.props.focusKey) else Vector.empty
@@ -74,7 +80,7 @@ private[dsl] object FocusPass:
   /** Rebuilds the tree with the focused element marked (`props.focused = true`) and every focusable wrapped in a
     * [[TrackedElement]] that records its rendered area. Indices are assigned in depth-first pre-order — the tab order.
     */
-  def decorate(root: Element, tracker: FocusTracker, focusStyle: io.worxbend.tui.core.Style): Element =
+  def decorate(root: Element, tracker: FocusTracker, focusStyle: Style): Element =
     var counter = 0
 
     def transform(element: Element): Element =

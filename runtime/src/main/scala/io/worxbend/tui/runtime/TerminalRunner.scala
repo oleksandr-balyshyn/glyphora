@@ -74,16 +74,16 @@ final class TerminalRunner(
         backend.printAbove(lines).left.foreach(error => failure = Some(error))
 
     def redraw(): Unit =
-      val drawn =
-        for
-          size <- backend.size
-          area   = Rect(size)
-          buffer = frameBuffer.filter(_.area == area).getOrElse(Buffer(area))
-          _      = buffer.reset()
-          _      = frameBuffer = Some(buffer)
-          _      = render(Frame(area, buffer))
-          _ <- backend.draw(buffer)
-        yield ()
+      val drawn = backend.size.flatMap { size =>
+        val area   = Rect(size)
+        // the previous frame's buffer is reused whenever the terminal did not resize: the backend diffs against what
+        // it last flushed, so only the composition has to be redone
+        val buffer = frameBuffer.filter(_.area == area).getOrElse(Buffer(area))
+        buffer.reset()
+        frameBuffer = Some(buffer)
+        render(Frame(area, buffer))
+        backend.draw(buffer)
+      }
       drawn.left.foreach(error => failure = Some(error))
 
     /** Dispatches one event; `true` when the frame should be repainted afterward. */
