@@ -58,7 +58,10 @@ object SyntaxHighlighter:
     val n = line.length
     while i < n do
       val c = line.charAt(i)
-      if spec.lineComment.exists(marker => line.startsWith(marker, i)) then
+      // bound the scan index to a local: a lambda capturing `i` directly would box it into a
+      // scala.runtime.IntRef for the whole loop, and this runs per character, per line, per frame
+      val at = i
+      if spec.lineComment.exists(marker => line.startsWith(marker, at)) then
         emit(line.drop(i), theme.comment)
         i = n
       else if spec.stringDelims.contains(c) then
