@@ -80,7 +80,7 @@ final case class TextInput(
     val clusters                                 = state.clusterSeq
     var scroll                                   = math.min(state.scrollCluster, state.cursor)
     def visibleWidth(from: Int, until: Int): Int = clusters.slice(from, until).map(CharWidth.of).sum
-    while visibleWidth(scroll, state.cursor).+(1) > width && scroll < state.cursor do scroll += 1
+    while visibleWidth(scroll, state.cursor) + 1 > width && scroll < state.cursor do scroll += 1
     scroll
 
   private def renderClusters(area: Rect, buffer: Buffer, state: TextInputState, clusters: Vector[String]): Unit =
