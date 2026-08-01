@@ -28,8 +28,9 @@ final case class PieChart(
   def render(area: Rect, buffer: Buffer): Unit =
     val total = data.map(_._2).filter(_ > 0).sum
     if !area.isEmpty && total > 0 then
-      val legendWidth = if showLegend then data.map(_._1.length).maxOption.getOrElse(0) + 7 else 0
-      val discWidth   = area.width - legendWidth
+      val legendWidth = if showLegend then data.map(entry => CharWidth.of(entry._1)).maxOption.getOrElse(0) + 7 else 0
+      // a legend wider than the area would otherwise push the disc — and the legend's own left edge — outside it
+      val discWidth   = math.max(0, area.width - legendWidth)
       val radius      = math.min(discWidth / 2.0 / 2.0, area.height / 2.0) // width halved for cell aspect
       val centerX     = area.x + discWidth / 2.0
       val centerY     = area.y + area.height / 2.0
@@ -85,7 +86,8 @@ final case class StackedBarChart(
           var bottom = area.y + chartHeight
           values.zipWithIndex.foreach { (value, series) =>
             val cells = math.round(math.max(0L, value).toDouble / maxTotal * chartHeight).toInt
-            val top   = bottom - cells
+            // each segment rounds up independently, so a tall stack can ask for more rows than the chart has
+            val top   = math.max(area.y, bottom - cells)
             var y     = top
             while y < bottom do
               var x = barLeft
