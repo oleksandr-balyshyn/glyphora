@@ -1,6 +1,8 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.runtime.ReactiveScope
+import io.worxbend.tui.runtime.{Effect, ReactiveScope}
+
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 /** One entry of the app's screen stack.
   *
@@ -33,6 +35,6 @@ enum ToastLevel:
   */
 final case class SplashScreen(
     content: Element,
-    effect: io.worxbend.tui.runtime.Effect,
-    minimumDuration: scala.concurrent.duration.FiniteDuration = scala.concurrent.duration.DurationInt(1500).millis,
+    effect: Effect,
+    minimumDuration: FiniteDuration = 1500.millis,
 )

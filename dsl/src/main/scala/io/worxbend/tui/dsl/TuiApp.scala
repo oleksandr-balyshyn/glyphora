@@ -1,12 +1,21 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{CharWidth, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind}
-import io.worxbend.tui.runtime.{ReactiveScope, RunnerConfig, RunnerError, RunnerHandle, Signal, TerminalRunner}
+import io.worxbend.tui.core.{CharWidth, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Style}
+import io.worxbend.tui.runtime.{
+  Effect,
+  Frame,
+  ReactiveScope,
+  RunnerConfig,
+  RunnerError,
+  RunnerHandle,
+  Signal,
+  TerminalRunner,
+}
 import io.worxbend.tui.terminal.{Backend, JLine3Backend}
 import io.worxbend.tui.widgets.TextInputState
 
 import java.util.concurrent.atomic.AtomicReference
-import scala.concurrent.duration.{DurationLong, FiniteDuration}
+import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 
 /** The application entry point for the declarative DSL.
   *
@@ -61,7 +70,7 @@ trait TuiApp:
   /** Starts a post-render [[Effect]] over the whole frame. Needs a `config.tickRate` to animate; the effect is dropped
     * once done.
     */
-  protected final def runEffect(effect: io.worxbend.tui.runtime.Effect): Unit =
+  protected final def runEffect(effect: Effect): Unit =
     activeEffects = (effect, System.nanoTime()) :: activeEffects
 
   // ---- navigation ----
@@ -177,8 +186,7 @@ trait TuiApp:
           invalidated || activeEffects.nonEmpty || splashActive || splashJustFinished || effectsJustFinished
 
     val effectiveConfig =
-      if splash.nonEmpty && config.tickRate.isEmpty then
-        config.copy(tickRate = Some(scala.concurrent.duration.DurationInt(50).millis))
+      if splash.nonEmpty && config.tickRate.isEmpty then config.copy(tickRate = Some(50.millis))
       else config
     val result          = TerminalRunner(backend, effectiveConfig, redrawRequested = () => invalidated).run(
       handleEvent,
@@ -281,7 +289,7 @@ trait TuiApp:
       }
     }
 
-  private def toastStyle(level: ToastLevel)(using theme: Theme): io.worxbend.tui.core.Style =
+  private def toastStyle(level: ToastLevel)(using theme: Theme): Style =
     val base = level match
       case ToastLevel.Info    => theme.accent
       case ToastLevel.Success => theme.success
@@ -303,7 +311,7 @@ trait TuiApp:
   private def splashActive: Boolean               =
     splash.nonEmpty && !splashFinished && !splashSkipped
 
-  private def renderSplash(frame: io.worxbend.tui.runtime.Frame): Unit =
+  private def renderSplash(frame: Frame): Unit =
     splash.foreach { intro =>
       if splashStartNanos == 0L then splashStartNanos = System.nanoTime()
       val elapsed = (System.nanoTime() - splashStartNanos).nanos
@@ -311,7 +319,7 @@ trait TuiApp:
       frame.applyEffect(intro.effect, elapsed)
     }
 
-  private def processEffects(frame: io.worxbend.tui.runtime.Frame): Unit =
+  private def processEffects(frame: Frame): Unit =
     if activeEffects.nonEmpty then
       val now = System.nanoTime()
       activeEffects.foreach((effect, started) => frame.applyEffect(effect, (now - started).nanos))
@@ -339,8 +347,8 @@ trait TuiApp:
         else false
       case _                                                     => false
 
-  private var activeEffects: List[(io.worxbend.tui.runtime.Effect, Long)] = Nil
-  private var splashStartNanos: Long                                      = 0L
-  private var splashFinished: Boolean                                     = false
-  private var splashSkipped: Boolean                                      = false
-  private val activeHandle                                                = AtomicReference[Option[RunnerHandle]](None)
+  private var activeEffects: List[(Effect, Long)] = Nil
+  private var splashStartNanos: Long              = 0L
+  private var splashFinished: Boolean             = false
+  private var splashSkipped: Boolean              = false
+  private val activeHandle                        = AtomicReference[Option[RunnerHandle]](None)
