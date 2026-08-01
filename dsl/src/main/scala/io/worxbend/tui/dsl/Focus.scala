@@ -60,13 +60,8 @@ private[dsl] object FocusPass:
       if element.props.focusable then element.withProps(element.props.copy(focusable = false)) else element
     cleared.withChildren(cleared.children.map(suppressFocus))
 
-  /** Number of focusable elements in depth-first order — the domain of [[FocusTracker.focusedIndex]]. */
-  def countFocusables(element: Element): Int =
-    val own = if element.props.focusable then 1 else 0
-    own + element.children.map(countFocusables).sum
-
-  /** The focus keys of every focusable in depth-first order (`None` for unkeyed ones) — what lets focus follow an
-    * element across renders when the tree changes shape.
+  /** The focus keys of every focusable in depth-first order (`None` for unkeyed ones) — the domain of
+    * [[FocusTracker.focusedIndex]], and what lets focus follow an element across renders when the tree changes shape.
     */
   def focusKeys(element: Element): Vector[Option[String]] =
     val own = if element.props.focusable then Vector(element.props.focusKey) else Vector.empty
