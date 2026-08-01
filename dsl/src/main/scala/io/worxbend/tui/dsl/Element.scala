@@ -135,10 +135,7 @@ final case class GaugeElement(
 ) extends Element:
   def widget: Widget = w.Gauge(ratio, label, props.style, filledStyle = props.style.reverse)
   private[dsl] def withProps(props: ElementProps): GaugeElement             = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
 
 final case class SparklineElement(
     data: Seq[Long],
@@ -147,10 +144,7 @@ final case class SparklineElement(
 ) extends Element:
   def widget: Widget                                                        = w.Sparkline(data, max, props.style)
   private[dsl] def withProps(props: ElementProps): SparklineElement         = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
 
 final case class TabsElement(
     titles: Seq[String],
@@ -159,10 +153,7 @@ final case class TabsElement(
 ) extends Element:
   def widget: Widget                                           = w.Tabs(titles.map(Line.raw), selected, props.style)
   private[dsl] def withProps(props: ElementProps): TabsElement = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
 
 final case class TableElement(
     rows: Seq[Seq[String]],
@@ -201,10 +192,7 @@ final case class InputElement(
     val input = w.TextInput(placeholder, showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): InputElement             = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
   private[dsl] override def builtinPasteHandler: Option[String => Boolean]  = Some { text =>
     if props.focused then
@@ -247,10 +235,7 @@ final case class CheckboxElement(
 ) extends Element:
   def widget: Widget                                               = w.Checkbox(label, checked.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): CheckboxElement = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint  =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
     Some(toggleOnActivate(props, () => checked.update(value => !value)))
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
@@ -263,10 +248,7 @@ final case class ToggleElement(
 ) extends Element:
   def widget: Widget                                             = w.Toggle(label, on.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): ToggleElement = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint  =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
     Some(toggleOnActivate(props, () => on.update(value => !value)))
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
@@ -281,10 +263,7 @@ final case class SelectElement(
     Some(clickActivates(() => if options.nonEmpty then selected.update(index => (index + 1) % options.size)))
   def widget: Widget = w.Select(options, selected.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): SelectElement             = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint  =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -777,10 +756,7 @@ final case class SliderElement(
     }
   def widget: Widget = w.Slider(value.peek, min, max, props.style, focusStyled(props).bold)
   private[dsl] def withProps(props: ElementProps): SliderElement             = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint  =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -846,10 +822,7 @@ final case class NumberInputElement(
     val input = w.TextInput(showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): NumberInputElement       = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -895,10 +868,7 @@ final case class MaskedInputElement(
     val input = w.TextInput(placeholder = mask, showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): MaskedInputElement       = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -943,10 +913,7 @@ final case class PaginatorElement(
 ) extends Element:
   def widget: Widget = w.Paginator(current.peek, total, props.style, focusStyled(props).bold)
   private[dsl] def withProps(props: ElementProps): PaginatorElement         = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
@@ -969,10 +936,7 @@ final case class ButtonElement(
 ) extends Element:
   def widget: Widget                                                         = w.Button(label, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): ButtonElement             = copy(props = props)
-  private[dsl] override def preferredSize(direction: Direction): Constraint  =
-    direction match
-      case Direction.Vertical   => Constraint.Length(1)
-      case Direction.Horizontal => Constraint.Fill(1)
+  private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
     Some(toggleOnActivate(props, action))
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
@@ -1143,6 +1107,14 @@ private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker
     inner.builtinMouseHandler
   private[dsl] override def builtinPasteHandler: Option[String => Boolean]       = inner.builtinPasteHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint      = inner.preferredSize(direction)
+
+/** What a one-line control claims from its container: exactly one row when stacked vertically, whatever width is going
+  * when laid out horizontally.
+  */
+private def singleRow(direction: Direction): Constraint =
+  direction match
+    case Direction.Vertical   => Constraint.Length(1)
+    case Direction.Horizontal => Constraint.Fill(1)
 
 /** A mouse press activates the control (focus already moved on the press). */
 private def clickActivates(activate: () => Unit): BuiltinMouseHandler =
