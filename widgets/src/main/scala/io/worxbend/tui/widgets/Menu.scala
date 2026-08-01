@@ -33,13 +33,15 @@ final class MenuState(var selected: Int = 0, var offset: Int = 0):
 
   private def step(items: Seq[MenuItem], delta: Int): Unit =
     if items.exists(_.selectable) then
-      val size  = items.size
-      var next  = selected
-      var guard = 0
-      while guard < size do
+      val size    = items.size
+      var next    = selected
+      var landed  = false
+      // one full lap at most: `items.exists` guarantees a landing spot, the bound just rules out a spin
+      var stepped = 0
+      while !landed && stepped < size do
         next = (next + delta + size) % size
-        guard += 1
-        if items(next).selectable then guard = size
+        stepped += 1
+        landed = items(next).selectable
       selected = next
 
   /** Snaps the highlight onto the first selectable entry if it currently sits on a non-selectable one. */
@@ -84,7 +86,7 @@ final case class Menu(
       val inner = block.inner(area)
       if !inner.isEmpty && items.nonEmpty then
         val visible = math.min(inner.height, items.size)
-        state.offset = scrolledOffset(state.offset, state.selected, inner.height)
+        state.offset = ScrollWindow.offsetFor(state.offset, Some(state.selected), items.size, inner.height)
         var row     = 0
         while row < visible do
           val index = state.offset + row
@@ -109,10 +111,3 @@ final case class Menu(
         val hintW = CharWidth.of(hint)
         if hintW + 2 <= inner.width then buffer.setString(inner.right - hintW, y, hint, rowStyle)
       }
-
-  private def scrolledOffset(offset: Int, selected: Int, height: Int): Int =
-    val maxOffset = math.max(0, items.size - height)
-    val clamped   = math.max(0, math.min(offset, maxOffset))
-    if selected < clamped then selected
-    else if selected >= clamped + height then selected - height + 1
-    else clamped

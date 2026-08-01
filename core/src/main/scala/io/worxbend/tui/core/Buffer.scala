@@ -32,11 +32,13 @@ final class Buffer(val area: Rect):
       while clusters.hasNext && column < area.right do
         val cluster = clusters.next()
         val width   = CharWidth.of(cluster)
-        if width > 0 && column + width <= area.right then
-          set(column, y, Cell(cluster, style))
-          if width == 2 then set(column + 1, y, Cell.Empty)
-          column += width
-        else if width > 0 then column = area.right // wide cluster that only half-fits: stop
+        // a zero-width cluster (a combining mark with no base character before it) claims no cell at all
+        if width > 0 then
+          if column + width <= area.right then
+            set(column, y, Cell(cluster, style))
+            if width == 2 then set(column + 1, y, Cell.Empty)
+            column += width
+          else column = area.right // a wide cluster that only half-fits at the edge: stop
       end while
 
   /** Allocation-free [[setString]] for printable ASCII: one column per char, symbols taken from a shared table. */

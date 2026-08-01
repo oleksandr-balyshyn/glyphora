@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Color, Rect, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, Color, Rect, Style, Widget}
 
 import scala.util.control.NonFatal
 
@@ -24,11 +24,7 @@ final case class Image(pixels: Vector[Vector[Color.Rgb]]) extends Widget:
         while x < area.width do
           val upper = sample(x, y * 2, area.width, targetRows, sourceWidth, sourceHeight)
           val lower = sample(x, y * 2 + 1, area.width, targetRows, sourceWidth, sourceHeight)
-          buffer.set(
-            area.x + x,
-            area.y + y,
-            Cell("▀", io.worxbend.tui.core.Style(fg = Some(upper), bg = Some(lower))),
-          )
+          buffer.set(area.x + x, area.y + y, Cell("▀", Style(fg = Some(upper), bg = Some(lower))))
           x += 1
         y += 1
 
@@ -40,9 +36,9 @@ final case class Image(pixels: Vector[Vector[Color.Rgb]]) extends Widget:
       sourceWidth: Int,
       sourceHeight: Int,
   ): Color.Rgb =
-    val sx = math.min(sourceWidth - 1, column * sourceWidth / targetWidth)
-    val sy = math.min(sourceHeight - 1, row * sourceHeight / targetHeight)
-    pixels(sy)(sx)
+    val sourceX = math.min(sourceWidth - 1, column * sourceWidth / targetWidth)
+    val sourceY = math.min(sourceHeight - 1, row * sourceHeight / targetHeight)
+    pixels(sourceY)(sourceX)
 
 object Image:
 

@@ -19,7 +19,7 @@ final case class BarChart(
     val chartHeight = if showLabels then area.height - 1 else area.height
     if area.isEmpty || data.isEmpty || chartHeight <= 0 || barWidth <= 0 then ()
     else
-      val ceiling = math.max(1L, max.getOrElse(data.map(_._2).max))
+      val ceiling = math.max(1L, max.getOrElse(data.map((_, value) => value).max))
       data.zipWithIndex.foreach { case ((label, value), index) =>
         val barLeft = area.x + index * (barWidth + barGap)
         if barLeft + barWidth <= area.right then

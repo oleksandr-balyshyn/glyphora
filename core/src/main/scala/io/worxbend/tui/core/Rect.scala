@@ -50,9 +50,9 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
 
   /** A `width`×`height` rectangle centered inside this one, clamped so it never exceeds these bounds. */
   def centered(w: Int, h: Int): Rect =
-    val cw = math.min(w, width)
-    val ch = math.min(h, height)
-    Rect(x + (width - cw) / 2, y + (height - ch) / 2, cw, ch)
+    val fittedWidth  = math.min(w, width)
+    val fittedHeight = math.min(h, height)
+    Rect(x + (width - fittedWidth) / 2, y + (height - fittedHeight) / 2, fittedWidth, fittedHeight)
 
   /** True when the two rectangles share at least one cell. */
   def intersects(other: Rect): Boolean =
@@ -63,11 +63,11 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
     if isEmpty then other
     else if other.isEmpty then this
     else
-      val left   = math.min(x, other.x)
-      val top    = math.min(y, other.y)
-      val right2 = math.max(right, other.right)
-      val bot2   = math.max(bottom, other.bottom)
-      Rect(left, top, right2 - left, bot2 - top)
+      val left        = math.min(x, other.x)
+      val top         = math.min(y, other.y)
+      val unionRight  = math.max(right, other.right)
+      val unionBottom = math.max(bottom, other.bottom)
+      Rect(left, top, unionRight - left, unionBottom - top)
 
 object Rect:
   val Zero: Rect = Rect(0, 0, 0, 0)

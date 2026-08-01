@@ -58,34 +58,32 @@ object SyntaxHighlighter:
     val n = line.length
     while i < n do
       val c = line.charAt(i)
-      spec.lineComment match
-        case Some(marker) if line.startsWith(marker, i) =>
-          emit(line.drop(i), theme.comment)
-          i = n
-        case _                                          =>
-          if spec.stringDelims.contains(c) then
-            val end = scanString(line, i, c)
-            emit(line.slice(i, end), theme.string)
-            i = end
-          else if c == '$' && spec.shellVariables && i + 1 < n && isIdentChar(line.charAt(i + 1)) then
-            val end = scanWhile(line, i + 1, isIdentChar)
-            emit(line.slice(i, end), theme.variable)
-            i = end
-          else if c.isDigit && !isIdentChar(prevChar(line, i)) then
-            val end = scanWhile(line, i, ch => ch.isDigit || ch == '.' || ch == 'x' || ch == 'e' || ch == '_')
-            emit(line.slice(i, end), theme.number)
-            i = end
-          else if isIdentStart(c) then
-            val end    = scanWhile(line, i, isIdentChar)
-            val word   = line.slice(i, end)
-            val isCall = end < n && line.charAt(end) == '('
-            if spec.keywords.contains(word) then emit(word, theme.keyword)
-            else if isCall then emit(word, theme.function)
-            else plain ++= word
-            i = end
-          else
-            plain += c
-            i += 1
+      if spec.lineComment.exists(marker => line.startsWith(marker, i)) then
+        emit(line.drop(i), theme.comment)
+        i = n
+      else if spec.stringDelims.contains(c) then
+        val end = scanString(line, i, c)
+        emit(line.slice(i, end), theme.string)
+        i = end
+      else if c == '$' && spec.shellVariables && i + 1 < n && isIdentChar(line.charAt(i + 1)) then
+        val end = scanWhile(line, i + 1, isIdentChar)
+        emit(line.slice(i, end), theme.variable)
+        i = end
+      else if c.isDigit && !isIdentChar(prevChar(line, i)) then
+        val end = scanWhile(line, i, ch => ch.isDigit || ch == '.' || ch == 'x' || ch == 'e' || ch == '_')
+        emit(line.slice(i, end), theme.number)
+        i = end
+      else if isIdentStart(c) then
+        val end    = scanWhile(line, i, isIdentChar)
+        val word   = line.slice(i, end)
+        val isCall = end < n && line.charAt(end) == '('
+        if spec.keywords.contains(word) then emit(word, theme.keyword)
+        else if isCall then emit(word, theme.function)
+        else plain ++= word
+        i = end
+      else
+        plain += c
+        i += 1
     flush()
     Line(spans.result())
 
@@ -103,13 +101,14 @@ object SyntaxHighlighter:
     * the closing delimiter (or end of line if unterminated).
     */
   private def scanString(line: String, start: Int, delim: Char): Int =
-    var i = start + 1
-    while i < line.length do
+    var i     = start + 1
+    var close = -1
+    while close < 0 && i < line.length do
       val c = line.charAt(i)
-      if c == '\\' then i += 2
-      else if c == delim then return i + 1
+      if c == '\\' then i += 2 // the escaped char can never close the literal
+      else if c == delim then close = i + 1
       else i += 1
-    line.length
+    if close < 0 then line.length else close
 
   private final case class LanguageSpec(
       keywords: Set[String],

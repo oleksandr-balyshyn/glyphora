@@ -79,7 +79,7 @@ final case class DirectoryTree(
     if !area.isEmpty then
       val visible       = state.visiblePaths()
       val selectedIndex = state.selected.map(visible.indexOf).filter(_ >= 0)
-      state.offset = scrolledOffset(state.offset, selectedIndex, visible.size, area.height)
+      state.offset = ScrollWindow.offsetFor(state.offset, selectedIndex, visible.size, area.height)
       visible.slice(state.offset, state.offset + area.height).zipWithIndex.foreach { (path, row) =>
         val rowStyle = if state.selected.contains(path) then style.patch(highlightStyle) else style
         val text     = CharWidth.substringByWidth(rowText(path, state), area.width)
@@ -94,13 +94,3 @@ final case class DirectoryTree(
       val marker = if state.expanded.contains(path) then "▾ " else "▸ "
       s"$indent$marker$name/"
     else s"$indent  $name"
-
-  private def scrolledOffset(offset: Int, selectedIndex: Option[Int], total: Int, height: Int): Int =
-    val maxOffset = math.max(0, total - height)
-    val clamped   = math.max(0, math.min(offset, maxOffset))
-    selectedIndex match
-      case None        => clamped
-      case Some(index) =>
-        if index < clamped then index
-        else if index >= clamped + height then index - height + 1
-        else clamped

@@ -26,7 +26,7 @@ final case class Scrollbar(
       val thumb       = thumbRange(trackLength, state)
       var along       = 0
       while along < trackLength do
-        val inThumb   = thumb.exists(range => along >= range._1 && along < range._1 + range._2)
+        val inThumb   = thumb.exists((start, size) => along >= start && along < start + size)
         val symbol    = if inThumb then thumbSymbol else trackSymbol
         val cellStyle = if inThumb then thumbStyle else style
         orientation match

@@ -26,15 +26,16 @@ final case class PieChart(
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    val total = data.map(_._2).filter(_ > 0).sum
+    val total = data.map((_, value) => value).filter(_ > 0).sum
     if !area.isEmpty && total > 0 then
-      val legendWidth = if showLegend then data.map(entry => CharWidth.of(entry._1)).maxOption.getOrElse(0) + 7 else 0
+      val legendWidth = if showLegend then data.map((label, _) => CharWidth.of(label)).maxOption.getOrElse(0) + 7 else 0
       // a legend wider than the area would otherwise push the disc — and the legend's own left edge — outside it
       val discWidth   = math.max(0, area.width - legendWidth)
       val radius      = math.min(discWidth / 2.0 / 2.0, area.height / 2.0) // width halved for cell aspect
       val centerX     = area.x + discWidth / 2.0
       val centerY     = area.y + area.height / 2.0
-      val cumulative  = data.scanLeft(0.0)((acc, entry) => acc + math.max(0, entry._2)).tail
+      // the running total after each sector, so a point's angle can be looked up by the first edge it falls before
+      val cumulative  = data.scanLeft(0.0) { case (runningTotal, (_, value)) => runningTotal + math.max(0, value) }.tail
       var y           = area.y
       while y < area.bottom do
         var x = area.x
@@ -77,7 +78,7 @@ final case class StackedBarChart(
   def render(area: Rect, buffer: Buffer): Unit =
     val showLabels  = area.height >= 2 && data.exists((label, _) => label.nonEmpty)
     val chartHeight = if showLabels then area.height - 1 else area.height
-    val maxTotal    = data.map(_._2.map(math.max(0L, _)).sum).maxOption.getOrElse(0L)
+    val maxTotal    = data.map((_, values) => values.map(math.max(0L, _)).sum).maxOption.getOrElse(0L)
     if area.isEmpty || data.isEmpty || chartHeight <= 0 || maxTotal <= 0 then ()
     else
       data.zipWithIndex.foreach { case ((label, values), barIndex) =>

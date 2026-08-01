@@ -51,41 +51,50 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   def draw(buffer: Buffer): Either[BackendError, Unit] =
     attempt {
-      val previous                    = lastFlushed.getOrElse(Buffer(buffer.area))
-      val body                        = StringBuilder()
-      var expectedX                   = -1
-      var currentY                    = -1
-      var currentStyle                = ""
-      var currentLink: Option[String] = scala.None
-      previous.diff(
-        buffer,
-        (x, y, cell) => {
-          if y != currentY || x != expectedX then body ++= AnsiSequences.moveTo(x, y)
-          val sgr = AnsiSequences.sgr(cell.style, colorDepth)
-          if sgr != currentStyle then
-            body ++= sgr
-            currentStyle = sgr
-          if cell.style.link != currentLink then
-            if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
-            cell.style.link.foreach(url => body ++= AnsiSequences.linkOpen(url))
-            currentLink = cell.style.link
-          body ++= cell.symbol
-          currentY = y
-          expectedX = x + math.max(1, CharWidth.of(cell.symbol))
-        },
-      )
+      val previous = lastFlushed.getOrElse(Buffer(buffer.area))
+      val body     = encodeChangedCells(previous, buffer)
       // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent
       if body.nonEmpty then
-        if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
-        val output = StringBuilder()
-        output ++= AnsiSequences.BeginSynchronized
-        output ++= body.result()
-        output ++= AnsiSequences.ResetStyle
-        output ++= AnsiSequences.EndSynchronized
-        terminal.writer().write(output.result())
+        // one atomic update: the terminal shows the previous frame until the whole batch has arrived
+        val frame =
+          AnsiSequences.BeginSynchronized + body + AnsiSequences.ResetStyle + AnsiSequences.EndSynchronized
+        terminal.writer().write(frame)
         terminal.writer().flush()
       lastFlushed = Some(buffer.snapshot)
     }
+
+  /** The cell-level ANSI for everything that differs between `previous` and `next`, in row-major order.
+    *
+    * Cursor position, SGR state and the open hyperlink carry across cells, so each is re-emitted only where it actually
+    * changes — that suppression is most of the reason a diffed frame is small enough to write in one go. Returns the
+    * empty string when the frame is unchanged.
+    */
+  private def encodeChangedCells(previous: Buffer, next: Buffer): String =
+    val body                        = StringBuilder()
+    var expectedX                   = -1
+    var currentY                    = -1
+    var currentStyle                = ""
+    var currentLink: Option[String] = scala.None
+    previous.diff(
+      next,
+      (x, y, cell) => {
+        if y != currentY || x != expectedX then body ++= AnsiSequences.moveTo(x, y)
+        val sgr = AnsiSequences.sgr(cell.style, colorDepth)
+        if sgr != currentStyle then
+          body ++= sgr
+          currentStyle = sgr
+        if cell.style.link != currentLink then
+          if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
+          cell.style.link.foreach(url => body ++= AnsiSequences.linkOpen(url))
+          currentLink = cell.style.link
+        body ++= cell.symbol
+        currentY = y
+        expectedX = x + math.max(1, CharWidth.of(cell.symbol))
+      },
+    )
+    // a link left open would swallow everything drawn after this frame
+    if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
+    body.result()
 
   def enableRawMode(): Either[BackendError, Unit] =
     attempt {
