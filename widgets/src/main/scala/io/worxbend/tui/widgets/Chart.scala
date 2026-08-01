@@ -35,8 +35,9 @@ final case class Chart(
       }
       Canvas(xBounds, yBounds, shapes, marker, resolution).render(plotArea, buffer)
       if showLabels then
-        buffer.setString(area.x + 1, area.y, formatBound(yBounds._2), axisStyle)
-        buffer.setString(area.x + 1, area.bottom - 2, formatBound(yBounds._1), axisStyle)
+        val (yMin, yMax) = yBounds
+        buffer.setString(area.x + 1, area.y, formatBound(yMax), axisStyle)
+        buffer.setString(area.x + 1, area.bottom - 2, formatBound(yMin), axisStyle)
 
   private def formatBound(value: Double): String =
     if value == value.floor && math.abs(value) < 1e9 then value.toLong.toString else f"$value%.1f"

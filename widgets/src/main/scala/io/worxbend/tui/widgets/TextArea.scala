@@ -149,9 +149,9 @@ final case class TextArea(
       state: TextAreaState,
       isCursorLine: Boolean,
   ): Unit =
-    val cursorColumn = state.cursor._2
-    var x            = area.x
-    var index        = state.scrollColumn
+    val (_, cursorColumn) = state.cursor
+    var x                 = area.x
+    var index             = state.scrollColumn
     while index <= clusters.size && x < area.right do
       val atEnd  = index == clusters.size
       val symbol = if atEnd then " " else clusters(index)
@@ -172,7 +172,8 @@ final case class TextArea(
 
   /** Scrolls all lines left just enough that the cursor's column (measured on its own line) stays visible. */
   private def scrolledHorizontally(state: TextAreaState, cursorColumn: Int, width: Int): Int =
-    val clusters                                 = state.clusterLines(state.cursor._1)
+    val (cursorLine, _)                          = state.cursor
+    val clusters                                 = state.clusterLines(cursorLine)
     var scroll                                   = math.min(state.scrollColumn, cursorColumn)
     def visibleWidth(from: Int, until: Int): Int = clusters.slice(from, until).map(CharWidth.of).sum
     while visibleWidth(scroll, cursorColumn) + 1 > width && scroll < cursorColumn do scroll += 1
