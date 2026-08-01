@@ -57,7 +57,7 @@ object SyntaxHighlighter:
     var i = 0
     val n = line.length
     while i < n do
-      val c = line.charAt(i)
+      val c  = line.charAt(i)
       // bound the scan index to a local: a lambda capturing `i` directly would box it into a
       // scala.runtime.IntRef for the whole loop, and this runs per character, per line, per frame
       val at = i

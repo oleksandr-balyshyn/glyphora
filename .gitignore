@@ -9,3 +9,4 @@ out/
 /cs
 build/wiki/
 .wiki-export/
+.claude/worktrees/
