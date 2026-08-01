@@ -23,6 +23,13 @@ final class ChromeSpec extends AnyFunSuite:
     assert(lines.head.contains("one │ two"))
     assert(lines.head.contains("v1"))
 
+  test("topBar reserves display columns, not code units, for wide text"):
+    // each of these characters is one UTF-16 code unit but two terminal columns
+    val lines = trimmedLines(rendered(topBar("日本語", tabs = Seq("一", "二"), right = "版本").widget, 40, 1))
+    assert(lines.head.startsWith(" 日本語 "))
+    assert(lines.head.contains("一 │ 二"))
+    assert(lines.head.contains("版本"))
+
   test("statusBar renders binding hints"):
     val bindings = KeyBindings(binding("q", "quit")(()), binding("tab", "next")(()))
     val lines    = trimmedLines(rendered(statusBar(bindings).widget, 40, 1))
