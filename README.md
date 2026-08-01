@@ -306,7 +306,7 @@ native-image example builds.
 
 **[🤝 Contributing guide](website/docs/contributing.md)** ·
 **[🐛 Report an issue](https://github.com/oleksandr-balyshyn/glyphora/issues)** ·
-**[💬 Discussions](https://github.com/oleksandr-balyshyn/glyphora/discussions)**
+**[📚 Wiki](https://github.com/oleksandr-balyshyn/glyphora/wiki)**
 
 </div>
 
