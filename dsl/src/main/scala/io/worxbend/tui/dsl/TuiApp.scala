@@ -139,7 +139,7 @@ trait TuiApp:
         if mouse.kind == MouseEventKind.Down then
           hit match
             case Some(index) if index != tracker.focusedIndex =>
-              tracker.focusedIndex = index
+              tracker.focusTo(index)
               true
             case _                                            => false
         else false

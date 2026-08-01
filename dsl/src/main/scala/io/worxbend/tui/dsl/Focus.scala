@@ -22,15 +22,25 @@ private[dsl] final class FocusTracker:
 
   def focusNext(): Boolean =
     if focusableCount > 1 then
-      focusedIndex = (focusedIndex + 1) % focusableCount
+      focusTo((focusedIndex + 1) % focusableCount)
       true
     else false
 
   def focusPrevious(): Boolean =
     if focusableCount > 1 then
-      focusedIndex = (focusedIndex - 1 + focusableCount) % focusableCount
+      focusTo((focusedIndex - 1 + focusableCount) % focusableCount)
       true
     else false
+
+  /** Moves focus to `index` deliberately (Tab, a click), forgetting the remembered [[focusedKey]].
+    *
+    * The key exists so focus can *follow* an element whose position changed between renders. Keeping the old key here
+    * would instead pull focus straight back to where it was on the next render, which is what an explicit move is
+    * asking not to happen; the render pass re-derives the key from the new index.
+    */
+  def focusTo(index: Int): Unit =
+    focusedIndex = index
+    focusedKey = None
 
   def areaOf(index: Int): Option[io.worxbend.tui.core.Rect] = areas.get(index)
 
