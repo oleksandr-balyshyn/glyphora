@@ -5,8 +5,9 @@ import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Line, Rect, Style, Text, W
 /** A modal-style dialog drawn over existing content: clears a centered box, borders it, renders the message and a row
   * of buttons with one highlighted.
   *
-  * There is no screen stack — a dialog is just an element rendered last in the view, so it paints over whatever was
-  * drawn before it.
+  * The widget owns no state and manages no stack of its own — it paints over whatever was drawn into the buffer before
+  * it, so rendering it last in the view is what makes it modal-looking. The DSL's `Screen` stack (`TuiApp.pushScreen`)
+  * builds on exactly that.
   */
 final case class Dialog(
     title: String,

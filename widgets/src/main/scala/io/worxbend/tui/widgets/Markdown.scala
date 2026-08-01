@@ -19,9 +19,10 @@ final case class MarkdownTheme(
 /** Renders a pragmatic Markdown subset: `#`/`##`/`###`+ headings, `-`/`*` bullets, `1.` numbered items, `>`
   * blockquotes, fenced code blocks, and inline `**strong**` / `*emphasis*` / `` `code` ``.
   *
-  * Inline `[label](url)` links render underlined with an OSC 8 target. Deliberately excluded: images, tables, nested
-  * lists, and syntax highlighting inside code fences — this is a document *viewer* for help screens and READMEs, not a
-  * rendering-complete engine. Prose wraps at the area width (cluster-safe); code blocks render verbatim.
+  * Inline `[label](url)` links render underlined with an OSC 8 target. Deliberately excluded: images, tables, and
+  * nested lists — this is a document *viewer* for help screens and READMEs, not a rendering-complete engine. Prose
+  * wraps at the area width (cluster-safe); code blocks render verbatim, except that a fence tagged with a [[Language]]
+  * the highlighter knows (` ```scala `) is coloured through [[SyntaxHighlighter]].
   */
 final case class Markdown(
     source: String,
