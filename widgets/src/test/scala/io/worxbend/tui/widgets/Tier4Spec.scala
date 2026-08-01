@@ -41,6 +41,13 @@ final class Tier4Spec extends AnyFunSuite:
     val interior = messageRow.substring(messageRow.indexOf("║"), messageRow.lastIndexOf("║"))
     assert(!interior.contains("#"))
 
+  test("dialog buttons that do not fit the box are dropped, not painted outside it"):
+    import io.worxbend.tui.core.Rect
+    val dialog = Dialog("Confirm", Text.raw("Pick"), Seq("Alpha", "Bravo", "Charlie", "Delta"))
+    val buffer = io.worxbend.tui.core.Buffer(Rect(0, 0, 40, 9))
+    dialog.render(Rect(0, 0, 20, 9), buffer)
+    assert(trimmedLines(buffer).forall(_.length <= 20))
+
   test("dual sparklines render in the top and bottom halves"):
     val widget = DualSparkline(Seq(8, 8), Seq(4, 4), max = Some(8))
     val buffer = rendered(widget, 2, 2)

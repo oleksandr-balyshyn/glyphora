@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Color, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Color, Rect, Style, Widget}
 
 /** A clickable hyperlink (OSC 8): renders `label` underlined with the link attached — terminals without OSC 8 support
   * just show the styled text.
@@ -12,4 +12,5 @@ final case class Link(
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    if !area.isEmpty then buffer.setString(area.x, area.y, label, style.withLink(url))
+    if !area.isEmpty then
+      buffer.setString(area.x, area.y, CharWidth.substringByWidth(label, area.width), style.withLink(url))
