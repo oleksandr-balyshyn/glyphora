@@ -33,13 +33,15 @@ final class MenuState(var selected: Int = 0, var offset: Int = 0):
 
   private def step(items: Seq[MenuItem], delta: Int): Unit =
     if items.exists(_.selectable) then
-      val size  = items.size
-      var next  = selected
-      var guard = 0
-      while guard < size do
+      val size    = items.size
+      var next    = selected
+      var landed  = false
+      // one full lap at most: `items.exists` guarantees a landing spot, the bound just rules out a spin
+      var stepped = 0
+      while !landed && stepped < size do
         next = (next + delta + size) % size
-        guard += 1
-        if items(next).selectable then guard = size
+        stepped += 1
+        landed = items(next).selectable
       selected = next
 
   /** Snaps the highlight onto the first selectable entry if it currently sits on a non-selectable one. */
