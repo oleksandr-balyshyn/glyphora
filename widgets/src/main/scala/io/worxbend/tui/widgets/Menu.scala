@@ -86,7 +86,7 @@ final case class Menu(
       val inner = block.inner(area)
       if !inner.isEmpty && items.nonEmpty then
         val visible = math.min(inner.height, items.size)
-        state.offset = scrolledOffset(state.offset, state.selected, inner.height)
+        state.offset = ScrollWindow.offsetFor(state.offset, Some(state.selected), items.size, inner.height)
         var row     = 0
         while row < visible do
           val index = state.offset + row
@@ -111,10 +111,3 @@ final case class Menu(
         val hintW = CharWidth.of(hint)
         if hintW + 2 <= inner.width then buffer.setString(inner.right - hintW, y, hint, rowStyle)
       }
-
-  private def scrolledOffset(offset: Int, selected: Int, height: Int): Int =
-    val maxOffset = math.max(0, items.size - height)
-    val clamped   = math.max(0, math.min(offset, maxOffset))
-    if selected < clamped then selected
-    else if selected >= clamped + height then selected - height + 1
-    else clamped

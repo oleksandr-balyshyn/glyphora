@@ -134,7 +134,7 @@ final case class DataTable(
       if bodyHeight > 0 && view.nonEmpty then
         val selected = state.selected.map(index => math.max(0, math.min(index, view.size - 1)))
         state.selected = selected
-        state.offset = scrolledOffset(state.offset, selected, view.size, bodyHeight)
+        state.offset = ScrollWindow.offsetFor(state.offset, selected, view.size, bodyHeight)
         view.slice(state.offset, state.offset + bodyHeight).zipWithIndex.foreach { (cells, row) =>
           val index    = state.offset + row
           val rowStyle = if selected.contains(index) then style.patch(highlightStyle) else style
@@ -165,13 +165,3 @@ final case class DataTable(
     (left.toDoubleOption, right.toDoubleOption) match
       case (Some(x), Some(y)) => x < y
       case _                  => left.compareToIgnoreCase(right) < 0
-
-  private def scrolledOffset(offset: Int, selected: Option[Int], total: Int, height: Int): Int =
-    val maxOffset = math.max(0, total - height)
-    val clamped   = math.max(0, math.min(offset, maxOffset))
-    selected match
-      case None        => clamped
-      case Some(index) =>
-        if index < clamped then index
-        else if index >= clamped + height then index - height + 1
-        else clamped

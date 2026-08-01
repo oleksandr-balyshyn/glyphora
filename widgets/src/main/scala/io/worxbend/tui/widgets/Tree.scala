@@ -50,7 +50,7 @@ final case class Tree(
     if !area.isEmpty && nodes.nonEmpty then
       val visible       = Tree.visiblePaths(nodes, state.expanded.toSet)
       val selectedIndex = state.selected.map(visible.indexOf).filter(_ >= 0)
-      state.offset = scrolledOffset(state.offset, selectedIndex, visible.size, area.height)
+      state.offset = ScrollWindow.offsetFor(state.offset, selectedIndex, visible.size, area.height)
       visible.slice(state.offset, state.offset + area.height).zipWithIndex.foreach { (path, row) =>
         val node       = Tree.nodeAt(nodes, path).getOrElse(TreeNode(""))
         val isSelected = state.selected.contains(path)
@@ -63,16 +63,6 @@ final case class Tree(
         val text       = CharWidth.substringByWidth(indent + marker + node.label, area.width)
         buffer.setString(area.x, area.y + row, text, rowStyle)
       }
-
-  private def scrolledOffset(offset: Int, selectedIndex: Option[Int], total: Int, height: Int): Int =
-    val maxOffset = math.max(0, total - height)
-    val clamped   = math.max(0, math.min(offset, maxOffset))
-    selectedIndex match
-      case None        => clamped
-      case Some(index) =>
-        if index < clamped then index
-        else if index >= clamped + height then index - height + 1
-        else clamped
 
 object Tree:
 
