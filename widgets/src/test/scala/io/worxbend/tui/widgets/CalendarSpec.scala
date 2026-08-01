@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.Modifiers
+import io.worxbend.tui.core.{Buffer, Modifiers, Rect}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -19,6 +19,14 @@ final class CalendarSpec extends AnyFunSuite:
   test("a month starting on Monday fills the first row"):
     val lines = trimmedLines(rendered(Calendar(2026, 6), 20, 8))
     assert(lines(2) == " 1  2  3  4  5  6  7")
+
+  test("day cells that do not fit the area are dropped, not written past its edges"):
+    // the full grid needs 20 columns and 3 + weeks rows; this area has neither
+    val buffer = Buffer(Rect(0, 0, 24, 12))
+    Calendar(2026, 7).render(Rect(0, 0, 11, 5), buffer)
+    val lines  = trimmedLines(buffer)
+    assert(lines.forall(_.length <= 11))
+    assert(lines.drop(5).forall(_.isEmpty))
 
   test("the selected day is highlighted"):
     val buffer = rendered(Calendar(2026, 7, selected = Some(1)), 20, 8)

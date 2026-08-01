@@ -62,6 +62,20 @@ final class VizExtrasSpec extends AnyFunSuite:
     assert(buffer.get(0, 1).symbol == " ") // the shorter bar stops here
     assert(buffer.get(1, 0).style.fg.contains(Color.Green)) // the max bar fills to the top
 
+  test("stacked segments never spill above the chart when their rounding overshoots"):
+    // six equal segments each round up to 2 of the 10 chart rows, asking for 12 rows in total
+    val chart  = StackedBarChart(Seq(("", Seq.fill(6)(15L))), barWidth = 1, barGap = 0)
+    val buffer = Buffer(Rect(0, 0, 1, 13))
+    chart.render(Rect(0, 3, 1, 10), buffer)
+    assert(trimmedLines(buffer).take(3) == Seq("", "", ""))
+
+  test("a pie legend stays inside the area when it is wider than the widget"):
+    val pie    = PieChart(Seq(("a-very-long-series-label", 1.0)))
+    val buffer = Buffer(Rect(0, 0, 20, 3))
+    pie.render(Rect(10, 0, 10, 3), buffer)
+    // the legend cannot fit next to a disc, but it must not paint to the left of x = 10 either
+    assert(trimmedLines(buffer).forall(line => line.take(10).isBlank))
+
   test("a heatmap maps values onto the shade ramp"):
     val heat   = Heatmap(Seq(Seq(0.0, 0.5, 1.0)))
     val buffer = rendered(heat, 3, 1)

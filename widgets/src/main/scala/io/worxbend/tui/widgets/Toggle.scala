@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
 
 /** A labeled on/off switch. Stateless — the flag lives with the application. */
 final case class Toggle(
@@ -14,4 +14,4 @@ final case class Toggle(
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
       val symbol = if on then onSymbol else offSymbol
-      buffer.setString(area.x, area.y, symbol + label, style)
+      buffer.setString(area.x, area.y, CharWidth.substringByWidth(symbol + label, area.width), style)

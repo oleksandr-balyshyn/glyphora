@@ -147,6 +147,40 @@ final class FocusSpec extends AnyFunSuite:
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
 
+  test("Tab still moves focus when the elements carry focus keys"):
+    val backend = HeadlessBackend(Size(30, 6))
+    val first   = TextInputState()
+    val second  = TextInputState()
+    val app     = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope): Element =
+        column(input(first).key("first"), input(second).key("second"))
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.pressKey(KeyCode.Tab).typeText("hi").waitForIdle()
+    // an explicit focus move must win over the remembered key, or Tab is a no-op on keyed trees
+    assert(first.value == "")
+    assert(second.value == "hi")
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
+  test("clicking a keyed element focuses it"):
+    val backend = HeadlessBackend(Size(30, 6))
+    val first   = TextInputState()
+    val second  = TextInputState()
+    val app     = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope): Element =
+        column(input(first).key("first"), input(second).key("second"))
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.click(2, 1).waitForIdle()
+    pilot.typeText("z").waitForIdle()
+    assert(first.value == "")
+    assert(second.value == "z")
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
   test("the focused element renders with the theme focus style"):
     val backend = HeadlessBackend(Size(20, 3))
     val agreed  = io.worxbend.tui.runtime.Signal(false)

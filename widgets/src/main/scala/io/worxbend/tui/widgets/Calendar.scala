@@ -42,7 +42,8 @@ final case class Calendar(
       val x        = area.x + (slot % 7) * 3
       val y        = area.y + 2 + slot / 7
       val dayStyle = if selected.contains(day) then style.patch(selectedStyle) else style
-      buffer.setString(x, y, f"$day%2d", dayStyle)
+      // a grid cell is two columns wide: drop the ones the area cannot hold rather than write past its edges
+      if x + 2 <= area.right && y < area.bottom then buffer.setString(x, y, f"$day%2d", dayStyle)
     }
 
   /** Monday-first column index of a date's weekday. */

@@ -46,8 +46,10 @@ final case class Dialog(
     val y          = inner.bottom - 1
     labels.zipWithIndex.foreach { (label, index) =>
       val buttonStyle = if index == selectedButton then style.patch(selectedStyle) else style
-      buffer.setString(x, y, label, buttonStyle)
-      x += CharWidth.of(label) + 1
+      val width       = CharWidth.of(label)
+      // more buttons than the box is wide: drop the ones that do not fit rather than paint over the app behind it
+      if x + width <= inner.right then buffer.setString(x, y, label, buttonStyle)
+      x += width + 1
     }
 
 object Dialog:

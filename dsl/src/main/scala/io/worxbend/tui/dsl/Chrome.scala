@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Constraint, Text}
+import io.worxbend.tui.core.{CharWidth, Constraint, Text}
 import io.worxbend.tui.widgets as w
 
 /** The app-chrome presets: top bar, status bar, sidebar, scaffold, help overlay, and layout helpers. All of them are
@@ -11,14 +11,15 @@ import io.worxbend.tui.widgets as w
 def topBar(title: String, tabs: Seq[String] = Seq.empty, selectedTab: Int = 0, right: String = "")(using
     theme: Theme
 ): Element =
+  // the reserved cells must be *display* columns, or a CJK/emoji title asks for fewer cells than it renders into
   val parts = Seq.newBuilder[Element]
-  parts += Element.text(s" $title ").styled(_ => theme.surface.bold).length(title.length + 2)
+  parts += Element.text(s" $title ").styled(_ => theme.surface.bold).length(CharWidth.of(title) + 2)
   if tabs.nonEmpty then
-    val tabsWidth = tabs.map(_.length).sum + (tabs.size - 1) * 3 // " │ " between titles
+    val tabsWidth = tabs.map(CharWidth.of).sum + (tabs.size - 1) * 3 // " │ " between titles
     parts += Element.spacer(2)
     parts += Element.tabs(tabs, selectedTab).styled(_ => theme.surface).length(tabsWidth)
   parts += Element.spacer
-  if right.nonEmpty then parts += Element.text(s"$right ").styled(_ => theme.surface).length(right.length + 1)
+  if right.nonEmpty then parts += Element.text(s"$right ").styled(_ => theme.surface).length(CharWidth.of(right) + 1)
   FilledElement(Element.row(parts.result()*), theme.surface).length(1)
 
 /** A one-row status bar of `key description` hints over the theme surface. */

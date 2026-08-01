@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
 
 /** An animation frame indicator: the app advances `frame` on each tick and re-renders.
   *
@@ -17,7 +17,7 @@ final case class Spinner(
     if !area.isEmpty && frames.nonEmpty then
       val glyph   = frames(math.floorMod(frame, frames.size))
       val content = if label.isEmpty then glyph else s"$glyph $label"
-      buffer.setString(area.x, area.y, content, style)
+      buffer.setString(area.x, area.y, CharWidth.substringByWidth(content, area.width), style)
 
 object Spinner:
   val BrailleFrames: Seq[String] = Seq("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")

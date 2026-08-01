@@ -11,12 +11,13 @@ final case class RadioGroup(
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    options.take(area.height).zipWithIndex.foreach { (label, index) =>
-      val isSelected = index == selected
-      val marker     = if isSelected then "(•) " else "( ) "
-      val rowStyle   = if isSelected then selectedStyle else style
-      buffer.setString(area.x, area.y + index, marker + label, rowStyle)
-    }
+    if !area.isEmpty then
+      options.take(area.height).zipWithIndex.foreach { (label, index) =>
+        val isSelected = index == selected
+        val marker     = if isSelected then "(•) " else "( ) "
+        val rowStyle   = if isSelected then selectedStyle else style
+        buffer.setString(area.x, area.y + index, CharWidth.substringByWidth(marker + label, area.width), rowStyle)
+      }
 
 /** A one-row value slider: `├───●──────┤` proportional to `value` within `[min, max]`. */
 final case class Slider(
