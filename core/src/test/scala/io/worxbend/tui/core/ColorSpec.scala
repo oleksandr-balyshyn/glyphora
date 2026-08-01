@@ -41,6 +41,17 @@ final class ColorSpec extends AnyFunSuite:
     assert(Color.approximateRgb(Color.BrightWhite) == (255, 255, 255))
     assert(Color.approximateRgb(Color.BrightBlack) == (127, 127, 127))
 
+  test("the first sixteen palette indices approximate to their named colors"):
+    assert(Color.approximateRgb(Color.Indexed(0)) == Color.approximateRgb(Color.Black))
+    assert(Color.approximateRgb(Color.Indexed(1)) == Color.approximateRgb(Color.Red))
+    assert(Color.approximateRgb(Color.Indexed(7)) == Color.approximateRgb(Color.White))
+    assert(Color.approximateRgb(Color.Indexed(9)) == Color.approximateRgb(Color.BrightRed))
+    assert(Color.approximateRgb(Color.Indexed(15)) == Color.approximateRgb(Color.BrightWhite))
+
+  test("a palette index outside 0..255 clamps instead of failing"):
+    assert(Color.approximateRgb(Color.Indexed(-1)) == Color.approximateRgb(Color.Black))
+    assert(Color.approximateRgb(Color.Indexed(999)) == Color.approximateRgb(Color.Indexed(255)))
+
   test("gradient yields evenly spaced stops from first to last inclusive"):
     val stops = Color.gradient(Color.Rgb(0, 0, 0), Color.Rgb(0, 0, 100), 5)
     assert(stops.size == 5)

@@ -93,14 +93,38 @@ object Color:
       case BrightWhite    => (255, 255, 255)
       case Reset          => (192, 192, 192)
       case Indexed(index) =>
-        if index < 16 then if index < 8 then (index * 24, index * 24, index * 24) else (192, 192, 192)
-        else if index >= 232 then
-          val gray = 8 + (index - 232) * 10
+        // an index outside the palette is a caller mistake, not a crash: clamp rather than index off the cube
+        val entry = math.max(0, math.min(255, index))
+        // 0-15 are the named ANSI colors, so they must agree with the cases above rather than form a grey ramp
+        if entry < 16 then approximateRgb(AnsiPalette(entry))
+        else if entry >= 232 then
+          val gray = 8 + (entry - 232) * 10
           (gray, gray, gray)
         else
-          val cube  = index - 16
+          val cube  = entry - 16
           val steps = Vector(0, 95, 135, 175, 215, 255)
           (steps(cube / 36), steps(cube / 6 % 6), steps(cube % 6))
+
+  /** The first sixteen palette entries, in xterm order — what `Indexed(0)`..`Indexed(15)` name. */
+  private val AnsiPalette: Vector[Color] =
+    Vector(
+      Black,
+      Red,
+      Green,
+      Yellow,
+      Blue,
+      Magenta,
+      Cyan,
+      White,
+      BrightBlack,
+      BrightRed,
+      BrightGreen,
+      BrightYellow,
+      BrightBlue,
+      BrightMagenta,
+      BrightCyan,
+      BrightWhite,
+    )
 
   private def clampChannel(value: Int): Int = math.max(0, math.min(255, value))
 
