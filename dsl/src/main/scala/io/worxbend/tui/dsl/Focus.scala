@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.Rect
+import io.worxbend.tui.core.{Position, Rect, Style}
 
 import scala.collection.mutable
 
@@ -43,11 +43,11 @@ private[dsl] final class FocusTracker:
       true
     else false
 
-  def areaOf(index: Int): Option[io.worxbend.tui.core.Rect] = areas.get(index)
+  def areaOf(index: Int): Option[Rect] = areas.get(index)
 
   /** The innermost focusable rendered at this position, if any. */
   def hitTest(x: Int, y: Int): Option[Int] =
-    val hits = areas.filter((_, area) => area.contains(io.worxbend.tui.core.Position(x, y)))
+    val hits = areas.filter((_, area) => area.contains(Position(x, y)))
     hits.minByOption((_, area) => area.area).map((index, _) => index)
 
 private[dsl] object FocusPass:
@@ -70,7 +70,7 @@ private[dsl] object FocusPass:
   /** Rebuilds the tree with the focused element marked (`props.focused = true`) and every focusable wrapped in a
     * [[TrackedElement]] that records its rendered area. Indices are assigned in depth-first pre-order — the tab order.
     */
-  def decorate(root: Element, tracker: FocusTracker, focusStyle: io.worxbend.tui.core.Style): Element =
+  def decorate(root: Element, tracker: FocusTracker, focusStyle: Style): Element =
     var counter = 0
 
     def transform(element: Element): Element =
