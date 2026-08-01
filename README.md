@@ -2,21 +2,35 @@
 
 <img src="docs/assets/banner.svg" alt="glyphora — terminal UI, written like Scala" width="100%"/>
 
-### Terminal UI, written like Scala.
+<h3>✦ Terminal UI, written like Scala.</h3>
 
-Reactive state · 40+ widgets · keyboard & mouse · composable motion · headless tests · GraalVM native-image
+<p>
+  <strong>Reactive signals</strong> · <strong>40+ widgets</strong> · <strong>keyboard &amp; mouse</strong><br/>
+  <strong>composable motion</strong> · <strong>headless tests</strong> · <strong>GraalVM native-image</strong>
+</p>
 
-[![CI](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml/badge.svg)](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml)
-[![Docs](https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/docs.yml/badge.svg)](https://oleksandr-balyshyn.github.io/glyphora/)
-[![Release](https://img.shields.io/github/v/tag/oleksandr-balyshyn/glyphora?label=release&color=ef3340)](https://github.com/oleksandr-balyshyn/glyphora/tags)
-[![Scala](https://img.shields.io/badge/Scala-3.7-DC322F?logo=scala&logoColor=white)](https://scala-lang.org)
-[![GraalVM](https://img.shields.io/badge/native--image-ready-34d399?logo=oracle&logoColor=white)](https://www.graalvm.org/latest/reference-manual/native-image/)
-[![License](https://img.shields.io/github/license/oleksandr-balyshyn/glyphora?color=fbbf24)](LICENSE)
+<p>
+  <a href="https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/ci.yml/badge.svg"/></a>
+  <a href="https://oleksandr-balyshyn.github.io/glyphora/"><img alt="Docs" src="https://github.com/oleksandr-balyshyn/glyphora/actions/workflows/docs.yml/badge.svg"/></a>
+  <a href="https://github.com/oleksandr-balyshyn/glyphora/tags"><img alt="Release" src="https://img.shields.io/github/v/tag/oleksandr-balyshyn/glyphora?label=release&color=EF3340"/></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/oleksandr-balyshyn/glyphora?color=FBBF24"/></a>
+</p>
 
-**[Read the guide](https://oleksandr-balyshyn.github.io/glyphora/)** ·
-**[Open the cookbook](website/docs/cookbook.md)** ·
-**[Browse Scaladoc](https://oleksandr-balyshyn.github.io/glyphora/api/)** ·
-**[Run the examples](examples/README.md)**
+<p>
+  <img alt="Scala" src="https://img.shields.io/badge/Scala-3.7-DC322F?logo=scala&logoColor=white"/>
+  <img alt="JDK" src="https://img.shields.io/badge/JDK-21-437291?logo=openjdk&logoColor=white"/>
+  <img alt="Mill" src="https://img.shields.io/badge/build-Mill-22D3EE"/>
+  <img alt="native-image" src="https://img.shields.io/badge/native--image-ready-34D399?logo=oracle&logoColor=white"/>
+  <img alt="Zero reflection" src="https://img.shields.io/badge/reflection-zero-A78BFA"/>
+</p>
+
+<p>
+  <a href="https://oleksandr-balyshyn.github.io/glyphora/"><b>📖 Read the guide</b></a> ·
+  <a href="https://github.com/oleksandr-balyshyn/glyphora/wiki"><b>📚 Browse the wiki</b></a> ·
+  <a href="website/docs/cookbook.md"><b>🍳 Cookbook</b></a> ·
+  <a href="https://oleksandr-balyshyn.github.io/glyphora/api/"><b>🔎 Scaladoc</b></a> ·
+  <a href="examples/README.md"><b>🎮 Examples</b></a>
+</p>
 
 </div>
 
@@ -26,22 +40,59 @@ Reactive state · 40+ widgets · keyboard & mouse · composable motion · headle
 
 <p align="center"><img src="docs/assets/capabilities.svg" alt="Reactive signals, rich widgets, motion, mouse input, and native binaries" width="100%"/></p>
 
-- ⚡ **Signals, not message plumbing** — read `Signal` and `Computed` values in a
-  typed Scala view; glyphora tracks dependencies and redraws when they change.
-- 🧩 **A serious widget vocabulary** — inputs, tables, trees, Markdown, forms,
-  loading states, menus, dialogs, charts, and app chrome ship together.
-- ⌨️ **Terminal interaction is first-class** — focus order, bubbling keys, bracketed
-  paste, mouse hit-testing, resize events, and Unicode-aware editing are built in.
-- 🎬 **Motion stays composable** — effects transform the completed frame, keeping
-  widget renderers deterministic and easy to test.
-- 🧪 **Production and tests share one pipeline** — render to a real terminal or the
-  in-memory `HeadlessBackend`; drive full apps without a PTY.
-- 📦 **Native-image by design** — Scala 3 compile-time derivation replaces runtime
-  reflection, so six example apps build with `--no-fallback` and no reflect config.
+<table>
+<tr>
+<td width="25%" align="center" valign="top">
+  <img src="docs/assets/icons/signals.svg" width="56" alt=""/><br/>
+  <b>⚡ Signals, not plumbing</b><br/>
+  <sub>Read <code>Signal</code> and <code>Computed</code> in a typed Scala view; glyphora tracks the dependencies and redraws what changed.</sub>
+</td>
+<td width="25%" align="center" valign="top">
+  <img src="docs/assets/icons/widgets.svg" width="56" alt=""/><br/>
+  <b>🧩 A real widget vocabulary</b><br/>
+  <sub>Inputs, tables, trees, Markdown, charts, dialogs, menus and app chrome all ship together.</sub>
+</td>
+<td width="25%" align="center" valign="top">
+  <img src="docs/assets/icons/mouse.svg" width="56" alt=""/><br/>
+  <b>⌨️ Interaction is first-class</b><br/>
+  <sub>Focus order, bubbling keys, bracketed paste, mouse hit-testing and resize events are built in.</sub>
+</td>
+<td width="25%" align="center" valign="top">
+  <img src="docs/assets/icons/effects.svg" width="56" alt=""/><br/>
+  <b>🎬 Motion stays composable</b><br/>
+  <sub>Effects transform the completed frame, so widget renderers stay deterministic and testable.</sub>
+</td>
+</tr>
+<tr>
+<td align="center" valign="top">
+  <img src="docs/assets/icons/testing.svg" width="56" alt=""/><br/>
+  <b>🧪 Tests share one pipeline</b><br/>
+  <sub>Render to a real terminal or the in-memory <code>HeadlessBackend</code> — drive whole apps with no PTY.</sub>
+</td>
+<td align="center" valign="top">
+  <img src="docs/assets/icons/native.svg" width="56" alt=""/><br/>
+  <b>📦 Native-image by design</b><br/>
+  <sub>Compile-time derivation replaces runtime reflection, so examples build with <code>--no-fallback</code> and no reflect config.</sub>
+</td>
+<td align="center" valign="top">
+  <img src="docs/assets/icons/unicode.svg" width="56" alt=""/><br/>
+  <b>🌍 Unicode done properly</b><br/>
+  <sub>Grapheme clusters, CJK width, emoji ZWJ sequences and combining marks all go through one width table.</sub>
+</td>
+<td align="center" valign="top">
+  <img src="docs/assets/icons/chrome.svg" width="56" alt=""/><br/>
+  <b>🏗️ Batteries-included shell</b><br/>
+  <sub>Scaffold, top bar, sidebar, status line, toasts, screens and a fuzzy command palette.</sub>
+</td>
+</tr>
+</table>
 
 ## 🚀 Your first app
 
-Add the batteries-included DSL module:
+> [!NOTE]
+> **Not on Maven Central yet.** `v0.10.0` is tagged but unreleased, so the coordinates below
+> will not resolve. Until the first release lands, use `./mill __.publishLocal` and depend on
+> `0.10.0` from your local Ivy cache — see [Build from source](#-build-from-source).
 
 ```scala
 // build.mill
@@ -84,12 +135,13 @@ object Counter extends TuiApp:
 
 Three ideas carry through the entire toolkit:
 
-1. **Model** changing values with `Signal`; derive cached values with `Computed`.
-2. **Compose** the screen from elements, constraints, semantic styles, and retained
-   widget state.
-3. **Ship** on the JVM, test through `HeadlessBackend`, or compile a native binary.
+| | |
+|---|---|
+| 1️⃣ **Model** | changing values with `Signal`; derive cached values with `Computed` |
+| 2️⃣ **Compose** | the screen from elements, constraints, semantic styles, and retained widget state |
+| 3️⃣ **Ship** | on the JVM, test through `HeadlessBackend`, or compile a native binary |
 
-The guided walkthrough explains every line: **[Getting started →](website/docs/getting-started.md)**
+📘 The guided walkthrough explains every line: **[Getting started →](website/docs/getting-started.md)**
 
 ## 🧭 One render pipeline
 
@@ -97,16 +149,16 @@ The guided walkthrough explains every line: **[Getting started →](website/docs
 
 | Module | Owns |
 |---|---|
-| [`tui-core`](core/README.md) | cells, buffer, geometry, style, layout, events, Unicode display width |
-| [`tui-terminal`](terminal/README.md) | backend contract, JLine 3, ANSI diffing, input decoder, headless backend |
-| [`tui-widgets`](widgets/README.md) | backend-independent content, controls, data, visualization, and feedback widgets |
-| [`tui-runtime`](runtime/README.md) | signals, render thread, loop, async work, timers, easing, effects |
-| [`tui-dsl`](dsl/README.md) | element tree, `TuiApp`, focus/mouse routing, themes, shell, screens, toasts, palette |
-| [`tui-macros`](macros/README.md) | reflection-free form and action derivation at compile time |
+| 🧱 [`tui-core`](core/README.md) | cells, buffer, geometry, style, layout, events, Unicode display width |
+| 🖥️ [`tui-terminal`](terminal/README.md) | backend contract, JLine 3, ANSI diffing, input decoder, headless backend |
+| 🧩 [`tui-widgets`](widgets/README.md) | backend-independent content, controls, data, visualization, and feedback widgets |
+| ⚡ [`tui-runtime`](runtime/README.md) | signals, render thread, loop, async work, timers, easing, effects |
+| 🎨 [`tui-dsl`](dsl/README.md) | element tree, `TuiApp`, focus/mouse routing, themes, shell, screens, toasts, palette |
+| 🪄 [`tui-macros`](macros/README.md) | reflection-free form and action derivation at compile time |
 
-Use the complete `tui-dsl` stack for applications or stop at a lower layer for a
-custom backend, renderer, or widget library. No widget depends on a terminal and no
-terminal backend knows about signals.
+Use the complete `tui-dsl` stack for applications, or stop at a lower layer for a custom
+backend, renderer, or widget library. **No widget depends on a terminal and no terminal
+backend knows about signals.**
 
 The modules above are the structure; this is what one frame actually does:
 
@@ -134,12 +186,11 @@ flowchart LR
   Effects["effects engine"] -. "animate" .-> Content
 ```
 
-Only the cells that changed reach the terminal, and the whole path up to `ANSI output`
-runs without one — which is what makes
-[headless testing](#-test-the-terminal-without-a-terminal) exact rather than
-approximate.
+Only the cells that changed reach the terminal, and the whole path up to `ANSI output` runs
+without one — which is what makes [headless testing](#-test-the-terminal-without-a-terminal)
+exact rather than approximate.
 
-**[Architecture guide →](website/docs/architecture.md)**
+🧭 **[Architecture guide →](website/docs/architecture.md)**
 
 ## 🧩 Widget atlas
 
@@ -151,10 +202,10 @@ approximate.
 | 📊 **Data viz** | gauge, sparkline, bar/stacked/pie chart, line/scatter chart, heatmap, canvas shapes, calendar |
 | ✨ **Feedback** | spinner, skeleton, indeterminate bar, marquee, wave text, dialog, tooltip, toasts, splash, effects |
 
-Every interactive state object is caller-owned. Every widget renders into a `Buffer`.
-Every width calculation goes through grapheme-aware `CharWidth`.
+Every interactive state object is caller-owned. Every widget renders into a `Buffer`. Every
+width calculation goes through grapheme-aware `CharWidth`.
 
-**[Browse the complete catalog →](website/docs/widgets.md)**
+🧩 **[Browse the complete catalog →](website/docs/widgets.md)**
 
 ## 🧪 Test the terminal without a terminal
 
@@ -174,15 +225,14 @@ pilot
 assert(pilot.screenText.contains("· ship docs"))
 ```
 
-`Pilot` posts the same event ADT used in production and exposes the last rendered
-screen as text. Buffer helpers skip wide-character continuation cells, so assertions
-match what users see.
+`Pilot` posts the same event ADT used in production and exposes the last rendered screen as
+text. Buffer helpers skip wide-character continuation cells, so assertions match what users see.
 
-> `Pilot` and `BufferAssertions` currently live in the repository's internal
-> `test-support` module; the public `HeadlessBackend` can be driven directly by
-> downstream projects.
+> [!TIP]
+> `Pilot` and `BufferAssertions` live in the repository's internal `test-support` module; the
+> public `HeadlessBackend` can be driven directly by downstream projects.
 
-**[Testing guide →](website/docs/testing.md)**
+🧪 **[Testing guide →](website/docs/testing.md)**
 
 ## 📦 Native binaries, zero reflection config
 
@@ -190,42 +240,80 @@ match what users see.
 ./mill examples.showcase.nativeImage
 ```
 
-CI compiles `hello-world`, `counter`, `todo-list`, `dashboard`, `form-demo`, and
-`showcase` with GraalVM `--no-fallback`, then launches each without a TTY to verify a
-safe exit. Reflection and dynamic class loading are rejected in main Scala sources.
+CI compiles `hello-world`, `counter`, `todo-list`, `dashboard`, `form-demo`, and `showcase`
+with GraalVM `--no-fallback`, then launches each without a TTY to verify a safe exit.
+Reflection and dynamic class loading are rejected in main Scala sources.
 
-**[Native-image guide →](website/docs/native-image.md)**
+📦 **[Native-image guide →](website/docs/native-image.md)**
 
-## 🛠️ Work on glyphora
+## 🧰 Build from source
 
 ```bash
-./mill __.compile
-./mill __.test
-./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources
+git clone https://github.com/oleksandr-balyshyn/glyphora.git
+cd glyphora
 
-# manual product tour
-./mill examples.showcase.run
+./mill __.compile        # build everything
+./mill __.test           # run every suite
+./mill __.publishLocal   # install 0.10.0 into your local Ivy cache
+```
 
-# docs + shared Wiki export
+Day-to-day development:
+
+```bash
+./mill widgets.test                                  # one module's suite
+./mill core.test.testOnly io.worxbend.tui.core.RectSpec        # one suite
+./mill core.test.testOnly io.worxbend.tui.core.RectSpec -- -z inset   # one test
+
+./mill mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
+./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources   # CI gate
+
+./mill examples.showcase.run   # manual product tour against a real terminal
+```
+
+Docs and the shared Wiki export:
+
+```bash
 (cd website && npm ci && npm run build)
 node scripts/export-wiki.mjs --output build/wiki
 ```
 
-Read **[Contributing](website/docs/contributing.md)** for the widget checklist,
-quality gates, docs workflow, and pull-request expectations. The shared visual and
-editorial rules live in [`docs/STYLE_GUIDE.md`](docs/STYLE_GUIDE.md).
+🧰 Read **[Contributing](website/docs/contributing.md)** for the widget checklist, quality
+gates, docs workflow, and pull-request expectations. Shared visual and editorial rules live in
+[`docs/STYLE_GUIDE.md`](docs/STYLE_GUIDE.md).
 
 ## 📚 Documentation map
 
-- 🟢 **Start** — [Introduction](website/docs/intro.md) · [Getting started](website/docs/getting-started.md)
-- 🧠 **Understand** — [State](website/docs/state-and-signals.md) · [Layout](website/docs/layout-and-style.md) · [Architecture](website/docs/architecture.md)
-- 🏗️ **Build** — [App shell](website/docs/app-shell.md) · [Widgets](website/docs/widgets.md) · [Forms](website/docs/forms-and-validation.md)
-- ⚙️ **Integrate** — [Async & timers](website/docs/async-and-timers.md) · [Mouse & focus](website/docs/mouse.md) · [Motion](website/docs/motion.md)
-- ✅ **Ship** — [Testing](website/docs/testing.md) · [Native binaries](website/docs/native-image.md) · [Troubleshooting](website/docs/troubleshooting.md)
+The same Markdown publishes to the [📖 GitHub Pages site](https://oleksandr-balyshyn.github.io/glyphora/)
+and the [📚 GitHub Wiki](https://github.com/oleksandr-balyshyn/glyphora/wiki) — `website/docs/`
+is canonical.
 
-The Markdown above is canonical: the same pages publish to the styled GitHub Pages
-site and the generated GitHub Wiki.
+| | Guides |
+|---|---|
+| 🟢 **Start** | [Introduction](website/docs/intro.md) · [Getting started](website/docs/getting-started.md) |
+| 🧠 **Understand** | [State & signals](website/docs/state-and-signals.md) · [Layout & style](website/docs/layout-and-style.md) · [Architecture](website/docs/architecture.md) |
+| 🏗️ **Build** | [App shell](website/docs/app-shell.md) · [Widgets](website/docs/widgets.md) · [Forms](website/docs/forms-and-validation.md) |
+| ⚙️ **Integrate** | [Async & timers](website/docs/async-and-timers.md) · [Mouse & focus](website/docs/mouse.md) · [Motion](website/docs/motion.md) |
+| ✅ **Ship** | [Testing](website/docs/testing.md) · [Native binaries](website/docs/native-image.md) · [Troubleshooting](website/docs/troubleshooting.md) |
+
+## 🤝 Contributing
+
+Contributions are welcome across runtime behavior, widgets, examples, tests, documentation, and
+design. CI enforces the constraints that protect the design: **no runtime reflection**, **no
+`String.substring` for layout math outside `CharWidth`**, warnings-as-errors, Scalafmt, and six
+native-image example builds.
+
+<div align="center">
+
+**[🤝 Contributing guide](website/docs/contributing.md)** ·
+**[🐛 Report an issue](https://github.com/oleksandr-balyshyn/glyphora/issues)** ·
+**[💬 Discussions](https://github.com/oleksandr-balyshyn/glyphora/discussions)**
+
+</div>
 
 ## 📜 License
 
 [MIT](LICENSE) — go build something glyphorious. ✦
+
+<div align="center">
+<sub>Built with Scala 3 · Mill · JLine 3 · GraalVM</sub>
+</div>
