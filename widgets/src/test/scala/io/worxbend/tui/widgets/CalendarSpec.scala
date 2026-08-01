@@ -21,7 +21,7 @@ final class CalendarSpec extends AnyFunSuite:
     assert(lines(2) == " 1  2  3  4  5  6  7")
 
   test("day cells that do not fit the area are dropped, not written past its edges"):
-    // the full grid needs 20 columns and 3 + weeks rows; this area has neither
+    // the full grid needs 20 columns and 2 + weeks rows; this area has neither
     val buffer = Buffer(Rect(0, 0, 24, 12))
     Calendar(2026, 7).render(Rect(0, 0, 11, 5), buffer)
     val lines  = trimmedLines(buffer)
