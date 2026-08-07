@@ -164,7 +164,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     }
 
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
-    require(!timeout.isFinite || timeout.toNanos > 0, s"readEvent timeout must be positive or infinite, got $timeout")
+    require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
     if pendingInterrupt.getAndSet(false) then Right(Some(Event.Interrupt))
     else
       pendingResize.getAndSet(scala.None) match
@@ -175,7 +175,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   private def blockingRead(timeout: Duration): Either[BackendError, Option[Event]] =
     pollingThread.set(Thread.currentThread())
-    try Right(decoder.decode(timeout.toMillis))
+    try Right(decoder.decode(JLine3Backend.readTimeoutMillis(timeout)))
     catch
       case _: InterruptedIOException => Right(scala.None) // woken deliberately by `wake()`
       case NonFatal(error)           => Left(BackendError.Io(error))
@@ -345,6 +345,16 @@ object JLine3Backend:
       val stopped = ProcessBuilder("kill", "-STOP", pid.toString).start()
       val _       = stopped.waitFor()
     catch case NonFatal(_) => ()
+
+  /** The millisecond timeout to hand JLine's reader for a [[Backend.readEvent]] timeout.
+    *
+    * `Duration.Infinite.toMillis` *throws*, so an infinite timeout — which [[Backend.readEvent]] documents and
+    * `HeadlessBackend` implements as "block until an event arrives" — used to be caught as an I/O failure and reported
+    * as `BackendError.Io`, which the runner treats as fatal. JLine reads a non-positive timeout as an unbounded
+    * blocking read, which is exactly what was asked for.
+    */
+  private[terminal] def readTimeoutMillis(timeout: Duration): Long =
+    if timeout.isFinite then timeout.toMillis else 0L
 
   /** Teardown steps are best-effort, but a silent failure is how a corrupted terminal goes unnoticed for months. */
   private[terminal] def logTeardownFailure(error: BackendError): Unit =
