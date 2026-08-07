@@ -12,6 +12,14 @@ final class RectSpec extends AnyFunSuite:
     assert(Rect(0, 0, 5, 0).isEmpty)
     assert(!Rect(0, 0, 1, 1).isEmpty)
 
+  test("a negatively sized rect is empty and has no area"):
+    // widgets guard with `if !area.isEmpty`; a negative extent from arithmetic upstream used to pass that guard
+    // and then report a negative area, so a widget rendered into a region that does not exist
+    assert(Rect(0, 0, -4, 4).isEmpty)
+    assert(Rect(0, 0, -4, 4).area == 0)
+    assert(Rect(0, 0, 4, -4).isEmpty)
+    assert(!Rect(0, 0, -4, 4).contains(Position(0, 0)))
+
   test("intersection of overlapping rects is the shared region"):
     assert(Rect(0, 0, 10, 10).intersection(Rect(5, 5, 10, 10)) == Rect(5, 5, 5, 5))
 

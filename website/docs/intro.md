@@ -38,7 +38,7 @@ object Counter extends TuiApp:
       .onKey(Key.char('q')) { quit() }
 
   def main(args: Array[String]): Unit =
-    run().foreach(_ => ())
+    run().left.foreach(error => println(s"failed to run: $error"))
 ```
 
 There is no separate template language. The view is ordinary typed Scala; state

@@ -90,7 +90,8 @@ final case class Menu(
         var row     = 0
         while row < visible do
           val index = state.offset + row
-          if index < items.size then renderItem(buffer, inner, row, index, state.selected)
+          // `selected` stays -1 when no entry is selectable (an all-disabled or all-separator menu)
+          if index >= 0 && index < items.size then renderItem(buffer, inner, row, index, state.selected)
           row += 1
 
   private def renderItem(buffer: Buffer, inner: Rect, row: Int, index: Int, selected: Int): Unit =

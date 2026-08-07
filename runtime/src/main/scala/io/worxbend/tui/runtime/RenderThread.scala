@@ -31,8 +31,10 @@ object RenderThread:
 
     private[runtime] def isEmpty: Boolean = pending.isEmpty
 
-  // several runners may live in one JVM and must not race on a single registration slot
-  private val loops = ConcurrentHashMap[Thread, RenderLoop]()
+  // Several runners may live in one JVM and must not race on a single registration slot. Each thread maps to a stack
+  // (innermost registration first) so a runner started from inside another runner's loop restores its host on exit
+  // instead of deregistering the thread outright.
+  private val loops = ConcurrentHashMap[Thread, List[RenderLoop]]()
 
   /** Work queued when the caller belongs to no runner and more than one is running — genuinely ambiguous, so it is
     * drained by whichever render thread gets there first. With zero or one runner the routing is exact.
@@ -66,25 +68,31 @@ object RenderThread:
     */
   def capture(): RenderLoop =
     val own = loops.get(Thread.currentThread())
-    if own != null then own
+    if own != null then own.head
     else
       val all = loops.values.iterator
       if !all.hasNext then detached
       else
         val first = all.next()
-        if all.hasNext then detached else first
+        if all.hasNext then detached else first.head
 
   private[tui] def register(thread: Thread, wake: () => Unit): RenderLoop =
     val loop = RenderLoop(wake)
-    loops.put(thread, loop)
+    val _    = loops.compute(thread, (_, enclosing) => loop :: (if enclosing == null then Nil else enclosing))
     loop
 
   /** Registers `thread` without a wake-up channel — for drivers that poll instead of blocking. */
   private[tui] def register(thread: Thread): RenderLoop =
     register(thread, () => ())
 
+  /** Pops the calling thread's innermost registration, restoring an enclosing runner's if there is one. */
   private[tui] def unregister(): Unit =
-    val _ = loops.remove(Thread.currentThread())
+    val _ = loops.compute(
+      Thread.currentThread(),
+      (_, registered) =>
+        val enclosing = if registered == null then Nil else registered.drop(1)
+        if enclosing.isEmpty then null else enclosing,
+    )
 
   /** Runs everything queued for `loop`, plus anything that could not be attributed to a specific runner. */
   private[tui] def drainPending(loop: RenderLoop): Unit =
@@ -94,7 +102,7 @@ object RenderThread:
   /** Drains whatever is queued for the calling thread, plus unattributed work. */
   private[tui] def drainPending(): Unit =
     val own = loops.get(Thread.currentThread())
-    if own != null then own.drain()
+    if own != null then own.head.drain()
     detached.drain()
 
   private[tui] def hasPending(loop: RenderLoop): Boolean =

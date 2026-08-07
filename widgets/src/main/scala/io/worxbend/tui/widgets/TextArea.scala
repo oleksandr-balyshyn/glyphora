@@ -134,7 +134,7 @@ final case class TextArea(
   def render(area: Rect, buffer: Buffer, state: TextAreaState): Unit =
     if !area.isEmpty then
       val (cursorLine, cursorColumn) = state.cursor
-      state.scrollRow = scrolled(state.scrollRow, cursorLine, area.height)
+      state.scrollRow = scrolled(state.scrollRow, cursorLine, state.clusterLines.size, area.height)
       state.scrollColumn = scrolledHorizontally(state, cursorColumn, area.width)
       state.clusterLines.slice(state.scrollRow, state.scrollRow + area.height).zipWithIndex.foreach { (clusters, row) =>
         val lineIndex = state.scrollRow + row
@@ -155,7 +155,7 @@ final case class TextArea(
     while index <= clusters.size && x < area.right do
       val atEnd  = index == clusters.size
       val symbol = if atEnd then " " else clusters(index)
-      val width  = math.max(1, CharWidth.of(symbol))
+      val width  = renderedWidth(symbol)
       if x + width <= area.right then
         val isCursor  = showCursor && isCursorLine && index == cursorColumn
         val cellStyle = if isCursor then style.patch(cursorStyle) else style
@@ -165,16 +165,38 @@ final case class TextArea(
       x += width
       index += 1
 
-  private def scrolled(offset: Int, cursorLine: Int, height: Int): Int =
-    if cursorLine < offset then cursorLine
-    else if cursorLine >= offset + height then cursorLine - height + 1
-    else offset
+  /** Scrolls vertically just enough to keep the cursor's line visible.
+    *
+    * The offset is caller-owned state that survives across frames, so it also has to be pulled back: deleting lines or
+    * growing the terminal both leave an offset past the last useful row, which renders the tail of the document
+    * followed by blank rows.
+    */
+  private def scrolled(offset: Int, cursorLine: Int, lineCount: Int, height: Int): Int =
+    val clamped = math.min(offset, math.max(0, lineCount - height))
+    if cursorLine < clamped then cursorLine
+    else if cursorLine >= clamped + height then cursorLine - height + 1
+    else clamped
 
-  /** Scrolls all lines left just enough that the cursor's column (measured on its own line) stays visible. */
+  /** Scrolls all lines left just enough that the cursor's column (measured on its own line) stays visible, and no
+    * further than the offset that just fits the end of that line — see `TextInput.rightmostUsefulScroll`.
+    */
   private def scrolledHorizontally(state: TextAreaState, cursorColumn: Int, width: Int): Int =
-    val (cursorLine, _)                          = state.cursor
-    val clusters                                 = state.clusterLines(cursorLine)
-    var scroll                                   = math.min(state.scrollColumn, cursorColumn)
-    def visibleWidth(from: Int, until: Int): Int = clusters.slice(from, until).map(CharWidth.of).sum
-    while visibleWidth(scroll, cursorColumn) + 1 > width && scroll < cursorColumn do scroll += 1
+    val (cursorLine, _) = state.cursor
+    val clusters        = state.clusterLines(cursorLine)
+    var scroll          = math.min(math.min(state.scrollColumn, cursorColumn), rightmostUsefulColumn(clusters, width))
+    while visibleWidth(clusters, scroll, cursorColumn) + 1 > width && scroll < cursorColumn do scroll += 1
     scroll
+
+  private def rightmostUsefulColumn(clusters: Vector[String], width: Int): Int =
+    var index = clusters.size
+    var used  = 1 // the end-of-line cursor always occupies one column
+    while index > 0 && used + renderedWidth(clusters(index - 1)) <= width do
+      used += renderedWidth(clusters(index - 1))
+      index -= 1
+    index
+
+  private def visibleWidth(clusters: Vector[String], from: Int, until: Int): Int =
+    clusters.slice(from, until).map(renderedWidth).sum
+
+  /** Measurement has to agree with the render loop, which gives every cluster at least one cell. */
+  private def renderedWidth(cluster: String): Int = math.max(1, CharWidth.of(cluster))

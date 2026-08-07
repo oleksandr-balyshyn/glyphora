@@ -78,10 +78,6 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     // UTF-16 surrogates must be recombined; two lone halves corrupt any string they land in
     assert(decoded("😀".map(_.toInt)*) == Event.Key(KeyEvent(KeyCode.Char(0x1f600), KeyModifiers.None)))
 
-  test("a high surrogate not followed by a low one does not swallow the next key"):
-    val events = decoderFor(0xd83d, 'a'.toInt).decode(10).toList ++ decoderFor().decode(1).toList
-    assert(events.nonEmpty)
-
   test("kitty reports an astral code point directly"):
     assert(decoded(csi("128512u")*) == Event.Key(KeyEvent(KeyCode.Char(0x1f600), KeyModifiers.None)))
 
@@ -110,3 +106,69 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
 
   test("a runaway parameter string is abandoned instead of looping forever"):
     dropped(csi("1" * 500)*)
+
+  test("an ESC-prefixed control byte decodes to the named key, not to a raw control character"):
+    // `KeyBindings.parseKey("alt+backspace")` yields Backspace+Alt; anything else is a binding that never fires
+    assert(decoded(Esc, 0x7f) == Event.Key(KeyEvent(KeyCode.Backspace, KeyModifiers.Alt)))
+    assert(decoded(Esc, 0x08) == Event.Key(KeyEvent(KeyCode.Backspace, KeyModifiers.Alt)))
+    assert(decoded(Esc, 0x0d) == Event.Key(KeyEvent(KeyCode.Enter, KeyModifiers.Alt)))
+    assert(decoded(Esc, 0x0a) == Event.Key(KeyEvent(KeyCode.Enter, KeyModifiers.Alt)))
+    assert(decoded(Esc, 0x09) == Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Alt)))
+
+  test("ESC plus a control code decodes to Ctrl+Alt+letter"):
+    assert(decoded(Esc, 1) == Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.Ctrl | KeyModifiers.Alt)))
+
+  test("the legacy and kitty encodings of the same key agree"):
+    // the kitty path already reported these correctly, so a binding used to work on one terminal and not the other
+    assert(decoded(Esc, 0x7f) == decoded(csi("127;3u")*))
+    assert(decoded(Esc, 0x0d) == decoded(csi("13;3u")*))
+    assert(decoded(Esc, 0x09) == decoded(csi("9;3u")*))
+    assert(decoded(Esc, 1) == decoded(csi("97;7u")*))
+
+  test("control bytes outside the letter range still carry Ctrl"):
+    // `parseKey("ctrl+space")` yields Char(' ')+Ctrl; a bare Char(0) with no modifier is inserted as text instead
+    assert(decoded(0x00) == Event.Key(KeyEvent(KeyCode.Char(' '), KeyModifiers.Ctrl)))
+    assert(decoded(0x1c) == Event.Key(KeyEvent(KeyCode.Char('\\'), KeyModifiers.Ctrl)))
+    assert(decoded(0x1d) == Event.Key(KeyEvent(KeyCode.Char(']'), KeyModifiers.Ctrl)))
+    assert(decoded(0x1e) == Event.Key(KeyEvent(KeyCode.Char('^'), KeyModifiers.Ctrl)))
+    assert(decoded(0x1f) == Event.Key(KeyEvent(KeyCode.Char('_'), KeyModifiers.Ctrl)))
+
+  test("a modified F3 decodes like the other modified function keys"):
+    assert(decoded(csi("1;5R")*) == Event.Key(KeyEvent(KeyCode.F(3), KeyModifiers.Ctrl)))
+    assert(decoded(csi("1;2R")*) == Event.Key(KeyEvent(KeyCode.F(3), KeyModifiers.Shift)))
+    assert(decoded(csi("1;5P")*) == Event.Key(KeyEvent(KeyCode.F(1), KeyModifiers.Ctrl)))
+
+  test("a cursor-position report is still not mistaken for F3"):
+    dropped(csi("24;80R")*)
+    dropped(csi("1;80R")*) // row 1, column 80: the column is not a plausible modifier code
+
+  test("a horizontal wheel report is dropped rather than reported as vertical scrolling"):
+    // xterm buttons 66/67 are wheel-left/right; reporting them as ScrollUp/Down scrolls a list on every sideways swipe
+    dropped(csi("<66;1;1M")*)
+    dropped(csi("<67;1;1M")*)
+    // the vertical wheel still works
+    assert(decoded(csi("<64;1;1M")*) == Event.Mouse(MouseEvent(0, 0, MouseEventKind.ScrollUp, KeyModifiers.None)))
+    assert(decoded(csi("<65;1;1M")*) == Event.Mouse(MouseEvent(0, 0, MouseEventKind.ScrollDown, KeyModifiers.None)))
+
+  test("an unpaired surrogate is dropped rather than delivered as half a character"):
+    // a lone surrogate corrupts every string it is appended to, which is what `printable` exists to prevent
+    assert(decoderFor(0xd83d, 'a'.toInt).decode(10).isEmpty)
+    dropped(csi("55357u")*) // kitty reporting a high surrogate as a code point
+
+  test("a high surrogate not followed by a low one does not swallow the next key"):
+    val decoder = decoderFor(0xd83d, 'a'.toInt)
+    val events  = List(decoder.decode(10), decoder.decode(10)).flatten
+    assert(events == List(Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.None))))
+
+  test("kitty super/hyper/meta keys are dropped rather than delivered unmodified"):
+    // Super+q delivered as a bare `q` fires the quit binding
+    dropped(csi("97;9u")*)  // super
+    dropped(csi("97;17u")*) // hyper
+    dropped(csi("97;33u")*) // meta
+    dropped(csi("1;9C")*) // and on the xterm parameter path too
+
+  test("kitty event types are currently indistinguishable from a press"):
+    // LATENT: `AnsiSequences.PushKittyKeyboard` requests flag 1 only, so no release/repeat events are ever sent. The
+    // moment flag 2 is added, this equality means every binding fires twice per keypress.
+    assert(decoded(csi("97;5:3u")*) == decoded(csi("97;5u")*)) // :3 is a key release
+    assert(decoded(csi("97;5:2u")*) == decoded(csi("97;5u")*)) // :2 is auto-repeat

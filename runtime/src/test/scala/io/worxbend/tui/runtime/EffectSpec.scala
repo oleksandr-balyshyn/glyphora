@@ -114,6 +114,42 @@ final class EffectSpec extends AnyFunSuite:
     val effect = Effect.pulse(100.millis)
     assert(!effect.isDone(1.hour))
 
+  test("a pulse period shorter than a millisecond does not divide by zero on the render thread"):
+    // an ArithmeticException here escapes `Frame.applyEffect` and unwinds the whole render loop
+    val subMilli = filledBuffer()
+    Effect.pulse(500.micros).process(3.millis, subMilli, subMilli.area)
+    assert(subMilli.get(0, 0).style.fg.nonEmpty)
+    val zero     = filledBuffer()
+    Effect.pulse(Duration.Zero).process(3.millis, zero, zero.area)
+    assert(zero.get(0, 0).style.fg.nonEmpty)
+
+  test("no easing makes a fade emit an out-of-range rgb channel"):
+    val elapsedSamples = Seq(0, 50, 100, 150, 200, 400, 600, 800, 1000).map(_.millis)
+    Easing.values.foreach { easing =>
+      Seq(Effect.fadeIn(1.second, easing), Effect.fadeOut(1.second, easing)).foreach { effect =>
+        elapsedSamples.foreach { elapsed =>
+          val buffer = filledBuffer()
+          effect.process(elapsed, buffer, buffer.area)
+          buffer.get(0, 0).style.fg.foreach {
+            case Color.Rgb(r, g, b) =>
+              assert(
+                Seq(r, g, b).forall(channel => channel >= 0 && channel <= 255),
+                s"$easing at $elapsed produced Rgb($r, $g, $b)",
+              )
+            case _                  => ()
+          }
+        }
+      }
+    }
+
+  test("repeating an endless effect zero times finishes immediately instead of never"):
+    val effect = Effect.repeat(Effect.pulse(), 0)
+    assert(effect.duration == Duration.Zero)
+    assert(effect.isDone(Duration.Zero), "an effect that is never played must not hold its tick-rate redraws open")
+    val buffer = filledBuffer()
+    effect.process(1.second, buffer, buffer.area)
+    assert(buffer.get(0, 0).style.fg.contains(Color.White)) // zero repetitions render nothing
+
   test("indexed colors approximate into the rgb cube"):
     assert(Effect.approximateRgb(Color.Indexed(196)) == (255, 0, 0))
     assert(Effect.approximateRgb(Color.Indexed(232)) == (8, 8, 8))

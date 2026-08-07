@@ -54,8 +54,14 @@ object Paragraph:
           val fitted = CharWidth.substringByWidth(pending, width - currentWidth)
           if fitted.isEmpty then
             if currentWidth == 0 then
-              // a single cluster wider than the whole area: drop it or loop forever
-              pending = pending.drop(firstClusterLength(pending))
+              // A single cluster wider than the whole area. It cannot be split, but deleting it is worse than
+              // clipping it: `heightOf` counts the rows this same function returns, so a dropped cluster makes
+              // measurement and rendering disagree and shifts every following line up a row. Give it a row of its
+              // own and let the renderer clip it, the way overflow is handled everywhere else.
+              val clusterLength = firstClusterLength(pending)
+              currentSpans = currentSpans :+ Span(pending.take(clusterLength), span.style)
+              pending = pending.drop(clusterLength)
+              flush()
             else flush()
           else
             currentSpans = currentSpans :+ Span(fitted, span.style)

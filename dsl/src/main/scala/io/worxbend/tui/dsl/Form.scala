@@ -18,7 +18,11 @@ private[dsl] object FieldBinding:
       parse: String => Either[String, Any],
   ) extends FieldBinding
 
-  final case class BoolLike(spec: FieldSpec, value: Signal[Boolean]) extends FieldBinding
+  final case class BoolLike(
+      spec: FieldSpec,
+      value: Signal[Boolean],
+      parse: Boolean => Either[String, Any],
+  ) extends FieldBinding
 
 /** Live state for a compile-time-derived form: text/int fields become inputs, boolean fields become checkboxes;
   * [[submit]] runs each field's parser/validators — errors land in [[errors]] per field, a fully valid form lands in
@@ -36,7 +40,7 @@ final class FormState[A] private (private[dsl] val bindings: Seq[FieldBinding], 
   def submit(): Unit =
     val parsed: Seq[(String, Either[String, Any])] = bindings.map {
       case FieldBinding.TextLike(spec, state, parse) => spec.name -> parse(state.value)
-      case FieldBinding.BoolLike(spec, value)        => spec.name -> Right(value.peek)
+      case FieldBinding.BoolLike(spec, value, parse) => spec.name -> parse(value.peek)
     }
     val failed                                     = parsed.collect { case (name, Left(message)) => name -> message }
     if failed.nonEmpty then
@@ -49,14 +53,36 @@ final class FormState[A] private (private[dsl] val bindings: Seq[FieldBinding], 
 object FormState:
 
   /** Builds live state from a derived [[FormSpec]]; `validators` override the default per-type parsers by field name
-    * (their own `FieldSpec` is ignored — position comes from the derived spec).
+    * (only the name is taken from their own `FieldSpec` — position comes from the derived spec).
+    *
+    * A validator naming a field the spec does not declare, or two validators naming the same field, is a programmer
+    * error and throws here, the way a malformed key spec throws from [[binding]]. Both are static declarations, and a
+    * silently dropped validator is invisible at runtime: the form submits unvalidated data and looks like it passed.
     */
   def of[A](spec: FormSpec[A], validators: Field[?]*): FormState[A] =
+    val declared = spec.fields.map(_.name).toSet
+    val unknown  = validators.map(_.spec.name).distinct.filterNot(declared.contains)
+    if unknown.nonEmpty then
+      throw IllegalArgumentException(
+        s"validator(s) for field(s) ${unknown.mkString(", ")} that the form does not declare; " +
+          s"it declares ${spec.fields.map(_.name).mkString(", ")}"
+      )
+    val repeated =
+      validators.groupBy(_.spec.name).collect { case (name, declaredTwice) if declaredTwice.sizeIs > 1 => name }
+    if repeated.nonEmpty then
+      throw IllegalArgumentException(s"more than one validator for field(s) ${repeated.mkString(", ")}")
+
     val byName   = validators.map(field => field.spec.name -> field).toMap
     val bindings = spec.fields.map { fieldSpec =>
       fieldSpec.input match
         case FieldInput.BoolField                       =>
-          FieldBinding.BoolLike(fieldSpec, Signal(false))
+          // a checkbox holds a Boolean, so its validator sees the same `"true"`/`"false"` text `Field.bool` parses
+          val field = byName.getOrElse(fieldSpec.name, Field.bool(fieldSpec.name))
+          FieldBinding.BoolLike(
+            fieldSpec,
+            Signal(false),
+            checked => field.parse(checked.toString).map(value => value: Any),
+          )
         case FieldInput.TextField | FieldInput.IntField =>
           val default =
             if fieldSpec.input == FieldInput.IntField then Field.int(fieldSpec.name) else Field.text(fieldSpec.name)
@@ -82,7 +108,7 @@ object Form:
               Element.input(inputState).fill,
             )
             .length(1)
-        case FieldBinding.BoolLike(spec, value)         =>
+        case FieldBinding.BoolLike(spec, value, _)      =>
           Element.checkbox(spec.name, value)
       val error = currentErrors.get(binding.spec.name).map { message =>
         Element.text(s"${" ".repeat(labelWidth)}! $message").color(Color.Red).length(1)
@@ -106,7 +132,7 @@ object Form:
             Element.text(s"$position: ${spec.name}").length(1),
             Element.input(inputState).fill.length(1),
           )
-        case FieldBinding.BoolLike(spec, value)         =>
+        case FieldBinding.BoolLike(spec, value, _)      =>
           val announced = if value.get then "checked" else "unchecked"
           Element.column(
             Element.text(s"$position: ${spec.name} ($announced)").length(1),

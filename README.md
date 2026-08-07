@@ -112,7 +112,7 @@ import io.worxbend.tui.dsl.*
 object Counter extends TuiApp:
   private val count = Signal(0)
 
-  override def bindings = KeyBindings(
+  override def bindings: KeyBindings = KeyBindings(
     binding("+", "increment")(count.update(_ + 1)),
     binding("-", "decrement")(count.update(_ - 1)),
     binding("q", "quit")(quit()),
@@ -130,7 +130,7 @@ object Counter extends TuiApp:
     }
 
   def main(args: Array[String]): Unit =
-    run().foreach(_ => ())
+    run().left.foreach(error => println(s"failed to run: $error"))
 ```
 
 Three ideas carry through the entire toolkit:

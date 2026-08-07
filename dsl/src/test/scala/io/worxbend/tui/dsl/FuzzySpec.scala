@@ -2,6 +2,8 @@ package io.worxbend.tui.dsl
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.util.Locale
+
 /** Pins the matching rule the command palette and `autocomplete` share. */
 final class FuzzySpec extends AnyFunSuite:
 
@@ -22,3 +24,16 @@ final class FuzzySpec extends AnyFunSuite:
   test("an empty query matches everything"):
     assert(Fuzzy.matcher("")("deploy-service"))
     assert(Fuzzy.matcher("")(""))
+
+  /** Case folding must not depend on the machine's locale: `"Install".toLowerCase` is `"ınstall"` under `tr`, so a
+    * default-locale fold would make the command palette come up empty for any query containing `i` — the same trap
+    * `KeyBindings.keyCodeFor` guards against.
+    */
+  test("matching folds case the same way in every locale"):
+    val original = Locale.getDefault
+    try
+      Locale.setDefault(Locale.forLanguageTag("tr"))
+      assert(Fuzzy.matcher("i")("Install"))
+      assert(Fuzzy.matcher("I")("install"))
+      assert(Fuzzy.matcher("ins")("Install-Service"))
+    finally Locale.setDefault(original)

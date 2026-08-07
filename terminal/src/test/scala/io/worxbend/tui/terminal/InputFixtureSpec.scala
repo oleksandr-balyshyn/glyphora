@@ -134,3 +134,45 @@ final class InputFixtureSpec extends AnyFunSuite:
     assert(
       replay(session) == List(key(KeyCode.Char('a')), key(KeyCode.Char(0x1f600)), key(KeyCode.Char('b')))
     )
+
+  test("a paste past the size cap consumes its terminator instead of leaking its tail as keystrokes"):
+    // the cap is a memory guard, not a place to stop reading: whatever the decoder does not consume is dispatched
+    // into the focused widget, where a `q` quits and an Enter submits
+    val limit   = 1 << 20 // InputDecoder.PasteLimit
+    val payload = "x" * (limit + 64)
+    val session = text("a") ++ csi("200~") ++ text(payload) ++ csi("201~") ++ text("q")
+    assert(replay(session) == List(key(KeyCode.Char('a')), Event.Paste("x" * limit), key(KeyCode.Char('q'))))
+
+  test("a runaway CSI parameter string resynchronizes on the final byte"):
+    // a verbose primary-DA reply can exceed the parameter budget; the remainder must not become 435 keypresses
+    val session = text("a") ++ csi("1" * 500 + "A") ++ text("q")
+    assert(replay(session) == List(key(KeyCode.Char('a')), key(KeyCode.Char('q'))))
+
+  test("an OSC reply left in the buffer by another program is consumed whole"):
+    // glyphora never asks for these, but tmux, a shell prompt, or a program run under `suspend` shares the tty
+    val osc11   = Seq(Esc, ']'.toInt) ++ text("11;rgb:1a1a/1b1b/1c1c") ++ Seq(Esc, '\\'.toInt)
+    val osc0    = Seq(Esc, ']'.toInt) ++ text("0;a window title") ++ Seq(7) // BEL-terminated form
+    val session = text("a") ++ osc11 ++ text("b") ++ osc0 ++ text("c")
+    assert(replay(session) == List(key(KeyCode.Char('a')), key(KeyCode.Char('b')), key(KeyCode.Char('c'))))
+
+  test("DCS and APC replies are consumed whole"):
+    val dcs     = Seq(Esc, 'P'.toInt) ++ text("1$r0m") ++ Seq(Esc, '\\'.toInt)   // DECRQSS status reply
+    val apc     = Seq(Esc, '_'.toInt) ++ text("Gi=1;OK") ++ Seq(Esc, '\\'.toInt) // kitty graphics reply
+    val session = text("a") ++ dcs ++ text("b") ++ apc ++ text("c")
+    assert(replay(session) == List(key(KeyCode.Char('a')), key(KeyCode.Char('b')), key(KeyCode.Char('c'))))
+
+  test("a horizontal wheel swipe between keystrokes produces no events"):
+    val session = text("a") ++ csi("<66;5;5M") ++ csi("<67;5;5M") ++ text("b")
+    assert(replay(session) == List(key(KeyCode.Char('a')), key(KeyCode.Char('b'))))
+
+  test("alt-modified control keys interleave with typing"):
+    val session = text("a") ++ Seq(Esc, 0x7f) ++ text("b") ++ Seq(Esc, 0x0d) ++ text("c")
+    assert(
+      replay(session) == List(
+        key(KeyCode.Char('a')),
+        key(KeyCode.Backspace, KeyModifiers.Alt),
+        key(KeyCode.Char('b')),
+        key(KeyCode.Enter, KeyModifiers.Alt),
+        key(KeyCode.Char('c')),
+      )
+    )

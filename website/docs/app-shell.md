@@ -94,6 +94,25 @@ Descriptions should be short verbs: “open project” is easier to scan than �
 opening functionality.” `KeyBindings.parseKey` accepts printable keys, named keys,
 and modifiers such as `ctrl+s`, `alt+enter`, and `shift+tab`.
 
+Two characters are both syntax and keys, and the parser resolves each in favour of the
+key:
+
+- `+` separates a modifier from the key it modifies, but only when it terminates a
+  modifier name — so `"+"` binds the plus key and `"ctrl++"` binds Ctrl+plus.
+- Surrounding whitespace is stripped as formatting, but never all of it — so `" "`
+  binds the space bar, as does the more readable `"space"`.
+
+Modifier names and named keys are case-insensitive (`"Ctrl+Enter"` works), but a
+single-character key keeps its case, because that case is what the terminal reports:
+Shift+G arrives as `KeyCode.Char('G')`, so bind `"G"`, not `"shift+g"`. Ctrl is the
+exception — a terminal cannot tell Ctrl+S from Ctrl+Shift+S, so `"ctrl+S"` folds to
+`"ctrl+s"` rather than declaring a binding that could never fire.
+
+Function keys run `"f1"` through `"f35"`, matching the range the input decoder emits.
+
+A spec that names no key (`"ctrl+"`) or no known key (`"banana"`) is a programmer error
+and throws from `binding` at declaration time.
+
 Focused/local handlers run before global bindings. Use local `.onKey(...)` for
 behavior owned by one element, and app bindings for commands meaningful everywhere.
 
