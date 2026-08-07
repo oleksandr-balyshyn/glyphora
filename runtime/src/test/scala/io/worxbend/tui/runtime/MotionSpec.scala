@@ -16,6 +16,11 @@ final class MotionSpec extends AnyFunSuite:
       assert(easing(5.0) == easing(1.0))
     }
 
+  test("a NaN progress eases to the start of the curve instead of propagating NaN"):
+    Easing.values.foreach { easing =>
+      assert(easing(Double.NaN) == easing(0.0), s"$easing at NaN")
+    }
+
   test("ease-out curves are ahead of linear in the first half, ease-in behind"):
     assert(Easing.CubicOut(0.25) > Easing.Linear(0.25))
     assert(Easing.CubicIn(0.25) < Easing.Linear(0.25))
@@ -37,6 +42,12 @@ final class MotionSpec extends AnyFunSuite:
       steps += 1
     assert(steps < 10000, "spring did not settle")
     assert(math.abs(pos - 1.0) < 1e-2)
+
+  test("a spring cannot be built with a time step that would never advance"):
+    // `while !settled(...) do step(...)` is the documented usage, and a non-positive step makes that loop hang
+    assertThrows[IllegalArgumentException](Spring(deltaTime = 0.0))
+    assertThrows[IllegalArgumentException](Spring(deltaTime = -1.0 / 60))
+    assertThrows[IllegalArgumentException](Spring().copy(deltaTime = 0.0))
 
   test("an underdamped spring overshoots its target at least once"):
     val spring     = Spring(frequency = 12.0, damping = 0.2)

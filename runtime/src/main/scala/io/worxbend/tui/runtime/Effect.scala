@@ -71,12 +71,15 @@ object Effect:
         val visible = math.round(progress * total).toInt
         eraseWhere(buffer, area)((x, y) => (y - area.y) * area.width + (x - area.x) >= visible)
 
-  /** Endless brightness oscillation with the given period. */
+  /** Endless brightness oscillation with the given period, which is clamped to at least one millisecond. */
   def pulse(period: FiniteDuration = 1.second): Effect =
     new Effect:
+      // the phase is computed at millisecond resolution, so a sub-millisecond period would divide by zero and unwind
+      // the render loop; one millisecond is the shortest cycle that resolution can express (as in `Async.every`)
+      private val periodMillis                                               = math.max(1L, period.toMillis)
       def duration: Duration                                                 = Duration.Inf
       def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
-        val phase      = (elapsed.toMillis % period.toMillis).toDouble / period.toMillis
+        val phase      = (elapsed.toMillis % periodMillis).toDouble / periodMillis
         val brightness = 0.55 + 0.45 * math.sin(phase * 2 * math.Pi)
         mapCells(buffer, area)(style => withFgScaled(style, brightness))
 
@@ -110,17 +113,21 @@ object Effect:
         if elapsed >= pause then effect.process(elapsed - pause, buffer, area)
         else effect.process(Duration.Zero, buffer, area)
 
-  /** Repeats `effect` `times` times. */
+  /** Repeats `effect` `times` times; `times <= 0` plays it not at all. */
   def repeat(effect: Effect, times: Int): Effect =
     new Effect:
-      def duration: Duration                                                 = effect.duration * times.toDouble
+      // "not at all" is a zero-length effect, not an undefined one: `Duration.Inf * 0` is `Duration.Undefined`, which
+      // `isDone` can never satisfy, so the runtime would keep the effect (and its per-tick redraws) alive forever
+      def duration: Duration                                                 =
+        if times <= 0 then Duration.Zero else effect.duration * times.toDouble
       def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
-        effect.duration match
-          case finite: FiniteDuration if finite.toNanos > 0 =>
-            val within = (elapsed.toNanos % finite.toNanos).nanos
-            val cycle  = elapsed.toNanos / finite.toNanos
-            if cycle < times then effect.process(within, buffer, area)
-          case _                                            => effect.process(elapsed, buffer, area)
+        if times > 0 then
+          effect.duration match
+            case finite: FiniteDuration if finite.toNanos > 0 =>
+              val within = (elapsed.toNanos % finite.toNanos).nanos
+              val cycle  = elapsed.toNanos / finite.toNanos
+              if cycle < times then effect.process(within, buffer, area)
+            case _                                            => effect.process(elapsed, buffer, area)
 
   // ---- shared machinery ----
 
@@ -168,10 +175,15 @@ object Effect:
         x += 1
       y += 1
 
+  /** Scales a style's foreground by `level`.
+    *
+    * `Color.rgb` rather than the bare `Rgb` constructor because the overshoot easings (`Back*`, `Elastic*`) dip below
+    * zero mid-flight, and an unclamped negative channel would reach the terminal as a literal `38;2;-7;-7;-7`.
+    */
   private def withFgScaled(style: Style, level: Double): Style =
     val (r, g, b) = approximateRgb(style.fg.getOrElse(Color.White))
     style.withFg(
-      Color.Rgb(
+      Color.rgb(
         math.round(r * level).toInt,
         math.round(g * level).toInt,
         math.round(b * level).toInt,

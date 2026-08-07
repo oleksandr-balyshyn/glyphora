@@ -142,6 +142,93 @@ final class ReactiveSpec extends AnyFunSuite:
     signal.set(5) // must not mark the disposed computed's (cleared) subscribers, nor leak into it
     assert(runs == 1)
 
+  test("a computed that clamps its own index while recomputing does not cache the pre-clamp value"):
+    var redraws = 0
+    val scope   = ReactiveScope.generational(() => redraws += 1)
+    val count   = Signal(3)
+    val index   = Signal(2)
+    val label   = Computed {
+      val i = index.get
+      if i >= count.get then index.set(0) // the ordinary "clamp the selection" repair-after-read pattern
+      s"item $i of ${count.peek}"
+    }
+
+    assert(label.get(using scope) == "item 2 of 3")
+    count.set(1) // the list shrank under the selection
+    assert(redraws == 1)
+
+    // this evaluation repairs `index` from inside the thunk, so the string it produces is already out of date
+    assert(label.get(using scope) == "item 2 of 1")
+    assert(index.peek == 0)
+    assert(redraws == 2, "the write from inside the thunk must schedule another redraw")
+
+    assert(label.get(using scope) == "item 0 of 1")
+    assert(label.get(using scope) == "item 0 of 1")
+    assert(redraws == 2, "the repaired value is stable — no invalidation loop")
+
+  test("a dependency written from inside a computed's own thunk leaves it stale, not falsely fresh"):
+    var runs    = 0
+    val trigger = Signal(0)
+    val patched = Signal("before")
+    val derived = Computed {
+      runs += 1
+      val _       = trigger.get
+      val current = patched.get
+      if current == "before" then patched.set("after")
+      current
+    }
+    assert(derived.peek == "before")
+    assert(derived.peek == "after")
+    assert(derived.peek == "after")
+    assert(runs == 2)
+
+  test("disposing a mid-chain computed does not freeze the computeds derived from it"):
+    val source = Signal(1)
+    val middle = Computed(source.get * 2)
+    val top    = Computed(middle.get + 1)
+    assert(top.peek == 3)
+
+    middle.dispose()
+    source.set(5)
+    assert(top.peek == 11, "a dependent must re-derive through the disposed computed, not keep its stale cache")
+    assert(middle.peek == 10)
+
+    // reading through it re-established the edges, so ordinary propagation continues
+    source.set(7)
+    assert(top.peek == 15)
+
+  test("a signal holding 0.0 notices a set to -0.0, because the sign carries direction"):
+    var invalidations = 0
+    val scope         = ReactiveScope.onInvalidation(() => invalidations += 1)
+    val velocity      = Signal(0.0)
+    val _             = velocity.get(using scope)
+    velocity.set(-0.0)
+    assert(invalidations == 1)
+    assert(1.0 / velocity.peek == Double.NegativeInfinity)
+
+  test("a signal holding NaN does not repaint on every rewrite of NaN"):
+    var invalidations = 0
+    val scope         = ReactiveScope.onInvalidation(() => invalidations += 1)
+    val ratio         = Signal(Double.NaN)
+    val _             = ratio.get(using scope)
+    ratio.set(Double.NaN)
+    ratio.set(Double.NaN)
+    assert(invalidations == 0)
+    ratio.set(0.5)
+    assert(invalidations == 1)
+
+  test("mutating a held value in place and setting the same instance notifies nobody"):
+    var invalidations = 0
+    val scope         = ReactiveScope.onInvalidation(() => invalidations += 1)
+    val rows          = scala.collection.mutable.ArrayBuffer("a")
+    val signal        = Signal(rows)
+    val _             = signal.get(using scope)
+    rows += "b"
+    signal.set(rows) // the same instance is equal to itself: change detection cannot see the mutation
+    assert(invalidations == 0)
+    signal.set(scala.collection.mutable.ArrayBuffer("a", "b", "c"))
+    assert(invalidations == 1)
+
   test("a generational scope drops subscriptions that stop being read"):
     var invalidations = 0
     val scope         = ReactiveScope.generational(() => invalidations += 1)

@@ -18,9 +18,11 @@ enum Easing:
   case ElasticIn, ElasticOut, ElasticInOut
   case BounceIn, BounceOut, BounceInOut
 
-  /** Eased progress for `t`, with `t` first clamped into `[0, 1]`. */
+  /** Eased progress for `t`, with `t` first clamped into `[0, 1]`; a `NaN` progress reads as the start of the curve. */
   def apply(t: Double): Double =
-    val x = math.max(0.0, math.min(1.0, t))
+    // `math.max`/`math.min` propagate NaN rather than clamping it, and a NaN progress would spread into every cell
+    // coordinate the effect derives from it
+    val x = if t.isNaN then 0.0 else math.max(0.0, math.min(1.0, t))
     this match
       case Linear       => x
       case QuadIn       => x * x
@@ -81,8 +83,13 @@ object Easing:
   * Unlike an [[Easing]], a spring has no fixed duration: call [[step]] each tick with the current position and velocity
   * and it eases toward `target`, overshooting or settling per `frequency` (stiffness) and `damping` (`< 1` bouncy, `1`
   * critically damped, `> 1` sluggish). Integrated semi-implicitly, stable for the usual TUI tick rates.
+  *
+  * `deltaTime` must be positive: a spring with a non-positive step can never advance, so the documented
+  * `while !settled(...) do step(...)` loop would hang. A defect in the caller, hence a construction-time throw.
   */
 final case class Spring(frequency: Double = 6.0, damping: Double = 0.7, deltaTime: Double = 1.0 / 60):
+
+  require(deltaTime > 0, s"a spring needs a positive time step, got $deltaTime")
 
   /** The next `(position, velocity)` as the value eases one `deltaTime` step toward `target`. */
   def step(position: Double, velocity: Double, target: Double): (Double, Double) =
