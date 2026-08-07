@@ -242,9 +242,10 @@ Use fixed seeds for `coalesce` and `dissolve`.
 ./mill widgets.test.runMain io.worxbend.tui.widgets.RenderLoopBench
 ```
 
-GitHub Actions also checks reflection discipline, Unicode width discipline, Linux
-tests, best-effort Windows compatibility, and GraalVM native images for every
-example.
+GitHub Actions runs the same commands in granular jobs: discipline greps that need no
+JDK, a formatting check, one compile of the library, then the library tests, one job per
+example, and a GraalVM native image for every example. Everything after the compile
+reuses its output, so the library is built once per run.
 
 ## What to cover before shipping
 

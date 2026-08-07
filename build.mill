@@ -1,5 +1,8 @@
+//| mvnDeps: ["com.goyeau::mill-scalafix::0.6.2"]
+
 package build
 
+import com.goyeau.mill.scalafix.ScalafixModule
 import mill.*
 import mill.javalib.*
 import mill.javalib.DepSyntax
@@ -9,7 +12,7 @@ import mill.scalalib.SbtModule
 object `package` extends Module {
 
   /** Shared conventions for every Scala module in this repo: Scala version, strict compiler flags, ScalaTest wiring. */
-  trait TuiModule extends SbtModule {
+  trait TuiModule extends SbtModule with ScalafixModule {
 
     def scalaVersion = "3.7.1"
 

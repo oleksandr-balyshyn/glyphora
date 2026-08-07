@@ -17,6 +17,8 @@ glyphora is a Scala 3 terminal-UI toolkit published as six `io.worxbend::tui-*` 
 
 ./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources   # CI gate
 ./mill mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
+./mill __.fix --check             # scalafix lints, CI gate
+./mill __.fix                     # apply them
 
 ./mill examples.showcase.run          # manual product tour against a real terminal
 ./mill examples.showcase.nativeImage  # GraalVM binary → out/examples/showcase/nativeImage.dest/
@@ -38,7 +40,7 @@ Golden-frame fixtures: run tests with `GLYPHORA_GOLDEN_UPDATE=<module>/src/test/
 - **No runtime reflection.** `java.lang.reflect` / `Class.forName` are grepped out of all `*/src/main/scala`. Any bridge to user-defined code goes through `tui-macros` compile-time derivation instead — this is what keeps native-image builds reflect-config-free.
 - **No `String.substring` in main sources outside `core/CharWidth.scala`.** All display-width, truncation, and layout arithmetic goes through `CharWidth` (grapheme clusters, CJK, emoji ZWJ, combining marks).
 - **Warnings are errors**: `-deprecation -feature -unchecked -Wunused:all -Werror` (set in `build.mill`).
-- Scalafmt (`.scalafmt.conf`, 120 cols, Scala 3 dialect, `align.preset = more`) is checked, not applied, by CI.
+- Scalafmt (`.scalafmt.conf`, 120 cols, Scala 3 dialect, `align.preset = more`) and Scalafix (`.scalafix.conf`) are checked by CI. On a pull request from this repository an `autofix` job applies both and pushes the result, so `lint` is the gate for `main` and for forks.
 - **Every** example must build with `--no-fallback` and exit cleanly with no TTY; the CI native-image job lists them by name, so adding an example means editing that list. `java.net.http` needs no extra native configuration on this toolchain — `weather`, `airsensor` and `loadtest` all use it and all build clean.
 
 ## Architecture
@@ -81,4 +83,4 @@ Every module is `<module>/src/{main,test}/scala/io/worxbend/tui/<module>/`. Exam
 
 ## Style docs
 
-`SCALA_CODE_STYLE.md` is the general Scala convention doc (explicit result types, sealed ADTs over booleans, `Either` for recoverable failures, no `return`, Scaladoc that states ownership and thread constraints). Its sections on Ox, Scalafix, HTTP/JSON, and DI describe conventions that have no counterpart in this repo — there is no Scalafix config and no Ox dependency here. `docs/STYLE_GUIDE.md` covers visual/editorial rules for the README, site, and `docs/assets/`.
+`SCALA_CODE_STYLE.md` is the general Scala convention doc (explicit result types, sealed ADTs over booleans, `Either` for recoverable failures, no `return`, Scaladoc that states ownership and thread constraints). Its sections on Ox, HTTP/JSON, and DI describe conventions that have no counterpart in this repo — there is no Ox dependency here. Scalafix *is* wired in (`.scalafix.conf`, syntactic rules only), but only the subset this codebase actually satisfies: `noVars`, `noThrows`, `noDefaultArgs` and `ExplicitResultTypes` are deliberately off, because local `var` in render loops, `throw` for programmer errors in static declarations, and default arguments on widget constructors are all deliberate here. The handful of legitimate exceptions to the enabled rules carry an inline `// scalafix:ok DisableSyntax; <why>`. `docs/STYLE_GUIDE.md` covers visual/editorial rules for the README, site, and `docs/assets/`.

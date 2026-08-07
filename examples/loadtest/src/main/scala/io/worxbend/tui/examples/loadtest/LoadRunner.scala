@@ -85,7 +85,7 @@ final class LoadRunner(target: Target):
   def drain(): Vector[Sample] =
     val batch = Vector.newBuilder[Sample]
     var next  = completed.poll()
-    while next != null do
+    while next != null do // scalafix:ok DisableSyntax; java.util.concurrent interop
       batch += next
       next = completed.poll()
     batch.result()

@@ -51,14 +51,14 @@ object Image:
     */
   def fromFile(path: java.nio.file.Path): Either[String, Image] =
     try
-      val decoded = javax.imageio.ImageIO.read(path.toFile)
-      if decoded == null then Left(s"unsupported image format: $path")
-      else
-        val pixels: Vector[Vector[Color.Rgb]] = Vector.tabulate(decoded.getHeight) { y =>
-          Vector.tabulate(decoded.getWidth) { x =>
-            val argb = decoded.getRGB(x, y)
-            Color.Rgb((argb >> 16) & 0xff, (argb >> 8) & 0xff, argb & 0xff): Color.Rgb
-          }
-        }
-        Right(Image(pixels))
+      // `ImageIO.read` reports an unsupported format by returning null rather than throwing
+      Option(javax.imageio.ImageIO.read(path.toFile))
+        .toRight(s"unsupported image format: $path")
+        .map: decoded =>
+          Image(Vector.tabulate(decoded.getHeight) { y =>
+            Vector.tabulate(decoded.getWidth) { x =>
+              val argb = decoded.getRGB(x, y)
+              Color.Rgb((argb >> 16) & 0xff, (argb >> 8) & 0xff, argb & 0xff): Color.Rgb
+            }
+          })
     catch case NonFatal(error) => Left(s"failed to read $path: ${error.getMessage}")

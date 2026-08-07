@@ -69,8 +69,10 @@ rather than writing escape sequences into your log file.
 
 ## Does it work on Windows?
 
-The project compiles and tests on Windows in CI. Terminal behavior still depends on
-the emulator and JLine support; Windows Terminal is the recommended environment.
+Unknown — glyphora targets Linux and CI no longer builds or tests on Windows. Nothing
+in the toolkit is deliberately Linux-only, and JLine supports Windows, so it may well
+work; but nobody is checking, so treat it as unverified rather than supported. If you
+run it there, a report either way is welcome.
 
 ## Can widgets be tested without image snapshots?
 

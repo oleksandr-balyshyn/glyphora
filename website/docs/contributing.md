@@ -51,9 +51,9 @@ CI enforces constraints that protect the design:
 - no `String.substring` for layout math outside `CharWidth`;
 - warnings are errors (`-deprecation -feature -unchecked -Wunused:all -Werror`);
 - Scalafmt owns formatting;
-- all tests run headlessly on Linux, with best-effort Windows coverage;
-- six example apps compile with GraalVM `--no-fallback` and start safely without a
-  TTY.
+- all tests run headlessly on Linux, which is the only platform CI covers;
+- every example compiles with GraalVM `--no-fallback` and starts safely without a TTY —
+  the CI list is derived from `examples/*/package.mill`, so adding a module is enough.
 
 For general Scala conventions, read
 [`SCALA_CODE_STYLE.md`](https://github.com/oleksandr-balyshyn/glyphora/blob/main/SCALA_CODE_STYLE.md).

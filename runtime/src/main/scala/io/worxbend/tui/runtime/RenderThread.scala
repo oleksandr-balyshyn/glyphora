@@ -25,7 +25,7 @@ object RenderThread:
 
     private[runtime] def drain(): Unit =
       var task = pending.poll()
-      while task != null do
+      while task != null do // scalafix:ok DisableSyntax; java.util.concurrent interop
         task()
         task = pending.poll()
 
@@ -68,7 +68,7 @@ object RenderThread:
     */
   def capture(): RenderLoop =
     val own = loops.get(Thread.currentThread())
-    if own != null then own.head
+    if own != null then own.head // scalafix:ok DisableSyntax; java.util.concurrent interop
     else
       val all = loops.values.iterator
       if !all.hasNext then detached
@@ -78,7 +78,10 @@ object RenderThread:
 
   private[tui] def register(thread: Thread, wake: () => Unit): RenderLoop =
     val loop = RenderLoop(wake)
-    val _    = loops.compute(thread, (_, enclosing) => loop :: (if enclosing == null then Nil else enclosing))
+    val _    = loops.compute(
+      thread,
+      (_, enclosing) => loop :: (if enclosing == null then Nil else enclosing),
+    ) // scalafix:ok DisableSyntax; java.util.concurrent interop
     loop
 
   /** Registers `thread` without a wake-up channel — for drivers that poll instead of blocking. */
@@ -90,8 +93,10 @@ object RenderThread:
     val _ = loops.compute(
       Thread.currentThread(),
       (_, registered) =>
-        val enclosing = if registered == null then Nil else registered.drop(1)
-        if enclosing.isEmpty then null else enclosing,
+        val enclosing =
+          if registered == null then Nil
+          else registered.drop(1) // scalafix:ok DisableSyntax; java.util.concurrent interop
+        if enclosing.isEmpty then null else enclosing, // scalafix:ok DisableSyntax; java.util.concurrent interop
     )
 
   /** Runs everything queued for `loop`, plus anything that could not be attributed to a specific runner. */
@@ -102,7 +107,7 @@ object RenderThread:
   /** Drains whatever is queued for the calling thread, plus unattributed work. */
   private[tui] def drainPending(): Unit =
     val own = loops.get(Thread.currentThread())
-    if own != null then own.head.drain()
+    if own != null then own.head.drain() // scalafix:ok DisableSyntax; java.util.concurrent interop
     detached.drain()
 
   private[tui] def hasPending(loop: RenderLoop): Boolean =

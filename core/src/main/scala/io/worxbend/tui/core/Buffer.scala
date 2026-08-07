@@ -130,7 +130,9 @@ final class Buffer(val area: Rect):
       y += 1
 
   private def sameCell(a: Cell, b: Cell): Boolean =
-    (a.asInstanceOf[AnyRef] eq b.asInstanceOf[AnyRef]) || a == b
+    (a.asInstanceOf[AnyRef] eq b.asInstanceOf[
+      AnyRef
+    ]) || a == b // scalafix:ok DisableSyntax; reference-equality fast path before the structural compare
 
   /** Like [[get]] but without the `Position` allocation `Rect.contains` would need. */
   private def cellAt(x: Int, y: Int): Cell =
