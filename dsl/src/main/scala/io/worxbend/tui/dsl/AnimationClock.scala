@@ -36,6 +36,12 @@ object AnimationClock:
   /** Pins the clock to an exact value. For tests: an animation is a pure function of this, so pinning it makes any
     * frame reproducible without waiting for wall-clock time to pass.
     *
+    * This clock is one signal for the whole process, so pinning it is a *global* act. A test suite that pins it and
+    * then asserts on a specific frame will be decided by whichever sibling suite pins it next — which is a failure that
+    * appears only under parallel execution, and therefore in CI rather than on a developer's machine. Prefer the
+    * `…At(elapsed)` element factories, which read nothing global; reach for this only when the ambient clock itself is
+    * the subject, and serialise those suites against each other.
+    *
     * Marshalled onto the render thread rather than set directly, because the caller is a *test* thread by construction.
     * The render-thread guard is process-wide, so a suite running beside another one that happens to have a live runner
     * would otherwise throw here — and it would throw only sometimes, depending on which suites were scheduled together,

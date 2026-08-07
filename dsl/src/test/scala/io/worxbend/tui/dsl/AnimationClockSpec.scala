@@ -70,20 +70,20 @@ final class AnimationClockSpec extends AnyFunSuite:
 
   /** An animation is a pure function of the clock, so pinning it makes any frame reproducible without waiting. */
   test("freezing the clock makes a frame reproducible"):
-    AnimationClock.freezeAt(0.millis)
-    val (_, first) = app(None)(spinner())
-    val atZero     = first.screenLines.head
-    close(first)
+    AnimationClockLock.frozenAt(0.millis):
+      val (_, first) = app(None)(spinner())
+      val atZero     = first.screenLines.head
+      close(first)
 
-    AnimationClock.freezeAt(w.SpinnerPreset.Dots.frameDuration)
-    val (_, second) = app(None)(spinner())
-    assert(second.screenLines.head != atZero, "a different frozen moment should render a different frame")
-    close(second)
+      AnimationClock.freezeAt(w.SpinnerPreset.Dots.frameDuration)
+      val (_, second) = app(None)(spinner())
+      assert(second.screenLines.head != atZero, "a different frozen moment should render a different frame")
+      close(second)
 
-    AnimationClock.freezeAt(0.millis)
-    val (_, third) = app(None)(spinner())
-    assert(third.screenLines.head == atZero, "the same frozen moment must render the same frame")
-    close(third)
+      AnimationClock.freezeAt(0.millis)
+      val (_, third) = app(None)(spinner())
+      assert(third.screenLines.head == atZero, "the same frozen moment must render the same frame")
+      close(third)
 
   /** The explicit-clock factories stay available for animations tied to something other than wall time. */
   test("the explicit-clock factories drive from a caller's own value"):

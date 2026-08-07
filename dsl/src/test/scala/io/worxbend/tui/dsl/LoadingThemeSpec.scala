@@ -7,6 +7,8 @@ import io.worxbend.tui.widgets as w
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import scala.concurrent.duration.DurationInt
+
 /** The loading elements resolve their colors from the ambient [[Theme]] at construction, the way `statusBar` does, so a
   * re-themed app re-themes its spinners and bars without touching a call site.
   */
@@ -71,12 +73,16 @@ final class LoadingThemeSpec extends AnyFunSuite:
     assert(pilot.screenLines(2).startsWith("0%"), "a zero total must not produce NaN")
     close(pilot)
 
+  /** Driven from an explicit clock rather than the ambient one. [[AnimationClock]] is process-global and ScalaTest runs
+    * suites in parallel, so a sibling suite pinning the clock would decide which frame this spinner is showing — which
+    * is exactly how this assertion failed in CI while passing locally.
+    */
   test("the fluent methods swap presets without losing the theme"):
     val pilot = renderWith(Theme.Dark)(
       column(
-        spinner().preset(w.SpinnerPreset.Line).label("busy"),
+        spinnerAt(0.millis).preset(w.SpinnerPreset.Line).label("busy"),
         progressBar(0.5).preset(w.ProgressStyle.Ascii).bare,
-        indeterminateBar().motion(w.IndeterminateMotion.Sweep).preset(w.ProgressStyle.Ascii),
+        indeterminateBarAt(0.millis).motion(w.IndeterminateMotion.Sweep).preset(w.ProgressStyle.Ascii),
       )
     )
     assert(pilot.screenLines.head.startsWith("| busy"))

@@ -172,10 +172,24 @@ AnimationClock.freezeAt(SpinnerPreset.Dots.frameDuration)
 ```
 
 `freezeAt` marshals onto the render thread, so it is safe to call from a test thread
-even while other suites run beside it. Prefer the `…At(elapsed)` factories —
-`spinnerAt`, `orbitSpinnerAt`, `animatedTextAt` — when the animation is a detail of
-one element rather than the whole app: passing the moment in directly needs no clock
-at all.
+even while other suites run beside it.
+
+It is still a **global** act, though: one clock serves the whole process, so a suite
+that pins it and then asserts on a particular frame can be overruled by a sibling suite
+pinning it a millisecond later. That failure only shows up under parallel execution —
+it passes on a developer's machine and fails in CI, which is the worst way to find out.
+
+So prefer the `…At(elapsed)` factories — `spinnerAt`, `orbitSpinnerAt`,
+`animatedTextAt`, `indeterminateBarAt` — whenever the animation is a detail of the
+element under test rather than the subject of it. Passing the moment in directly reads
+no global state and cannot be raced:
+
+```scala
+spinnerAt(0.millis).preset(SpinnerPreset.Line).label("busy")   // always frame 0
+```
+
+Reserve `freezeAt` for tests whose subject *is* the ambient clock, and serialise those
+suites against each other.
 
 To assert that something animates *at all* rather than at a particular moment, watch
 the draw count instead of the content:
