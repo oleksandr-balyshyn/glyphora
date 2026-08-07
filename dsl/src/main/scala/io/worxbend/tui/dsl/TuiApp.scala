@@ -12,7 +12,7 @@ import io.worxbend.tui.runtime.{
   TerminalRunner,
 }
 import io.worxbend.tui.terminal.{Backend, JLine3Backend}
-import io.worxbend.tui.widgets.TextInputState
+import io.worxbend.tui.widgets.{NoticeLevel, TextInputState}
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
@@ -88,7 +88,7 @@ trait TuiApp:
   // ---- notifications ----
 
   /** Shows a toast in the top-right corner for `ttlTicks` ticks (needs a `config.tickRate` to age out). */
-  protected final def notify(message: String, level: ToastLevel = ToastLevel.Info, ttlTicks: Int = 30): Unit =
+  protected final def notify(message: String, level: NoticeLevel = NoticeLevel.Info, ttlTicks: Int = 30): Unit =
     toasts.update(_ :+ ActiveToast(message, level, ttlTicks))
 
   protected final def dismissToasts(): Unit =
@@ -179,6 +179,8 @@ trait TuiApp:
         case Event.Interrupt    => onInterrupt()
         case Event.Resize(_)    => true
         case Event.Tick         =>
+          // before user code, so an `onTick` that reads the clock sees this tick's value rather than the last one's
+          AnimationClock.advance()
           ageToasts()
           onTick()
           val splashJustFinished  = updateSplashProgress()
@@ -289,19 +291,19 @@ trait TuiApp:
       }
     }
 
-  private def toastStyle(level: ToastLevel)(using theme: Theme): Style =
+  private def toastStyle(level: NoticeLevel)(using theme: Theme): Style =
     val base = level match
-      case ToastLevel.Info    => theme.accent
-      case ToastLevel.Success => theme.success
-      case ToastLevel.Warning => theme.warning
-      case ToastLevel.Error   => theme.error
+      case NoticeLevel.Info    => theme.accent
+      case NoticeLevel.Success => theme.success
+      case NoticeLevel.Warning => theme.warning
+      case NoticeLevel.Error   => theme.error
     base.reverse
 
   private def ageToasts(): Unit =
     if toasts.peek.nonEmpty then
       toasts.update(_.map(t => t.copy(remainingTicks = t.remainingTicks - 1)).filter(_.remainingTicks > 0))
 
-  private final case class ActiveToast(message: String, level: ToastLevel, remainingTicks: Int)
+  private final case class ActiveToast(message: String, level: NoticeLevel, remainingTicks: Int)
 
   private val screenStack: Signal[List[Screen]]   = Signal(Nil)
   private val toasts: Signal[Vector[ActiveToast]] = Signal(Vector.empty)

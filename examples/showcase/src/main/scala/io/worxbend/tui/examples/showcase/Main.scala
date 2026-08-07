@@ -2,7 +2,16 @@ package io.worxbend.tui.examples.showcase
 
 import io.worxbend.tui.dsl.*
 import io.worxbend.tui.runtime.RunnerConfig
-import io.worxbend.tui.widgets.{ListState, LogState, TextInputState}
+import io.worxbend.tui.widgets.{
+  IndeterminateMotion,
+  ListState,
+  LogState,
+  OrbitPath,
+  ScrollViewState,
+  ProgressStyle,
+  SpinnerPreset,
+  TextInputState,
+}
 
 import scala.concurrent.duration.DurationInt
 
@@ -34,6 +43,7 @@ final class ShowcaseApp extends TuiApp:
   val noteField: TextInputState = TextInputState()
   val logState: LogState        = LogState()
   val ticks: Signal[Int]        = Signal(0)
+  private val loadingScroll     = ScrollViewState()
 
   override def onTick(): Unit =
     ticks.update(_ + 1)
@@ -41,11 +51,11 @@ final class ShowcaseApp extends TuiApp:
 
   override def bindings: KeyBindings = KeyBindings(
     binding("ctrl+t", "switch theme")(themeIndex.update(index => (index + 1) % themes.size)),
-    binding("ctrl+n", "show a toast")(notify("hello from glyphora", ToastLevel.Success)),
+    binding("ctrl+n", "show a toast")(notify("hello from glyphora", NoticeLevel.Success)),
     binding("ctrl+o", "open modal")(openModal()),
     binding("ctrl+y", "copy note to clipboard") {
       copyToClipboard(noteField.value)
-      notify("copied to clipboard", ToastLevel.Info)
+      notify("copied to clipboard", NoticeLevel.Info)
     },
     binding("esc", "quit")(quit()),
   )
@@ -68,7 +78,8 @@ final class ShowcaseApp extends TuiApp:
     given Theme = theme
     val _       = themeIndex.get // theme switching re-renders
     scaffold(
-      topBar = Some(topBar("glyphora", tabs = Seq("Widgets", "Log", "About"), selectedTab = selectedTab.get)),
+      topBar =
+        Some(topBar("glyphora", tabs = Seq("Widgets", "Loading", "Log", "About"), selectedTab = selectedTab.get)),
       sidebar = Some(sidebar(sidebarPane, width = 22)),
       statusBar = Some(statusBar(bindings)),
     )(mainPane)
@@ -81,9 +92,55 @@ final class ShowcaseApp extends TuiApp:
   private def mainPane(using ReactiveScope): Element =
     tabbedContent(
       "Widgets" -> widgetsPage,
+      "Loading" -> loadingPage,
       "Log"     -> log(logState),
       "About"   -> markdown(ShowcaseApp.AboutMarkdown),
     )(selectedTab)
+
+  /** A live gallery of every loading preset, animating against the app's own tick counter — the quickest way to pick
+    * one, and a standing check that no preset renders as a hole.
+    */
+  private def loadingPage(using ReactiveScope): Element =
+    // the gallery is taller than most terminals, so it scrolls rather than hiding its tail below the fold
+    scrollView(loadingGallery, loadingScroll)
+
+  private def loadingGallery(using ReactiveScope): Element =
+    val progress = ((ticks.get % 50) + 1) / 50.0
+    column(
+      rule("spinners"),
+      column(SpinnerPreset.All.map(preset => spinner(preset.name).preset(preset).length(1))*).fill,
+      rule("determinate"),
+      column(
+        ProgressStyle.All.map { bar =>
+          row(
+            text(bar.name).length(14),
+            progressBar(progress).preset(bar).bare.fill,
+          ).length(1)
+        }*
+      ).fill,
+      rule("shapes"),
+      row(
+        orbitSpinner().radius(4).length(10),
+        orbitSpinner().path(OrbitPath.Square).radius(4).length(10),
+        orbitSpinner().radius(4).solid.reversed.length(10),
+        spinnerGrid().preset(SpinnerPreset.DotsRing).fill,
+      ).length(3),
+      row(
+        text("linear").length(10),
+        linearSpinner().fill,
+        text(" bounce").length(8),
+        linearSpinner().bouncing.fill,
+      ).length(1),
+      rule("indeterminate"),
+      column(
+        IndeterminateMotion.values.toSeq.map { motion =>
+          row(
+            text(motion.toString.toLowerCase).length(14),
+            indeterminateBar().motion(motion).preset(ProgressStyle.Blocks).fill,
+          ).length(1)
+        }*
+      ).fill,
+    )
 
   private def widgetsPage(using ReactiveScope): Element =
     val t = ticks.get

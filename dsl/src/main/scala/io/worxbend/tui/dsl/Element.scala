@@ -17,7 +17,10 @@ import io.worxbend.tui.core.{
   Text,
   Widget,
 }
-import io.worxbend.tui.runtime.Signal
+import io.worxbend.tui.runtime.{ReactiveScope, Signal}
+
+import java.time.LocalTime
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import io.worxbend.tui.widgets as w
 
 /** Framework mouse behavior: the event plus the element's rendered area, `true` when the event is consumed. */
@@ -136,6 +139,359 @@ final case class GaugeElement(
   def widget: Widget = w.Gauge(ratio, label, props.style, filledStyle = props.style.reverse)
   private[dsl] def withProps(props: ElementProps): GaugeElement             = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
+
+/** A spinner whose colors were resolved from the ambient [[Theme]] at construction.
+  *
+  * The theme supplies the glyph and label styles; anything the call site sets with `.color`/`.bold`/`.style` layers on
+  * top of the glyph style, so `spinner(tick).color(Color.Red)` recolors the moving part and leaves the label alone.
+  */
+final case class SpinnerElement(
+    elapsed: FiniteDuration,
+    label: String,
+    preset: w.SpinnerPreset,
+    glyphStyle: Style,
+    labelStyle: Style,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  def widget: Widget = w.Spinner(elapsed, label, preset, glyphStyle.patch(props.style), Some(labelStyle))
+
+  /** Swaps the animation — see [[io.worxbend.tui.widgets.SpinnerPreset]] for the catalogue. */
+  def preset(chosen: w.SpinnerPreset): SpinnerElement = copy(preset = chosen)
+
+  /** Sets the caption shown after the glyph. */
+  def label(text: String): SpinnerElement = copy(label = text)
+
+  /** Styles the caption independently of the glyph. */
+  def labelStyle(style: Style): SpinnerElement = copy(labelStyle = style)
+
+  /** Runs the animation `factor` times slower than the preset's own speed. */
+  def slowedBy(factor: Double): SpinnerElement = copy(preset = preset.slowedBy(factor))
+
+  /** Runs the animation at an explicit frame rate. */
+  def atFps(fps: Double): SpinnerElement = copy(preset = preset.atFps(fps))
+
+  private[dsl] def withProps(props: ElementProps): SpinnerElement           = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]        = Some(1)
+
+/** A one-row determinate progress bar, themed at construction. */
+final case class ProgressBarElement(
+    ratio: Double,
+    label: w.ProgressLabel,
+    bar: w.ProgressStyle,
+    trackStyle: Style,
+    fillStyle: Style,
+    ramp: Option[w.ColorRamp],
+    props: ElementProps = ElementProps(),
+) extends Element:
+  def widget: Widget =
+    w.LineGauge(ratio, label, trackStyle.patch(props.style), fillStyle.patch(props.style), bar, ramp)
+
+  /** Swaps the glyph vocabulary — see [[io.worxbend.tui.widgets.ProgressStyle]] for the catalogue. */
+  def preset(chosen: w.ProgressStyle): ProgressBarElement = copy(bar = chosen)
+
+  /** Replaces the percentage caption with fixed text. */
+  def label(text: String): ProgressBarElement = copy(label = w.ProgressLabel.Text(text))
+
+  /** Shows fixed text followed by the percentage, as in `syncing 42%`. */
+  def labelled(text: String): ProgressBarElement = copy(label = w.ProgressLabel.TextAndPercentage(text))
+
+  /** Drops the caption entirely, leaving the bar the full width. */
+  def bare: ProgressBarElement = copy(label = w.ProgressLabel.Hidden)
+
+  /** Colors the fill by how far along it is — see [[io.worxbend.tui.widgets.ColorRamp]] for the built-in ramps. */
+  def ramp(chosen: w.ColorRamp): ProgressBarElement = copy(ramp = Some(chosen))
+
+  /** Colors the fill along a two-stop ramp. */
+  def ramp(from: Color, to: Color): ProgressBarElement = copy(ramp = Some(w.ColorRamp(from, to)))
+
+  private[dsl] def withProps(props: ElementProps): ProgressBarElement       = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]        = Some(1)
+
+/** A one-row indeterminate progress bar, themed at construction. */
+final case class IndeterminateElement(
+    elapsed: FiniteDuration,
+    motion: w.IndeterminateMotion,
+    bar: w.ProgressStyle,
+    trackStyle: Style,
+    fillStyle: Style,
+    period: FiniteDuration = 1600.millis,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  def widget: Widget =
+    w.IndeterminateBar(
+      elapsed,
+      trackStyle.patch(props.style),
+      fillStyle.patch(props.style),
+      bar,
+      motion,
+      period = period,
+    )
+
+  /** Sets how long one full traverse takes. */
+  def period(duration: FiniteDuration): IndeterminateElement = copy(period = duration)
+
+  /** Swaps how the segment travels — bounce, sweep, comet, or pulse. */
+  def motion(chosen: w.IndeterminateMotion): IndeterminateElement = copy(motion = chosen)
+
+  /** Swaps the glyph vocabulary. */
+  def preset(chosen: w.ProgressStyle): IndeterminateElement = copy(bar = chosen)
+
+  private[dsl] def withProps(props: ElementProps): IndeterminateElement     = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint = singleRow(direction)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]        = Some(1)
+
+/** Text carrying a time-based effect, themed at construction. */
+final case class AnimatedTextElement(
+    content: String,
+    elapsed: FiniteDuration,
+    effect: w.TextEffect,
+    baseStyle: Style,
+    highlightStyle: Style,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  def widget: Widget = w.AnimatedText(content, elapsed, effect, baseStyle.patch(props.style), highlightStyle)
+
+  /** Swaps the effect — see [[io.worxbend.tui.widgets.TextEffect]] for the catalogue. */
+  def effect(chosen: w.TextEffect): AnimatedTextElement = copy(effect = chosen)
+
+  /** Styles the emphasised part — the crest, the cursor, the shimmer head — independently of the resting text. */
+  def highlight(style: Style): AnimatedTextElement = copy(highlightStyle = style)
+
+  private[dsl] def withProps(props: ElementProps): AnimatedTextElement = copy(props = props)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]   =
+    Some(w.AnimatedText(content, elapsed, effect).preferredHeight)
+
+/** One styled message line, themed at construction. */
+final case class NoticeElement(
+    message: String,
+    level: w.NoticeLevel,
+    timestamp: Option[LocalTime],
+    messageStyle: Style,
+    accentStyle: Style,
+    timestampStyle: Style,
+    wrap: Boolean = false,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  def widget: Widget =
+    w.Notice(message, level, timestamp, messageStyle.patch(props.style), accentStyle, timestampStyle, wrap = wrap)
+
+  /** Stamps the notice with the moment the event happened. Pass the time explicitly — a widget that read the clock
+    * itself would render a different frame on every repaint.
+    */
+  def at(time: LocalTime): NoticeElement = copy(timestamp = Some(time))
+
+  /** Lets a long message wrap onto further rows instead of clipping. */
+  def wrapped: NoticeElement = copy(wrap = true)
+
+  private[dsl] def withProps(props: ElementProps): NoticeElement     = copy(props = props)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+    Some(w.Notice(message, level, timestamp, wrap = wrap).heightOf(width))
+
+/** A short inline label, themed at construction. */
+final case class BadgeElement(
+    label: String,
+    variant: w.BadgeVariant,
+    badgeStyle: Style,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  def widget: Widget = w.Badge(label, variant, badgeStyle.patch(props.style))
+
+  /** Bracketed text with no block of colour behind it — for a badge sitting inside prose. */
+  def outline: BadgeElement = copy(variant = w.BadgeVariant.Outline)
+
+  /** A coloured dot before plain text: carries the colour without the emphasis. */
+  def dot: BadgeElement = copy(variant = w.BadgeVariant.Dot)
+
+  private[dsl] def withProps(props: ElementProps): BadgeElement             = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    direction match
+      case Direction.Vertical   => Constraint.Length(1)
+      case Direction.Horizontal => Constraint.Length(w.Badge(label, variant).preferredWidth)
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]        = Some(1)
+
+/** An orbit spinner whose colors were resolved from the ambient [[Theme]] at construction.
+  *
+  * The [[LoadingTheme]] supplies both: the resting path takes `track`, the arc takes `spinner`. Anything the call site
+  * sets with `.color`/`.bold`/`.style` layers onto the arc only, so `orbitSpinner().color(Color.Red)` recolors the
+  * moving part and leaves the path themed — the rule [[SpinnerElement]] follows for its glyph and label.
+  */
+final case class OrbitSpinnerElement(
+    elapsed: FiniteDuration,
+    pathStyle: Style,
+    arcStyle: Style,
+    orbit: w.OrbitPath = w.OrbitPath.Circle,
+    trail: w.OrbitTrail = w.OrbitTrail.Comet(),
+    sweep: Double = 0.25,
+    radius: Option[Int] = None,
+    thickness: Int = 1,
+    resolution: w.CanvasResolution = w.CanvasResolution.Braille,
+    marker: String = "●",
+    direction: w.SpinDirection = w.SpinDirection.Clockwise,
+    period: FiniteDuration = 1600.millis,
+    props: ElementProps = ElementProps(),
+) extends Element:
+
+  def widget: Widget =
+    w.OrbitSpinner(
+      elapsed,
+      pathStyle,
+      arcStyle.patch(props.style),
+      orbit,
+      trail,
+      sweep,
+      radius,
+      thickness,
+      resolution,
+      marker,
+      direction,
+      period,
+    )
+
+  /** Swaps the loop the arc travels — a circle or a square. */
+  def path(chosen: w.OrbitPath): OrbitSpinnerElement = copy(orbit = chosen)
+
+  /** Fixes the figure's radius in dots; unset, it fills whatever area it is given. */
+  def radius(dots: Int): OrbitSpinnerElement = copy(radius = Some(dots))
+
+  /** Sets how much of the lap is lit, as a fraction — `.sweep(1.0)` with a solid trail lights the whole path and stops
+    * the motion, which is the family's static "queued" state.
+    */
+  def sweep(fraction: Double): OrbitSpinnerElement = copy(sweep = fraction)
+
+  /** Thickens the arc and the path inwards, in dots — worth it above about radius 8, where one dot reads as faint. */
+  def thickness(dots: Int): OrbitSpinnerElement = copy(thickness = dots)
+
+  /** Swaps how the arc is shaded — see [[io.worxbend.tui.widgets.OrbitTrail]]. */
+  def trail(chosen: w.OrbitTrail): OrbitSpinnerElement = copy(trail = chosen)
+
+  /** A uniform bright window instead of a fading tail — the colourless-terminal choice, and the legible one on a small
+    * figure.
+    */
+  def solid: OrbitSpinnerElement = copy(trail = w.OrbitTrail.Solid)
+
+  /** Colors the comet's decay along a ramp — the only way to get more than two steps of fade out of one style per cell,
+    * and even then only about one step per cell the arc crosses.
+    */
+  def ramp(chosen: w.ColorRamp): OrbitSpinnerElement = copy(trail = w.OrbitTrail.Comet(Some(chosen)))
+
+  /** Runs the arc the other way round. */
+  def reversed: OrbitSpinnerElement = copy(direction = w.SpinDirection.CounterClockwise)
+
+  /** Sets how long one full revolution takes. */
+  def period(duration: FiniteDuration): OrbitSpinnerElement = copy(period = duration)
+
+  /** Draws the figure from one `glyph` per cell instead of sub-cell dots — for a terminal with no braille block, at a
+    * quarter of the vertical resolution.
+    */
+  def markers(glyph: String): OrbitSpinnerElement = copy(resolution = w.CanvasResolution.Cell, marker = glyph)
+
+  /** Half-block dots: twice the vertical resolution of `.markers`, and no braille font needed. */
+  def halfBlocks: OrbitSpinnerElement = copy(resolution = w.CanvasResolution.HalfBlock)
+
+  private[dsl] def withProps(props: ElementProps): OrbitSpinnerElement = copy(props = props)
+
+  /** A fixed radius claims its exact box; a fitted one claims the space it fills. Deriving both axes from the widget's
+    * own `preferredSize` is what keeps the measurement from drifting away from what is painted.
+    */
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    w.OrbitSpinner(elapsed, radius = radius, resolution = resolution).preferredSize match
+      case None       => Constraint.Fill(1)
+      case Some(size) =>
+        direction match
+          case Direction.Vertical   => Constraint.Length(size.height)
+          case Direction.Horizontal => Constraint.Length(size.width)
+
+/** A head travelling a one-cell track, themed at construction. */
+final case class LinearSpinnerElement(
+    elapsed: FiniteDuration,
+    railStyle: Style,
+    headStyle: Style,
+    axis: w.LinearAxis = w.LinearAxis.Horizontal,
+    path: w.LinearPath = w.LinearPath.Wrap,
+    flow: w.LinearFlow = w.LinearFlow.Forward,
+    trail: w.LinearTrail = w.LinearTrail.Comet,
+    period: FiniteDuration = 1200.millis,
+    props: ElementProps = ElementProps(),
+) extends Element:
+
+  def widget: Widget =
+    w.LinearSpinner(elapsed, railStyle, headStyle.patch(props.style), axis, path, flow, trail, period = period)
+
+  /** Runs the track down a column instead of along a row. */
+  def vertical: LinearSpinnerElement = copy(axis = w.LinearAxis.Vertical)
+
+  /** The head turns back at each end rather than wrapping round. */
+  def bouncing: LinearSpinnerElement = copy(path = w.LinearPath.Bounce)
+
+  /** Runs the head the other way. */
+  def reversed: LinearSpinnerElement = copy(flow = w.LinearFlow.Backward)
+
+  /** A uniform lit window instead of a fading tail. */
+  def solid: LinearSpinnerElement = copy(trail = w.LinearTrail.Solid)
+
+  /** Sets how long one full cycle takes — a traverse when wrapping, a round trip when bouncing. */
+  def period(duration: FiniteDuration): LinearSpinnerElement = copy(period = duration)
+
+  private[dsl] def withProps(props: ElementProps): LinearSpinnerElement     = copy(props = props)
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    (axis, direction) match
+      case (w.LinearAxis.Horizontal, Direction.Vertical) => Constraint.Length(1)
+      case (w.LinearAxis.Vertical, Direction.Horizontal) => Constraint.Length(1)
+      case _                                             => Constraint.Fill(1)
+
+/** A themed block of phase-offset spinners. */
+final case class SpinnerGridElement(
+    elapsed: FiniteDuration,
+    preset: w.SpinnerPreset,
+    phase: w.GridPhase,
+    glyphStyle: Style,
+    ramp: Option[w.ColorRamp] = None,
+    props: ElementProps = ElementProps(),
+) extends Element:
+
+  def widget: Widget = w.SpinnerGrid(elapsed, preset, phase, glyphStyle.patch(props.style), ramp)
+
+  /** Swaps the animation each slot runs — see [[io.worxbend.tui.widgets.SpinnerPreset]] for the catalogue. */
+  def preset(chosen: w.SpinnerPreset): SpinnerGridElement = copy(preset = chosen)
+
+  /** Swaps how neighbouring slots are offset — lockstep, diagonal, or radial. */
+  def phase(chosen: w.GridPhase): SpinnerGridElement = copy(phase = chosen)
+
+  /** Every slot in lockstep: the reduced-motion member of this family. */
+  def uniform: SpinnerGridElement = copy(phase = w.GridPhase.Uniform)
+
+  /** Colors the block by phase — free here, because every slot holds exactly one frame. */
+  def ramp(chosen: w.ColorRamp): SpinnerGridElement = copy(ramp = Some(chosen))
+
+  /** Runs the animation `factor` times slower than the preset's own speed. */
+  def slowedBy(factor: Double): SpinnerGridElement = copy(preset = preset.slowedBy(factor))
+
+  /** Runs the animation at an explicit frame rate. */
+  def atFps(fps: Double): SpinnerGridElement = copy(preset = preset.atFps(fps))
+
+  private[dsl] def withProps(props: ElementProps): SpinnerGridElement = copy(props = props)
+
+/** A skeleton placeholder, themed at construction. */
+final case class SkeletonElement(
+    elapsed: FiniteDuration,
+    baseStyle: Style,
+    bandStyle: Style,
+    bandWidth: Option[Int] = None,
+    period: FiniteDuration = 1200.millis,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  def widget: Widget =
+    w.Skeleton(elapsed, baseStyle.patch(props.style), bandStyle, bandWidth = bandWidth, period = period)
+
+  /** Pins the sweeping band's width, so skeletons of different sizes pulse in step. */
+  def band(cells: Int): SkeletonElement = copy(bandWidth = Some(cells))
+
+  /** Sets how long one full sweep takes. */
+  def period(duration: FiniteDuration): SkeletonElement = copy(period = duration)
+
+  private[dsl] def withProps(props: ElementProps): SkeletonElement = copy(props = props)
 
 final case class SparklineElement(
     data: Seq[Long],
@@ -1239,11 +1595,49 @@ object Element:
   def heatmap(values: Seq[Seq[Double]]): WidgetElement =
     WidgetElement(w.Heatmap(values))
 
-  def spinner(frame: Int, label: String = ""): WidgetElement =
-    WidgetElement(w.Spinner(frame, label))
+  /** An animation frame indicator. Needs a `config.tickRate` to animate and nothing else — it reads the ambient
+    * [[AnimationClock]], so there is no counter to declare, advance, or thread through.
+    *
+    * Colors come from the ambient [[Theme]]'s [[LoadingTheme]]; the animation from
+    * [[io.worxbend.tui.widgets.SpinnerPreset]], swappable with `.preset(...)`.
+    */
+  def spinner(label: String = "")(using theme: Theme, scope: ReactiveScope): SpinnerElement =
+    spinnerAt(AnimationClock.elapsed, label)
 
-  def waveText(content: String, phase: Int): WidgetElement =
-    WidgetElement(w.WaveText(content, phase))
+  /** A spinner on a clock the caller drives, for a progress animation tied to something other than wall time. */
+  def spinnerAt(elapsed: FiniteDuration, label: String = "")(using theme: Theme): SpinnerElement =
+    SpinnerElement(elapsed, label, w.SpinnerPreset.Dots, theme.loading.spinner, theme.loading.label)
+
+  /** Text carrying a time-based effect, on the ambient [[AnimationClock]].
+    *
+    * Defaults to a travelling highlight; `.effect(...)` swaps in a typewriter, a scrolling gradient, a shimmer, or a
+    * bounce. Colors come from the ambient [[Theme]].
+    */
+  def animatedText(content: String)(using theme: Theme, scope: ReactiveScope): AnimatedTextElement =
+    animatedTextAt(content, AnimationClock.elapsed)
+
+  /** Animated text on a clock the caller drives. */
+  def animatedTextAt(content: String, elapsed: FiniteDuration)(using theme: Theme): AnimatedTextElement =
+    AnimatedTextElement(content, elapsed, w.TextEffect.Wave(), theme.muted, theme.accent)
+
+  /** One styled message line: an icon, an optional timestamp, and the message. Colors follow the level. */
+  def notice(message: String, level: w.NoticeLevel = w.NoticeLevel.Info)(using theme: Theme): NoticeElement =
+    NoticeElement(message, level, None, theme.primary, noticeStyle(level), theme.muted)
+
+  /** A short inline label. Defaults to a solid badge in the theme's accent; `.outline` and `.dot` are quieter. */
+  def badge(label: String)(using theme: Theme): BadgeElement =
+    BadgeElement(label, w.BadgeVariant.Solid, theme.accent)
+
+  /** A badge carrying a severity's own tag and color — `badge(NoticeLevel.Error)` reads `FAIL`. */
+  def badge(level: w.NoticeLevel)(using theme: Theme): BadgeElement =
+    BadgeElement(level.tag, w.BadgeVariant.Solid, noticeStyle(level))
+
+  private def noticeStyle(level: w.NoticeLevel)(using theme: Theme): Style =
+    level match
+      case w.NoticeLevel.Success => theme.success
+      case w.NoticeLevel.Info    => theme.accent
+      case w.NoticeLevel.Warning => theme.warning
+      case w.NoticeLevel.Error   => theme.error
 
   def dialog(title: String, message: String, buttons: Seq[String] = Seq("OK"), selected: Int = 0): WidgetElement =
     WidgetElement(w.Dialog(title, io.worxbend.tui.core.Text.raw(message), buttons, selected))
@@ -1251,14 +1645,86 @@ object Element:
   def dualSparkline(upper: Seq[Long], lower: Seq[Long]): WidgetElement =
     WidgetElement(w.DualSparkline(upper, lower))
 
-  def skeleton(phase: Int): WidgetElement =
-    WidgetElement(w.Skeleton(phase))
+  /** A pulsing placeholder for content that has not arrived yet, on the ambient [[AnimationClock]]. */
+  def skeleton()(using theme: Theme, scope: ReactiveScope): SkeletonElement =
+    skeletonAt(AnimationClock.elapsed)
 
-  def indeterminateBar(phase: Int): WidgetElement =
-    WidgetElement(
-      w.IndeterminateBar(phase),
+  /** A skeleton on a clock the caller drives. */
+  def skeletonAt(elapsed: FiniteDuration)(using theme: Theme): SkeletonElement =
+    SkeletonElement(elapsed, theme.loading.track, theme.loading.band)
+
+  /** A figure with an arc chasing round it — a spinner big enough to fill a pane. Needs a `config.tickRate` and nothing
+    * else: it reads the ambient [[AnimationClock]], so there is no counter to declare or thread through.
+    *
+    * Defaults to a circle fitted to its area with a quarter of it lit as a fading comet; `.radius(n)` pins the size,
+    * `.path(OrbitPath.Square)` squares it off, `.markers("*")` drops it to an ASCII-safe cell grid. Colors come from
+    * the ambient [[Theme]]'s [[LoadingTheme]]: the resting path is the track, the arc is the spinner.
+    */
+  def orbitSpinner()(using theme: Theme, scope: ReactiveScope): OrbitSpinnerElement =
+    orbitSpinnerAt(AnimationClock.elapsed)
+
+  /** An orbit spinner on a clock the caller drives. */
+  def orbitSpinnerAt(elapsed: FiniteDuration)(using theme: Theme): OrbitSpinnerElement =
+    OrbitSpinnerElement(elapsed, theme.loading.track, theme.loading.spinner)
+
+  /** A head travelling a one-cell track, on the ambient [[AnimationClock]] — the row-or-column-shaped member of the
+    * family, for a status line under a log pane or a column beside one.
+    */
+  def linearSpinner()(using theme: Theme, scope: ReactiveScope): LinearSpinnerElement =
+    linearSpinnerAt(AnimationClock.elapsed)
+
+  /** A linear spinner on a clock the caller drives. */
+  def linearSpinnerAt(elapsed: FiniteDuration)(using theme: Theme): LinearSpinnerElement =
+    LinearSpinnerElement(elapsed, theme.loading.track, theme.loading.spinner)
+
+  /** A block of phase-offset spinners, on the ambient [[AnimationClock]]. `.preset(...)` picks the per-slot animation
+    * from the ordinary spinner catalogue — including the ASCII ones — and `.phase(...)` decides whether the block
+    * pulses, waves, or ripples.
+    */
+  def spinnerGrid()(using theme: Theme, scope: ReactiveScope): SpinnerGridElement =
+    spinnerGridAt(AnimationClock.elapsed)
+
+  /** A spinner grid on a clock the caller drives. */
+  def spinnerGridAt(elapsed: FiniteDuration)(using theme: Theme): SpinnerGridElement =
+    SpinnerGridElement(elapsed, w.SpinnerPreset.DotsRing, w.GridPhase.Diagonal(), theme.loading.spinner)
+
+  /** A progress bar for work of unknown length, on the ambient [[AnimationClock]].
+    *
+    * Defaults to a bouncing segment — `.motion(...)` swaps in sweep, comet, or the quieter in-place pulse.
+    */
+  def indeterminateBar()(using theme: Theme, scope: ReactiveScope): IndeterminateElement =
+    indeterminateBarAt(AnimationClock.elapsed)
+
+  /** An indeterminate bar on a clock the caller drives. */
+  def indeterminateBarAt(elapsed: FiniteDuration)(using theme: Theme): IndeterminateElement =
+    IndeterminateElement(
+      elapsed,
+      w.IndeterminateMotion.Bounce,
+      w.ProgressStyle.Line,
+      theme.loading.track,
+      theme.loading.fill,
+      props = ElementProps(constraint = Some(Constraint.Length(1))),
+    )
+
+  /** A one-row determinate progress bar: a caption then a filled track.
+    *
+    * `ratio` is clamped to `[0, 1]`. The glyphs come from [[io.worxbend.tui.widgets.ProgressStyle]] — the default steps
+    * whole cells, and `.preset(ProgressStyle.Blocks)` moves smoothly with sub-cell partials.
+    */
+  def progressBar(ratio: Double)(using theme: Theme): ProgressBarElement =
+    ProgressBarElement(
+      ratio,
+      w.ProgressLabel.Percentage,
+      w.ProgressStyle.Line,
+      theme.loading.track,
+      theme.loading.fill,
+      theme.loading.fillRamp,
       ElementProps(constraint = Some(Constraint.Length(1))),
     )
+
+  /** `progressBar` for counts rather than a fraction: `progressBar(3, 10)` is a 30% bar. */
+  def progressBar(current: Int, total: Int)(using Theme): ProgressBarElement =
+    progressBar(if total <= 0 then 0.0 else current.toDouble / total)
 
   def autocomplete(
       state: AutocompleteState,
@@ -1292,9 +1758,14 @@ object Element:
   def paginator(current: io.worxbend.tui.runtime.Signal[Int], total: Int): PaginatorElement =
     PaginatorElement(current, total)
 
-  def marquee(content: String, phase: Int): WidgetElement =
+  /** Scrolling ticker text, on the ambient [[AnimationClock]]. */
+  def marquee(content: String)(using scope: ReactiveScope): WidgetElement =
+    marqueeAt(content, AnimationClock.elapsed)
+
+  /** A marquee on a clock the caller drives. */
+  def marqueeAt(content: String, elapsed: FiniteDuration): WidgetElement =
     WidgetElement(
-      w.Marquee(content, phase),
+      w.Marquee(content, elapsed),
       ElementProps(constraint = Some(Constraint.Length(1))),
     )
 
