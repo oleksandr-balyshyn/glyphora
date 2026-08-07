@@ -59,7 +59,7 @@ One declaration drives dispatch, the status-bar hints, the `?` overlay, and the
 pushScreen(Screen { centered(40, 7)(panel("Confirm")(...)) }) // modal: base loses focus
 pushScreen(Screen.full(settingsView))                         // replaces the view
 popScreen()
-notify("Saved", ToastLevel.Success)                           // needs config.tickRate
+notify("Saved", NoticeLevel.Success)                           // needs config.tickRate
 ```
 
 ## Splash & animation

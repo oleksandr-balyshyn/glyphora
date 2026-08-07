@@ -115,7 +115,7 @@ private def confirmDelete(name: String): Unit =
         .onKey(Key.Enter) {
           delete(name)
           popScreen()
-          notify("Deployment deleted", ToastLevel.Success)
+          notify("Deployment deleted", NoticeLevel.Success)
         }
         .onKey(Key.Escape) { popScreen() }
     }
@@ -143,7 +143,7 @@ private def reload(): Unit =
 
 def rowsView(using ReactiveScope): Element = rows.get match
   case LoadState.Idle            => text("Press r to load.").dim
-  case LoadState.Loading         => row(spinner(0), text(" loading…"))
+  case LoadState.Loading         => spinner("loading…")
   case LoadState.Ready(value)    => renderRows(value)
   case LoadState.Failed(message) => text(s"Error: $message").color(Color.Red)
 ```
@@ -290,7 +290,7 @@ override def config = RunnerConfig(tickRate = Some(100.millis))
 
 override def onTick(): Unit =
   timer.tick(100.millis)
-  if timer.justExpired() then notify("Time is up", ToastLevel.Warning)
+  if timer.justExpired() then notify("Time is up", NoticeLevel.Warning)
 
 def clock: Element = text(timer.formatted).bold
 ```
