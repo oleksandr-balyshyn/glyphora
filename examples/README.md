@@ -20,6 +20,6 @@ Each of `procmon`, `airsensor` and `loadtest` has a step-by-step guide that buil
 nothing: see [Build a real app](../website/docs/build-a-process-monitor.md) in the docs.
 
 Native binaries: `./mill show examples.<name>.nativeImage` (GraalVM community 23.0.1,
-`--no-fallback`, no reflect-config needed). CI builds every example except the three that
-use `java.net.http` — `weather`, `airsensor` and `loadtest` — which are excluded from that
-job rather than carrying the extra native configuration an HTTPS client needs.
+`--no-fallback`, no reflect-config needed). CI builds every one of them and runs each binary
+headless, so the job's list has to be extended whenever an example is added. The four that
+use `java.net.http` need no extra native configuration on this toolchain.

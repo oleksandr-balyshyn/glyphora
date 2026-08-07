@@ -85,9 +85,12 @@ jobs:
           + examples.dashboard.nativeImage
           + examples.form-demo.nativeImage
           + examples.showcase.nativeImage
+          + examples.weather.nativeImage
           + examples.procmon.nativeImage
+          + examples.airsensor.nativeImage
+          + examples.loadtest.nativeImage
       - name: "Run each binary (headless: must detect the missing TTY and exit cleanly)"
         run: |
-          for ex in hello-world counter todo-list dashboard form-demo showcase procmon; do
+          for ex in hello-world counter todo-list dashboard form-demo showcase weather procmon airsensor loadtest; do
             ./out/examples/$ex/nativeImage.dest/native-executable | grep -q "UnsupportedTerminal" || exit 1
           done
