@@ -14,7 +14,7 @@ to delay every interaction.
 
 ## Enable animation ticks
 
-Effects need the runtime to produce frames while time passes:
+Motion needs the runtime to produce frames while time passes:
 
 ```scala
 import io.worxbend.tui.runtime.RunnerConfig
@@ -25,6 +25,53 @@ override def config = RunnerConfig(tickRate = Some(50.millis))
 
 Twenty frames per second is usually enough for terminal animation. Faster ticks
 increase CPU and terminal traffic without guaranteeing a smoother emulator.
+
+That is the *only* setup an animated widget needs. There is no counter to declare,
+advance, or thread through a view — see [the animation clock](#the-animation-clock)
+below.
+
+## Three kinds of motion
+
+They are not interchangeable, and reaching for the wrong one is the usual source of
+motion that feels wrong:
+
+| Kind | Use | Driven by |
+|---|---|---|
+| **Animated widgets** — `spinner`, `progressBar`, `orbitSpinner`, `animatedText`, … | ongoing status: something is working, something is loading | the ambient `AnimationClock` |
+| **Frame effects** — `Effect.fadeIn`, `sweepIn`, … | a transition: arriving, leaving, drawing attention once | `runEffect`, elapsed since it started |
+| **Tween / Spring** | a *value* your view consumes — a ratio, an offset, a scroll position | elapsed time you supply |
+
+An `Effect` transforms the cells of a finished frame. An animated widget draws
+different cells. A `Tween` changes a number your widgets are built from. Use an effect
+for a transition, a widget for a state, and a tween for a value.
+
+## The animation clock
+
+Every animated widget reads elapsed time from the ambient `AnimationClock`, so this
+is a complete animated app:
+
+```scala
+override def config = RunnerConfig(tickRate = Some(50.millis))
+
+def view(using ReactiveScope): Element = spinner("deploying")
+```
+
+The read is **tracked**, which is what makes this more than a shorthand: a view only
+subscribes to the clock when it actually renders an animation, so a screen with no
+animation on it is not repainted by the ticks. Hand-rolling a `Signal[Int]` counter
+and reading it in `view` repaints the whole app on every tick forever, whether
+anything is moving or not.
+
+Speeds are wall-clock, not tick counts. A preset that holds each frame for 80 ms
+looks the same in an app ticking every 50 ms and one ticking every 200 ms; expressing
+speed in ticks would make the same animation read as sluggish in one and frantic in
+the other.
+
+Every animated widget is a pure function of elapsed time, so each has a
+`…At(elapsed)` twin — `spinnerAt`, `orbitSpinnerAt`, `animatedTextAt`,
+`indeterminateBarAt`, `skeletonAt`, `marqueeAt`, `linearSpinnerAt`, `spinnerGridAt` —
+for driving from a clock of your own. See [Widgets](./widgets#feedback-and-motion) for
+the catalogue.
 
 ## Run a frame effect
 
@@ -105,15 +152,17 @@ range—rather than whole-frame cell transforms:
 ```scala
 import scala.concurrent.duration.*
 
-private val elapsed = Signal(0.millis)
 private val progress = Tween(0.0, 1.0, 800.millis, Easing.CubicOut)
 
-override def onTick(): Unit =
-  elapsed.update(_ + 50.millis)
-
 def view(using ReactiveScope): Element =
-  gauge(progress.at(elapsed.get))
+  gauge(progress.at(AnimationClock.elapsed))
 ```
+
+The clock is shared with the animated widgets, so a tween and a spinner in the same
+view stay in step, and reading it here subscribes this view to the ticks for exactly
+as long as it renders the tween. Supply your own elapsed value instead when the
+animation is tied to something other than wall time — progress through a download,
+say, rather than seconds.
 
 `Tween.at` clamps through the easing function, so values remain at their completed
 endpoint after the duration.
@@ -165,9 +214,12 @@ a default tick when the app config has none.
 - Keep most transitions under 500 ms.
 - Never animate away an error or required action.
 - Prefer one dominant effect over several competing ones.
-- Offer a reduced-motion setting for persistent animation.
+- Offer a reduced-motion setting for persistent animation. The quietest built-ins are
+  `IndeterminateMotion.Pulse` (brightens in place, no travel), `spinnerGrid().uniform`
+  (every slot in lockstep), and `SpinnerPreset.Ellipsis`.
 - Test finite effects at zero, halfway, completion, and after completion.
 - Use stable scatter seeds in tests.
 
-Effects process the same buffers used by headless tests; see [Testing](./testing) for
-deterministic frame assertions.
+Effects process the same buffers used by headless tests, and `AnimationClock.freezeAt`
+pins the clock so an animated widget renders a known frame; see
+[Testing](./testing#assert-an-animated-frame) for both.

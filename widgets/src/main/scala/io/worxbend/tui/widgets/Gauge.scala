@@ -1,24 +1,30 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Modifiers, Rect, Style, Widget}
 
 /** A filled progress bar with a centered label; the fill spans the whole area height.
   *
-  * `ratio` is clamped to `[0, 1]`. The default label is the percentage.
+  * `ratio` is clamped to `[0, 1]` and `NaN` reads as no progress. The default label is the percentage.
+  *
+  * `fillRamp` colors the fill by how far along it is. It replaces `filledStyle`'s background — the fill is drawn as
+  * blank cells, so the bar's color *is* its background — and leaves everything else alone.
   */
 final case class Gauge(
     ratio: Double,
     label: Option[String] = None,
     style: Style = Style.Default,
     filledStyle: Style = Style.Default.reverse,
+    fillRamp: Option[ColorRamp] = None,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val clamped     = math.max(0.0, math.min(1.0, ratio))
+      val clamped     = if ratio.isNaN then 0.0 else math.max(0.0, math.min(1.0, ratio))
       val filledWidth = math.round(clamped * area.width).toInt
+      val fill        =
+        fillRamp.fold(filledStyle)(ramp => filledStyle.without(Modifiers.Reverse).withBg(ramp.at(clamped)))
 
-      def styleAt(x: Int): Style = if x - area.x < filledWidth then filledStyle else style
+      def styleAt(x: Int): Style = if x - area.x < filledWidth then fill else style
 
       var y = area.y
       while y < area.bottom do

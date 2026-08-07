@@ -31,7 +31,7 @@ Render each state in one place:
 ```scala
 def usersView(using ReactiveScope): Element = users.get match
   case LoadState.Idle            => text("Press r to load users.").dim
-  case LoadState.Loading         => row(spinner(0), text(" loading…"))
+  case LoadState.Loading         => spinner("loading…")
   case LoadState.Ready(values)   => list(values.map(_.name), userList)
   case LoadState.Failed(message) => text(s"Load failed: $message").color(Color.Red)
 ```
@@ -117,7 +117,7 @@ override def config = RunnerConfig(tickRate = Some(100.millis))
 
 override def onTick(): Unit =
   timer.tick(100.millis)
-  if timer.justExpired() then notify("Time is up", ToastLevel.Warning)
+  if timer.justExpired() then notify("Time is up", NoticeLevel.Warning)
 
 def timerView: Element = text(timer.formatted)
 ```

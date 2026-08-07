@@ -45,6 +45,12 @@ explicit constraint only when the surrounding composition needs one.
 | `.minSize(8)` | at least 8 cells when solving | important compact content |
 | `.maxSize(30)` | no more than 30 cells | readable text or narrow controls |
 
+A percentage takes its share and leaves the rest as free space, which `flex` then
+positions — `row(a.percent(20), b.percent(60))` is 20/60 with a fifth of the axis
+unused, not 30/70. Percentages that *do* claim the whole axis absorb the rounding
+remainder between them, so `.percent(33)` three times fills the container exactly at
+every width rather than leaving a stray column at the right edge.
+
 Weighted fills make proportions clear without hardcoding terminal width:
 
 ```scala

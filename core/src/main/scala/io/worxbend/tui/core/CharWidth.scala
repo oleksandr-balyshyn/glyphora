@@ -45,11 +45,16 @@ object CharWidth:
     * Returns `null` for anything outside `0x20`–`0x7E`; callers on the fast path have already checked.
     */
   def asciiSymbol(c: Char): String =
-    if c >= 0x20 && c <= 0x7e then AsciiSymbols(c - 0x20) else null
+    if c >= 0x20 && c <= 0x7e then AsciiSymbols(c - 0x20)
+    else null // scalafix:ok DisableSyntax; hot-path sentinel: an Option here allocates on every ASCII character
 
   /** The longest prefix of `text` that fits in `maxWidth` columns; never splits a grapheme cluster. */
   def substringByWidth(text: String, maxWidth: Int): String =
-    if isPrintableAscii(text) then return text.substring(0, math.max(0, math.min(text.length, maxWidth)))
+    if isPrintableAscii(text) then
+      return text.substring(
+        0,
+        math.max(0, math.min(text.length, maxWidth)),
+      ) // scalafix:ok DisableSyntax; hot-path early exit: the ASCII fast path is the most-called branch in the toolkit
     val clusters  = graphemeClusters(text)
     val prefix    = StringBuilder()
     var used      = 0

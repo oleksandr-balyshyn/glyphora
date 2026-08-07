@@ -79,7 +79,7 @@ final class AppServicesSpec extends AnyFunSuite:
     val app      = new TuiApp:
       override def config: RunnerConfig      = RunnerConfig(tickRate = Some(10.millis))
       override def bindings: KeyBindings     = KeyBindings(
-        binding("n", "notify me")(notify("saved ok", ToastLevel.Success, ttlTicks = 40)),
+        binding("n", "notify me")(notify("saved ok", NoticeLevel.Success, ttlTicks = 40)),
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("content")

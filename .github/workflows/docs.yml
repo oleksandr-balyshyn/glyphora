@@ -36,18 +36,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-java@v4
+      - uses: ./.github/actions/mill
         with:
-          distribution: temurin
-          java-version: "21"
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cache/mill
-            ~/.cache/coursier
-          key: mill-docs-${{ runner.os }}-${{ hashFiles('.mill-version', 'build.mill', '**/package.mill') }}
-          restore-keys: mill-docs-${{ runner.os }}-
+          dependency-cache: read-write
 
       - uses: actions/setup-node@v6
         with:

@@ -1,0 +1,71 @@
+name: Set up Mill
+description: >-
+  JDK, the resolved-dependency cache, and optionally the compiled build output from an
+  earlier job in the same run. Every job that runs ./mill starts with this.
+
+inputs:
+  java-version:
+    description: Temurin version to install.
+    required: false
+    default: "21"
+  dependency-cache:
+    description: >-
+      `read-write` to restore and then save ~/.cache/mill and ~/.cache/coursier, `read`
+      to only restore them. Exactly one job per run should write, or the others log a
+      harmless but noisy "cache already exists" failure when they race to save it.
+    required: false
+    default: read
+  build-output:
+    description: >-
+      `restore` to pull in `out/` produced by an earlier job in this run, `skip` to start
+      cold. A miss is not an error — Mill simply recompiles, so a job is correct either
+      way and only its duration changes.
+    required: false
+    default: skip
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    - name: Compute cache keys
+      id: keys
+      shell: bash
+      # Dependencies change only when the build definition does. The build output changes
+      # with every commit, so it is keyed by SHA and shared only within one run.
+      run: |
+        {
+          echo "deps=mill-deps-${{ runner.os }}-${{ hashFiles('.mill-version', 'build.mill', '**/package.mill') }}"
+          echo "deps-prefix=mill-deps-${{ runner.os }}-"
+          echo "build=mill-build-${{ runner.os }}-${{ github.sha }}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Cache resolved dependencies (read-write)
+      if: inputs.dependency-cache == 'read-write'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/mill
+          ~/.cache/coursier
+        key: ${{ steps.keys.outputs.deps }}
+        restore-keys: ${{ steps.keys.outputs.deps-prefix }}
+
+    - name: Restore resolved dependencies (read-only)
+      if: inputs.dependency-cache == 'read'
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ~/.cache/mill
+          ~/.cache/coursier
+        key: ${{ steps.keys.outputs.deps }}
+        restore-keys: ${{ steps.keys.outputs.deps-prefix }}
+
+    - name: Restore compiled build output
+      if: inputs.build-output == 'restore'
+      uses: actions/cache/restore@v4
+      with:
+        path: out
+        key: ${{ steps.keys.outputs.build }}

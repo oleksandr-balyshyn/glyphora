@@ -12,6 +12,14 @@ end-to-end tests in its `test` submodule.
 | `dashboard` | `./mill examples.dashboard.run` | `gauge`/`sparkline`/`chart`, tick-rate animation |
 | `form-demo` | `./mill examples.form-demo.run` | `deriveForm` + `Field.mapValidated` validation |
 | `weather` | `./mill examples.weather.run` | live public HTTP API call bridged into `Signal` via `RenderThread.runOnRenderThread` |
+| `procmon` | `./mill examples.procmon.run` | a sortable/filterable table over refreshing data, with a selection that survives the refresh |
+| `airsensor` | `./mill examples.airsensor.run` | polling on a timer, threshold bands, trend arrows, a loading/ready/error state machine |
+| `loadtest` | `./mill examples.loadtest.run` | concurrent background work streamed back to the render thread, with a live histogram and percentiles |
+
+Each of `procmon`, `airsensor` and `loadtest` has a step-by-step guide that builds it from
+nothing: see [Build a real app](../website/docs/build-a-process-monitor.md) in the docs.
 
 Native binaries: `./mill show examples.<name>.nativeImage` (GraalVM community 23.0.1,
-`--no-fallback`, no reflect-config needed).
+`--no-fallback`, no reflect-config needed). CI builds every one of them and runs each binary
+headless, so the job's list has to be extended whenever an example is added. The four that
+use `java.net.http` need no extra native configuration on this toolchain.

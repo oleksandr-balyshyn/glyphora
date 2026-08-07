@@ -147,8 +147,8 @@ construction, so you do not need a separate focus trap.
 ## Notify without interrupting flow
 
 ```scala
-notify("Deployment queued", ToastLevel.Success)
-notify("Authentication expired", ToastLevel.Error, ttlTicks = 60)
+notify("Deployment queued", NoticeLevel.Success)
+notify("Authentication expired", NoticeLevel.Error, ttlTicks = 60)
 dismissToasts()
 ```
 
@@ -179,12 +179,15 @@ final case class Theme(
   surface: Style,
   border: Style,
   focus: Style,
+  loading: LoadingTheme,
 )
 ```
 
 `Theme.Dark`, `Theme.Light`, and `Theme.HighContrast` ship with glyphora. Built-in
 chrome, palette, focus, and toasts use semantic theme roles rather than hardcoded
-colors.
+colors. `loading` is the palette the spinners and progress bars draw from — see
+[Widgets](./widgets#theming-the-animations); a custom theme gets a coherent one from
+`LoadingTheme.from(accent, muted, surface)` rather than having to spell out all five.
 
 For live switching, keep a theme index in a `Signal`, return the selected value from
 `theme`, and read the index in `view` so the tree is invalidated. A complete snippet

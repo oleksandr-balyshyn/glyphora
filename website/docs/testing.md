@@ -137,6 +137,72 @@ pilot.waitForIdle()
 Keep coordinates tied to a deliberate test layout and size. A test that clicks a
 magic coordinate in a changing screen is hard to maintain.
 
+## Assert style, not just glyphs
+
+`screenLines` and `screenText` flatten a frame to its characters, which is the right
+level for most assertions. When the thing under test *is* the styling — a theme, a
+focus ring, a progress bar's fill colour — reach for the frame itself:
+
+```scala
+assert(pilot.cellAt(0, 0).style.fg == theme.loading.spinner.fg)
+assert(pilot.cellAt(2, 0).style.modifiers.has(Modifiers.Bold))
+```
+
+`pilot.lastFrame` is the whole `Buffer` for a sweep across rows; `cellAt(x, y)` is the
+single cell. Both fail the test if nothing has been drawn yet, rather than returning
+an empty frame that an assertion would pass against for the wrong reason.
+
+This matters more than it looks for the animated widgets. An `orbitSpinner` OR-s its
+dot masks so the ring never erodes, which means its **glyphs are identical at every
+moment** and the entire animation lives in the per-cell style — a glyph-only assertion
+would call it static.
+
+## Assert an animated frame
+
+Every animated widget is a pure function of elapsed time, so pin the clock and the
+frame becomes reproducible without waiting for wall time to pass:
+
+```scala
+AnimationClock.freezeAt(0.millis)
+val pilot = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
+assert(pilot.screenLines.head.startsWith("⠋"))
+
+AnimationClock.freezeAt(SpinnerPreset.Dots.frameDuration)
+// …the next frame, deterministically
+```
+
+`freezeAt` marshals onto the render thread, so it is safe to call from a test thread
+even while other suites run beside it.
+
+It is still a **global** act, though: one clock serves the whole process, so a suite
+that pins it and then asserts on a particular frame can be overruled by a sibling suite
+pinning it a millisecond later. That failure only shows up under parallel execution —
+it passes on a developer's machine and fails in CI, which is the worst way to find out.
+
+So prefer the `…At(elapsed)` factories — `spinnerAt`, `orbitSpinnerAt`,
+`animatedTextAt`, `indeterminateBarAt` — whenever the animation is a detail of the
+element under test rather than the subject of it. Passing the moment in directly reads
+no global state and cannot be raced:
+
+```scala
+spinnerAt(0.millis).preset(SpinnerPreset.Line).label("busy")   // always frame 0
+```
+
+Reserve `freezeAt` for tests whose subject *is* the ambient clock, and serialise those
+suites against each other.
+
+To assert that something animates *at all* rather than at a particular moment, watch
+the draw count instead of the content:
+
+```scala
+val before = backend.drawCount
+// …let a few ticks pass
+assert(backend.drawCount > before)
+```
+
+That is also how to prove the opposite — that a view with no animation on it is *not*
+being repainted by the ticks.
+
 ## Test async completion
 
 Inject a fake client and wait for the app to go idle after the callback updates its
@@ -190,9 +256,10 @@ Use fixed seeds for `coalesce` and `dissolve`.
 ./mill widgets.test.runMain io.worxbend.tui.widgets.RenderLoopBench
 ```
 
-GitHub Actions also checks reflection discipline, Unicode width discipline, Linux
-tests, best-effort Windows compatibility, and GraalVM native images for every
-example.
+GitHub Actions runs the same commands in granular jobs: discipline greps that need no
+JDK, a formatting check, one compile of the library, then the library tests, one job per
+example, and a GraalVM native image for every example. Everything after the compile
+reuses its output, so the library is built once per run.
 
 ## What to cover before shipping
 

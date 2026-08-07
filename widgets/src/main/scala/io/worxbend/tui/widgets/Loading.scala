@@ -2,66 +2,155 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
 
-/** A pulsing placeholder for content that has not loaded yet (skeleton screen): light shade with a brighter band
-  * sweeping through, advanced by `phase` (one step per tick).
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
+
+/** How an [[IndeterminateBar]]'s segment travels. Indeterminate bars all say "working, no idea how long", but they say
+  * it at different volumes — pick by how much of the user's attention the task deserves.
+  */
+enum IndeterminateMotion:
+
+  /** A segment sliding to the far edge and back. The classic, and the most eye-catching. */
+  case Bounce
+
+  /** A segment sliding off one edge and reappearing at the other — calmer than [[Bounce]], and it never pauses at a
+    * turning point, so it reads as steady rather than as struggling.
+    */
+  case Sweep
+
+  /** A bright head with a tail fading out behind it, sweeping in one direction. */
+  case Comet
+
+  /** The whole track brightening and dimming in place. The quietest option: no motion to track across the row, so it
+    * sits in a dense dashboard without pulling the eye.
+    */
+  case Pulse
+
+/** A pulsing placeholder for content that has not loaded yet (skeleton screen): a base shade with a brighter band
+  * sweeping through, positioned from how long the animation has been running.
+  *
+  * `period` is one full sweep, in wall-clock time, so the sweep takes the same time whatever the app's tick rate and
+  * whatever the widget's width. `bandWidth` defaults to a fifth of the area, which keeps the highlight proportional to
+  * whatever the skeleton is standing in for; give it an explicit width when several skeletons of different sizes need
+  * to pulse in step.
   */
 final case class Skeleton(
-    phase: Int,
+    elapsed: FiniteDuration,
     style: Style = Style.Default.dim,
     bandStyle: Style = Style.Default,
+    baseSymbol: String = "░",
+    bandSymbol: String = "▒",
+    bandWidth: Option[Int] = None,
+    period: FiniteDuration = 1200.millis,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val bandWidth = math.max(2, area.width / 5)
-      val cycle     = area.width + bandWidth
-      val bandStart = math.floorMod(phase, cycle) - bandWidth
+      val band      = math.max(1, bandWidth.getOrElse(math.max(2, area.width / 5)))
+      val cycle     = area.width + band
+      val bandStart = Animation.step(elapsed, period, cycle) - band
       var y         = area.y
       while y < area.bottom do
         var x = area.x
         while x < area.right do
-          val inBand = x - area.x >= bandStart && x - area.x < bandStart + bandWidth
-          val symbol = if inBand then "▒" else "░"
-          buffer.set(x, y, Cell(symbol, if inBand then bandStyle else style))
+          val inBand = x - area.x >= bandStart && x - area.x < bandStart + band
+          buffer.set(x, y, Cell(if inBand then bandSymbol else baseSymbol, if inBand then bandStyle else style))
           x += 1
         y += 1
 
-/** An indeterminate progress bar: a segment bouncing side to side, advanced by `phase`. */
+/** An indeterminate progress bar: a segment travelling along a track, advanced by `phase`.
+  *
+  * The glyphs come from a [[ProgressStyle]] so a determinate and an indeterminate bar in the same view can be drawn
+  * from the same vocabulary, and the travel comes from an [[IndeterminateMotion]].
+  */
 final case class IndeterminateBar(
-    phase: Int,
+    elapsed: FiniteDuration,
     style: Style = Style.Default.dim,
     segmentStyle: Style = Style.Default,
-    segmentSymbol: String = "━",
-    trackSymbol: String = "─",
+    progressStyle: ProgressStyle = ProgressStyle.Line,
+    motion: IndeterminateMotion = IndeterminateMotion.Bounce,
+    segmentWidth: Option[Int] = None,
+    period: FiniteDuration = 1600.millis,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val segment = math.max(2, area.width / 4)
-      val travel  = math.max(1, area.width - segment)
-      val bounce  = math.floorMod(phase, 2 * travel)
-      val start   = if bounce < travel then bounce else 2 * travel - bounce
-      var x       = area.x
-      while x < area.right do
-        val inSegment = x - area.x >= start && x - area.x < start + segment
-        val symbol    = if inSegment then segmentSymbol else trackSymbol
-        buffer.set(x, area.y, Cell(symbol, if inSegment then segmentStyle else style))
-        x += 1
+      val segment = math.max(1, math.min(area.width, segmentWidth.getOrElse(math.max(2, area.width / 4))))
+      motion match
+        case IndeterminateMotion.Bounce => renderTravelling(area, buffer, segment, bounceStart(area.width, segment))
+        case IndeterminateMotion.Sweep  => renderTravelling(area, buffer, segment, sweepStart(area.width, segment))
+        case IndeterminateMotion.Comet  => renderComet(area, buffer, segment)
+        case IndeterminateMotion.Pulse  => renderPulse(area, buffer)
 
-/** Text scrolling horizontally through the area (news-ticker style), advanced by `phase`; the text wraps around with a
-  * gap between repetitions.
+  /** A segment sliding to the far edge and turning back; one `period` covers the round trip. */
+  private def bounceStart(width: Int, segment: Int): Int =
+    val travel = math.max(1, width - segment)
+    val cycle  = Animation.step(elapsed, period, 2 * travel)
+    if cycle < travel then cycle else 2 * travel - cycle
+
+  /** A segment sliding off one edge and reappearing at the other; the start may be negative, which the wrap handles. */
+  private def sweepStart(width: Int, segment: Int): Int =
+    Animation.step(elapsed, period, width + segment) - segment
+
+  private def renderTravelling(area: Rect, buffer: Buffer, segment: Int, start: Int): Unit =
+    var x = area.x
+    while x < area.right do
+      val offset    = x - area.x
+      val inSegment = offset >= start && offset < start + segment
+      buffer.set(x, area.y, cellFor(inSegment, segmentStyle))
+      x += 1
+
+  /** A bright head with a tail behind it: the tail dims by stepping down the style's partial glyphs, or by falling back
+    * to the track glyph where the vocabulary has none.
+    */
+  private def renderComet(area: Rect, buffer: Buffer, segment: Int): Unit =
+    val head = Animation.step(elapsed, period, area.width + segment)
+    var x    = area.x
+    while x < area.right do
+      val distance = head - (x - area.x)
+      if distance >= 0 && distance < segment then
+        val glyph =
+          if distance == 0 then progressStyle.fill
+          else if progressStyle.isSubCell then
+            val step = progressStyle.partials.size - 1 - (distance - 1) * progressStyle.partials.size / segment
+            progressStyle.partials(math.max(0, math.min(progressStyle.partials.size - 1, step)))
+          else progressStyle.fill
+        buffer.set(x, area.y, Cell(glyph, if distance == 0 then segmentStyle else style))
+      else buffer.set(x, area.y, Cell(progressStyle.track, style))
+      x += 1
+
+  /** The whole track brightening and dimming in place. Lit for the middle half of each period, so it reads as a breath
+    * rather than a strobe.
+    */
+  private def renderPulse(area: Rect, buffer: Buffer): Unit =
+    val steps = 4
+    val cycle = Animation.step(elapsed, period, steps)
+    val lit   = cycle == 1 || cycle == 2
+    var x     = area.x
+    while x < area.right do
+      buffer.set(x, area.y, cellFor(lit, segmentStyle))
+      x += 1
+
+  private def cellFor(active: Boolean, activeStyle: Style): Cell =
+    if active then Cell(progressStyle.fill, activeStyle) else Cell(progressStyle.track, style)
+
+/** Text scrolling horizontally through the area (news-ticker style); the text wraps around with a gap between
+  * repetitions.
+  *
+  * `cellsPerSecond` is a reading speed rather than a step count, so the same marquee scrolls at the same rate whatever
+  * the app's tick rate. Around 8 cells per second is comfortable to read.
   */
 final case class Marquee(
     content: String,
-    phase: Int,
+    elapsed: FiniteDuration,
     style: Style = Style.Default,
     gap: Int = 4,
+    cellsPerSecond: Double = 8.0,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty && content.nonEmpty then
       val clusters = CharWidth.graphemeClusters(content).toVector ++ Vector.fill(gap)(" ")
-      val offset   = math.floorMod(phase, clusters.size)
+      val offset   = Animation.stepAtRate(elapsed, cellsPerSecond, clusters.size)
       var x        = area.x
       var index    = offset
       while x < area.right do

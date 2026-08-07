@@ -23,8 +23,8 @@ object GoldenFrames:
         Files.createDirectories(target.getParent)
         Files.write(target, actual.getBytes(StandardCharsets.UTF_8))
       case None            =>
-        val stream   = getClass.getResourceAsStream(s"/golden/$name.txt")
-        if stream == null then
+        val stream = getClass.getResourceAsStream(s"/golden/$name.txt")
+        if stream == null then // scalafix:ok DisableSyntax; getResourceAsStream returns null when the fixture is absent
           throw AssertionError(
             s"missing golden fixture golden/$name.txt — run once with GLYPHORA_GOLDEN_UPDATE=<test-resources-dir>"
           )

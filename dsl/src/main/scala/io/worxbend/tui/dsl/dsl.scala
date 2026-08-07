@@ -7,6 +7,7 @@ import io.worxbend.tui.widgets.BorderType
 // the styling/layout extensions, and the core vocabulary the examples need.
 export Element.{
   autocomplete,
+  badge,
   barChart,
   bigText,
   button,
@@ -19,7 +20,11 @@ export Element.{
   dualSparkline,
   filePicker,
   spinner,
-  waveText,
+  spinnerAt,
+  spinnerGrid,
+  spinnerGridAt,
+  animatedText,
+  animatedTextAt,
   column,
   dataTable,
   directoryTree,
@@ -27,19 +32,27 @@ export Element.{
   heatmap,
   image,
   indeterminateBar,
+  indeterminateBarAt,
   input,
   layers,
+  linearSpinner,
+  linearSpinnerAt,
   link,
   list,
   log,
   markdown,
   maskedInput,
   marquee,
+  marqueeAt,
   menu,
+  notice,
   numberInput,
+  orbitSpinner,
+  orbitSpinnerAt,
   paginator,
   panel,
   pieChart,
+  progressBar,
   positioned,
   radioGroup,
   row,
@@ -48,6 +61,7 @@ export Element.{
   select,
   selectionList,
   skeleton,
+  skeletonAt,
   slider,
   spacer,
   splitPane,
@@ -65,7 +79,29 @@ export Element.{
 }
 export io.worxbend.tui.core.{Color, Constraint, Flex, KeyCode, KeyEvent, KeyModifiers, MouseEvent, Style}
 export io.worxbend.tui.runtime.{Async, Cancelable, Computed, Easing, Effect, ReactiveScope, Signal, Tween}
-export io.worxbend.tui.widgets.{Language, MenuItem, MenuState, SyntaxHighlighter, SyntaxTheme}
+// the vocabulary types an application names directly: severities, animation and bar presets, badge variants
+export io.worxbend.tui.widgets.{
+  BadgeVariant,
+  ColorRamp,
+  GridPhase,
+  IndeterminateMotion,
+  LinearAxis,
+  LinearFlow,
+  LinearPath,
+  LinearTrail,
+  Language,
+  MenuItem,
+  MenuState,
+  NoticeLevel,
+  OrbitPath,
+  OrbitTrail,
+  ProgressLabel,
+  ProgressStyle,
+  SpinnerPreset,
+  SyntaxHighlighter,
+  SyntaxTheme,
+  TextEffect,
+}
 
 /** The shape of an app's `view` (and any sub-view helper): a computation, run under a tracking [[ReactiveScope]], that
   * produces the current [[Element]] tree. Reading a `Signal` inside it subscribes the next redraw. Mirrors terminus's

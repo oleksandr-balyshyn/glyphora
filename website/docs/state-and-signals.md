@@ -26,7 +26,15 @@ While `view` runs, `count.get` subscribes its root reactive scope. `update` chan
 the value, marks that scope stale, and wakes the runtime. On the next pass the view
 reads the new value and widgets render a new buffer.
 
-Setting a signal to an equal value (using `==`) does not notify dependents.
+Setting a signal to an equal value does not notify dependents. Equality is `==`, with
+one deliberate exception: `Double` and `Float` are compared by total order, so a
+signal holding `0.0` *does* notice a set to `-0.0` (the sign carries direction in a
+scroll or velocity delta) and a signal holding `NaN` does *not* repaint on every
+rewrite of `NaN`. Both are IEEE-754 artefacts of using `==` as a change flag rather
+than anything a caller meant.
+
+The one case no comparison can catch is mutating a value in place and setting the same
+instance back — see below.
 
 ## Signal operations
 
@@ -78,6 +86,10 @@ def view(using ReactiveScope): Element =
 Long-lived computed values belong beside your signals, not inside `view`. If you
 create a short-lived `Computed`, call `.dispose()` when its owner goes away so its
 internal subscriptions are detached.
+
+`dispose` detaches; it does not close. Anything derived from a disposed computed is
+marked stale so it recomputes rather than freezing at its last value, and reading the
+disposed computed again simply re-attaches it.
 
 ## Conditional dependencies stay accurate
 

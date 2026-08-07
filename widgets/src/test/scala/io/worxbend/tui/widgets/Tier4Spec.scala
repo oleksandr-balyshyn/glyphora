@@ -5,21 +5,23 @@ import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import scala.concurrent.duration.DurationInt
+
 final class Tier4Spec extends AnyFunSuite:
 
   test("a spinner cycles its frames by tick index"):
-    assert(trimmedLines(rendered(Spinner(0, "loading"), 12, 1)) == Seq("⠋ loading"))
-    assert(trimmedLines(rendered(Spinner(1, "loading"), 12, 1)) == Seq("⠙ loading"))
-    assert(trimmedLines(rendered(Spinner(10, "loading"), 12, 1)) == Seq("⠋ loading")) // wraps
+    assert(trimmedLines(rendered(Spinner(0.millis, "loading"), 12, 1)) == Seq("⠋ loading"))
+    assert(trimmedLines(rendered(Spinner(90.millis, "loading"), 12, 1)) == Seq("⠙ loading"))
+    assert(trimmedLines(rendered(Spinner(800.millis, "loading"), 12, 1)) == Seq("⠋ loading")) // wraps
 
   test("wave text highlights the clusters at the crest"):
-    val buffer = rendered(WaveText("hello", phase = 2, crestWidth = 1), 6, 1)
+    val buffer = rendered(AnimatedText("hello", 200.millis, TextEffect.Wave(crestWidth = 1)), 6, 1)
     assert(trimmedLines(buffer) == Seq("hello"))
     assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Bold))
     assert(!buffer.get(0, 0).style.modifiers.has(Modifiers.Bold))
 
   test("the wave crest advances with the phase"):
-    val buffer = rendered(WaveText("hello", phase = 4, crestWidth = 1), 6, 1)
+    val buffer = rendered(AnimatedText("hello", 400.millis, TextEffect.Wave(crestWidth = 1)), 6, 1)
     assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Bold))
     assert(!buffer.get(2, 0).style.modifiers.has(Modifiers.Bold))
 

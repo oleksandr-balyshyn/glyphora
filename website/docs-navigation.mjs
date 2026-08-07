@@ -38,6 +38,30 @@ export const docsNavigation = [
     ],
   },
   {
+    // Task-shaped pages: each owns one problem an application runs into, and the
+    // tutorials below link into them rather than restating the reasoning.
+    type: 'category',
+    label: 'Recipes',
+    collapsed: false,
+    items: [
+      'live-data',
+      'tables-and-selection',
+      'charts-and-status',
+    ],
+  },
+  {
+    // Start-to-finish builds. Each produces a real app that also ships in examples/,
+    // so every snippet in them is code that compiles and is tested.
+    type: 'category',
+    label: 'Build a real app',
+    collapsed: false,
+    items: [
+      'build-a-process-monitor',
+      'build-a-sensor-dashboard',
+      'build-a-load-generator',
+    ],
+  },
+  {
     type: 'category',
     label: 'Ship with confidence',
     collapsed: false,

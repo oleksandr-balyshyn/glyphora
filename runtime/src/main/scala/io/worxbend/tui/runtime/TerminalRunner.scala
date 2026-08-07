@@ -97,7 +97,7 @@ final class TerminalRunner(
             false
         case _               =>
           val wantsRedraw = handleEvent(event, handle)
-          wantsRedraw || event.isInstanceOf[Event.Resize]
+          wantsRedraw || event.isInstanceOf[Event.Resize] // scalafix:ok DisableSyntax; narrowing a caught Throwable
 
     redraw()
     while running && failure.isEmpty do

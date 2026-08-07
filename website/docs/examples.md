@@ -1,14 +1,16 @@
 ---
 title: Examples
-description: Run seven complete glyphora applications and learn which source to read for state, focus, dashboards, forms, async work, and app chrome.
+description: Run ten complete glyphora applications and learn which source to read for state, focus, dashboards, forms, async work, tables, live data, and app chrome.
 ---
 
 # Learn from complete apps
 
-The repository includes seven runnable applications. Each is intentionally small,
-uses the same public APIs described in this guide, and has a headless end-to-end
-test. Start with the behavior closest to your app and read its source beside the
-running terminal.
+The repository includes ten runnable applications. Each uses the same public APIs
+described in this guide and has a headless end-to-end test. Start with the behavior
+closest to your app and read its source beside the running terminal.
+
+The last three are larger, and each has a step-by-step guide that builds it from
+nothing — see [Build a real app](./build-a-process-monitor).
 
 ```bash
 git clone git@github.com:oleksandr-balyshyn/glyphora.git
@@ -27,6 +29,9 @@ cd glyphora
 | `form-demo` | `./mill examples.form-demo.run` | compile-time form derivation and validation |
 | `weather` | `./mill examples.weather.run` | real HTTP, loading/error states, render-thread handoff |
 | `showcase` | `./mill examples.showcase.run` | scaffold, themes, palette, screens, toasts, splash |
+| `procmon` | `./mill examples.procmon.run` | a sortable table over refreshing rows, selection that survives a refresh — [guide](./build-a-process-monitor) |
+| `airsensor` | `./mill examples.airsensor.run` | polling, threshold bands, trend arrows, loading/ready/error — [guide](./build-a-sensor-dashboard) |
+| `loadtest` | `./mill examples.loadtest.run` | concurrent work off the render thread, histogram and percentiles — [guide](./build-a-load-generator) |
 
 Every app exits with `q` or `Esc`; the source comment above each app lists its full
 keyboard vocabulary.

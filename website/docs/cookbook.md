@@ -115,7 +115,7 @@ private def confirmDelete(name: String): Unit =
         .onKey(Key.Enter) {
           delete(name)
           popScreen()
-          notify("Deployment deleted", ToastLevel.Success)
+          notify("Deployment deleted", NoticeLevel.Success)
         }
         .onKey(Key.Escape) { popScreen() }
     }
@@ -143,7 +143,7 @@ private def reload(): Unit =
 
 def rowsView(using ReactiveScope): Element = rows.get match
   case LoadState.Idle            => text("Press r to load.").dim
-  case LoadState.Loading         => row(spinner(0), text(" loading…"))
+  case LoadState.Loading         => spinner("loading…")
   case LoadState.Ready(value)    => renderRows(value)
   case LoadState.Failed(message) => text(s"Error: $message").color(Color.Red)
 ```
@@ -168,7 +168,17 @@ private def stopPolling(): Unit =
 
 Make the component or screen that starts work responsible for canceling it.
 
+Two things this sketch leaves out, both of which bite in a real poller: `Async.every`
+fires for the first time *after* a full interval, so a screen armed this way is empty
+for fifteen seconds, and nothing here drops a slow response that arrives after a newer
+one. [Live data & background work](./live-data) covers both, plus where the poller must
+be started from.
+
 ## Sort, filter, and select tabular data
+
+> This recipe shows a `DataTable` over rows that do not change. When the rows are
+> replaced on a timer, sorting and selection need more than this — see
+> [Tables & selection](./tables-and-selection).
 
 ```scala
 import io.worxbend.tui.widgets.{DataTable, DataTableState}
@@ -290,7 +300,7 @@ override def config = RunnerConfig(tickRate = Some(100.millis))
 
 override def onTick(): Unit =
   timer.tick(100.millis)
-  if timer.justExpired() then notify("Time is up", ToastLevel.Warning)
+  if timer.justExpired() then notify("Time is up", NoticeLevel.Warning)
 
 def clock: Element = text(timer.formatted).bold
 ```

@@ -5,6 +5,8 @@ import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import scala.concurrent.duration.DurationInt
+
 final class ControlsSpec extends AnyFunSuite:
 
   /** Renders `widget` into the left half of a 20x`height` buffer and returns the right half, which must stay blank. */
@@ -31,7 +33,7 @@ final class ControlsSpec extends AnyFunSuite:
     assert(spillToTheRight(Checkbox("ship it now please", checked = true), 6, 1) == Seq(""))
     assert(spillToTheRight(Toggle("dark mode please", on = true), 6, 1) == Seq(""))
     assert(spillToTheRight(Select(Seq("a-long-option"), selected = 0), 6, 1) == Seq(""))
-    assert(spillToTheRight(Spinner(0, "loading the world"), 6, 1) == Seq(""))
+    assert(spillToTheRight(Spinner(0.millis, "loading the world"), 6, 1) == Seq(""))
     assert(spillToTheRight(Link("a-long-label", "https://example.com"), 6, 1) == Seq(""))
     assert(spillToTheRight(RadioGroup(Seq("first option", "second option"), selected = 0), 6, 2) == Seq("", ""))
 

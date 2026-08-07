@@ -82,8 +82,36 @@ def statusLine(state: State): Element = state match
   case State.Failed(message) => text(s"Error: $message").color(Color.Red)
 ```
 
+`notice` and `badge` do this for you: `NoticeLevel` pairs each severity with a glyph
+(`✔ • ▲ ✖`) and a word (`OK INFO WARN FAIL`), so a message survives a monochrome
+terminal. The glyphs are geometric rather than emoji deliberately — emoji are two
+columns wide and inconsistently rendered, which makes a stacked column of notices
+ragged.
+
 This remains understandable in monochrome terminals and high-contrast modes.
 `Theme.HighContrast` is available when the application needs stronger separation.
+
+## Offer a way to turn motion down
+
+Persistent animation is the accessibility hazard most terminal toolkits ignore. When
+an app animates while it waits, give the user a setting, and route it to the quieter
+member of each family rather than to nothing at all:
+
+| Instead of | Reach for | Why |
+|---|---|---|
+| `indeterminateBar()` | `.motion(IndeterminateMotion.Pulse)` | brightens in place; no travel to track across the row |
+| `spinnerGrid()` | `.uniform` | every slot in lockstep, so the block pulses rather than waves |
+| `spinner()` | `.preset(SpinnerPreset.Ellipsis)` | four slow frames of `...`, closer to punctuation than motion |
+| any animation | a static caption | when there is nothing useful to say about progress, say it once |
+
+Two more properties worth knowing before choosing an animation:
+
+- An `orbitSpinner` animates entirely through per-cell **style**; its glyphs are the
+  same at every moment. On a terminal that renders neither colour nor dim it is a
+  still ring, so prefer `spinnerGrid` or `spinner` there.
+- `SpinnerPreset.AsciiPresets` and `ProgressStyle.Ascii`/`Arrow` need nothing beyond
+  ASCII, and `orbitSpinner().markers("*")` draws the same figure with one glyph per
+  cell. Those are the floors for an unknown terminal, a CI log, or a screen reader.
 
 ## Prefer explicit forms and commands
 

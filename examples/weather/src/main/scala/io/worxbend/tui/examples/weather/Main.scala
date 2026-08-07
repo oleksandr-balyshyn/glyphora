@@ -27,9 +27,6 @@ final class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp
   private val cityInput                       = TextInputState()
   private val status: Signal[Status]          = Signal(Status.Idle)
   private val history: Signal[Vector[String]] = Signal(Vector.empty)
-  private val spinnerFrame: Signal[Int]       = Signal(0)
-
-  override def onTick(): Unit = spinnerFrame.update(_ + 1)
 
   def view(using ReactiveScope): Element =
     column(
@@ -55,7 +52,7 @@ final class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp
     status.get match
       case Status.Idle                  => text("Type a city name and press Enter.").dim
       case Status.Loading(city)         =>
-        row(spinner(spinnerFrame.get), text(s" fetching weather for $city..."))
+        spinner(s"fetching weather for $city...")
       case Status.Failed(city, message) => text(s"Couldn't fetch $city: $message").color(Color.Red)
       case Status.Loaded(report)        =>
         column(

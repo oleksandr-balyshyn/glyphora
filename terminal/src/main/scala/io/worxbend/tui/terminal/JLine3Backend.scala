@@ -34,11 +34,13 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   private val pendingResize    = AtomicReference[Option[Size]](scala.None)
   private val pendingInterrupt = AtomicBoolean(false)
   private val woken            = AtomicBoolean(false)
-  private val pollingThread    = AtomicReference[Thread](null)
+  private val pollingThread    = AtomicReference[Thread](null) // scalafix:ok DisableSyntax; JLine Java API returns null
   private val decoder          = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
 
   private val supportsAlternateScreen =
-    terminal.getStringCapability(InfoCmp.Capability.enter_ca_mode) != null
+    terminal.getStringCapability(
+      InfoCmp.Capability.enter_ca_mode
+    ) != null // scalafix:ok DisableSyntax; JLine Java API returns null
 
   terminal.handle(Terminal.Signal.WINCH, _ => onResize())
   // INT/QUIT must not kill the JVM: the process would die before any teardown and hand back a raw, alt-screen terminal
@@ -180,7 +182,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       case _: InterruptedIOException => Right(scala.None) // woken deliberately by `wake()`
       case NonFatal(error)           => Left(BackendError.Io(error))
     finally
-      pollingThread.set(null)
+      pollingThread.set(null) // scalafix:ok DisableSyntax; JLine Java API returns null
       val _ = Thread.interrupted() // drop an interrupt that landed after the read completed
 
   /** Cuts short an in-flight [[readEvent]].
@@ -191,7 +193,8 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   override def wake(): Unit =
     woken.set(true)
     val blocked = pollingThread.get()
-    if blocked != null && (blocked ne Thread.currentThread()) then blocked.interrupt()
+    if blocked != null && (blocked ne Thread.currentThread()) then
+      blocked.interrupt() // scalafix:ok DisableSyntax; JLine Java API returns null
 
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     attempt(write(AnsiSequences.clipboardCopy(text)))
@@ -358,5 +361,5 @@ object JLine3Backend:
 
   /** Teardown steps are best-effort, but a silent failure is how a corrupted terminal goes unnoticed for months. */
   private[terminal] def logTeardownFailure(error: BackendError): Unit =
-    if System.getenv("GLYPHORA_DEBUG") != null then
+    if System.getenv("GLYPHORA_DEBUG") != null then // scalafix:ok DisableSyntax; JLine Java API returns null
       System.err.println(s"glyphora: terminal teardown step failed: $error")

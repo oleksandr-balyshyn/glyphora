@@ -39,6 +39,30 @@ private val signup = FormState.of(
 compilation. Validators are matched by field name and replace the default parser for
 that field.
 
+**A name that matches nothing is a construction error, not a silent no-op.** A typo, a
+case difference, or a renamed case-class field throws from `FormState.of` at
+declaration time — the same way a malformed key spec throws from `binding`:
+
+```scala
+FormState.of(deriveForm[Signup], Field.text("userName"))
+// java.lang.IllegalArgumentException: validator(s) for field(s) userName that the
+// form does not declare; it declares username, age, subscribe
+```
+
+Failing here rather than at submit is the whole point: a dropped validator is
+invisible at runtime, so the form would submit completely unvalidated data and look
+like it had passed. Two validators for the same field are rejected for the same
+reason, instead of silently last-wins.
+
+Boolean fields are validated like any other — a `Field.bool` validator sees the
+checkbox's own value:
+
+```scala
+Field.bool("subscribe").mapValidated { accepted =>
+  if accepted then Right(accepted) else Left("you must accept the terms")
+}
+```
+
 ## Render and submit
 
 ```scala

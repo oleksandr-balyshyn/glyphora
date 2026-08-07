@@ -5,88 +5,230 @@ on:
     branches: [main]
   pull_request:
 
+# A new push to the same branch makes the running build irrelevant. Cancelling it frees
+# a runner immediately, which matters more than the partial result it would have printed.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
+  # ── gates that need nothing but the source ────────────────────────────────────────
+  discipline:
+    name: Discipline checks
     runs-on: ubuntu-latest
+    # No JDK, no Mill, no cache. Seconds, and it fails before a runner has been spent
+    # compiling something that was never going to be merged.
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/mill
-            ~/.cache/coursier
-          key: mill-${{ runner.os }}-${{ hashFiles('.mill-version', 'build.mill', '**/package.mill') }}
-          restore-keys: mill-${{ runner.os }}-
-      - name: Reflection discipline check
+
+      - name: No runtime reflection in main sources
+        # native-image is reflect-config-free by construction; tui-macros derives at
+        # compile time through Mirror instead.
         run: |
-          # runtime reflection is forbidden everywhere (native-image); tui-macros uses compile-time Mirror only
           if grep -rn "java\.lang\.reflect\|Class\.forName" --include="*.scala" */src/main/scala 2>/dev/null; then
-            echo "runtime reflection found in main sources" >&2
+            echo "::error::runtime reflection found in main sources" >&2
             exit 1
           fi
-      - name: CharWidth discipline check
+
+      - name: All width arithmetic goes through CharWidth
         run: |
-          # String.substring for layout math must go through CharWidth
           violations=$(grep -rn "\.substring(" --include="*.scala" */src/main/scala | grep -v "core/CharWidth.scala" || true)
           if [ -n "$violations" ]; then
             echo "$violations" >&2
-            echo "String.substring outside CharWidth" >&2
+            echo "::error::String.substring outside core/CharWidth.scala" >&2
             exit 1
           fi
-      - name: Formatting check
-        run: ./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources
-      - name: Compile
-        run: ./mill __.compile
-      - name: Test
-        run: ./mill __.test
 
-  windows:
-    # best-effort visibility into Windows behavior; not yet a gate
-    runs-on: windows-latest
-    continue-on-error: true
-    defaults:
-      run:
-        shell: bash
+      - name: Every example is covered by CI
+        # The example list used to be hardcoded here, and an example added afterwards was
+        # silently never built. The matrices below now derive it, and this asserts the
+        # derivation still finds everything on disk.
+        run: |
+          modules=$(find examples -mindepth 2 -maxdepth 2 -name package.mill -printf '%h\n' | wc -l)
+          if [ "$modules" -lt 1 ]; then
+            echo "::error::example discovery found no modules — the matrices would silently be empty" >&2
+            exit 1
+          fi
+          echo "discovered $modules example modules"
+
+  discover:
+    name: Discover examples
+    runs-on: ubuntu-latest
+    outputs:
+      examples: ${{ steps.list.outputs.examples }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-      - name: Compile and test
-        run: ./mill __.compile && ./mill __.test
+      - id: list
+        # Derived, never hardcoded: adding examples/<name>/package.mill is the only step
+        # needed to get that example compiled, tested, and built as a native binary.
+        run: |
+          names=$(find examples -mindepth 2 -maxdepth 2 -name package.mill -printf '%h\n' \
+            | xargs -n1 basename | sort | jq -R . | jq -sc .)
+          echo "examples=$names" >> "$GITHUB_OUTPUT"
+          echo "matrix: $names"
 
-  native-image:
+  lint:
+    name: Formatting and lints
+    runs-on: ubuntu-latest
+    # Independent of compilation: scalafmt reads sources and the enabled scalafix rules
+    # are syntactic, so neither waits for a build it does not need.
+    #
+    # On a pull request from this repository the `autofix` job has already pushed any
+    # formatting fix, so this is the gate for pushes to main and for fork branches,
+    # where a bot cannot write.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mill
+      - name: Formatting
+        run: ./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources
+      - name: Lints
+        run: ./mill __.fix --check
+
+  autofix:
+    name: Autofix (same-repo PRs)
+    runs-on: ubuntu-latest
+    # Formatting is not a thing to fail a review over when a machine can just do it. This
+    # applies scalafmt and any auto-fixable scalafix rule and pushes the result back to
+    # the branch.
+    #
+    # Skipped for forks on purpose: a fork's token is read-only, so the push would fail
+    # and the run would go red for something the contributor cannot act on. Those PRs are
+    # covered by the `lint` gate instead.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          # the default token's pushes do not retrigger workflows, which is what stops
+          # this job from looping on its own commit
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./.github/actions/mill
+
+      - name: Apply scalafmt and scalafix
+        run: |
+          ./mill mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
+          ./mill __.fix
+
+      - name: Commit anything that changed
+        run: |
+          if git diff --quiet; then
+            echo "already clean"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "style: apply scalafmt and scalafix"
+          git push
+          echo "::notice::pushed a formatting commit — pull before you push again"
+
+  # ── build the library once, then reuse it ─────────────────────────────────────────
+  build:
+    name: Compile library
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: ./.github/actions/mill
         with:
-          distribution: temurin
-          java-version: "21"
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/mill
-            ~/.cache/coursier
-          key: mill-native-${{ runner.os }}-${{ hashFiles('.mill-version', 'build.mill', '**/package.mill') }}
-          restore-keys: mill-native-${{ runner.os }}-
-      - name: Build native images for every example
-        # `+` separates tasks; without it Mill runs only the first selector and
-        # swallows the rest as arguments to it, silently building one image.
+          # The one job that writes the dependency cache, so the others never race to save it.
+          dependency-cache: read-write
+
+      - name: Compile every published module
         run: >-
-          ./mill examples.hello-world.nativeImage
-          + examples.counter.nativeImage
-          + examples.todo-list.nativeImage
-          + examples.dashboard.nativeImage
-          + examples.form-demo.nativeImage
-          + examples.showcase.nativeImage
-      - name: "Run each binary (headless: must detect the missing TTY and exit cleanly)"
+          ./mill core.compile
+          + terminal.compile
+          + widgets.compile
+          + runtime.compile
+          + macros.compile
+          + dsl.compile
+          + test-support.compile
+          + __.test.compile
+
+      - name: Share the build output with the jobs below
+        # Keyed by SHA, so it is scoped to this run. Mill's metadata embeds absolute
+        # workspace paths, which is safe only because every runner in this workflow is
+        # ubuntu and checks out to the same path.
+        uses: actions/cache/save@v4
+        with:
+          path: out
+          key: mill-build-${{ runner.os }}-${{ github.sha }}
+
+  test:
+    name: Test library
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mill
+        with:
+          build-output: restore
+      - name: Test every published module
+        run: >-
+          ./mill core.test
+          + terminal.test
+          + widgets.test
+          + runtime.test
+          + macros.test
+          + dsl.test
+
+  # ── examples: one small job each, all reusing the compiled library ────────────────
+  example:
+    name: Example ${{ matrix.example }}
+    needs: [build, discover]
+    runs-on: ubuntu-latest
+    strategy:
+      # One example failing says nothing about the other nine, and finding out about all
+      # of them in one run beats nine more pushes.
+      fail-fast: false
+      matrix:
+        example: ${{ fromJSON(needs.discover.outputs.examples) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mill
+        with:
+          build-output: restore
+      - name: Compile and test
+        run: ./mill examples.${{ matrix.example }}.test
+
+  native-image:
+    name: Native images
+    needs: [build, discover]
+    runs-on: ubuntu-latest
+    # Deliberately one job rather than a matrix. Each image needs the GraalVM toolchain,
+    # which Mill fetches through coursier; a matrix would download it on every shard the
+    # first time, and the builds themselves are ~30s each. One job keeps that download
+    # to once and still reports every failure, because the loop below does not stop early.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mill
+        with:
+          build-output: restore
+
+      - name: Build a native image for every example
         run: |
-          for ex in hello-world counter todo-list dashboard form-demo showcase; do
-            ./out/examples/$ex/nativeImage.dest/native-executable | grep -q "UnsupportedTerminal" || exit 1
+          # `+` separates Mill task selectors. Without it Mill runs only the first and
+          # swallows the rest as arguments to it, silently building one image.
+          selectors=$(find examples -mindepth 2 -maxdepth 2 -name package.mill -printf '%h\n' \
+            | xargs -n1 basename | sort \
+            | sed 's/^/examples./; s/$/.nativeImage/' | paste -sd, - | sed 's/,/ + /g')
+          echo "building: $selectors"
+          ./mill $selectors
+
+      - name: Every binary detects the missing TTY and exits cleanly
+        run: |
+          failed=""
+          for ex in $(find examples -mindepth 2 -maxdepth 2 -name package.mill -printf '%h\n' | xargs -n1 basename | sort); do
+            binary="./out/examples/$ex/nativeImage.dest/native-executable"
+            if [ ! -x "$binary" ]; then
+              failed="$failed $ex(missing)"
+            elif ! "$binary" </dev/null 2>&1 | grep -q "UnsupportedTerminal"; then
+              failed="$failed $ex(no-clean-exit)"
+            fi
           done
+          if [ -n "$failed" ]; then
+            echo "::error::native binaries failed:$failed" >&2
+            exit 1
+          fi

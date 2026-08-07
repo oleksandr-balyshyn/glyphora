@@ -90,6 +90,12 @@ Every built-in widget. Depends only on `tui-core` — widgets are
 backend-agnostic and render into a `Buffer`, nothing else. See the full
 [Widget catalog](./widgets).
 
+Animated widgets take an elapsed `FiniteDuration` rather than a frame counter, so a
+frame is a pure function of its inputs: nothing is retained between renders, a test
+can draw any moment directly, and an animation looks the same whatever tick rate the
+app runs at. Sub-cell drawing — braille and half-block — goes through one shared bit
+table (`SubCell`), used by both the `Canvas` painter and the shape spinners.
+
 ## tui-runtime
 
 The mid-level framework tier:
@@ -102,6 +108,10 @@ The mid-level framework tier:
 - **`Runner` / `TerminalRunner` / `Frame` / `RunnerConfig`** — the event/render loop:
   terminal setup/teardown, diff-driven redraws, tick emission, resize handling.
 - **`Effect`** — the post-render motion engine. See [Motion](./motion).
+
+`tui-dsl` adds `AnimationClock` on top of these: a signal of elapsed time republished
+each tick, which the animated elements read. Because that read is tracked, a view
+subscribes to the clock only while it actually renders an animation.
 
 ## tui-dsl
 

@@ -56,30 +56,11 @@ final class Painter private[widgets] (
         buffer.set(x, y, Cell(glyphFor(masks(index)), styles(index)))
       index += 1
 
-  private def bitFor(dx: Int, dy: Int): Int =
-    resolution match
-      case CanvasResolution.Cell      => 1
-      case CanvasResolution.HalfBlock => if dy == 0 then 1 else 2
-      case CanvasResolution.Braille   => Painter.BrailleBits(dy)(dx)
+  // the sub-cell bit layouts live in `SubCell`, shared with the animated widgets that draw at the same resolutions;
+  // two divergent copies of the braille bit table is the one outcome that extraction exists to prevent
+  private def bitFor(dx: Int, dy: Int): Int = SubCell.bitFor(resolution, dx, dy)
 
-  private def glyphFor(mask: Int): String =
-    resolution match
-      case CanvasResolution.Cell      => marker
-      case CanvasResolution.HalfBlock =>
-        mask match
-          case 1 => "▀"
-          case 2 => "▄"
-          case _ => "█"
-      case CanvasResolution.Braille   => (0x2800 + mask).toChar.toString
-
-private object Painter:
-  /** Braille dot bit for sub-position `(dx, dy)`: dots 1–8 per the Unicode braille block layout. */
-  private val BrailleBits: Vector[Vector[Int]] = Vector(
-    Vector(0x01, 0x08),
-    Vector(0x02, 0x10),
-    Vector(0x04, 0x20),
-    Vector(0x40, 0x80),
-  )
+  private def glyphFor(mask: Int): String = SubCell.glyphFor(resolution, mask, marker)
 
 /** Something drawable on a [[Canvas]] in world coordinates. */
 trait Shape:

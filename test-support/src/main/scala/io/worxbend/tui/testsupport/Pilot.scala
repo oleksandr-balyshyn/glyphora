@@ -1,6 +1,6 @@
 package io.worxbend.tui.testsupport
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Size}
+import io.worxbend.tui.core.{Buffer, Cell, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Size}
 import io.worxbend.tui.terminal.HeadlessBackend
 
 import scala.concurrent.duration.{Deadline, DurationInt, FiniteDuration}
@@ -46,6 +46,16 @@ final class Pilot private (val backend: HeadlessBackend, thread: Thread):
     backend.lastDrawn.map(BufferAssertions.trimmedLines).getOrElse(Seq.empty)
 
   def screenText: String = screenLines.mkString("\n")
+
+  /** The last rendered frame itself, for assertions about style rather than glyphs — colors, modifiers, and anything
+    * else [[screenLines]] flattens away. Fails the test when nothing has been drawn, because an assertion against a
+    * silently empty frame passes for the wrong reason.
+    */
+  def lastFrame: Buffer =
+    backend.lastDrawn.getOrElse(throw AssertionError("nothing has been drawn yet"))
+
+  /** The cell at `(x, y)` of the last rendered frame. */
+  def cellAt(x: Int, y: Int): Cell = lastFrame.get(x, y)
 
   def isRunning: Boolean = thread.isAlive
 
