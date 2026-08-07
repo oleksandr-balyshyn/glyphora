@@ -24,6 +24,37 @@ final class TuiAppSpec extends AnyFunSuite:
         case _                              => false
       }
 
+  /** The counter app exactly as the README and getting-started guide document it: `+`/`-`/`q` declared through
+    * [[KeyBindings]] rather than an element handler, so the `+` spec is parsed at declaration time.
+    */
+  private final class DocumentedCounterApp extends TuiApp:
+    val count = Signal(0)
+
+    override def bindings: KeyBindings = KeyBindings(
+      binding("+", "increment")(count.update(_ + 1)),
+      binding("-", "decrement")(count.update(_ - 1)),
+      binding("q", "quit")(quit()),
+    )
+
+    def view(using ReactiveScope): Element =
+      scaffold(statusBar = Some(statusBar(bindings))) {
+        centered(34, 7) {
+          panel("Counter")(
+            text(s"Count: ${count.get}").bold.color(Color.Cyan)
+          ).rounded
+        }
+      }
+
+  test("the documented counter app binds '+' and '-' through KeyBindings"):
+    val backend = HeadlessBackend(Size(40, 12))
+    val app     = DocumentedCounterApp()
+    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char('-')).waitForIdle()
+    assert(app.count.peek == 1)
+    pilot.pressKey(KeyCode.Char('q'))
+    assert(pilot.awaitTermination())
+
   test("a TuiApp renders its view and reacts to signal updates from key handlers"):
     val backend = HeadlessBackend(Size(20, 4))
     val app     = CounterApp()
