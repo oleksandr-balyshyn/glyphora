@@ -1,0 +1,58 @@
+package io.worxbend.tui.dsl
+
+import org.scalatest.funsuite.AnyFunSuite
+
+import java.nio.file.{Files, Path, Paths}
+import scala.jdk.CollectionConverters.*
+import scala.util.Using
+
+/** The `binding("+", "increment")(…)` in the README and the getting-started guide threw `IllegalArgumentException` from
+  * a field initializer — every reader who copied the documented counter app got an `ExceptionInInitializerError` before
+  * the first frame. Nothing caught it because published prose is not compiled.
+  *
+  * This suite extracts every `binding("…", …)` spec from the Markdown that ships to the site and the Wiki and asserts
+  * it parses. It is a spec-level check, not a compile of the snippets, so it cannot catch every documentation defect —
+  * but the class of defect it does catch is the one that reached users.
+  */
+final class DocumentedKeySpecSpec extends AnyFunSuite:
+
+  /** The test's working directory is not guaranteed, so find the checkout by walking up to the build file. */
+  private lazy val repoRoot: Option[Path] =
+    Iterator
+      .iterate(Paths.get("").toAbsolutePath)(_.getParent)
+      .takeWhile(_ != null)
+      .find(candidate => Files.isRegularFile(candidate.resolve("build.mill")))
+
+  private def markdownSources(root: Path): Seq[Path] =
+    val docs  = root.resolve("website/docs")
+    val pages =
+      if Files.isDirectory(docs) then
+        Using.resource(Files.list(docs))(_.iterator.asScala.filter(_.toString.endsWith(".md")).toVector)
+      else Vector.empty
+    (root.resolve("README.md") +: pages).filter(Files.isRegularFile(_))
+
+  /** Matches the spec literal in `binding("ctrl+s", "save")(…)` — the first string argument only. */
+  private val BindingSpec = """binding\("((?:[^"\\]|\\.)*)"""".r
+
+  test("every key spec published in the documentation parses"):
+    val root  = repoRoot.getOrElse(cancel("not running from a checkout: no build.mill above the working directory"))
+    val found =
+      for
+        page <- markdownSources(root)
+        line <- Files.readAllLines(page).asScala
+        spec <- BindingSpec.findAllMatchIn(line).map(_.group(1))
+      yield (root.relativize(page).toString, spec)
+
+    assert(found.nonEmpty, "found no documented bindings — the extraction pattern or the doc paths are wrong")
+
+    val broken = found.collect:
+      case (page, spec) if KeyBindings.parseKey(spec).isLeft =>
+        s"$page: binding(\"$spec\") -> ${KeyBindings.parseKey(spec).left.getOrElse("")}"
+    assert(broken.isEmpty, s"documented key specs that throw at declaration time:\n${broken.mkString("\n")}")
+
+  /** The specific specs the counter app in the README and the getting-started guide declares. Pinned by value so a
+    * rewrite of those pages that drops the `+`/`-` pair still leaves this suite honest about what it covers.
+    */
+  test("the documented counter app's own specs parse"):
+    Seq("+", "-", "q").foreach: spec =>
+      assert(KeyBindings.parseKey(spec).isRight, s"the documented counter app cannot declare binding(\"$spec\")")

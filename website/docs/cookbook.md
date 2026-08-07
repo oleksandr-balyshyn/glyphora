@@ -28,7 +28,7 @@ object Hello extends TuiApp:
     }
 
   def main(args: Array[String]): Unit =
-    run().foreach(_ => ())
+    run().left.foreach(error => println(s"failed to run: $error"))
 ```
 
 Use `.onKey` for exact key/action pairs; use `.onKeyEvent` only when the handler must
