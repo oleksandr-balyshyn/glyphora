@@ -46,6 +46,9 @@ final class LogState(maxLines: Int = 1000):
 
   private[widgets] def visibleSlice(height: Int): Seq[Line] =
     lastViewportHeight = height
+    // `offset` is a public var and the viewport can grow between frames, so clamp on the way out as well as on the
+    // way in — an offset past the last useful row renders the tail of the log followed by blank rows, or nothing.
+    offset = math.max(0, math.min(offset, math.max(0, ring.size - height)))
     if follow then offset = math.max(0, ring.size - height)
     ring.slice(offset, offset + height).toSeq
 

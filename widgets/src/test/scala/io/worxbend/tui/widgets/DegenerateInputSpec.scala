@@ -1,0 +1,168 @@
+package io.worxbend.tui.widgets
+
+import io.worxbend.tui.core.{Buffer, Cell, Color, Constraint, Line, Rect, Style, Text}
+
+import org.scalatest.funsuite.AnyFunSuite
+
+/** Widgets under the inputs a real app reaches by ordinary means: state that outlived the data it indexes, a viewport
+  * that changed size between frames, a caller-supplied collection that turned out to be empty, a count that came from
+  * `area.height - 2` on a short terminal.
+  *
+  * Every case here either threw out of `render` (which kills the render thread and the app with it), wrote outside the
+  * `Rect` it was given (silently corrupting the neighbouring widget), or rendered blank while holding real content.
+  */
+final class DegenerateInputSpec extends AnyFunSuite:
+
+  private def buffer(width: Int, height: Int): Buffer = Buffer(Rect(0, 0, width, height))
+
+  private def rowText(buf: Buffer, y: Int, width: Int): String =
+    (0 until width).map(x => buf.get(x, y).symbol).mkString
+
+  // ---------------------------------------------------------------- TextInput / TextArea scroll offsets
+
+  /** The scroll offset is caller-owned and survives across frames, so it has to be pulled back as well as pushed
+    * forward. Typing past the edge and then deleting back down used to leave the whole value off the left edge: the
+    * field looked frozen and empty while still holding text.
+    */
+  test("a text input still shows its value after the text is deleted back down"):
+    val state = TextInputState()
+    state.insert("the quick brown fox jumps")
+    val input = TextInput()
+    input.render(Rect(0, 0, 12, 1), buffer(12, 1), state)
+    assert(state.scrollCluster > 0, "the long value should have scrolled")
+    (1 to 20).foreach(_ => state.backspace())
+    assert(state.value == "the q")
+    val buf   = buffer(12, 1)
+    input.render(Rect(0, 0, 12, 1), buf, state)
+    assert(rowText(buf, 0, 12).startsWith("the q"), s"rendered '${rowText(buf, 0, 12)}'")
+
+  test("a text input re-flows when the viewport grows"):
+    val state  = TextInputState()
+    state.insert("hello world, this is a long value")
+    val input  = TextInput()
+    input.render(Rect(0, 0, 6, 1), buffer(6, 1), state)
+    val narrow = state.scrollCluster
+    assert(narrow > 0)
+    val buf    = buffer(40, 1)
+    input.render(Rect(0, 0, 40, 1), buf, state)
+    assert(state.scrollCluster == 0, "the whole value fits at width 40, so nothing should be scrolled away")
+    assert(rowText(buf, 0, 40).startsWith("hello world"))
+
+  test("a text area re-flows both axes when the viewport grows"):
+    val state = TextAreaState((1 to 8).map(n => s"line$n").mkString("\n"))
+    val area  = TextArea()
+    area.render(Rect(0, 0, 6, 2), buffer(6, 2), state)
+    assert(state.scrollRow > 0)
+    val buf   = buffer(20, 8)
+    area.render(Rect(0, 0, 20, 8), buf, state)
+    assert(state.scrollRow == 0, "all 8 lines fit in 8 rows, so nothing should be scrolled away")
+    assert(rowText(buf, 0, 20).startsWith("line1"))
+
+  // ---------------------------------------------------------------- writes outside the given Rect
+
+  /** `Buffer.set` clips to the buffer, not to the widget's `Rect`, so anything a widget draws without clipping lands on
+    * its neighbour. Here the highlight symbol is wider than the list it is drawn in.
+    */
+  test("a list view narrower than its highlight symbol stays inside its rect"):
+    val buf = buffer(10, 2)
+    (0 until 10).foreach(x => buf.set(x, 0, Cell("#", Style.Default)))
+    ListView(Seq(Line.raw("a")), highlightSymbol = "==> ")
+      .render(Rect(0, 0, 2, 1), buf, ListState(selected = Some(0)))
+    assert(rowText(buf, 0, 10).drop(2) == "########", s"row 0 is '${rowText(buf, 0, 10)}'")
+
+  test("a bar chart with a negative gap stays inside its rect"):
+    val buf = buffer(20, 4)
+    (0 until 10).foreach(x => buf.set(x, 1, Cell("#", Style.Default)))
+    BarChart(Seq("" -> 5L, "" -> 5L, "" -> 5L), barWidth = 3, barGap = -5).render(Rect(10, 0, 10, 4), buf)
+    assert(rowText(buf, 1, 10) == "##########", s"columns left of the area were overwritten: '${rowText(buf, 1, 10)}'")
+
+  // ---------------------------------------------------------------- exceptions out of render
+
+  /** `selected = -1` is the natural "nothing highlighted" encoding, and `normalize` leaves it there when no entry is
+    * selectable at all. It used to reach `items(-1)`.
+    */
+  test("a menu with nothing selectable renders instead of throwing"):
+    val menu = Menu(Seq(MenuItem("cut", enabled = false), MenuItem("copy", enabled = false)))
+    menu.render(Rect(0, 0, 10, 4), buffer(10, 4), MenuState(selected = -1))
+
+  test("a calendar clips an out-of-range month instead of throwing"):
+    Calendar(2026, 13).render(Rect(0, 0, 20, 10), buffer(20, 10))
+    Calendar(2026, 0).render(Rect(0, 0, 20, 10), buffer(20, 10))
+    Calendar(Int.MaxValue, 6).render(Rect(0, 0, 20, 10), buffer(20, 10))
+
+  test("charts with an empty palette render instead of dividing by zero"):
+    PieChart(Seq("a" -> 1.0, "b" -> 2.0), styles = Seq.empty).render(Rect(0, 0, 30, 10), buffer(30, 10))
+    StackedBarChart(Seq("a" -> Seq(1L, 2L)), styles = Seq.empty).render(Rect(0, 0, 20, 6), buffer(20, 6))
+
+  test("an image with ragged rows renders instead of indexing past a short row"):
+    val rgb: Color.Rgb = Color.Rgb(10, 20, 30)
+    Image(Vector(Vector.fill(4)(rgb), Vector.fill(1)(rgb))).render(Rect(0, 0, 4, 2), buffer(4, 2))
+    Image(Vector(Vector.fill(4)(rgb), Vector.empty)).render(Rect(0, 0, 4, 2), buffer(4, 2))
+
+  /** A column mixing numbers with dates is ordinary data. Deciding numeric-vs-text per comparison is not a valid
+    * ordering — `"9" < "10"` numerically, `"10" < "2020-01-01"` and `"2020-01-01" < "9"` textually is a cycle — and
+    * TimSort raises `IllegalArgumentException: Comparison method violates its general contract!` when it notices.
+    */
+  test("sorting a column that mixes numbers and text is a total order"):
+    val cells  = Vector("9", "10", "11", "12", "3", "41", "7", "55", "2", "88", "30", "5x", "2018-01-01", "NaN")
+    val rows   = (0 until 8).flatMap(_ => cells).map(Seq(_))
+    val table  = DataTable(Seq("value"), rows, Seq(Constraint.Fill(1)))
+    val state  = DataTableState()
+    state.sortColumn = Some(0)
+    val sorted = table.filteredRows(state)
+    assert(sorted.size == rows.size)
+
+  test("an all-numeric column still sorts numerically"):
+    val table = DataTable(Seq("value"), Seq(Seq("9"), Seq("10"), Seq("2")), Seq(Constraint.Fill(1)))
+    val state = DataTableState()
+    state.sortColumn = Some(0)
+    assert(table.filteredRows(state).map(_.head) == Seq("2", "9", "10"))
+
+  // ---------------------------------------------------------------- measurement that disagrees with rendering
+
+  /** `Paragraph.heightOf` counts the rows `wrapLine` returns, so the two have to agree. A cluster wider than the column
+    * budget used to be deleted from the document instead of clipped: `ScrollView` then reserved rows nothing rendered
+    * into, sized its scrollbar thumb wrong, and every following line moved up one row.
+    */
+  test("a cluster wider than the wrap width is clipped, not deleted"):
+    assert(Paragraph.wrapLine(Line.raw("日本語"), 1).size == 3)
+    assert(Paragraph.wrapLine(Line.raw("ab日cd"), 1).size == 5)
+    assert(Paragraph.wrapLine(Line.raw("ab👍cd"), 1).map(_.spans.map(_.content).mkString).mkString == "ab👍cd")
+
+  test("heightOf agrees with the rows a paragraph renders"):
+    val cases = Seq(
+      Text.raw("日本語テキスト")     -> 1,
+      Text.raw("你好\nok")      -> 1,
+      Text.raw("hello world") -> 5,
+      Text.raw("")            -> 3,
+    )
+    cases.foreach: (text, width) =>
+      val measured = Paragraph.heightOf(text, width)
+      val rendered = text.lines.flatMap(line => Paragraph.wrapLine(line, width)).size
+      assert(measured == rendered, s"heightOf said $measured, wrapping produced $rendered for width $width")
+
+  // ---------------------------------------------------------------- degenerate counts
+
+  /** `pageSize = Some(area.height - 2)` is the obvious idiom and yields `Some(0)` on a two-row terminal. Paging by zero
+    * showed no rows at all, on every page, forever.
+    */
+  test("a page size of zero still shows rows"):
+    val table = DataTable(Seq("value"), (1 to 5).map(n => Seq(n.toString)), Seq(Constraint.Fill(1)))
+    val state = DataTableState()
+    state.pageSize = Some(0)
+    assert(table.visibleRows(state).nonEmpty)
+    state.pageSize = Some(-3)
+    assert(table.visibleRows(state).nonEmpty)
+
+  /** `LogState.offset` is a public var and the viewport can grow between frames; an offset past the last useful row
+    * rendered the tail of the log followed by blank rows, or nothing at all.
+    */
+  test("a log clamps a stale scroll offset to the content it has"):
+    val state = LogState()
+    (1 to 30).foreach(n => state.append(Line.raw(s"line$n")))
+    state.scrollUp(20)
+    assert(state.visibleSlice(20).size == 20, "a 20-row viewport over 30 lines must be full")
+    val small = LogState()
+    (1 to 3).foreach(n => small.append(Line.raw(s"line$n")))
+    small.offset = 10
+    assert(small.visibleSlice(5).nonEmpty, "an offset past the end must not blank the panel")

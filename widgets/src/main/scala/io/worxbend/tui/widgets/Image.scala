@@ -36,9 +36,11 @@ final case class Image(pixels: Vector[Vector[Color.Rgb]]) extends Widget:
       sourceWidth: Int,
       sourceHeight: Int,
   ): Color.Rgb =
-    val sourceX = math.min(sourceWidth - 1, column * sourceWidth / targetWidth)
-    val sourceY = math.min(sourceHeight - 1, row * sourceHeight / targetHeight)
-    pixels(sourceY)(sourceX)
+    val sourceY   = math.min(sourceHeight - 1, row * sourceHeight / targetHeight)
+    val sourceRow = pixels(sourceY)
+    // `sourceWidth` comes from the first row only, so a ragged `pixels` would index past a shorter row
+    if sourceRow.isEmpty then Color.Rgb(0, 0, 0)
+    else sourceRow(math.min(sourceRow.size - 1, column * sourceWidth / targetWidth))
 
 object Image:
 

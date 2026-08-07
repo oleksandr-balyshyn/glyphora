@@ -15,6 +15,13 @@ private[widgets] object SeriesPalette:
 
   def at(index: Int): Style = Default(index % Default.size)
 
+  /** Cycles `styles`, falling back to [[Default]] when the caller passed an empty palette — `styles` is a public
+    * parameter, and `index % 0` is an `ArithmeticException` out of the middle of a render.
+    */
+  def cycle(styles: Seq[Style], index: Int): Style =
+    val palette = if styles.isEmpty then Default else styles
+    palette(math.floorMod(index, palette.size))
+
 /** A filled pie: angular sectors proportional to each value, plus a legend when width allows.
   *
   * Cells are roughly half as tall as they are wide, so the disc corrects the aspect ratio to look circular.
@@ -46,7 +53,7 @@ final case class PieChart(
             val angle  = (math.atan2(dy, dx) + math.Pi) / (2 * math.Pi) // 0..1 around the disc
             val sector = cumulative.indexWhere(edge => angle * total <= edge)
             val index  = if sector < 0 then data.size - 1 else sector
-            buffer.set(x, y, Cell("█", styles(index % styles.size)))
+            buffer.set(x, y, Cell("█", SeriesPalette.cycle(styles, index)))
           x += 1
         y += 1
       if showLegend then renderLegend(area, buffer, discWidth, total)
@@ -60,7 +67,7 @@ final case class PieChart(
         x,
         area.y + index,
         CharWidth.substringByWidth(entry, area.right - x),
-        styles(index % styles.size),
+        SeriesPalette.cycle(styles, index),
       )
     }
 
@@ -81,9 +88,10 @@ final case class StackedBarChart(
     val maxTotal    = data.map((_, values) => values.map(math.max(0L, _)).sum).maxOption.getOrElse(0L)
     if area.isEmpty || data.isEmpty || chartHeight <= 0 || maxTotal <= 0 then ()
     else
+      val stride = math.max(1, barWidth + barGap)
       data.zipWithIndex.foreach { case ((label, values), barIndex) =>
-        val barLeft = area.x + barIndex * (barWidth + barGap)
-        if barLeft + barWidth <= area.right then
+        val barLeft = area.x + barIndex * stride
+        if barLeft >= area.x && barLeft + barWidth <= area.right then
           var bottom = area.y + chartHeight
           values.zipWithIndex.foreach { (value, series) =>
             val cells = math.round(math.max(0L, value).toDouble / maxTotal * chartHeight).toInt
@@ -93,7 +101,7 @@ final case class StackedBarChart(
             while y < bottom do
               var x = barLeft
               while x < barLeft + barWidth do
-                buffer.set(x, y, Cell("█", styles(series % styles.size)))
+                buffer.set(x, y, Cell("█", SeriesPalette.cycle(styles, series)))
                 x += 1
               y += 1
             bottom = top

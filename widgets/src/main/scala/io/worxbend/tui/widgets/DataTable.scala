@@ -109,7 +109,10 @@ final case class DataTable(
       state.sortColumn match
         case None         => filtered
         case Some(column) =>
-          val sorted = filtered.sortWith((a, b) => cellLess(a.lift(column), b.lift(column)))
+          val cells   = filtered.map(row => row.lift(column).getOrElse(""))
+          val ordered = ordering(cells)
+          val sorted  =
+            filtered.sortWith((a, b) => ordered.lt(a.lift(column).getOrElse(""), b.lift(column).getOrElse("")))
           if state.sortAscending then sorted else sorted.reverse
     }
 
@@ -121,9 +124,12 @@ final case class DataTable(
     state.pageSize match
       case None       => all
       case Some(size) =>
-        val lastPage = math.max(0, (all.size - 1) / math.max(1, size))
-        state.page = math.min(state.page, lastPage)
-        all.slice(state.page * size, (state.page + 1) * size)
+        // one page size for every use: `Some(0)` arises naturally from `Some(area.height - 2)` on a short terminal,
+        // and paging by 0 shows no rows at all on every page
+        val page     = math.max(1, size)
+        val lastPage = math.max(0, (all.size - 1) / page)
+        state.page = math.max(0, math.min(state.page, lastPage))
+        all.slice(state.page * page, (state.page + 1) * page)
 
   def render(area: Rect, buffer: Buffer, state: DataTableState): Unit =
     if !area.isEmpty then
@@ -158,10 +164,15 @@ final case class DataTable(
         val _ = LineRenderer.render(buffer, segment.x, y, Line.styled(cell, rowStyle), segment.width)
     }
 
-  /** Numeric-aware ordering: numbers compare as numbers, everything else as case-insensitive text. */
-  private def cellLess(a: Option[String], b: Option[String]): Boolean =
-    val left  = a.getOrElse("")
-    val right = b.getOrElse("")
-    (left.toDoubleOption, right.toDoubleOption) match
-      case (Some(x), Some(y)) => x < y
-      case _                  => left.compareToIgnoreCase(right) < 0
+  /** Numeric-aware ordering, chosen once for the whole column rather than per comparison.
+    *
+    * Deciding per pair is not a valid ordering and is not merely untidy: in a column mixing `"9"`, `"10"` and
+    * `"2020-01-01"`, `"9" < "10"` numerically while `"10" < "2020-01-01"` and `"2020-01-01" < "9"` textually — a cycle,
+    * which makes `sortWith` throw `IllegalArgumentException: Comparison method violates its general contract!` out of
+    * the render loop, and silently mis-order the rows when it does not. `NaN` is excluded from the numeric case for the
+    * same reason: it compares false against everything, breaking transitivity just as badly.
+    */
+  private def ordering(cells: Seq[String]): Ordering[String] =
+    val numeric = cells.forall(cell => cell.toDoubleOption.exists(value => !value.isNaN))
+    if numeric then Ordering.by[String, Double](_.toDoubleOption.getOrElse(0.0))
+    else (left, right) => left.compareToIgnoreCase(right)

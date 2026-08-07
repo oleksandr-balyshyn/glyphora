@@ -3,7 +3,7 @@ package io.worxbend.tui.widgets
 import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
 
 import java.time.format.TextStyle as JTextStyle
-import java.time.{DayOfWeek, LocalDate, YearMonth}
+import java.time.{DayOfWeek, LocalDate, Year, YearMonth}
 import java.util.Locale
 
 /** A month grid: title row, weekday header (weeks start Monday), and day numbers with an optional highlighted day.
@@ -22,13 +22,18 @@ final case class Calendar(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val yearMonth = YearMonth.of(year, month)
+      // prev/next-month navigation naturally produces month 0 and 13, and every other widget here clips rather than
+      // throwing out of `render`; `YearMonth.of` would raise `DateTimeException`
+      val yearMonth = YearMonth.of(
+        math.max(Year.MIN_VALUE, math.min(Year.MAX_VALUE, year)),
+        math.max(1, math.min(12, month)),
+      )
       drawTitle(area, buffer, yearMonth)
       drawWeekdayHeader(area, buffer)
       drawDays(area, buffer, yearMonth)
 
   private def drawTitle(area: Rect, buffer: Buffer, yearMonth: YearMonth): Unit =
-    val title  = s"${yearMonth.getMonth.getDisplayName(JTextStyle.FULL, Locale.ENGLISH)} $year"
+    val title  = s"${yearMonth.getMonth.getDisplayName(JTextStyle.FULL, Locale.ENGLISH)} ${yearMonth.getYear}"
     val fitted = CharWidth.substringByWidth(title, area.width)
     val offset = (math.min(area.width, GridWidth) - CharWidth.of(fitted)) / 2
     buffer.setString(area.x + math.max(0, offset), area.y, fitted, headerStyle)

@@ -75,13 +75,36 @@ final case class TextInput(
     val clusters = CharWidth.graphemeClusters(placeholder)
     if clusters.hasNext then clusters.next() else " "
 
-  /** Scrolls just enough that the cursor stays visible (one column is reserved for the end-of-text cursor). */
+  /** Scrolls just enough that the cursor stays visible (one column is reserved for the end-of-text cursor).
+    *
+    * The scroll offset is caller-owned state that outlives any one frame, so it has to be pulled *back* as well as
+    * pushed forward: deleting text or widening the terminal both leave an offset that is further right than the text
+    * now needs, and the field would render blank with its content off the left edge.
+    */
   private def scrolledTo(state: TextInputState, width: Int): Int =
-    val clusters                                 = state.clusterSeq
-    var scroll                                   = math.min(state.scrollCluster, state.cursor)
-    def visibleWidth(from: Int, until: Int): Int = clusters.slice(from, until).map(CharWidth.of).sum
-    while visibleWidth(scroll, state.cursor) + 1 > width && scroll < state.cursor do scroll += 1
+    val clusters = state.clusterSeq
+    var scroll   = math.min(math.min(state.scrollCluster, state.cursor), rightmostUsefulScroll(clusters, width))
+    while visibleWidth(clusters, scroll, state.cursor) + 1 > width && scroll < state.cursor do scroll += 1
     scroll
+
+  /** The furthest-right offset worth scrolling to: the one that just fits the end of the text, cursor column included.
+    * Scrolling past it only pushes text off the left edge to leave blanks on the right.
+    */
+  private def rightmostUsefulScroll(clusters: Vector[String], width: Int): Int =
+    var index = clusters.size
+    var used  = 1 // the end-of-text cursor always occupies one column
+    while index > 0 && used + renderedWidth(clusters(index - 1)) <= width do
+      used += renderedWidth(clusters(index - 1))
+      index -= 1
+    index
+
+  private def visibleWidth(clusters: Vector[String], from: Int, until: Int): Int =
+    clusters.slice(from, until).map(renderedWidth).sum
+
+  /** Measurement has to agree with [[renderClusters]], which gives every cluster at least one cell — a zero-width
+    * cluster measured as 0 but drawn in 1 makes the scroll arithmetic drift until the cursor is pushed off-screen.
+    */
+  private def renderedWidth(cluster: String): Int = math.max(1, CharWidth.of(cluster))
 
   private def renderClusters(area: Rect, buffer: Buffer, state: TextInputState, clusters: Vector[String]): Unit =
     var x     = area.x
@@ -89,7 +112,7 @@ final case class TextInput(
     while index <= clusters.size && x < area.right do
       val atEnd  = index == clusters.size
       val symbol = if atEnd then " " else clusters(index)
-      val width  = math.max(1, CharWidth.of(symbol))
+      val width  = renderedWidth(symbol)
       if x + width <= area.right then
         val isCursor  = showCursor && index == state.cursor
         val cellStyle = if isCursor then style.patch(cursorStyle) else style

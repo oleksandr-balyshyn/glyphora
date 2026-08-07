@@ -20,9 +20,12 @@ final case class BarChart(
     if area.isEmpty || data.isEmpty || chartHeight <= 0 || barWidth <= 0 then ()
     else
       val ceiling = math.max(1L, max.getOrElse(data.map((_, value) => value).max))
+      // a negative gap can walk `barLeft` left of the area; `Buffer.set` clips to the buffer, not to the Rect, so an
+      // unclamped bar paints straight over whatever widget owns the columns to the left
+      val stride  = math.max(1, barWidth + barGap)
       data.zipWithIndex.foreach { case ((label, value), index) =>
-        val barLeft = area.x + index * (barWidth + barGap)
-        if barLeft + barWidth <= area.right then
+        val barLeft = area.x + index * stride
+        if barLeft >= area.x && barLeft + barWidth <= area.right then
           drawBar(buffer, area, barLeft, chartHeight, value, ceiling)
           if showLabels then drawLabel(buffer, area, barLeft, label)
       }

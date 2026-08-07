@@ -19,6 +19,8 @@ private[widgets] object ScrollWindow:
     selected match
       case None        => clamped
       case Some(index) =>
-        if index < clamped then index
-        else if index >= clamped + viewportHeight then index - viewportHeight + 1
+        // `selected` is caller-owned and may be a "nothing highlighted" sentinel of -1, which must never become a
+        // negative offset — callers index their content with it directly.
+        if index < clamped then math.max(0, index)
+        else if index >= clamped + viewportHeight then math.max(0, index - viewportHeight + 1)
         else clamped

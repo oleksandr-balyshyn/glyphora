@@ -39,6 +39,8 @@ final case class ListView(
         val rowStyle   = if isSelected then style.patch(highlightStyle) else style
         val prefix     = if isSelected then highlightSymbol else padding
         val y          = area.y + row
-        buffer.setString(area.x, y, prefix, rowStyle)
+        // clip to the area, not just to the buffer: a highlight symbol wider than a narrow list would otherwise be
+        // written straight over whatever owns the columns to the right
+        buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, area.width), rowStyle)
         val _          = LineRenderer.render(buffer, area.x + symbolWidth, y, line, area.width - symbolWidth, rowStyle)
       }
