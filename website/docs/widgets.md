@@ -5,7 +5,7 @@ description: Choose, compose, configure, and test glyphora's layout, content, in
 
 # Widget catalog
 
-glyphora ships more than forty backend-agnostic widgets. The high-level DSL wraps
+glyphora ships more than fifty backend-agnostic widgets. The high-level DSL wraps
 each widget in an `Element`, adds focus and input behavior where appropriate, and
 keeps mutable interaction state owned by your application.
 

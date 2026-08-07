@@ -137,6 +137,58 @@ pilot.waitForIdle()
 Keep coordinates tied to a deliberate test layout and size. A test that clicks a
 magic coordinate in a changing screen is hard to maintain.
 
+## Assert style, not just glyphs
+
+`screenLines` and `screenText` flatten a frame to its characters, which is the right
+level for most assertions. When the thing under test *is* the styling — a theme, a
+focus ring, a progress bar's fill colour — reach for the frame itself:
+
+```scala
+assert(pilot.cellAt(0, 0).style.fg == theme.loading.spinner.fg)
+assert(pilot.cellAt(2, 0).style.modifiers.has(Modifiers.Bold))
+```
+
+`pilot.lastFrame` is the whole `Buffer` for a sweep across rows; `cellAt(x, y)` is the
+single cell. Both fail the test if nothing has been drawn yet, rather than returning
+an empty frame that an assertion would pass against for the wrong reason.
+
+This matters more than it looks for the animated widgets. An `orbitSpinner` OR-s its
+dot masks so the ring never erodes, which means its **glyphs are identical at every
+moment** and the entire animation lives in the per-cell style — a glyph-only assertion
+would call it static.
+
+## Assert an animated frame
+
+Every animated widget is a pure function of elapsed time, so pin the clock and the
+frame becomes reproducible without waiting for wall time to pass:
+
+```scala
+AnimationClock.freezeAt(0.millis)
+val pilot = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
+assert(pilot.screenLines.head.startsWith("⠋"))
+
+AnimationClock.freezeAt(SpinnerPreset.Dots.frameDuration)
+// …the next frame, deterministically
+```
+
+`freezeAt` marshals onto the render thread, so it is safe to call from a test thread
+even while other suites run beside it. Prefer the `…At(elapsed)` factories —
+`spinnerAt`, `orbitSpinnerAt`, `animatedTextAt` — when the animation is a detail of
+one element rather than the whole app: passing the moment in directly needs no clock
+at all.
+
+To assert that something animates *at all* rather than at a particular moment, watch
+the draw count instead of the content:
+
+```scala
+val before = backend.drawCount
+// …let a few ticks pass
+assert(backend.drawCount > before)
+```
+
+That is also how to prove the opposite — that a view with no animation on it is *not*
+being repainted by the ticks.
+
 ## Test async completion
 
 Inject a fake client and wait for the app to go idle after the callback updates its

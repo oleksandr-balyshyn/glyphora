@@ -5,7 +5,7 @@
 <h3>✦ Terminal UI, written like Scala.</h3>
 
 <p>
-  <strong>Reactive signals</strong> · <strong>40+ widgets</strong> · <strong>keyboard &amp; mouse</strong><br/>
+  <strong>Reactive signals</strong> · <strong>50+ widgets</strong> · <strong>keyboard &amp; mouse</strong><br/>
   <strong>composable motion</strong> · <strong>headless tests</strong> · <strong>GraalVM native-image</strong>
 </p>
 
@@ -50,7 +50,7 @@
 <td width="25%" align="center" valign="top">
   <img src="docs/assets/icons/widgets.svg" width="56" alt=""/><br/>
   <b>🧩 A real widget vocabulary</b><br/>
-  <sub>Inputs, tables, trees, Markdown, charts, dialogs, menus and app chrome all ship together.</sub>
+  <sub>Inputs, tables, trees, Markdown, charts, spinners, dialogs, menus and app chrome all ship together.</sub>
 </td>
 <td width="25%" align="center" valign="top">
   <img src="docs/assets/icons/mouse.svg" width="56" alt=""/><br/>
@@ -60,7 +60,7 @@
 <td width="25%" align="center" valign="top">
   <img src="docs/assets/icons/effects.svg" width="56" alt=""/><br/>
   <b>🎬 Motion stays composable</b><br/>
-  <sub>Effects transform the completed frame, so widget renderers stay deterministic and testable.</sub>
+  <sub>Effects transform the completed frame and animated widgets are pure functions of elapsed time, so every renderer stays deterministic and testable.</sub>
 </td>
 </tr>
 <tr>
