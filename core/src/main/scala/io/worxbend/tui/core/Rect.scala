@@ -7,9 +7,13 @@ package io.worxbend.tui.core
   */
 final case class Rect(x: Int, y: Int, width: Int, height: Int):
 
-  def area: Int = width * height
+  def area: Int = if isEmpty then 0 else width * height
 
-  def isEmpty: Boolean = width == 0 || height == 0
+  /** Whether this rectangle covers no cells. A negative extent counts as empty: it can only come from arithmetic
+    * upstream, and the standard `if !area.isEmpty` widget guard must reject it rather than render into a region that
+    * does not exist.
+    */
+  def isEmpty: Boolean = width <= 0 || height <= 0
 
   /** Exclusive right edge. */
   def right: Int = x + width

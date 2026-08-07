@@ -128,3 +128,45 @@ final class BufferSpec extends AnyFunSuite:
     assert(target.get(0, 0) == Cell.Empty) // torn left half dropped
     assert(target.get(1, 0).symbol == "b")
     assert(target.get(2, 0) == Cell.Empty) // wide char whose continuation was cut off dropped
+
+  test("blit trims a region that starts outside the source instead of shifting its content"):
+    // an overlay laid out at a negative origin asks for cells the source does not have; clipping must drop those
+    // columns, not slide the surviving ones left onto the landing point meant for the missing ones
+    val source = buffer(3, 1)
+    source.setString(0, 0, "abc", Style.Default)
+    val target = buffer(5, 1)
+    target.blit(source, Position(0, 0), Rect(-2, 0, 5, 1))
+    assert(target.get(0, 0) == Cell.Empty) // the two columns left of the source stay blank
+    assert(target.get(1, 0) == Cell.Empty)
+    assert(target.get(2, 0).symbol == "a")
+    assert(target.get(3, 0).symbol == "b")
+    assert(target.get(4, 0).symbol == "c")
+
+  test("a variation selector does not consume a cell of its own"):
+    // a lone VS16 reported two columns, so setString claimed a cell plus a continuation for a glyph the terminal
+    // never draws and pushed the rest of the row two columns right
+    val buf = buffer(4, 1)
+    buf.setString(0, 0, 0xfe0f.toChar.toString + "abc", Style.Default)
+    assert(buf.get(0, 0).symbol == "a")
+    assert(buf.get(1, 0).symbol == "b")
+    assert(buf.get(2, 0).symbol == "c")
+
+  test("a CJK ideograph followed by VS15 still claims its continuation cell"):
+    // treating 你 + VS15 as one column left no continuation cell: everything right of it rendered one column off
+    // for the rest of the row, and the diff engine confirmed the overwrite instead of suppressing it
+    val buf = buffer(4, 1)
+    buf.setString(0, 0, "你" + 0xfe0e.toChar.toString + "xy", Style.Default)
+    assert(buf.get(1, 0) == Cell.Empty) // the continuation cell of the wide glyph
+    assert(buf.get(2, 0).symbol == "x")
+    assert(buf.get(3, 0).symbol == "y")
+
+  test("a stray ZWJ does not let the following text overflow the buffer"):
+    // joining unconditionally made "a ZWJ 你" one column wide, so the characters after it were written on top of
+    // the ideograph instead of after it
+    val buf = buffer(6, 1)
+    buf.setString(0, 0, "a" + 0x200d.toChar.toString + "你XY", Style.Default)
+    assert(buf.get(0, 0).symbol.startsWith("a"))
+    assert(buf.get(1, 0).symbol == "你")
+    assert(buf.get(2, 0) == Cell.Empty) // continuation of 你, not overwritten by X
+    assert(buf.get(3, 0).symbol == "X")
+    assert(buf.get(4, 0).symbol == "Y")

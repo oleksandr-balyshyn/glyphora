@@ -11,8 +11,9 @@ import java.util.Arrays
   *
   * Widths are derived from the Unicode Character Database: East Asian Width `W`/`F` codepoints (see [[WidthTable]]) are
   * two columns; combining marks, format controls, and conjoining Hangul jamo are zero; everything else is one.
-  * Variation selectors override the base width (VS16 forces emoji presentation, two columns; VS15 forces text
-  * presentation, one column), and a regional-indicator pair (flag emoji) is two.
+  * Variation selectors override the base width — VS16 forces emoji presentation (two columns), VS15 text presentation
+  * (one) — but only after a base that has both presentations; after a letter or an ideograph they are inert. A
+  * regional-indicator pair (flag emoji) is two.
   */
 object CharWidth:
 
@@ -89,32 +90,72 @@ object CharWidth:
         index += Character.charCount(first)
         if isRegionalIndicator(first) && index < text.length && isRegionalIndicator(text.codePointAt(index)) then
           index += Character.charCount(text.codePointAt(index))
-        else absorbContinuations()
+        else absorbContinuations(first)
         text.substring(start, index)
 
-      private def absorbContinuations(): Unit =
+      private def absorbContinuations(base: Int): Unit =
         var done = false
         while !done && index < text.length do
           val cp = text.codePointAt(index)
           // the ZWJ check must precede the generic continuation check: ZWJ is category Cf, and absorbing it
           // without also absorbing the codepoint it joins would split an emoji ZWJ sequence in two
-          if cp == ZeroWidthJoiner && index + Character.charCount(cp) < text.length then
+          if cp == ZeroWidthJoiner && joinsEmoji(base, index + Character.charCount(cp)) then
             index += Character.charCount(cp)
             index += Character.charCount(text.codePointAt(index))
           else if isClusterContinuation(cp) then index += Character.charCount(cp)
           else done = true
 
+      /** Whether the ZWJ preceding `after` really joins an emoji sequence: `base` opened the cluster and `after`
+        * indexes the codepoint on the far side of the joiner. Only emoji join. A stray ZWJ — pasted web text, Indic and
+        * Persian input carry them — must leave the characters on either side in their own cells, or the cluster
+        * under-reports its width and the text after it overflows the rect it was measured against.
+        */
+      private def joinsEmoji(base: Int, after: Int): Boolean =
+        after < text.length && isEmojiCapable(base) && isEmojiCapable(text.codePointAt(after))
+
   private def clusterWidth(cluster: String): Int =
     if cluster.isEmpty then 0
-    else if containsCodePoint(cluster, TextPresentationSelector) then 1
-    else if containsCodePoint(cluster, EmojiPresentationSelector) then 2
     else
       val base = cluster.codePointAt(0)
       // a flag is exactly two regional indicators; an RI followed by anything else (a combining mark) is not one
       if isRegionalIndicator(base) && secondCodePointIsRegionalIndicator(cluster, base) then 2
+      // a variation selector only speaks for a base that has both presentations; after a letter or an ideograph
+      // it is inert decoration, and a cluster that is nothing but selectors has no base at all
+      else if isEmojiCapable(base) then presentationWidth(cluster, base)
       else if isZeroWidth(base) || Character.isISOControl(base) then 0
       else if isWideCodePoint(base) then 2
       else 1
+
+  /** The width of an emoji-capable `base` once its variation selector has had its say: VS15 forces text presentation
+    * (one column), VS16 forces emoji presentation (two). With neither, the base's own width stands.
+    */
+  private def presentationWidth(cluster: String, base: Int): Int =
+    if containsCodePoint(cluster, TextPresentationSelector) then 1
+    else if containsCodePoint(cluster, EmojiPresentationSelector) then 2
+    else if isWideCodePoint(base) then 2
+    else 1
+
+  /** Whether `cp` is a character that has both a text and an emoji presentation, so that a variation selector or a ZWJ
+    * after it means something.
+    *
+    * An approximation of the Unicode `Emoji` property rather than a generated table: the emoji planes, the symbol
+    * categories that hold the dingbats and pictographs, the keycap bases, and the handful of legacy characters (`(c)`,
+    * `(r)`, `!!`, `!?`, and the two CJK wave marks) that carry the property outside them. Letters, digits read as text,
+    * and CJK ideographs are deliberately excluded — a selector after them changes nothing a terminal draws, so it must
+    * not change the column count either.
+    */
+  private def isEmojiCapable(cp: Int): Boolean =
+    if cp >= 0x1f000 && cp <= 0x1faff then true
+    else if isKeycapBase(cp) then true
+    else if cp == 0x00a9 || cp == 0x00ae || cp == 0x203c || cp == 0x2049 || cp == 0x3030 || cp == 0x303d then true
+    else if cp < 0x2000 then false
+    else
+      val category = Character.getType(cp)
+      category == Character.MATH_SYMBOL.toInt || category == Character.OTHER_SYMBOL.toInt
+
+  /** The digits, `#`, and `*` that a keycap sequence (`1` VS16 U+20E3) is built on. */
+  private def isKeycapBase(cp: Int): Boolean =
+    (cp >= 0x30 && cp <= 0x39) || cp == 0x23 || cp == 0x2a
 
   private def secondCodePointIsRegionalIndicator(cluster: String, base: Int): Boolean =
     val next = Character.charCount(base)

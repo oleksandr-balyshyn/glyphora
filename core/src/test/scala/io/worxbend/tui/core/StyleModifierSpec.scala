@@ -23,3 +23,12 @@ final class StyleModifierSpec extends AnyFunSuite:
 
   test("removing a modifier is idempotent on a style that lacks it"):
     assert(Style.Default.notReverse == Style.Default)
+
+  test("has is an ANY test, not an ALL test, when given more than one flag"):
+    // documented rather than changed: the name and the `Modifiers`-typed parameter read as "has all of these", but
+    // the implementation is a non-zero bitwise AND. Changing it would silently flip the meaning of every existing
+    // call site, so it is pinned here instead.
+    val boldItalic = Modifiers.Bold | Modifiers.Italic
+    assert(boldItalic.has(Modifiers.Bold | Modifiers.Underline))
+    assert(!boldItalic.has(Modifiers.Underline | Modifiers.Blink))
+    assert(!boldItalic.has(Modifiers.None))

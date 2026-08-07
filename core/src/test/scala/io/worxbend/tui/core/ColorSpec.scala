@@ -62,6 +62,26 @@ final class ColorSpec extends AnyFunSuite:
   test("a single-step gradient is just the start color"):
     assert(Color.gradient(Color.Red, Color.Blue, 1) == Seq(Color.mix(Color.Red, Color.Blue, 0)))
 
+  test("a NaN interpolation factor yields the start color, not black"):
+    // clamping NaN left it NaN, and math.round(NaN) is 0, so a NaN from a divide-by-zero animation clock painted
+    // every affected cell black instead of leaving the color alone
+    assert(Color.mix(Color.Red, Color.Blue, Double.NaN) == Color.mix(Color.Red, Color.Blue, 0.0))
+    assert(Color.lighten(Color.Red, Double.NaN) == Color.Rgb(205, 49, 49))
+    assert(Color.darken(Color.Red, Double.NaN) == Color.Rgb(205, 49, 49))
+    assert(Color.blend(Color.White, Color.Black, Double.NaN) == Color.Rgb(0, 0, 0))
+
+  test("a non-positive step count yields no gradient stops"):
+    // a caller sizing a gradient from an empty list got one stop back and painted a band that should not exist
+    assert(Color.gradient(Color.Red, Color.Blue, 0).isEmpty)
+    assert(Color.gradient(Color.Red, Color.Blue, -3).isEmpty)
+
+  test("derived colors stay inside 0..255 even from an unclamped Rgb"):
+    // the Rgb case class does not clamp its channels — only Color.rgb does — so an out-of-range literal used to
+    // propagate through lighten/mix and reach the SGR encoder as a malformed escape
+    assert(Color.lighten(Color.Rgb(999, -4, 0), 0.5) == Color.Rgb(255, 128, 128))
+    assert(Color.approximateRgb(Color.Rgb(999, -4, 0)) == (255, 0, 0))
+    assert(Color.mix(Color.Rgb(999, 0, 0), Color.Rgb(999, 0, 0), 1.0) == Color.Rgb(255, 0, 0))
+
   test("AdaptiveColor resolves by terminal background"):
     val adaptive = AdaptiveColor(light = Color.Black, dark = Color.White)
     assert(adaptive.resolve(darkBackground = true) == Color.White)

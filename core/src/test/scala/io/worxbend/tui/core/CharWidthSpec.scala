@@ -84,3 +84,50 @@ final class CharWidthSpec extends AnyFunSuite:
     val loneRiWithMark = "🇺" + "́"
     assert(CharWidth.of(loneRiWithMark) == 1)
     assert(CharWidth.of("🇺" + "́" + "🇦") == CharWidth.of("🇺" + "́") + CharWidth.of("🇦"))
+
+  test("a variation selector with no base character before it claims no column"):
+    // a stray VS16 (pasted text, a decoded escape) used to report two columns for something a terminal draws in
+    // none, so a backend advanced its cursor past cells it never painted
+    assert(CharWidth.of(EmojiPresentationSelector) == 0)
+    assert(CharWidth.of(TextPresentationSelector) == 0)
+
+  test("VS15 does not narrow a CJK ideograph"):
+    // 你 is two columns with or without a text-presentation selector: it has no emoji presentation to switch away
+    // from. Reporting one column allocates a single cell for a two-column glyph and shifts the rest of the row.
+    assert(CharWidth.of("你" + TextPresentationSelector) == 2)
+    assert(CharWidth.of("你" + TextPresentationSelector + "xy") == 4)
+
+  test("VS16 does not widen a Latin letter"):
+    // 'a' has no emoji presentation, so the selector is decoration the terminal ignores — claiming two columns
+    // would leave a blank continuation cell in the middle of a word
+    assert(CharWidth.of("a" + EmojiPresentationSelector) == 1)
+
+  test("a variation selector still switches the presentation of an emoji-capable base"):
+    assert(CharWidth.of("☹" + EmojiPresentationSelector) == 2) // narrow by default, wide as emoji
+    assert(CharWidth.of("⌚" + TextPresentationSelector) == 1) // wide by default, narrow as text
+
+  test("a ZWJ between two non-emoji characters does not glue them into one cell"):
+    // pasted web text and Indic/Persian input carry stray U+200D; joining unconditionally under-counted the width
+    // and let the following characters overflow the rect they were clipped to
+    assert(CharWidth.of("a" + ZeroWidthJoiner + "b") == 2)
+    assert(CharWidth.graphemeClusters("a" + ZeroWidthJoiner + "b").size == 2)
+
+  test("a ZWJ next to a CJK ideograph keeps both characters' widths"):
+    assert(CharWidth.of("a" + ZeroWidthJoiner + "你") == 3)
+    assert(CharWidth.of("你" + ZeroWidthJoiner + "a") == 3)
+
+  test("a ZWJ between two emoji still forms one cluster"):
+    assert(CharWidth.of("👨" + ZeroWidthJoiner + "👩") == 2)
+    assert(CharWidth.graphemeClusters("👨" + ZeroWidthJoiner + "👩").size == 1)
+
+  test("a ZWJ sequence built on a legacy symbol base still forms one cluster"):
+    // ❤️‍🔥 is U+2764 VS16 ZWJ U+1F525: the base predates the emoji planes, so gating the join on "is emoji" must
+    // recognize the dingbats and pictographs too or the sequence splits into two cells
+    val heartOnFire = "❤" + EmojiPresentationSelector + ZeroWidthJoiner + "🔥"
+    assert(CharWidth.graphemeClusters(heartOnFire).size == 1)
+    assert(CharWidth.of(heartOnFire) == 2)
+
+  /** Spelled by codepoint rather than as literals: all three are invisible in an editor. */
+  private val ZeroWidthJoiner: String           = 0x200d.toChar.toString
+  private val TextPresentationSelector: String  = 0xfe0e.toChar.toString
+  private val EmojiPresentationSelector: String = 0xfe0f.toChar.toString

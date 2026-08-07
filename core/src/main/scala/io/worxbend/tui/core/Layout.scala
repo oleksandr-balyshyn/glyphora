@@ -33,36 +33,76 @@ final case class Layout(
     else
       val extras = distributeLeftover(leftover)
       val shared = fixed.indices.map(i => fixed(i) + extras(i))
-      if extras.sum > 0 then shared else absorbProportionalRemainder(shared, available - shared.sum)
+      if extras.sum > 0 then shared else absorbProportionalRemainder(shared, available - shared.sum, available)
 
   /** Hands the integer-division remainder to the proportional segments so they fill the container exactly.
     *
     * `Percentage(33) x 3` at width 100 truncates to 33+33+33 and would otherwise leave a stray column at the right
-    * edge. This only applies when *every* constraint is proportional — with a `Length` or `Fill` in the mix the
-    * leftover is real free space that [[flex]] positions, not a rounding artifact.
+    * edge. Two conditions gate it, and both matter. Every constraint must be proportional — with a `Length` or `Fill`
+    * in the mix the leftover is real free space that [[flex]] positions, not a rounding artifact. And the constraints
+    * must claim the whole axis to within [[claimsWholeAxis]]'s tolerance: `Percentage(50)` on its own asks for half the
+    * container and must *get* half, with the other half left free.
+    *
+    * The spare cells go to the segments whose exact demand lost the most to integer division, so the solved sizes stay
+    * as close as integers allow to the ratio the constraints asked for.
     */
-  private def absorbProportionalRemainder(sizes: IndexedSeq[Int], remainder: Int): IndexedSeq[Int] =
+  private def absorbProportionalRemainder(
+      sizes: IndexedSeq[Int],
+      remainder: Int,
+      available: Int,
+  ): IndexedSeq[Int] =
+    if remainder <= 0 || sizes.isEmpty || !claimsWholeAxis then sizes
+    else
+      val fractions = proportionalFractions(available)
+      val order     = sizes.indices.sortBy(index => (-fractions(index), index))
+      val granted   = sizes.toArray
+      var pending   = remainder
+      var position  = 0
+      // one cell at a time, largest shortfall first and wrapping if there is more than one cell per segment, so the
+      // distribution is deterministic and any two segments differ by at most one
+      while pending > 0 do
+        granted(order(position % order.length)) += 1
+        pending -= 1
+        position += 1
+      granted.toIndexedSeq
+
+  /** Whether every constraint is proportional *and* together they ask for the whole axis.
+    *
+    * The tolerance is one percentage point per constraint: an integer percentage can only approximate the share its
+    * author meant, so three thirds spell 99% and still mean "all of it", while `Percentage(50)` alone means half and
+    * `Percentage(10), Percentage(30)` means a 1:3 split with 60% of the axis left free.
+    */
+  private def claimsWholeAxis: Boolean =
     val proportional = constraints.forall {
       case Constraint.Percentage(_) | Constraint.Ratio(_, _) => true
       case _                                                 => false
     }
-    if remainder <= 0 || !proportional || sizes.isEmpty then sizes
-    else
-      // one cell at a time to the earliest segments, so the distribution is deterministic and differs by at most one
-      val granted = sizes.toArray
-      var pending = remainder
-      var index   = 0
-      while pending > 0 do
-        granted(index % granted.length) += 1
-        pending -= 1
-        index += 1
-      granted.toIndexedSeq
+    proportional && claimedShare > 1.0 - constraints.size / 100.0
+
+  /** The fraction of the axis the constraints ask for; anything not proportional contributes nothing. */
+  private def claimedShare: Double =
+    constraints.map {
+      case Constraint.Percentage(pct) => math.max(0, pct) / 100.0
+      case Constraint.Ratio(num, den) => if den <= 0 then 0.0 else math.max(0, num).toDouble / den
+      case _                          => 0.0
+    }.sum
+
+  /** For each constraint, the fraction of a cell its exact demand lost to the integer division in [[fixedDemand]] — the
+    * ranking key for handing out the remainder.
+    */
+  private def proportionalFractions(available: Int): IndexedSeq[Double] =
+    constraints.map {
+      case Constraint.Percentage(pct) => (available.toLong * math.max(0, pct) % 100) / 100.0
+      case Constraint.Ratio(num, den) =>
+        if den <= 0 then 0.0 else (available.toLong * math.max(0, num) % den).toDouble / den
+      case _                          => 0.0
+    }.toIndexedSeq
 
   private def fixedDemand(constraint: Constraint, available: Int): Int =
     constraint match
       case Constraint.Length(cells)   => math.max(0, cells)
       case Constraint.Percentage(pct) => available * math.max(0, pct) / 100
-      case Constraint.Ratio(num, den) => if den == 0 then 0 else available * math.max(0, num) / den
+      case Constraint.Ratio(num, den) => if den <= 0 then 0 else available * math.max(0, num) / den
       case Constraint.Min(cells)      => math.max(0, cells)
       case Constraint.Max(_)          => 0
       case Constraint.Fill(_)         => 0

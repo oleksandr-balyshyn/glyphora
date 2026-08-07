@@ -62,10 +62,12 @@ object Color:
   def blend(foreground: Color, background: Color, alpha: Double): Color =
     mix(background, foreground, alpha)
 
-  /** `steps` evenly-spaced colors from `from` to `to` inclusive (a 1-step gradient is just `from`). Builds on [[mix]].
+  /** `steps` evenly-spaced colors from `from` to `to` inclusive (a 1-step gradient is just `from`); a non-positive
+    * `steps` asks for no colors and gets none. Builds on [[mix]].
     */
   def gradient(from: Color, to: Color, steps: Int): Seq[Color] =
-    if steps <= 1 then Seq(mix(from, to, 0))
+    if steps <= 0 then Seq.empty
+    else if steps == 1 then Seq(mix(from, to, 0))
     else Seq.tabulate(steps)(i => mix(from, to, i.toDouble / (steps - 1)))
 
   /** RGB approximation for every color model — good enough for fades and capability downsampling, not for color
@@ -74,7 +76,9 @@ object Color:
     */
   def approximateRgb(color: Color): (Int, Int, Int) =
     color match
-      case Rgb(r, g, b)   => (r, g, b)
+      // the Rgb case takes its channels unchecked (only Color.rgb clamps), so clamp on the way out rather than let
+      // an out-of-range literal reach the SGR encoder as a malformed escape
+      case Rgb(r, g, b)   => (clampChannel(r), clampChannel(g), clampChannel(b))
       case Black          => (0, 0, 0)
       case Red            => (205, 49, 49)
       case Green          => (13, 188, 121)
@@ -128,10 +132,16 @@ object Color:
 
   private def clampChannel(value: Int): Int = math.max(0, math.min(255, value))
 
-  private def clampUnit(value: Double): Double = math.max(0.0, math.min(1.0, value))
+  /** Clamps an interpolation factor to `0.0..1.0`. `NaN` — a divide-by-zero in an animation clock, say — clamps to
+    * `0.0`, the identity end of every interpolation here: `math.min`/`math.max` propagate it, and `math.round(NaN)` is
+    * `0`, which would otherwise paint the affected cells black.
+    */
+  private def clampUnit(value: Double): Double =
+    if value.isNaN then 0.0 else math.max(0.0, math.min(1.0, value))
 
+  /** Interpolates one channel, clamping the result so an out-of-range [[Rgb]] input cannot produce one. */
   private def lerp(from: Int, to: Int, t: Double): Int =
-    math.round(from + (to - from) * t).toInt
+    clampChannel(math.round(from + (to - from) * t).toInt)
 
   private def isHexDigit(c: Char): Boolean =
     (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')

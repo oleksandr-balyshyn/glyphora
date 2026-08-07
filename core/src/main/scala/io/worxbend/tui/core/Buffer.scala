@@ -53,24 +53,33 @@ final class Buffer(val area: Rect):
   /** Copies `region` of `source` into this buffer with the region's top-left landing at `at`.
     *
     * Writes outside this buffer's area are clipped like any other write — this is how offscreen-rendered content
-    * (scroll views, overlays) lands on the frame.
+    * (scroll views, overlays) lands on the frame. A `region` reaching past `source`'s own area is trimmed to it, and
+    * the landing point moves by however much the trim shifted the region's origin, so the surviving cells keep their
+    * position relative to `at` instead of sliding onto the ones that were dropped.
+    *
+    * Blitting a buffer onto itself works on a snapshot: without it, overlapping rows would read cells this call has
+    * already overwritten and smear them across the region.
     */
   def blit(source: Buffer, at: Position, region: Rect): Unit =
-    val clipped = region.intersection(source.area)
-    var dy      = 0
-    while dy < clipped.height do
-      val y  = clipped.y + dy
-      var dx = 0
-      while dx < clipped.width do
-        val cell = source.get(clipped.x + dx, y)
-        val safe =
-          // a wide grapheme cut in half by the window edge would render torn — blank the half instead
-          if dx == 0 && CharWidth.of(source.get(clipped.x - 1, y).symbol) == 2 then Cell.Empty
-          else if dx == clipped.width - 1 && CharWidth.of(cell.symbol) == 2 then Cell.Empty
-          else cell
-        set(at.x + dx, at.y + dy, safe)
-        dx += 1
-      dy += 1
+    if source eq this then blit(source.snapshot, at, region)
+    else
+      val clipped = region.intersection(source.area)
+      val originX = at.x + (clipped.x - region.x)
+      val originY = at.y + (clipped.y - region.y)
+      var dy      = 0
+      while dy < clipped.height do
+        val y  = clipped.y + dy
+        var dx = 0
+        while dx < clipped.width do
+          val cell = source.get(clipped.x + dx, y)
+          val safe =
+            // a wide grapheme cut in half by the window edge would render torn — blank the half instead
+            if dx == 0 && CharWidth.of(source.get(clipped.x - 1, y).symbol) == 2 then Cell.Empty
+            else if dx == clipped.width - 1 && CharWidth.of(cell.symbol) == 2 then Cell.Empty
+            else cell
+          set(originX + dx, originY + dy, safe)
+          dx += 1
+        dy += 1
 
   /** Copies all of `source` into this buffer at `at`. */
   def blit(source: Buffer, at: Position): Unit =

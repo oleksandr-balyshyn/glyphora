@@ -42,6 +42,32 @@ final class LayoutRemainderSpec extends AnyFunSuite, ScalaCheckPropertyChecks:
   test("mixing a percentage with a fill leaves the fill in charge of the remainder"):
     assert(widths(Seq(Constraint.Percentage(33), Constraint.Fill(1)), 100).sum == 100)
 
+  test("a lone percentage takes its share and leaves the rest free"):
+    // absorbing any leftover whenever every constraint was proportional turned a half-width sidebar into a
+    // full-width one, and left flex with no free space to position
+    assert(widths(Seq(Constraint.Percentage(50)), 100) == Seq(50))
+    assert(widths(Seq(Constraint.Percentage(0)), 100) == Seq(0))
+
+  test("a lone ratio takes its share and leaves the rest free"):
+    assert(widths(Seq(Constraint.Ratio(1, 4)), 100) == Seq(25))
+    assert(widths(Seq(Constraint.Ratio(1, 0)), 100) == Seq(0)) // a zero denominator claims nothing
+
+  test("percentages that leave real free space keep their relative sizes"):
+    // 10% and 30% is a 1:3 split with 60% free; round-robin absorption used to hand out the free space evenly and
+    // turn it into 40 and 60, a 2:3 split
+    assert(widths(Seq(Constraint.Percentage(10), Constraint.Percentage(30)), 100) == Seq(10, 30))
+    assert(widths(Seq(Constraint.Percentage(20), Constraint.Percentage(60)), 100) == Seq(20, 60))
+
+  test("flex still has free space to position when the percentages do not fill the axis"):
+    val layout = Layout(Direction.Horizontal, Seq(Constraint.Percentage(50)), flex = Flex.Center)
+    assert(layout.split(Rect(0, 0, 100, 1)).map(_.x) == Seq(25))
+
+  test("remainder cells go to the largest fractional shares, not to the earliest segments"):
+    // Ratio(1,2) wants 5.0 cells and Ratio(1,4) wants 2.5 twice: the two quarters are the ones short-changed by
+    // integer division, so they get the spare cells rather than the half that was already exact
+    val thirds = Seq(Constraint.Ratio(1, 2), Constraint.Ratio(1, 4), Constraint.Ratio(1, 4))
+    assert(widths(thirds, 10) == Seq(5, 3, 2))
+
   test("segments never overlap or leave the container, at any width"):
     val anyConstraints = Gen.oneOf(
       Seq.fill(3)(Constraint.Percentage(33)),
