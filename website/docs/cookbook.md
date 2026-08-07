@@ -168,7 +168,17 @@ private def stopPolling(): Unit =
 
 Make the component or screen that starts work responsible for canceling it.
 
+Two things this sketch leaves out, both of which bite in a real poller: `Async.every`
+fires for the first time *after* a full interval, so a screen armed this way is empty
+for fifteen seconds, and nothing here drops a slow response that arrives after a newer
+one. [Live data & background work](./live-data) covers both, plus where the poller must
+be started from.
+
 ## Sort, filter, and select tabular data
+
+> This recipe shows a `DataTable` over rows that do not change. When the rows are
+> replaced on a timer, sorting and selection need more than this — see
+> [Tables & selection](./tables-and-selection).
 
 ```scala
 import io.worxbend.tui.widgets.{DataTable, DataTableState}

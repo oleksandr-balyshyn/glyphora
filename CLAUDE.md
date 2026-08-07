@@ -39,7 +39,7 @@ Golden-frame fixtures: run tests with `GLYPHORA_GOLDEN_UPDATE=<module>/src/test/
 - **No `String.substring` in main sources outside `core/CharWidth.scala`.** All display-width, truncation, and layout arithmetic goes through `CharWidth` (grapheme clusters, CJK, emoji ZWJ, combining marks).
 - **Warnings are errors**: `-deprecation -feature -unchecked -Wunused:all -Werror` (set in `build.mill`).
 - Scalafmt (`.scalafmt.conf`, 120 cols, Scala 3 dialect, `align.preset = more`) is checked, not applied, by CI.
-- Six examples (`hello-world`, `counter`, `todo-list`, `dashboard`, `form-demo`, `showcase`) must build with `--no-fallback` and exit cleanly with no TTY.
+- Seven examples (`hello-world`, `counter`, `todo-list`, `dashboard`, `form-demo`, `showcase`, `procmon`) must build with `--no-fallback` and exit cleanly with no TTY. The three that use `java.net.http` — `weather`, `airsensor`, `loadtest` — are deliberately outside that job.
 
 ## Architecture
 
