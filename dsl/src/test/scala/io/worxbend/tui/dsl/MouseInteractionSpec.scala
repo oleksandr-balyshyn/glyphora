@@ -1,24 +1,67 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.Size
+import io.worxbend.tui.core.{Buffer, Rect, Size, Style}
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
-import io.worxbend.tui.widgets.ScrollViewState
+import io.worxbend.tui.widgets.{ListState, ScrollViewState}
 
 import org.scalatest.funsuite.AnyFunSuite
 
 final class MouseInteractionSpec extends AnyFunSuite:
 
-  private def startApp(view0: ReactiveScope ?=> Element): Pilot =
-    val backend = HeadlessBackend(Size(40, 8))
+  private def startApp(view0: ReactiveScope ?=> Element): Pilot = startAppOn(Size(40, 8))(view0)
+
+  private def startAppOn(size: Size)(view0: ReactiveScope ?=> Element): Pilot =
+    val backend = HeadlessBackend(size)
     val testApp = new TuiApp:
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0
     Pilot.start(backend) { val _ = testApp.runWith(backend) }.waitForIdle()
 
+  /** Twenty single-row content rows inside a scroll view that is deliberately *not* at the frame origin, so a
+    * content-space rect and a screen rect can never coincide.
+    *
+    * On a 40x12 frame the scroll view lands at `Rect(4, 1, 36, 11)`; the content overflows, so one column goes to the
+    * scrollbar and the offscreen content buffer is 35 wide — the content viewport on screen is `Rect(4, 1, 35, 11)`.
+    * Focus indices in depth-first order: 0 the scroll view itself, 1 button `TOP` (content row 0), 2 button `A`
+    * (content row 8), 3 the slider (content row 12).
+    */
+  private final class ScrollFixture:
+    var topPresses            = 0
+    var aPresses              = 0
+    val value                 = Signal(0)
+    val state                 = ScrollViewState()
+    private val contentColumn = column(
+      (0 until 20).map[Element] {
+        case 0  => button("TOP") { topPresses += 1 }
+        case 8  => button("A") { aPresses += 1 }
+        case 12 => slider(value)
+        case n  => text(s"row $n")
+      }*
+    )
+    val root: Element         = column(
+      text("header").length(1),
+      row(text("|").length(4), scrollView(contentColumn, contentHeight = 20, state).fill).fill,
+    )
+
   private def quitApp(pilot: Pilot): Unit =
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
+
+  /** One press, not a click: `Pilot.click` posts a Down *and* an Up, which would double every counter below. */
+  private def press(pilot: Pilot, x: Int, y: Int): Unit =
+    pilot.backend.postEvent(
+      io.worxbend.tui.core.Event.Mouse(
+        io.worxbend.tui.core.MouseEvent(x, y, io.worxbend.tui.core.MouseEventKind.Down, KeyModifiers.None)
+      )
+    )
+    val _ = pilot.waitForIdle()
+
+  private def wheel(pilot: Pilot, x: Int, y: Int, kind: io.worxbend.tui.core.MouseEventKind): Unit =
+    pilot.backend.postEvent(
+      io.worxbend.tui.core.Event.Mouse(io.worxbend.tui.core.MouseEvent(x, y, kind, KeyModifiers.None))
+    )
+    val _ = pilot.waitForIdle()
 
   test("clicking a button activates it"):
     var pressed = 0
@@ -50,6 +93,43 @@ final class MouseInteractionSpec extends AnyFunSuite:
     assert(pilot.screenLines.head.startsWith("row 1"))
     quitApp(pilot)
 
+  test("a button inside a scrolled scrollView activates where it is drawn, not at its content coordinates"):
+    val fixture = ScrollFixture()
+    val pilot   = startAppOn(Size(40, 12))(fixture.root)
+    (0 until 5).foreach(_ => pilot.pressKey(KeyCode.Down)) // the scroll view holds focus, so this scrolls it
+    pilot.waitForIdle()
+    assert(pilot.screenLines(1).contains("row 5"))
+    pilot.click(1, 8).waitForIdle()                        // where button A's content-space rect used to sit
+    assert(fixture.aPresses == 0)
+    pilot.click(6, 4).waitForIdle()                        // where button A is actually drawn
+    assert(fixture.aPresses == 1)
+    assert(fixture.topPresses == 0)
+    quitApp(pilot)
+
+  test("a scrollView records its focusables' areas in screen coordinates and drops the scrolled-out ones"):
+    val fixture = ScrollFixture()
+    fixture.state.offset = 5
+    val tracker = FocusTracker()
+    tracker.reconcile(FocusPass.focusKeys(fixture.root))
+    val tree    = FocusPass.decorate(fixture.root, tracker, Style.Default)
+    val buffer  = Buffer(Rect(0, 0, 40, 12))
+    tree.widget.render(buffer.area, buffer)
+    assert(tracker.areaOf(0).contains(Rect(4, 1, 36, 11))) // the scroll view's own area is already a screen area
+    assert(tracker.areaOf(2).contains(Rect(4, 4, 35, 1)))  // button A, translated onto the screen
+    assert(tracker.areaOf(1).isEmpty)                      // button TOP is scrolled above the viewport
+    assert(tracker.hitTest(6, 4).contains(2))              // and beats the enclosing scroll view on area
+    assert(tracker.hitTest(1, 8).isEmpty) // the old content-space coordinates hit nothing
+
+  test("a slider inside a scrollView positions from its on-screen area"):
+    val fixture = ScrollFixture()
+    val pilot   = startAppOn(Size(40, 12))(fixture.root)
+    (0 until 5).foreach(_ => pilot.pressKey(KeyCode.Down))
+    pilot.waitForIdle()
+    // the slider is drawn at Rect(4, 8, 35, 1), so (21 - 4 - 1) / (35 - 3) is exactly half the track
+    pilot.click(21, 8).waitForIdle()
+    assert(fixture.value.peek == 50)
+    quitApp(pilot)
+
   test("clicking positions a slider knob"):
     val value = Signal(0)
     val pilot = startApp(column(slider(value), text("x")))
@@ -59,14 +139,163 @@ final class MouseInteractionSpec extends AnyFunSuite:
     assert(value.peek > 30 && value.peek < 70)
     quitApp(pilot)
 
+  test("an unconsumed mouse event reaches the hit element and its ancestor exactly once each"):
+    var onList   = 0
+    var onColumn = 0
+    val pilot    = startApp(
+      column(
+        list(Seq("a", "b", "c"), ListState())
+          .onMouseEvent { _ =>
+            onList += 1
+            false
+          }
+          .length(3),
+        text("detail"),
+      ).onMouseEvent { _ =>
+        onColumn += 1
+        false
+      }
+    )
+    press(pilot, 2, 0)
+    assert(onList == 1)
+    assert(onColumn == 1)
+    quitApp(pilot)
+
+  test("a handler on an element the pointer is not over receives nothing"):
+    var onDetail = 0
+    val pilot    = startApp(
+      column(
+        list(Seq("a", "b", "c"), ListState()).length(3),
+        text("detail").onMouseEvent { _ =>
+          onDetail += 1
+          false
+        },
+      )
+    )
+    press(pilot, 2, 0)
+    assert(onDetail == 0)
+    quitApp(pilot)
+
+  test("with nothing focusable, only the untracked handler under the pointer receives the event"):
+    var onTop    = 0
+    var onBottom = 0
+    val pilot    = startApp(
+      column(
+        text("top")
+          .onMouseEvent { _ =>
+            onTop += 1
+            false
+          }
+          .length(1),
+        text("bottom")
+          .onMouseEvent { _ =>
+            onBottom += 1
+            false
+          }
+          .length(1),
+      )
+    )
+    press(pilot, 2, 0)
+    assert(onTop == 1)
+    assert(onBottom == 0)
+    press(pilot, 2, 1)
+    assert(onTop == 1)
+    assert(onBottom == 1)
+    quitApp(pilot)
+
+  test("a handler on a non-focusable element inside a tracked one still receives the event"):
+    var onCanvas = 0
+    val pilot    = startApp(
+      splitPane(
+        panel("Canvas")(text("x")).onMouseEvent { _ =>
+          onCanvas += 1
+          false
+        },
+        text("R").fill,
+        Signal(50),
+      )
+    )
+    press(pilot, 2, 2)
+    assert(onCanvas == 1)
+    quitApp(pilot)
+
+  test("the user handler runs before the element's built-in behavior and can consume the event"):
+    var seen    = 0
+    var pressed = 0
+    val pilot   = startApp(
+      column(
+        button("OK") { pressed += 1 }.onMouseEvent { _ =>
+          seen += 1
+          true
+        },
+        text("below"),
+      )
+    )
+    press(pilot, 5, 0)
+    assert(seen == 1)
+    assert(pressed == 0)
+    quitApp(pilot)
+
+  test("a click on a layers stack goes to the topmost layer under the pointer, not the base beneath it"):
+    var baseClicks    = 0
+    var overlayClicks = 0
+    val pilot         = startApp(
+      layers(
+        panel("Canvas")(text("x").fill).onMouseEvent { _ =>
+          baseClicks += 1
+          false
+        },
+        centered(20, 3)(
+          panel("Hint")(text("hi")).onMouseEvent { _ =>
+            overlayClicks += 1
+            true
+          }
+        ),
+      )
+    )
+    press(pilot, 20, 4) // inside the centered overlay, which also sits over the base layer
+    assert(overlayClicks == 1)
+    assert(baseClicks == 0)
+    quitApp(pilot)
+
+  test("the wheel scrolls the enclosing scrollView when the pointer is over a focusable inside it"):
+    val fixture = ScrollFixture()
+    val pilot   = startAppOn(Size(40, 12))(fixture.root)
+    assert(pilot.screenLines(1).contains("TOP"))
+    wheel(pilot, 6, 9, io.worxbend.tui.core.MouseEventKind.ScrollDown) // over button A, drawn at content row 8
+    assert(fixture.aPresses == 0)
+    assert(fixture.state.offset == 1)
+    assert(pilot.screenLines(1).contains("row 1"))
+    wheel(pilot, 6, 9, io.worxbend.tui.core.MouseEventKind.ScrollUp)
+    assert(fixture.state.offset == 0)
+    quitApp(pilot)
+
   test("dragging moves the splitPane divider"):
     val split = Signal(50)
     val pilot = startApp(splitPane(text("L").fill, text("R").fill, split))
-    pilot.backend.postEvent(
-      io.worxbend.tui.core.Event.Mouse(
-        io.worxbend.tui.core.MouseEvent(10, 2, io.worxbend.tui.core.MouseEventKind.Drag, KeyModifiers.None)
-      )
-    )
-    pilot.waitForIdle()
+    drag(pilot, 10, 2)
     assert(split.peek == 25) // 10 of 40 columns
     quitApp(pilot)
+
+  /** The wheel is the only gesture that reaches an enclosing control's built-in. A drag must not: the splitPane's
+    * built-in reads the pointer against its own whole area, so bubbling one would move the divider from anywhere in
+    * either pane — and dragging inside a pane's own control is exactly what a user does to select text.
+    */
+  test("dragging inside a focusable pane does not move the splitPane divider"):
+    val split = Signal(50)
+    val state = ListState()
+    val pilot = startApp(splitPane(list(Seq("a", "b", "c"), state).fill, text("R").fill, split))
+    drag(pilot, 5, 3) // over the list, which is a smaller focusable than the splitPane and so wins the hit test
+    assert(split.peek == 50)
+    // and the divider still moves for a drag the list does not cover, so the built-in itself is intact
+    drag(pilot, 30, 3)
+    assert(split.peek == 75)
+    quitApp(pilot)
+
+  private def drag(pilot: Pilot, x: Int, y: Int): Unit =
+    pilot.backend.postEvent(
+      io.worxbend.tui.core.Event.Mouse(
+        io.worxbend.tui.core.MouseEvent(x, y, io.worxbend.tui.core.MouseEventKind.Drag, KeyModifiers.None)
+      )
+    )
+    val _ = pilot.waitForIdle()

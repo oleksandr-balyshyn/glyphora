@@ -135,7 +135,8 @@ private def openCreateScreen(): Unit =
 ```
 
 `Screen(...)` is modal: it paints over the current view and removes the layers below
-from tab order. `Screen.full(...)` replaces the current view entirely:
+from tab order and from event routing: nothing below a modal receives a key or a mouse
+event. `Screen.full(...)` replaces the current view entirely:
 
 ```scala
 pushScreen(Screen.full(settingsPage))

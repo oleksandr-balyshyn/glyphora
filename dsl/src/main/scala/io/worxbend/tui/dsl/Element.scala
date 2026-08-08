@@ -13,6 +13,7 @@ import io.worxbend.tui.core.{
   MouseEvent,
   MouseEventKind,
   Rect,
+  Size,
   Style,
   Text,
   Widget,
@@ -813,6 +814,50 @@ final case class LayersElement(
   private[dsl] def withProps(props: ElementProps): LayersElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): LayersElement = copy(children = children)
 
+/** A subtree chosen by the terminal's size — a media query, not a container query.
+  *
+  * `build` is handed the size of the whole terminal, not this node's allotted area, and runs during [[ResponsivePass]]
+  * before the focus pass, so whatever it returns is an ordinary part of the tree: its focusables take Tab stops, its
+  * handlers receive keys, and clicks hit-test into it — unless the node sits on a layer a modal covers, in which case
+  * [[ResponsivePass]] suppresses the branch along with the rest of that layer. That is what makes swapping *components*
+  * work and not just constraints — a `row` of three panes at 120 columns can become a `tabbedContent` at 60.
+  *
+  * The node is otherwise transparent: it holds the built branch as its single child, so a constraint, a style, or an
+  * `onKeyEvent` set on it applies exactly as it would on a `column` wrapping the same content, and the branch's own
+  * layout claim becomes the node's when none is set explicitly.
+  *
+  * `resolved` is filled in by [[ResponsivePass]] on every render, never by user code — the same contract
+  * `ElementProps.focused` has. While it is empty the node still renders: it falls back to building against its own
+  * area, so a construction test that draws `element.widget` straight into a buffer without a [[TuiApp]] behind it shows
+  * content rather than blank space. That fallback has no focus pass behind it, so focusables inside it are inert —
+  * which is why the pass exists rather than doing this at render time.
+  */
+final case class ResponsiveElement(
+    build: Size => Element,
+    resolved: Option[Element] = None,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  override def children: Seq[Element]                                               = resolved.toSeq
+  def widget: Widget                                                                =
+    resolved match
+      case Some(branch) => branch.widget
+      case None         => (area, buffer) => build(Size(area.width, area.height)).widget.render(area, buffer)
+  private[dsl] def withProps(props: ElementProps): ResponsiveElement                = copy(props = props)
+  private[dsl] override def withChildren(children: Seq[Element]): ResponsiveElement =
+    copy(resolved = children.headOption.orElse(resolved))
+
+  /** This node holding what `build` produces at `size` — [[ResponsivePass]]'s single mutation. */
+  private[dsl] def resolvedAt(branch: Element): ResponsiveElement = copy(resolved = Some(branch))
+
+  private[dsl] override def preferredSize(direction: Direction): Constraint =
+    resolved.map(_.preferredSize(direction)).getOrElse(Constraint.Fill(1))
+
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+    props.constraint match
+      case Some(Constraint.Length(cells)) => Some(cells)
+      case Some(_)                        => None
+      case None                           => resolved.flatMap(_.intrinsicHeight(width))
+
 /** A scrollable viewport over taller-than-the-screen content. Up/Down/PageUp/PageDown scroll while focused. */
 final case class ScrollViewElement(
     content: Element,
@@ -826,6 +871,11 @@ final case class ScrollViewElement(
       val resolved =
         if contentHeight > 0 then contentHeight
         else content.intrinsicHeight(math.max(1, area.width - 1)).getOrElse(area.height)
+      // the content renders into an offscreen buffer, so it cannot see where this scroll view sits on screen; the
+      // focus pass's viewport wrapper needs that to translate the areas recorded underneath it
+      content match
+        case viewport: ScrollViewportElement => viewport.publishScreenArea(area)
+        case _                               => ()
       w.ScrollView(content.widget, resolved).render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): ScrollViewElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): ScrollViewElement =
@@ -1476,6 +1526,79 @@ private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker
   private[dsl] override def builtinPasteHandler: Option[String => Boolean]       = inner.builtinPasteHandler
   private[dsl] override def preferredSize(direction: Direction): Constraint      = inner.preferredSize(direction)
 
+/** Wraps the content of a [[ScrollViewElement]] during the focus pass so the areas recorded inside it are screen areas.
+  *
+  * `w.ScrollView` renders its content into an offscreen buffer anchored at (0, 0) and blits the visible window into
+  * place, so every rect the content subtree is handed is in content coordinates. This node publishes the
+  * content-to-screen mapping to the [[FocusTracker]] for exactly the duration of the content render — pushed from
+  * inside that render, so the paths where `ScrollView` draws no content push nothing, and popped in a `finally`.
+  * Transparent otherwise: it renders, measures and routes straight to `inner`, and carries neutral props of its own so
+  * it never doubles up the wrapped element's handlers or focus state.
+  *
+  * Owned by the [[FocusPass]] that built it and touched only on the render thread, like the tracker it writes to. A
+  * focusable only partly inside the viewport records the clipped rect; width is never clipped (the offscreen buffer is
+  * exactly the viewport width less the scrollbar column), so `x`/`width`-based built-ins such as the slider stay exact,
+  * while a `y`/`height`-based one — the splitPane divider — reads the clipped height when half scrolled out.
+  */
+private[dsl] final class ScrollViewportElement(
+    val inner: Element,
+    tracker: FocusTracker,
+    state: w.ScrollViewState,
+) extends Element:
+
+  /** The enclosing scroll view's own area, published each frame just before it renders this content. */
+  private var screenArea: Rect = Rect.Zero
+
+  private[dsl] def publishScreenArea(area: Rect): Unit = screenArea = area
+
+  val props: ElementProps             = ElementProps()
+  override def children: Seq[Element] = Seq(inner)
+
+  def widget: Widget =
+    (area, buffer) =>
+      // `area` is the offscreen content rect: its width is the viewport width less any scrollbar column, and
+      // `state.offset` has already been clamped by `ScrollView.render`
+      val viewport  = Rect(screenArea.x, screenArea.y, area.width, screenArea.height)
+      val transform = ViewportTransform(screenArea.x - area.x, screenArea.y - area.y - state.offset, viewport)
+      tracker.pushViewport(transform)
+      try inner.widget.render(area, buffer)
+      finally tracker.popViewport()
+
+  private[dsl] def withProps(props: ElementProps): Element =
+    val _ = props
+    this
+
+  private[dsl] override def withChildren(children: Seq[Element]): Element =
+    children.headOption.fold(this)(child => ScrollViewportElement(child, tracker, state))
+
+  private[dsl] override def preferredSize(direction: Direction): Constraint = inner.preferredSize(direction)
+  // load-bearing: `ScrollViewElement.widget` measures its content through this wrapper when no explicit content
+  // height was given, so the trait default here would silently collapse an auto-sized scroll view
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]        = inner.intrinsicHeight(width)
+
+/** Wraps a non-focusable element that carries an `onMouseEvent` during the focus pass, so its rendered area is recorded
+  * and the mouse router can offer it only the events that landed inside it. Focusable elements need no such wrapper —
+  * [[TrackedElement]] already records their area under their focus index. Transparent for everything else: props,
+  * children, measurement and handlers delegate to the wrapped node.
+  */
+private[dsl] final case class PointerElement(inner: Element, pointerId: Int, tracker: FocusTracker) extends Element:
+  def props: ElementProps                                                        = inner.props
+  override def children: Seq[Element]                                            = inner.children
+  def widget: Widget                                                             =
+    (area, buffer) =>
+      tracker.recordPointer(pointerId, area)
+      inner.widget.render(area, buffer)
+  private[dsl] def withProps(props: ElementProps): PointerElement                = copy(inner = inner.withProps(props))
+  private[dsl] override def withChildren(children: Seq[Element]): PointerElement =
+    copy(inner = inner.withChildren(children))
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]       = inner.builtinKeyHandler
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler]     = inner.builtinMouseHandler
+  private[dsl] override def builtinPasteHandler: Option[String => Boolean]       = inner.builtinPasteHandler
+  private[dsl] override def preferredSize(direction: Direction): Constraint      = inner.preferredSize(direction)
+  // load-bearing: containers recurse through `children.map(_.intrinsicHeight(...))`, so falling back to the trait
+  // default here would silently change the measured height of any handler-carrying panel/row/column
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]             = inner.intrinsicHeight(width)
+
 /** What a one-line control claims from its container: exactly one row when stacked vertically, whatever width is going
   * when laid out horizontally.
   */
@@ -1802,6 +1925,22 @@ object Element:
   /** Later layers paint over earlier ones across the full area. */
   def layers(base: Element, overlays: Element*): LayersElement =
     LayersElement(base +: overlays)
+
+  /** Picks a subtree from the terminal's size, re-evaluated on every resize.
+    *
+    * {{{
+    * responsive {
+    *   case size if size.width < 60 => column(header, tabbedContent(pages, active))
+    *   case _                       => row(sidebar.percent(25), detail.fill)
+    * }
+    * }}}
+    *
+    * The size is the whole terminal's, the same one [[TuiApp.terminalSize]] reports — nesting this inside a `panel` or
+    * a `splitPane` does not narrow what `build` sees. Branch on [[Breakpoint.of]] instead of raw columns when the named
+    * bands say what you mean.
+    */
+  def responsive(build: io.worxbend.tui.core.Size => Element): ResponsiveElement =
+    ResponsiveElement(build)
 
   def scrollView(
       content: Element,

@@ -4,9 +4,21 @@ import io.worxbend.tui.core.{Position, Rect, Style}
 
 import scala.collection.mutable
 
+/** How a rect drawn into a scroll view's offscreen buffer maps onto the surface that scroll view renders into:
+  * `dx`/`dy` translate content coordinates (the scroll offset included), `viewport` is the visible window that clips
+  * the result. Composed innermost-first by [[FocusTracker.record]], so nested scroll views translate all the way out to
+  * the screen.
+  */
+private[dsl] final case class ViewportTransform(dx: Int, dy: Int, viewport: Rect):
+  def apply(rect: Rect): Rect = rect.offset(dx, dy).intersection(viewport)
+
 /** Per-app focus bookkeeping, owned by a single `TuiApp.runWith` invocation and touched only on the render thread:
   * which focusable (by depth-first order index) has focus, how many exist, and where each rendered last frame (for
   * click-to-focus hit-testing).
+  *
+  * It also carries a second, independent area map for the non-focusable elements that carry an `onMouseEvent`, so
+  * [[EventRouter]] can filter mouse delivery by pointer position for them too. That map is deliberately *not* part of
+  * hit-testing or the tab order: a pointer id is not a focus index.
   */
 private[dsl] final class FocusTracker:
 
@@ -14,11 +26,44 @@ private[dsl] final class FocusTracker:
   var focusableCount: Int        = 0
   var focusedKey: Option[String] = None
   private val areas              = mutable.Map[Int, Rect]()
+  private val pointerAreas       = mutable.Map[Int, Rect]()
+  private var viewports          = List.empty[ViewportTransform]
 
+  /** Records where `index` rendered, mapped out of any offscreen scroll buffers it rendered inside: translated into
+    * screen coordinates and clipped to every enclosing viewport. A focusable scrolled out of view clips to nothing and
+    * is not recorded at all, so [[hitTest]] can never return it and [[areaOf]] never hands an empty area to a built-in
+    * mouse handler.
+    */
   def record(index: Int, area: Rect): Unit =
-    areas(index) = area
+    val onScreen = onScreenArea(area)
+    if !onScreen.isEmpty then areas(index) = onScreen
 
-  def clearAreas(): Unit = areas.clear()
+  /** Records where an element that carries an `onMouseEvent` but is not focusable rendered, so mouse delivery can be
+    * filtered by pointer position the way click-to-focus already is. Keyed by the pointer id the decoration pass
+    * assigns — a numbering independent of the focus index, and invisible to the tab order. Translated onto the screen
+    * and dropped when scrolled out of view, exactly as [[record]] does.
+    */
+  def recordPointer(id: Int, area: Rect): Unit =
+    val onScreen = onScreenArea(area)
+    if !onScreen.isEmpty then pointerAreas(id) = onScreen
+
+  /** Published by a scroll view for exactly the duration of its content render, and paired with [[popViewport]] in a
+    * `finally` so an exception mid-render cannot leak a translation into a sibling subtree.
+    */
+  def pushViewport(viewport: ViewportTransform): Unit = viewports = viewport :: viewports
+
+  def popViewport(): Unit = viewports = viewports.drop(1)
+
+  /** A rendered rect translated out of every offscreen scroll buffer it was drawn into, innermost first: an inner
+    * scroll view's transform maps into the *enclosing* content space, and the enclosing one then maps that onward.
+    */
+  private def onScreenArea(area: Rect): Rect =
+    viewports.foldLeft(area)((rect, viewport) => viewport(rect))
+
+  def clearAreas(): Unit =
+    areas.clear()
+    pointerAreas.clear()
+    viewports = Nil
 
   /** Re-anchors focus against the focus keys of the tree that is about to render (depth-first order, `None` for unkeyed
     * focusables): a keyed element keeps focus even when its position moved, and the index is clamped into the new
@@ -55,6 +100,8 @@ private[dsl] final class FocusTracker:
 
   def areaOf(index: Int): Option[Rect] = areas.get(index)
 
+  def pointerAreaOf(id: Int): Option[Rect] = pointerAreas.get(id)
+
   /** The innermost focusable rendered at this position, if any. */
   def hitTest(x: Int, y: Int): Option[Int] =
     val hits = areas.filter((_, area) => area.contains(Position(x, y)))
@@ -62,12 +109,13 @@ private[dsl] final class FocusTracker:
 
 private[dsl] object FocusPass:
 
-  /** A copy of the tree with every element made unfocusable — how layers *below* a modal drop out of the tab order
-    * while remaining visible.
+  /** A copy of the tree with every element made unfocusable and marked `inert` — how a layer *below* a modal drops out
+    * of the tab order *and* out of event routing while remaining visible. Suppression covers input, not merely tabbing:
+    * no element in the returned tree receives a key or a mouse event, whether or not the layer above it contains a
+    * focusable of its own ([[EventRouter]] refuses to descend into an inert subtree).
     */
   def suppressFocus(element: Element): Element =
-    val cleared =
-      if element.props.focusable then element.withProps(element.props.copy(focusable = false)) else element
+    val cleared = element.withProps(element.props.copy(focusable = false, inert = true))
     cleared.withChildren(cleared.children.map(suppressFocus))
 
   /** The focus keys of every focusable in depth-first order (`None` for unkeyed ones) — the domain of
@@ -78,10 +126,14 @@ private[dsl] object FocusPass:
     own ++ element.children.flatMap(focusKeys)
 
   /** Rebuilds the tree with the focused element marked (`props.focused = true`) and every focusable wrapped in a
-    * [[TrackedElement]] that records its rendered area. Indices are assigned in depth-first pre-order — the tab order.
+    * [[TrackedElement]] that records its rendered area; a non-focusable element that carries an `onMouseEvent` is
+    * wrapped in a [[PointerElement]] instead, which records its area for pointer-filtered mouse delivery. Focus indices
+    * are assigned in depth-first pre-order — the tab order; pointer ids are a separate numbering that no other pass
+    * reads.
     */
   def decorate(root: Element, tracker: FocusTracker, focusStyle: Style): Element =
-    var counter = 0
+    var counter        = 0
+    var pointerCounter = 0
 
     def transform(element: Element): Element =
       val current =
@@ -93,7 +145,20 @@ private[dsl] object FocusPass:
               element.withProps(element.props.copy(focused = true, focusStyle = focusStyle))
             else element
           TrackedElement(marked, index, tracker)
+        else if element.props.onMouse.isDefined then
+          val id = pointerCounter
+          pointerCounter += 1
+          PointerElement(element, id, tracker)
         else element
-      current.withChildren(current.children.map(transform))
+      current.withChildren(viewportWrapped(element, current.children.map(transform), tracker))
 
     transform(root)
+
+  /** A scroll view renders its content into an offscreen buffer, so every rect the content subtree is handed — and
+    * hence every area recorded underneath it — is in content coordinates. Wrapping the content re-anchors those records
+    * onto the screen.
+    */
+  private def viewportWrapped(element: Element, children: Seq[Element], tracker: FocusTracker): Seq[Element] =
+    element match
+      case scroll: ScrollViewElement => children.map(child => ScrollViewportElement(child, tracker, scroll.state))
+      case _                         => children

@@ -122,7 +122,7 @@ private def confirmDelete(name: String): Unit =
   })
 ```
 
-The modal removes the underlying view from tab order automatically.
+The modal removes the underlying view from tab order and from input routing automatically.
 
 ## Load data without blocking the UI
 
