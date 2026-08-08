@@ -165,7 +165,7 @@ jobs:
       - uses: ./.github/actions/mill
         with:
           build-output: restore
-      - name: Test every published module
+      - name: Test every library module
         run: >-
           ./mill core.test
           + terminal.test
@@ -173,6 +173,7 @@ jobs:
           + runtime.test
           + macros.test
           + dsl.test
+          + test-support.test
 
   # ── examples: one small job each, all reusing the compiled library ────────────────
   example:
