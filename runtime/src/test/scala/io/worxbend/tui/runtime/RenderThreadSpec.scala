@@ -128,6 +128,52 @@ final class RenderThreadSpec extends AnyFunSuite:
       assert(signal.peek == 2)
     finally RenderThread.unregister()
 
+  test("a throwing queued body neither stops the drain nor drops the bodies queued behind it"):
+    val seen  = scala.collection.mutable.ArrayBuffer.empty[Throwable]
+    val order = scala.collection.mutable.ArrayBuffer.empty[String]
+    val loop  = RenderThread.register(Thread.currentThread(), () => (), error => { val _ = seen.append(error) })
+    try
+      RenderThread.runLater(order.append("first"))
+      RenderThread.runLater(throw RuntimeException("boom"))
+      RenderThread.runLater(order.append("third"))
+      RenderThread.drainPending(loop)
+      assert(order.toList == List("first", "third"), "the drain stopped at the throwing body")
+      assert(seen.map(_.getMessage).toList == List("boom"), "the throwable was dropped instead of reported")
+
+      RenderThread.runLater(order.append("fourth"))
+      RenderThread.drainPending(loop)
+      assert(order.toList == List("first", "third", "fourth"), "the loop is unusable after a failing body")
+    finally RenderThread.unregister()
+
+  test("the installed handler receives the throwable itself, not a wrapper"):
+    val seen = scala.collection.mutable.ArrayBuffer.empty[Throwable]
+    val loop = RenderThread.register(Thread.currentThread(), () => (), error => { val _ = seen.append(error) })
+    try
+      RenderThread.runLater(throw IllegalStateException("queued"))
+      RenderThread.drainPending(loop)
+      assert(seen.size == 1)
+      assert(seen.head.isInstanceOf[IllegalStateException])
+      assert(seen.head.getMessage == "queued")
+    finally RenderThread.unregister()
+
+  test("a fatal error from a queued body still propagates past the drain"):
+    // NonFatal deliberately excludes LinkageError: absorbing a JVM-level failure would hide a broken process
+    val loop = RenderThread.register(Thread.currentThread(), () => (), _ => fail("the handler saw a fatal error"))
+    try
+      RenderThread.runLater(throw LinkageError("fatal"))
+      assertThrows[LinkageError](RenderThread.drainPending(loop))
+    finally RenderThread.unregister()
+
+  test("a failure from unattributed work is reported through the draining runner's handler"):
+    // the unattributed queue has no owner of its own, so the runner that drains it is the one that would otherwise die
+    val seen = scala.collection.mutable.ArrayBuffer.empty[Throwable]
+    RenderThread.runLater(throw RuntimeException("detached boom"))
+    val loop = RenderThread.register(Thread.currentThread(), () => (), error => { val _ = seen.append(error) })
+    try
+      RenderThread.drainPending(loop) // must not throw
+      assert(seen.map(_.getMessage).toList == List("detached boom"))
+    finally RenderThread.unregister()
+
   test("two render threads can be registered at once without racing each other"):
     RenderThread.register(Thread.currentThread())
     try

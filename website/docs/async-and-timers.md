@@ -142,6 +142,37 @@ client.onMessage { message =>
 `runOnRenderThread` runs immediately when already on the UI thread and queues
 otherwise. `runLater` always queues for the next loop iteration.
 
+## When a continuation throws
+
+A queued continuation is your code, and your code throws — `result.toOption.get` on a
+failed request is enough. That no longer takes the app down: the render loop catches a
+non-fatal throwable from a queued body, reports it, and keeps draining, so the bodies
+queued behind it (a timer tick, a second in-flight request) still run in order.
+
+By default the runner accumulates these failures and returns them once the app has
+exited, as `Left(RunnerError.QueuedTask(QueuedTaskFailures(first, count)))`: `count` is
+how many bodies failed in total — a continuation that throws on every tick reports as
+the flood it was, not as one incident — and the later throwables are attached to
+`first` as suppressed exceptions, up to a bounded number, so their stack traces survive
+without a long-lived app hoarding them. If the backend then fails and ends the loop,
+`Left(RunnerError.Backend(error, queuedTasks))` carries the same report rather than
+erasing it.
+
+Install a handler to see each failure as it happens instead — reporting is then
+entirely yours, and `run` returns `Right` unless the backend itself failed. Keep the
+handler total: a handler that throws is not isolated, and takes the loop down with it.
+
+```scala
+import io.worxbend.tui.runtime.{RenderTaskErrorHandler, RunnerConfig}
+
+override def config: RunnerConfig =
+  RunnerConfig(onTaskError = Some(error => lastError.set(Some(error.getMessage))))
+```
+
+The handler runs on the render thread, inside the drain, so it may set signals
+directly. Fatal errors (anything outside `scala.util.control.NonFatal`) still
+propagate and end the loop.
+
 ## Failure and lifecycle checklist
 
 - Model loading and failure in state; do not let worker exceptions vanish.

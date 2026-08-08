@@ -26,19 +26,47 @@ final class TerminalRunner(
         backend.close()
         Left(RunnerError.Backend(error))
       case Right(())   =>
-        val loop              = RenderThread.register(Thread.currentThread(), () => backend.wake())
+        // recorded, not fatal: absorbing a throwing continuation is the point, so the loop keeps running and the
+        // failures are reported once the app has exited rather than tearing it down mid-frame. Only `run` writes and
+        // reads these, and only from the render thread, so no volatile is needed.
+        var taskFailure: Option[Throwable] = None
+        var taskFailureCount               = 0
+        // every failure counts, and every one up to the cap keeps its own stack trace: a continuation that throws on
+        // every tick must not report as a single incident, which is the silent-failure mode this default exists to
+        // avoid in the first place
+        val record: RenderTaskErrorHandler = error =>
+          taskFailureCount += 1
+          taskFailure match
+            case None        => taskFailure = Some(error)
+            case Some(first) =>
+              // `addSuppressed(self)` throws, and a cached throwable rethrown every tick is exactly the shape that
+              // hits it
+              if !(first eq error) && first.getSuppressed.length < MaxSuppressedTaskFailures then
+                first.addSuppressed(error)
+        val loop                           = RenderThread.register(
+          Thread.currentThread(),
+          () => backend.wake(),
+          config.onTaskError.getOrElse(record),
+        )
         // a `try/finally` alone only protects against exceptions unwinding this thread; a signal that terminates the
         // JVM directly (SIGTERM, SIGHUP) skips straight to shutdown hooks. `close()` is the tidy path, but by the time
         // a hook runs the backend's own resources may already have been torn down underneath it — so follow up with
         // `emergencyRestore()`, which takes the shortest path to a usable terminal and cannot fail.
-        val restoreOnShutdown = new Thread(
+        val restoreOnShutdown              = new Thread(
           () =>
             try backend.close()
             finally backend.emergencyRestore(),
           "glyphora-terminal-restore",
         )
         Runtime.getRuntime.addShutdownHook(restoreOnShutdown)
-        try runLoop(handleEvent, render, loop).left.map(RunnerError.Backend(_))
+        try
+          val outcome     = runLoop(handleEvent, render, loop)
+          val taskOutcome = taskFailure.map(QueuedTaskFailures(_, taskFailureCount))
+          outcome match
+            // a terminal failure ends the loop but says nothing about the tasks that already failed, so it carries
+            // them rather than replacing them
+            case Left(error) => Left(RunnerError.Backend(error, taskOutcome))
+            case Right(())   => taskOutcome.map(RunnerError.QueuedTask(_)).toLeft(())
         finally
           RenderThread.unregister()
           backend.close()
@@ -138,3 +166,8 @@ final class TerminalRunner(
 
   /** The floor for any poll: short enough to be indistinguishable from "check now", never zero. */
   private val MinPollNanos: Long = 1_000_000L
+
+  /** How many queued-task throwables past the first keep their own stack trace on the reported failure. Bounded because
+    * a long-lived app can fail on every tick; the reported count stays exact regardless.
+    */
+  private val MaxSuppressedTaskFailures: Int = 16

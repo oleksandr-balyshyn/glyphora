@@ -1,6 +1,7 @@
 package io.worxbend.tui.runtime
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
+import scala.util.control.NonFatal
 
 /** The single-render-thread model.
   *
@@ -13,8 +14,11 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
   */
 object RenderThread:
 
-  /** One runner's queue of work waiting to run on its render thread. */
-  final class RenderLoop private[runtime] (wake: () => Unit):
+  /** One runner's queue of work waiting to run on its render thread.
+    *
+    * `onError` is supplied by the runner that owns this loop and receives throwables escaping queued bodies.
+    */
+  final class RenderLoop private[runtime] (wake: () => Unit, private[runtime] val onError: RenderTaskErrorHandler):
 
     private val pending = ConcurrentLinkedQueue[() => Unit]()
 
@@ -23,10 +27,17 @@ object RenderThread:
       val _ = pending.add(body)
       wake()
 
-    private[runtime] def drain(): Unit =
+    /** Runs everything queued, in FIFO order, isolating each body: a `NonFatal` throwable from one task goes to
+      * `handler` and the drain continues with the next task, so one failing continuation can neither stop the runner
+      * loop nor discard the bodies queued behind it. Fatal errors propagate, as does anything `handler` itself throws.
+      *
+      * Runs on the render thread that owns this loop.
+      */
+    private[runtime] def drain(handler: RenderTaskErrorHandler = onError): Unit =
       var task = pending.poll()
       while task != null do // scalafix:ok DisableSyntax; java.util.concurrent interop
-        task()
+        try task()
+        catch case NonFatal(error) => handler.handle(error)
         task = pending.poll()
 
     private[runtime] def isEmpty: Boolean = pending.isEmpty
@@ -39,7 +50,7 @@ object RenderThread:
   /** Work queued when the caller belongs to no runner and more than one is running — genuinely ambiguous, so it is
     * drained by whichever render thread gets there first. With zero or one runner the routing is exact.
     */
-  private val detached = RenderLoop(() => ())
+  private val detached = RenderLoop(() => (), RenderTaskErrorHandler.rethrow)
 
   def isRenderThread: Boolean =
     loops.isEmpty || loops.containsKey(Thread.currentThread())
@@ -76,17 +87,21 @@ object RenderThread:
         val first = all.next()
         if all.hasNext then detached else first.head
 
-  private[tui] def register(thread: Thread, wake: () => Unit): RenderLoop =
-    val loop = RenderLoop(wake)
+  /** Registers `thread` as a render thread and returns its queue. `wake` nudges a blocked runner when work is queued
+    * (drivers that poll instead of blocking can leave it at the no-op default); `onError` receives throwables escaping
+    * queued bodies drained by this loop, and defaults to rethrowing so an unowned loop never swallows a failure.
+    */
+  private[tui] def register(
+      thread: Thread,
+      wake: () => Unit = () => (),
+      onError: RenderTaskErrorHandler = RenderTaskErrorHandler.rethrow,
+  ): RenderLoop =
+    val loop = RenderLoop(wake, onError)
     val _    = loops.compute(
       thread,
       (_, enclosing) => loop :: (if enclosing == null then Nil else enclosing),
     ) // scalafix:ok DisableSyntax; java.util.concurrent interop
     loop
-
-  /** Registers `thread` without a wake-up channel — for drivers that poll instead of blocking. */
-  private[tui] def register(thread: Thread): RenderLoop =
-    register(thread, () => ())
 
   /** Pops the calling thread's innermost registration, restoring an enclosing runner's if there is one. */
   private[tui] def unregister(): Unit =
@@ -99,16 +114,43 @@ object RenderThread:
         if enclosing.isEmpty then null else enclosing, // scalafix:ok DisableSyntax; java.util.concurrent interop
     )
 
-  /** Runs everything queued for `loop`, plus anything that could not be attributed to a specific runner. */
+  /** Runs everything queued for `loop`, plus anything that could not be attributed to a specific runner. Unattributed
+    * failures are reported through `loop`'s handler: the detached queue has no owner of its own, and `loop` is the one
+    * whose runner would otherwise be taken down by them.
+    */
   private[tui] def drainPending(loop: RenderLoop): Unit =
     loop.drain()
-    detached.drain()
+    detached.drain(loop.onError)
 
-  /** Drains whatever is queued for the calling thread, plus unattributed work. */
+  /** Drains whatever is queued for the calling thread, plus unattributed work. With no runner registered the detached
+    * queue keeps its own rethrowing handler, so a failing body still surfaces on the caller's thread.
+    */
   private[tui] def drainPending(): Unit =
     val own = loops.get(Thread.currentThread())
-    if own != null then own.head.drain() // scalafix:ok DisableSyntax; java.util.concurrent interop
-    detached.drain()
+    if own != null then // scalafix:ok DisableSyntax; java.util.concurrent interop
+      own.head.drain()
+      detached.drain(own.head.onError)
+    else detached.drain()
 
   private[tui] def hasPending(loop: RenderLoop): Boolean =
     !loop.isEmpty || !detached.isEmpty
+
+/** How a render loop reports a `NonFatal` throwable escaping a body queued with [[RenderThread.runLater]] — typically
+  * the continuation of some background work (see [[Async]]).
+  *
+  * Installed per loop rather than passed at the call site the way [[AsyncErrorHandler]] is: each runner owns its own
+  * queue, and the queue is drained long after the caller that filled it is gone. It runs on the render thread, inside
+  * the drain; anything it throws propagates and stops that drain, which is exactly how
+  * [[RenderTaskErrorHandler.rethrow]] surfaces a failure on a loop no runner owns.
+  */
+trait RenderTaskErrorHandler:
+  def handle(error: Throwable): Unit
+
+object RenderTaskErrorHandler:
+  /** Rethrows on the render thread. The default for an unowned loop, so a failing continuation in a test that drives
+    * [[RenderThread]] directly still fails that test instead of vanishing.
+    */
+  val rethrow: RenderTaskErrorHandler = error => throw error
+
+  /** Swallows the error silently. */
+  val ignore: RenderTaskErrorHandler = _ => ()
