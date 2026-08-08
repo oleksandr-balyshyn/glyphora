@@ -118,3 +118,58 @@ final class TextAreaSpec extends AnyFunSuite:
     state.insert("X") // new edit invalidates the redo branch
     state.redo()
     assert(state.value == "abX")
+
+  test("controls are dropped on insert but the newline still splits"):
+    // the filter has to run per segment, after the split: filtering the whole string first would eat the "\n" that
+    // newline() inserts
+    val state = TextAreaState()
+    state.insert("a\tb\nc" + Escape + "d")
+    assert(state.value == "ab\ncd")
+    assert(state.lineCount == 2)
+    assert(state.cursor == (1, 2))
+
+  test("the constructor seed is filtered too"):
+    val state = TextAreaState("x" + Null + "y\r\nz")
+    assert(state.value == "xy\nz")
+    assert(!state.value.exists(c => c != '\n' && Character.isISOControl(c)))
+
+  test("no control character reaches a cell"):
+    val buffer  = renderedWith(TextAreaState("a\tb"))
+    val symbols = for y <- 0 until 4; x <- 0 until 10 yield buffer.get(x, y).symbol
+    assert(symbols.forall(symbol => !symbol.exists(c => Character.isISOControl(c))))
+    assert(trimmedLines(buffer).head == "ab")
+
+  test("a zero-width cluster is drawn as a blank cell"):
+    val state  = TextAreaState(CombiningAcute + "a")
+    state.moveHome()
+    val buffer = renderedWith(state)
+    assert(buffer.get(0, 0).symbol == " ")
+    assert(buffer.get(1, 0).symbol == "a")
+
+  test("the cursor on a wide grapheme stays visible at an odd inner width"):
+    val state = TextAreaState("你好")
+    state.moveLeft() // cursor at (0, 1), on the second cluster
+    val buffer = renderedWith(state, width = 3, height = 1)
+    assert(state.scrollColumn == 1)
+    assert(buffer.get(0, 0).symbol == "好")
+    assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Reverse))
+
+  test("a wide-grapheme cursor renders unscrolled when the line fits"):
+    val state  = TextAreaState("你好")
+    state.moveLeft()
+    val buffer = renderedWith(state, width = 4, height = 1)
+    assert(state.scrollColumn == 0)
+    assert(trimmedLines(buffer).head == "你好")
+    assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Reverse))
+
+  test("a cluster wider than the whole area terminates the horizontal solver"):
+    val state  = TextAreaState("你")
+    state.moveHome()
+    val buffer = renderedWith(state, width = 1, height = 1)
+    assert(state.scrollColumn == 0)
+    assert(buffer.get(0, 0).symbol == " ")
+
+  /** Controls and marks spelled by codepoint: a literal one in a source file is invisible. */
+  private val Escape: String         = 0x1b.toChar.toString
+  private val Null: String           = 0x00.toChar.toString
+  private val CombiningAcute: String = 0x0301.toChar.toString

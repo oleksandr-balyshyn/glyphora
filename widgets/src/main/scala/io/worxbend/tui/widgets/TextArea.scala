@@ -9,11 +9,14 @@ import scala.collection.mutable
   * Text is a vector of lines, each a vector of grapheme clusters — the cursor is `(line, column)` in cluster
   * coordinates and can never split a combining sequence or emoji. Every editing operation snapshots onto a bounded undo
   * stack.
+  *
+  * Control characters other than the `\n` that separates lines are dropped on the way in — by the constructor as well
+  * as by [[insert]] — because a control is zero columns wide but still fills a whole `Cell`, so storing one
+  * desynchronises the backend's cursor model from the terminal's.
   */
 final class TextAreaState(initial: String = ""):
 
-  private var lines: Vector[Vector[String]] =
-    initial.split("\n", -1).toVector.map(line => CharWidth.graphemeClusters(line).toVector)
+  private var lines: Vector[Vector[String]] = clusterLinesOf(initial)
   private var line                          = lines.size - 1
   private var column                        = lines.last.size
   private[widgets] var scrollRow: Int       = 0
@@ -30,9 +33,15 @@ final class TextAreaState(initial: String = ""):
 
   private[widgets] def clusterLines: Vector[Vector[String]] = lines
 
+  /** Splits `text` into one cluster vector per line, dropping controls *after* the split so that the `\n` doing the
+    * splitting survives — [[newline]] is `insert("\n")`. Reads no field, so the field initializer may call it.
+    */
+  private def clusterLinesOf(text: String): Vector[Vector[String]] =
+    text.split("\n", -1).toVector.map(seg => CharWidth.graphemeClusters(CharWidth.withoutControls(seg)).toVector)
+
   def insert(text: String): Unit =
     pushUndo()
-    val segments        = text.split("\n", -1).toVector.map(seg => CharWidth.graphemeClusters(seg).toVector)
+    val segments        = clusterLinesOf(text)
     val (before, after) = lines(line).splitAt(column)
     if segments.size == 1 then
       lines = lines.updated(line, before ++ segments.head ++ after)
@@ -160,7 +169,7 @@ final case class TextArea(
         val isCursor  = showCursor && isCursorLine && index == cursorColumn
         val cellStyle = if isCursor then style.patch(cursorStyle) else style
         if !atEnd || isCursor then
-          buffer.set(x, y, Cell(symbol, cellStyle))
+          buffer.set(x, y, Cell(drawnSymbol(symbol), cellStyle))
           if width == 2 then buffer.set(x + 1, y, Cell.Empty)
       x += width
       index += 1
@@ -178,13 +187,17 @@ final case class TextArea(
     else clamped
 
   /** Scrolls all lines left just enough that the cursor's column (measured on its own line) stays visible, and no
-    * further than the offset that just fits the end of that line — see `TextInput.rightmostUsefulScroll`.
+    * further than the offset that just fits the end of that line — see `TextInput.rightmostUsefulScroll`. The
+    * reservation is the display width of the cluster under the cursor, not a flat column, or [[renderLine]] would
+    * refuse to draw a two-column cursor cluster the solver had called visible; a cursor past the end of the line
+    * renders a one-column trailing space.
     */
   private def scrolledHorizontally(state: TextAreaState, cursorColumn: Int, width: Int): Int =
     val (cursorLine, _) = state.cursor
     val clusters        = state.clusterLines(cursorLine)
+    val cursorWidth     = if cursorColumn < clusters.size then renderedWidth(clusters(cursorColumn)) else 1
     var scroll          = math.min(math.min(state.scrollColumn, cursorColumn), rightmostUsefulColumn(clusters, width))
-    while visibleWidth(clusters, scroll, cursorColumn) + 1 > width && scroll < cursorColumn do scroll += 1
+    while visibleWidth(clusters, scroll, cursorColumn) + cursorWidth > width && scroll < cursorColumn do scroll += 1
     scroll
 
   private def rightmostUsefulColumn(clusters: Vector[String], width: Int): Int =
@@ -200,3 +213,9 @@ final case class TextArea(
 
   /** Measurement has to agree with the render loop, which gives every cluster at least one cell. */
   private def renderedWidth(cluster: String): Int = math.max(1, CharWidth.of(cluster))
+
+  /** The symbol actually drawn for `cluster`. A zero-width cluster — a bare combining mark, or a control that predates
+    * [[TextAreaState]]'s filter — is drawn as a blank: [[renderedWidth]] gives every cluster a whole cell, and a symbol
+    * whose width disagrees with the cell it occupies desynchronises the backend's cursor model from the terminal's.
+    */
+  private def drawnSymbol(cluster: String): String = if CharWidth.of(cluster) == 0 then " " else cluster

@@ -21,10 +21,18 @@ CharWidth.of("hello")       // 5
 CharWidth.of("界")          // usually 2 terminal cells
 CharWidth.of("e\u0301")    // 1: e + combining acute accent
 CharWidth.of("👨‍👩‍👧‍👦")   // one grapheme cluster, terminal-dependent width
+CharWidth.withoutControls("a\tb") // "ab": C0, DEL and C1 clusters removed
 ```
 
 Use `CharWidth` anywhere custom code clips, aligns, wraps, pads, or positions a
 cursor. `String.length` counts UTF-16 code units and will eventually misalign a UI.
+
+`CharWidth.withoutControls(text)` strips C0, DEL and C1 control clusters while
+keeping combining marks, and is what a custom editable-text model must call before
+storing caller-supplied text: a control is zero columns wide but still fills a whole
+cell, so storing one desynchronises the backend's cursor model from the terminal's.
+`TextInputState` and `TextAreaState` already apply it to both their constructor seed
+and every `insert` — a tab pasted into a field is dropped, not expanded.
 
 Built-in widgets already route their width calculations through generated Unicode
 Character Database tables. `TextInput` and `TextArea` edit by grapheme cluster, so

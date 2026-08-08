@@ -58,6 +58,60 @@ final class DirectoryTreeSpec extends AnyFunSuite:
     state.invalidate()
     assert(state.childrenOf(root).size == 3)
 
+  test("visiblePaths walks the cached tree without re-reading the filesystem"):
+    val root  = fixture()
+    val state = DirectoryTreeState(root)
+    state.selectNext() // src/
+    state.toggle()
+    state.selectNext() // src/util/
+    state.toggle()
+    val before = state.visiblePaths()
+    assert(before.map(_.getFileName.toString) == Vector("src", "util", "Io.scala", "Main.scala", "README.md"))
+    Files.delete(root.resolve("src/util/Io.scala"))
+    Files.delete(root.resolve("src/util"))
+    assert(state.visiblePaths() == before) // nothing re-stat-ed: the directory flag came from the cached listing
+    state.invalidate()
+    assert(state.visiblePaths().map(_.getFileName.toString) == Vector("src", "Main.scala", "README.md"))
+
+  test("rowText renders from the cached flag, not a fresh stat"):
+    val root  = fixture()
+    val state = DirectoryTreeState(root)
+    state.selectNext() // src/
+    state.toggle()
+    val before = trimmedLines(renderedWith(state))
+    assert(before.take(4) == Seq("▾ src/", "  ▸ util/", "    Main.scala", "  README.md"))
+    Files.delete(root.resolve("src/util/Io.scala"))
+    Files.delete(root.resolve("src/util"))
+    Files.writeString(root.resolve("src/util"), "") // same name, now a plain file
+    assert(trimmedLines(renderedWith(state)) == before)
+    state.invalidate()
+    val after = trimmedLines(renderedWith(state))
+    assert(after.take(4) == Seq("▾ src/", "    Main.scala", "    util", "  README.md"))
+
+  test("invalidate(Some(directory)) re-reads that branch's directory flags"):
+    // Guards the parallel-Map[Path, Boolean] design, which would leave `util -> true` behind and keep rendering "▸".
+    val root  = fixture()
+    val state = DirectoryTreeState(root)
+    val src   = root.resolve("src")
+    state.expanded += src
+    assert(trimmedLines(renderedWith(state)).take(2) == Seq("▾ src/", "  ▸ util/"))
+    Files.delete(root.resolve("src/util/Io.scala"))
+    Files.delete(src.resolve("util"))
+    Files.writeString(src.resolve("util"), "")
+    state.invalidate(Some(src))
+    assert(trimmedLines(renderedWith(state)).take(3) == Seq("▾ src/", "    Main.scala", "    util"))
+
+  test("toggle works on a path the caller assigned directly"):
+    val root  = fixture()
+    val state = DirectoryTreeState(root)
+    state.selected = Some(root.resolve("src"))
+    state.toggle()
+    assert(state.expanded.contains(root.resolve("src")))
+    state.selected = Some(root.resolve("README.md"))
+    state.toggle()
+    assert(!state.expanded.contains(root.resolve("README.md")))
+    assert(state.expanded.size == 1)
+
   test("an unreadable directory renders as empty instead of crashing"):
     val state = DirectoryTreeState(Path.of("/nonexistent-glyphora-path"))
     assert(state.visiblePaths().isEmpty)
