@@ -48,6 +48,11 @@ private[terminal] final class InputDecoder(
     * Ctrl+A to Ctrl+Z, `0x00` is Ctrl+Space, and `0x1c`-`0x1f` are Ctrl plus `\`, `]`, `^`, `_` (ASCII caret notation).
     * Reporting those as an unmodified `Char` is worse than useless — text inputs insert any character that arrives with
     * no modifier, so the control code lands in the model as an invisible, zero-width, corrupt cell.
+    *
+    * The 8-bit C1 range (`0x80`-`0x9f`) names no key at all — it is what an 8-bit-mode terminal sends instead of an
+    * `ESC` prefix — so it decodes to `None` for the same reason: reporting one as an unmodified `Char` corrupts every
+    * text model it reaches. The reader hands back UTF-16 code units, never raw UTF-8 bytes, so a value in that range
+    * here is a genuine C1 character and never a continuation byte.
     */
   private def decodeControl(byte: Int, modifiers: KeyModifiers): Option[Event] =
     byte match
@@ -57,6 +62,7 @@ private[terminal] final class InputDecoder(
       case c if c >= 1 && c <= 26      => key(KeyCode.Char('a' + c - 1), modifiers | KeyModifiers.Ctrl)
       case 0                           => key(KeyCode.Char(' '), modifiers | KeyModifiers.Ctrl)
       case c if c >= 0x1c && c <= 0x1f => key(KeyCode.Char(c + 0x40), modifiers | KeyModifiers.Ctrl)
+      case c if c >= 0x80 && c <= 0x9f => None
       case c                           => printable(c, modifiers)
 
   /** A printable character, recombining a UTF-16 surrogate pair into the single code point it encodes.
