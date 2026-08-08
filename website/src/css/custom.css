@@ -12,12 +12,20 @@
   --glyphora-font-display: 'Space Grotesk Variable', 'Arial Narrow', sans-serif;
   --glyphora-font-body: 'IBM Plex Sans Variable', Inter, system-ui, sans-serif;
   --glyphora-font-mono: 'JetBrains Mono Variable', 'SFMono-Regular', Consolas, monospace;
-  --glyphora-coral: #ef3340;
-  --glyphora-coral-hot: #ff5c64;
-  --glyphora-cyan: #22d3ee;
-  --glyphora-violet: #a78bfa;
-  --glyphora-mint: #34d399;
-  --glyphora-amber: #fbbf24;
+  /* Accents are tuned per theme, not shared. The dark set below sits between
+     1.7:1 and 3.0:1 on a light background, so light mode uses same-hue
+     counterparts that clear 4.5:1 as text. Bright fills that carry dark text
+     (buttons, dots, gradient bars) use the -vivid pair instead. */
+  --glyphora-coral: #ce2634;
+  --glyphora-coral-hot: #ce2634;
+  --glyphora-cyan: #147d8c;
+  --glyphora-violet: #755ac7;
+  --glyphora-mint: #0c8752;
+  --glyphora-amber: #946b00;
+  --glyphora-coral-vivid: #ef3340;
+  --glyphora-cyan-vivid: #0891b2;
+  --glyphora-violet-vivid: #8c70e0;
+  --glyphora-mint-vivid: #189e6d;
   --glyphora-ink: #111522;
   --glyphora-muted: #5f697a;
   --glyphora-panel: #ffffff;
@@ -25,7 +33,14 @@
   --glyphora-rule: rgba(27, 34, 51, 0.13);
   --glyphora-soft-coral: rgba(239, 51, 64, 0.075);
   --glyphora-shadow: 0 18px 54px rgba(24, 31, 47, 0.09);
-  --glyphora-gradient: linear-gradient(100deg, var(--glyphora-coral-hot), var(--glyphora-cyan) 55%, var(--glyphora-violet));
+  --glyphora-gradient: linear-gradient(100deg, #ce2634, #147d8c 55%, #755ac7);
+  /* Surfaces that stay dark in both themes — the footer and terminal
+     screenshots — need accents that read on near-black, not on paper. */
+  --glyphora-on-dark-ink: #f3f5f8;
+  --glyphora-on-dark-text: #a9b6cb;
+  --glyphora-on-dark-muted: #7d8ba3;
+  --glyphora-on-dark-cyan: #22d3ee;
+  --glyphora-on-dark-rule: rgba(166, 180, 206, 0.13);
   --ifm-color-primary: #ce2634;
   --ifm-color-primary-dark: #b8222e;
   --ifm-color-primary-darker: #aa202b;
@@ -48,6 +63,17 @@
 }
 
 [data-theme='dark'] {
+  --glyphora-coral: #ef3340;
+  --glyphora-coral-hot: #ff5c64;
+  --glyphora-cyan: #22d3ee;
+  --glyphora-violet: #a78bfa;
+  --glyphora-mint: #34d399;
+  --glyphora-amber: #fbbf24;
+  --glyphora-coral-vivid: #ff5c64;
+  --glyphora-cyan-vivid: #22d3ee;
+  --glyphora-violet-vivid: #a78bfa;
+  --glyphora-mint-vivid: #34d399;
+  --glyphora-gradient: linear-gradient(100deg, #ff5c64, #22d3ee 55%, #a78bfa);
   --glyphora-ink: #f4f6fa;
   --glyphora-muted: #9ba7ba;
   --glyphora-panel: #0e131f;
@@ -256,7 +282,7 @@ a { text-underline-offset: 0.18em; }
   margin: 2rem auto;
   border: 1px solid var(--glyphora-rule);
   border-radius: 9px;
-  background: #070910;
+  background: var(--glyphora-panel);
   box-shadow: var(--glyphora-shadow);
 }
 
@@ -286,24 +312,94 @@ code {
   padding: 0.14rem 0.32rem;
   border: 1px solid color-mix(in srgb, var(--glyphora-rule) 75%, transparent);
   border-radius: 3px;
-  color: color-mix(in srgb, var(--glyphora-cyan) 78%, var(--glyphora-ink));
+  color: color-mix(in srgb, var(--glyphora-cyan) 55%, var(--glyphora-ink));
   background: color-mix(in srgb, var(--glyphora-cyan) 5%, var(--glyphora-panel));
   font-family: var(--glyphora-font-mono);
   font-variant-ligatures: none;
+}
+
+/* Code blocks follow the theme. They used to be pinned to #0b0f19 in both
+   themes, which put Prism's oneLight tokens — #383a42 and friends — on a
+   near-black slab and made every light-mode snippet unreadable. Prism already
+   ships the right palette per theme (theme: oneLight, darkTheme: oneDark in
+   docusaurus.config.js); the surface just has to follow it. */
+:root {
+  --glyphora-code-bg: #f7f9fc;
+  --glyphora-code-title-bg: #eef1f6;
+  --glyphora-code-title-ink: #4a5566;
+}
+
+[data-theme='dark'] {
+  --glyphora-code-bg: #0b0f19;
+  --glyphora-code-title-bg: #121827;
+  --glyphora-code-title-ink: #8f9bb0;
 }
 
 .theme-code-block,
 pre {
   border: 1px solid var(--glyphora-rule);
   border-radius: 5px !important;
-  background: #0b0f19 !important;
+  background: var(--glyphora-code-bg) !important;
+  box-shadow: 10px 10px 0 color-mix(in srgb, var(--glyphora-violet) 12%, transparent);
+}
+
+[data-theme='dark'] .theme-code-block,
+[data-theme='dark'] pre {
   box-shadow: 10px 10px 0 color-mix(in srgb, var(--glyphora-violet) 5%, transparent);
 }
+
+/* Prism's oneLight palette was drawn for a #fafafa slab and several of its
+   token colours fail AA on any light surface: comments 2.44:1, strings 3.04:1,
+   numbers 3.89:1, functions 3.84:1. These are same-hue, darker replacements
+   that clear 4.5:1. prism-react-renderer emits token colours as inline styles,
+   so !important is the only thing that reaches them. */
+html:not([data-theme='dark']) .token.comment,
+html:not([data-theme='dark']) .token.prolog,
+html:not([data-theme='dark']) .token.cdata { color: #5f6673 !important; }
+
+html:not([data-theme='dark']) .token.string,
+html:not([data-theme='dark']) .token.string-interpolation,
+html:not([data-theme='dark']) .token.char,
+html:not([data-theme='dark']) .token.builtin,
+html:not([data-theme='dark']) .token.selector,
+html:not([data-theme='dark']) .token.regex,
+html:not([data-theme='dark']) .token.inserted,
+html:not([data-theme='dark']) .token.attr-value { color: #357a34 !important; }
+
+html:not([data-theme='dark']) .token.number,
+html:not([data-theme='dark']) .token.boolean,
+html:not([data-theme='dark']) .token.constant,
+html:not([data-theme='dark']) .token.attr-name,
+html:not([data-theme='dark']) .token.class-name,
+html:not([data-theme='dark']) .token.atrule { color: #8a5200 !important; }
+
+html:not([data-theme='dark']) .token.function,
+html:not([data-theme='dark']) .token.variable,
+html:not([data-theme='dark']) .token.operator { color: #2f5fd0 !important; }
+
+html:not([data-theme='dark']) .token.tag,
+html:not([data-theme='dark']) .token.property,
+html:not([data-theme='dark']) .token.symbol,
+html:not([data-theme='dark']) .token.deleted,
+html:not([data-theme='dark']) .token.important { color: #b52d22 !important; }
+
+html:not([data-theme='dark']) .token.url { color: #026a96 !important; }
+
+/* oneDark's comment grey is only 3.17:1 on the dark slab. */
+[data-theme='dark'] .token.comment,
+[data-theme='dark'] .token.prolog,
+[data-theme='dark'] .token.cdata { color: #7d8799 !important; }
 
 .theme-code-block { margin-block: 1.7rem; }
 .theme-code-block code,
 pre code { padding: 0; border: 0; color: inherit; background: transparent; font-size: 0.82rem; line-height: 1.75; }
-[class*='codeBlockTitle'] { border-bottom-color: rgba(255, 255, 255, 0.08) !important; color: #8f9bb0; background: #121827 !important; font: 650 0.68rem/1.4 var(--glyphora-font-mono); letter-spacing: 0.05em; }
+[class*='codeBlockTitle'] {
+  border-bottom-color: var(--glyphora-rule) !important;
+  color: var(--glyphora-code-title-ink);
+  background: var(--glyphora-code-title-bg) !important;
+  font: 650 0.68rem/1.4 var(--glyphora-font-mono);
+  letter-spacing: 0.05em;
+}
 
 table {
   display: table;
@@ -323,7 +419,22 @@ table td { padding: 0.85rem 1rem; border-color: var(--glyphora-rule); }
 table th { color: var(--glyphora-ink); background: var(--glyphora-soft-coral); font: 720 0.7rem/1.4 var(--glyphora-font-mono); letter-spacing: 0.035em; text-transform: uppercase; }
 table tr:nth-child(even) td { background: color-mix(in srgb, var(--glyphora-panel-raised) 70%, transparent); }
 
-.theme-mermaid { margin: 2rem 0; padding: 1.5rem; overflow: auto; border: 1px solid var(--glyphora-rule); border-radius: 5px; background: var(--glyphora-panel); box-shadow: var(--glyphora-shadow); }
+/* Docusaurus renders diagrams into .docusaurus-mermaid-container, so the old
+   .theme-mermaid selector never matched and diagrams had no frame at all.
+   Mermaid picks its own light/dark palette, which stays legible in both; only
+   the dark edge label needed lifting, from 4.43:1 to 5.6:1. */
+.docusaurus-mermaid-container {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  overflow: auto;
+  border: 1px solid var(--glyphora-rule);
+  border-radius: 5px;
+  background: var(--glyphora-panel);
+  box-shadow: var(--glyphora-shadow);
+}
+
+[data-theme='dark'] .docusaurus-mermaid-container .edgeLabel span,
+[data-theme='dark'] .docusaurus-mermaid-container .edgeLabel p { color: #e8e8e8; }
 
 /* Right rail and pagination */
 .table-of-contents {
@@ -349,20 +460,23 @@ table tr:nth-child(even) td { background: color-mix(in srgb, var(--glyphora-pane
 .pagination-nav__label { font-family: var(--glyphora-font-display); font-weight: 650; }
 
 /* Footer */
+/* The footer stays dark in both themes — deliberate, and matching the API
+   pages — so it uses the on-dark tokens rather than the theme accents, which
+   in light mode would put a 3:1 teal on near-black. */
 .footer {
   position: relative;
-  border-top: 1px solid rgba(166, 180, 206, 0.13);
-  color: #9ba7ba;
+  border-top: 1px solid var(--glyphora-on-dark-rule);
+  color: var(--glyphora-on-dark-text);
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     #070910;
   background-size: 72px 100%;
 }
 
-.footer__title { color: #f3f5f8; font: 720 0.7rem/1 var(--glyphora-font-mono); letter-spacing: 0.085em; text-transform: uppercase; }
-.footer__link-item { color: #98a4b7; font-size: 0.88rem; }
-.footer__link-item:hover { color: var(--glyphora-cyan); }
-.footer__copyright { color: #67748a; font: 500 0.66rem/1.6 var(--glyphora-font-mono); }
+.footer__title { color: var(--glyphora-on-dark-ink); font: 720 0.7rem/1 var(--glyphora-font-mono); letter-spacing: 0.085em; text-transform: uppercase; }
+.footer__link-item { color: var(--glyphora-on-dark-text); font-size: 0.88rem; }
+.footer__link-item:hover { color: var(--glyphora-on-dark-cyan); }
+.footer__copyright { color: var(--glyphora-on-dark-muted); font: 500 0.66rem/1.6 var(--glyphora-font-mono); }
 
 @media (max-width: 996px) {
   .navbar { padding-inline: 1rem; }

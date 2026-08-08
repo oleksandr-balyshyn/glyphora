@@ -14,12 +14,28 @@
   -->
   <script>
     (function () {
-      var key = 'use-dark-theme';
-      var stored = null;
-      try { stored = localStorage.getItem(key); } catch (error) { /* storage unavailable */ }
-      var dark = stored === null
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches
-        : stored === 'true';
+      var apiKey = 'use-dark-theme';
+      var siteKey = 'theme';
+      function read(key) { try { return localStorage.getItem(key); } catch (error) { return null; } }
+      function write(key, value) { try { localStorage.setItem(key, value); } catch (error) { /* storage unavailable */ } }
+
+      // Follow the Docusaurus guide whenever its choice changed since we last
+      // adopted it; otherwise keep the API side's own preference, then fall
+      // back to the OS. Toggling here writes both keys, so the choice survives
+      // a move in either direction between the guide and the API reference.
+      var syncKey = 'glyphora-theme-synced-from-site';
+      var stored = read(apiKey);
+      var site = read(siteKey);
+      var dark;
+      if (site !== null && site !== read(syncKey)) {
+        dark = site === 'dark';
+        write(apiKey, String(dark));
+        write(syncKey, site);
+      } else if (stored !== null) {
+        dark = stored === 'true';
+      } else {
+        dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
       document.documentElement.classList.toggle('theme-dark', dark);
 
       document.addEventListener('DOMContentLoaded', function () {
@@ -30,7 +46,9 @@
           var next = !document.documentElement.classList.contains('theme-dark');
           document.documentElement.classList.toggle('theme-dark', next);
           toggle.setAttribute('aria-pressed', String(next));
-          try { localStorage.setItem(key, String(next)); } catch (error) { /* storage unavailable */ }
+          write(apiKey, String(next));
+          write(siteKey, next ? 'dark' : 'light');
+          write(syncKey, next ? 'dark' : 'light');
         });
       });
     })();
