@@ -35,7 +35,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   private var lastFlushed: Option[Buffer] = scala.None
 
   // raised by any thread that disturbed the screen (alternate-screen entry, SIGCONT's reacquire), consumed by `draw`
-  private val fullRedrawRequested = AtomicBoolean(false)
+  private val fullRedrawRequested = RedrawRequest()
 
   private val pendingResize    = AtomicReference[Option[Size]](scala.None)
   private val pendingInterrupt = AtomicBoolean(false)
@@ -59,7 +59,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   def draw(buffer: Buffer): Either[BackendError, Unit] =
     // claimed before the frame is composed, so a request raised while this frame is in flight survives for the next one
-    val forced = fullRedrawRequested.getAndSet(false)
+    val forced = fullRedrawRequested.claim()
     val result = attempt {
       val previous = if forced then scala.None else lastFlushed
       val body     = encodeChangedCells(previous.getOrElse(Buffer(buffer.area)), buffer)
@@ -83,7 +83,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * of the baseline keeps `lastFlushed` render-thread-private, so a request raised while a `draw` is in flight is
     * consumed by the *following* frame instead of being overwritten by that frame's snapshot.
     */
-  private[terminal] def requestFullRedraw(): Unit = fullRedrawRequested.set(true)
+  private[terminal] def requestFullRedraw(): Unit = fullRedrawRequested.raise()
 
   /** The cell-level ANSI for everything that differs between `previous` and `next`, in row-major order.
     *
@@ -391,3 +391,25 @@ object JLine3Backend:
   private[terminal] def logTeardownFailure(error: BackendError): Unit =
     if System.getenv("GLYPHORA_DEBUG") != null then // scalafix:ok DisableSyntax; JLine Java API returns null
       System.err.println(s"glyphora: terminal teardown step failed: $error")
+
+/** The "repaint every cell next frame" request that [[JLine3Backend]] uses to keep `lastFlushed` render-thread-private.
+  *
+  * A separate value rather than a bare flag because the ordering is the whole point and is worth testing on its own:
+  * `draw` [[claim]]s before it composes a frame, so a [[raise]] from another thread *during* that frame is not consumed
+  * by it and survives for the next one. Writing the baseline directly from the raising thread would instead lose the
+  * repaint, because the in-flight frame's snapshot would overwrite it.
+  *
+  * Every operation is safe from any thread.
+  */
+private[terminal] final class RedrawRequest:
+
+  private val raised = AtomicBoolean(false)
+
+  /** Asks the next claim to repaint everything. Idempotent: two raises before a claim are one repaint. */
+  def raise(): Unit = raised.set(true)
+
+  /** Takes the pending request, if any, and clears it. Call before composing the frame that will serve it. */
+  def claim(): Boolean = raised.getAndSet(false)
+
+  /** Whether a request is pending, without taking it. Test and diagnostic use only. */
+  def isPending: Boolean = raised.get()
