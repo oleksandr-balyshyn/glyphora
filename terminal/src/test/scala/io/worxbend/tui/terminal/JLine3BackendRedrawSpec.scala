@@ -7,7 +7,9 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.{ByteArrayOutputStream, InputStream, OutputStream}
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 /** The diff baseline of [[JLine3Backend]], driven against a real backend over a pair of streams.
   *
@@ -18,6 +20,11 @@ import java.util.concurrent.CountDownLatch
   */
 final class JLine3BackendRedrawSpec extends AnyFunSuite:
 
+  /** How long any wait here may take before it is a failure. Generous for a loaded CI runner, finite on principle: an
+    * unbounded wait in a test is a hang, not a test.
+    */
+  private val Patience: FiniteDuration = 30.seconds
+
   test("a repaint request raised while a draw is in flight is honoured by the next frame"):
     withBackend { (backend, out) =>
       assert(backend.draw(frame("first")) == Right(()))
@@ -25,22 +32,24 @@ final class JLine3BackendRedrawSpec extends AnyFunSuite:
 
       val inFlight = CountDownLatch(1)
       val release  = CountDownLatch(1)
-      out.onFlush = () =>
+      out.parkNextWrite { () =>
         inFlight.countDown()
-        release.await()
+        val _ = release.await(Patience.toSeconds, TimeUnit.SECONDS)
+      }
 
       // the assertion cannot live in the thread body: a failure there would not fail the test
       @volatile var drawn: Option[Either[BackendError, Unit]] = None
       val drawing = Thread(() => drawn = Some(backend.draw(frame("second"))))
+      drawing.setDaemon(true) // a wedged draw must not outlive the suite and hold the JVM open
       drawing.start()
 
-      // the drawing thread is now parked inside `flush`: past its baseline choice, past its bytes, before its snapshot
-      inFlight.await()
+      // the drawing thread is now parked inside the frame's first write: past its baseline choice, before its snapshot
+      assert(inFlight.await(Patience.toSeconds, TimeUnit.SECONDS), "the draw never reached the capture stream")
       backend.requestFullRedraw() // exactly what the SIGCONT handler does, via `reacquireTerminal`
       release.countDown()
-      drawing.join()
+      drawing.join(Patience.toMillis)
+      assert(!drawing.isAlive, "the parked draw never finished")
 
-      out.onFlush = () => ()
       assert(drawn == Some(Right(())))
       val _ = out.drain()
 
@@ -116,17 +125,27 @@ final class JLine3BackendRedrawSpec extends AnyFunSuite:
       .signalHandler(Terminal.SignalHandler.SIG_IGN)
       .build()
 
-/** Everything the backend wrote, with a hook that can park the writing thread partway through a frame. */
+/** Everything the backend wrote, with a one-shot hook that parks the writing thread partway through a frame. */
 private final class CaptureStream extends OutputStream:
 
-  private val written = ByteArrayOutputStream()
+  private val written                    = ByteArrayOutputStream()
+  private val armed                      = AtomicBoolean(false)
+  @volatile private var hook: () => Unit = () => ()
 
-  /** Run on whichever thread called `flush` — the render thread in these tests. */
-  @volatile var onFlush: () => Unit = () => ()
+  /** Parks the next thread to write a byte, once.
+    *
+    * Hooking `write` rather than `flush` is the difference between a test and a hang. A frame always reaches the stream
+    * as bytes, but whether JLine's writer propagates a `flush` down to the underlying `OutputStream` depends on how the
+    * terminal was built — on CI it does not, and a park hook that never fires left the test thread waiting on a latch
+    * forever, with the suite green up to that point and the runner held until the job timeout.
+    */
+  def parkNextWrite(body: () => Unit): Unit =
+    hook = body
+    armed.set(true)
 
-  def write(b: Int): Unit = synchronized(written.write(b))
-
-  override def flush(): Unit = onFlush()
+  def write(b: Int): Unit =
+    if armed.getAndSet(false) then hook()
+    synchronized(written.write(b))
 
   def drain(): String = synchronized {
     val text = written.toString(StandardCharsets.UTF_8)
