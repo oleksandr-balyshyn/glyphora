@@ -120,7 +120,10 @@ final class LoadTestAppSpec extends AnyFunSuite:
     assert(waitUntil(5.seconds)(liveThreadsNamed(app.workerThreadPrefix).isEmpty))
 
   test("the plan is adjustable while idle and frozen while running"):
-    val (app, pilot) = startedApp(FakeTarget(failureRate = 0.0, pace = 2.millis), Plan(requests = 40, concurrency = 4))
+    // The pace is deliberately slow: this is the one test that presses keys *while the run is in flight*, so the run
+    // has to still be in flight when they arrive. At 2ms the 80 requests finished in ~30ms and the `[` occasionally
+    // landed after the phase had already left Running, halving the requests and failing the freeze assertion.
+    val (app, pilot) = startedApp(FakeTarget(failureRate = 0.0, pace = 50.millis), Plan(requests = 40, concurrency = 4))
 
     pilot.pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char(']')).waitForIdle()
     assert(app.plan.peek == Plan(requests = 80, concurrency = 6))
