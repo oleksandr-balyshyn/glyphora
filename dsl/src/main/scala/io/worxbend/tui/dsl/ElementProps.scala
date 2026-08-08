@@ -7,7 +7,8 @@ import io.worxbend.tui.core.{Constraint, KeyEvent, MouseEvent, Style}
   * methods produce a new element with updated props — elements stay immutable values.
   *
   * `focusable` opts the element into tab-order traversal; `focused` is set by the framework's focus pass each render,
-  * never by user code.
+  * never by user code. `inert` marks a subtree a modal layer covers: it takes no key and no mouse event at all and
+  * supplies no focus or hit-test path. Like `focused`, the framework's passes set it each render, never user code.
   */
 final case class ElementProps(
     style: Style = Style.Default,
@@ -18,4 +19,5 @@ final case class ElementProps(
     focused: Boolean = false,
     focusKey: Option[String] = None,
     focusStyle: Style = Style.Default.reverse,
+    inert: Boolean = false,
 )

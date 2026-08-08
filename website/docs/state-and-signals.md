@@ -83,13 +83,30 @@ def view(using ReactiveScope): Element =
   )
 ```
 
-Long-lived computed values belong beside your signals, not inside `view`. If you
-create a short-lived `Computed`, call `.dispose()` when its owner goes away so its
-internal subscriptions are detached.
+Long-lived computed values belong beside your signals, not inside `view`. A
+`Computed` created inside a `view` body subscribes to its dependencies again on every
+evaluation and is never released on its own, so the source signal's subscriber set
+grows by one per frame. Hoist it out beside your signals, or call `.dispose()` when
+whatever owns it goes away. (`map`, below, needs neither.)
 
 `dispose` detaches; it does not close. Anything derived from a disposed computed is
 marked stale so it recomputes rather than freezing at its last value, and reading the
 disposed computed again simply re-attaches it.
+
+## Derive cheaply with map
+
+`signal.map(f)` returns a `Derived[B]`: a transparent view that applies `f` on every
+read and subscribes to nothing of its own. Reading one inside `view` subscribes the
+view to the underlying signal, not to a per-frame intermediate, so a `Derived` is
+safe to create inline and there is nothing to dispose:
+
+```scala
+def view(using ReactiveScope): Element =
+  text(count.map(n => s"$n items").get)
+```
+
+The trade is that `f` re-runs on each read. When the derivation is expensive enough
+to be worth caching, use a `Computed` — and give it an owner, as above.
 
 ## Conditional dependencies stay accurate
 
@@ -188,7 +205,8 @@ invalidation. The complete implementation is in the `showcase` example.
 - Read with `.get` in view code and `.peek` in handlers when you do not need to
   create a dependency.
 - Keep state values immutable and updates small.
-- Create long-lived `Computed` values outside `view`.
+- Create `Computed` values outside `view` (or dispose them when their owner goes
+  away); `map` is free to use inline.
 - Model async loading and errors as a single enum.
 - Marshal third-party callbacks to the render thread before writing.
 

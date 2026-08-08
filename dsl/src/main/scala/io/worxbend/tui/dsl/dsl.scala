@@ -55,6 +55,7 @@ export Element.{
   progressBar,
   positioned,
   radioGroup,
+  responsive,
   row,
   rule,
   scrollView,
@@ -77,8 +78,8 @@ export Element.{
   tree,
   widget,
 }
-export io.worxbend.tui.core.{Color, Constraint, Flex, KeyCode, KeyEvent, KeyModifiers, MouseEvent, Style}
-export io.worxbend.tui.runtime.{Async, Cancelable, Computed, Easing, Effect, ReactiveScope, Signal, Tween}
+export io.worxbend.tui.core.{Color, Constraint, Flex, KeyCode, KeyEvent, KeyModifiers, MouseEvent, Size, Style}
+export io.worxbend.tui.runtime.{Async, Cancelable, Computed, Derived, Easing, Effect, ReactiveScope, Signal, Tween}
 // the vocabulary types an application names directly: severities, animation and bar presets, badge variants
 export io.worxbend.tui.widgets.{
   BadgeVariant,

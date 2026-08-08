@@ -165,14 +165,30 @@ jobs:
       - uses: ./.github/actions/mill
         with:
           build-output: restore
-      - name: Test every published module
-        run: >-
-          ./mill core.test
-          + terminal.test
-          + widgets.test
-          + runtime.test
-          + macros.test
-          + dsl.test
+      # One step per module: a single combined step reports only "still running", so a module that hangs cannot be
+      # told from a slow one. Per-module steps name the culprit in the live job view, and each carries its own timeout
+      # so a hang fails in minutes instead of occupying a runner until the six-hour job limit.
+      - name: Test core
+        timeout-minutes: 10
+        run: ./mill core.test
+      - name: Test terminal
+        timeout-minutes: 10
+        run: ./mill terminal.test
+      - name: Test widgets
+        timeout-minutes: 10
+        run: ./mill widgets.test
+      - name: Test runtime
+        timeout-minutes: 10
+        run: ./mill runtime.test
+      - name: Test macros
+        timeout-minutes: 10
+        run: ./mill macros.test
+      - name: Test dsl
+        timeout-minutes: 10
+        run: ./mill dsl.test
+      - name: Test test-support
+        timeout-minutes: 10
+        run: ./mill test-support.test
 
   # ── examples: one small job each, all reusing the compiled library ────────────────
   example:

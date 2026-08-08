@@ -7,10 +7,20 @@ import scala.concurrent.duration.Duration
 
 /** Runner configuration: an optional tick rate (synthetic [[Event.Tick]]s for animation) and whether to capture mouse
   * events.
+  *
+  * `onTaskError` decides what happens when a body queued onto the render thread (an [[Async]] continuation, a timer
+  * body) throws. `None` — the default — accumulates them and returns them from [[Runner.run]] as
+  * [[RunnerError.QueuedTask]] once the app exits: the first throwable, the total count, and the later throwables
+  * attached to the first as suppressed exceptions. Installing a handler takes reporting over instead: it is called as
+  * each failure happens, and `run` then returns `Right` unless the backend itself failed. Either way the loop survives
+  * the failing body and the bodies queued behind it still run — but only as long as the reporting itself does not
+  * throw. A handler that throws is not isolated: it unwinds out of the drain, abandoning the bodies queued behind it,
+  * and out of [[Runner.run]]. Keep a handler total.
   */
 final case class RunnerConfig(
     tickRate: Option[Duration] = None,
     mouseCapture: Boolean = false,
+    onTaskError: Option[RenderTaskErrorHandler] = None,
 )
 
 /** The mid-level API tier: owns the event/render loop over a `Backend`.
@@ -43,5 +53,21 @@ trait RunnerHandle:
   /** Prints `lines` into the terminal scrollback above the live UI (durable log output). Default: a no-op. */
   def printAbove(lines: Seq[String]): Unit = ()
 
+/** Every queued-body failure one run absorbed, collapsed into a single report.
+  *
+  * `first` is the throwable that started it and `count` how many failures there were in total; the later throwables are
+  * attached to `first` as suppressed exceptions, up to a cap — so a continuation that fails on every tick for a week
+  * neither reports as one incident nor accumulates a week of stack traces.
+  */
+final case class QueuedTaskFailures(first: Throwable, count: Int)
+
 enum RunnerError:
-  case Backend(error: BackendError)
+  /** The backend failed, which ends the loop. `queuedTasks` carries whatever queued-body failures the loop had already
+    * absorbed, so they are still reported when a terminal failure happens to follow them.
+    */
+  case Backend(error: BackendError, queuedTasks: Option[QueuedTaskFailures] = None)
+
+  /** Bodies queued onto the render thread threw. The loop absorbed them and kept running; this reports them once the
+    * app has exited. Install [[RunnerConfig.onTaskError]] to handle them as they happen instead.
+    */
+  case QueuedTask(failures: QueuedTaskFailures)

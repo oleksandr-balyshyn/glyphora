@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.Size
+import io.worxbend.tui.core.{Buffer, MouseEventKind, Rect, Size, Style}
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 import io.worxbend.tui.widgets.TextInputState
@@ -194,5 +194,142 @@ final class FocusSpec extends AnyFunSuite:
     // HighContrast focus = reverse + bold: proves the theme's focus style is applied, not a hardcoded reverse
     assert(cell.style.modifiers.has(io.worxbend.tui.core.Modifiers.Reverse))
     assert(cell.style.modifiers.has(io.worxbend.tui.core.Modifiers.Bold))
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
+  // ---- a modal covers the layer below it for input, not merely for tabbing ----
+
+  test("a suppressed layer is inert to keys even when the layer above has no focusable"):
+    val seen  = scala.collection.mutable.Buffer[String]()
+    val base  = column(text("base")).onKeyEvent { _ =>
+      seen += "base"
+      true
+    }
+    val modal = centered(20, 3)(panel("Delete?")(text("d = confirm"))).onKeyEvent { _ =>
+      seen += "modal"
+      true
+    }
+    val tree  = layers(FocusPass.suppressFocus(base), modal)
+    assert(EventRouter.dispatchKey(tree, KeyEvent(KeyCode.Char('d'), KeyModifiers.None)))
+    assert(seen.toSeq == Seq("modal"))
+
+  test("a suppressed layer is inert to mouse events"):
+    var baseClicks = 0
+    val base       = column(text("base")).onMouseEvent { _ =>
+      baseClicks += 1
+      true
+    }
+    val tracker    = FocusTracker()
+    val suppressed = FocusPass.decorate(FocusPass.suppressFocus(base), tracker, Style.Default)
+    // rendering once is what makes this assertion mean something: mouse delivery only reaches elements whose area was
+    // recorded under the pointer, so without a render the handler would be skipped for want of an area rather than
+    // for being inert
+    val area       = Rect(0, 0, 10, 3)
+    suppressed.widget.render(area, Buffer(area))
+    assert(!EventRouter.dispatchMouse(suppressed, MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.None), None))
+    assert(baseClicks == 0)
+
+  test("a modal with no focusable element takes keys before the layer it covers"):
+    val backend   = HeadlessBackend(Size(40, 8))
+    val baseKeys  = scala.collection.mutable.Buffer[String]()
+    val modalKeys = scala.collection.mutable.Buffer[String]()
+    val app       = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(
+        binding("ctrl+o", "open dialog")(openDialog()),
+        binding("ctrl+q", "quit")(quit()),
+      )
+      def view(using ReactiveScope): Element =
+        column(text("base screen")).onKeyEvent {
+          case KeyEvent(KeyCode.Char(c), m) if !m.has(KeyModifiers.Ctrl) =>
+            baseKeys += Character.toString(c)
+            true
+          case _                                                         => false
+        }
+      // panel/text only: nothing in the dialog is focusable, so the whole tree has no focus path
+      private def openDialog(): Unit         = pushScreen(Screen {
+        centered(30, 5)(panel("Delete?")(text("d = confirm, esc = cancel"))).onKeyEvent {
+          case KeyEvent(KeyCode.Escape, _)                               =>
+            popScreen()
+            true
+          case KeyEvent(KeyCode.Char(c), m) if !m.has(KeyModifiers.Ctrl) =>
+            modalKeys += Character.toString(c)
+            true
+          case _                                                         => false
+        }
+      })
+    val pilot     = Pilot.start(backend) { val _ = app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.typeText("d").waitForIdle()
+    assert(baseKeys.toSeq == Seq("d"))               // the base handler is live to begin with
+    pilot.pressKey(KeyCode.Char('o'), KeyModifiers.Ctrl).waitForIdle()
+    assert(pilot.screenText.contains("Delete?"))
+    assert(pilot.screenText.contains("base screen")) // still visible beneath
+    pilot.typeText("d").waitForIdle()
+    assert(modalKeys.toSeq == Seq("d"))
+    assert(baseKeys.toSeq == Seq("d"))               // unchanged: the covered layer saw nothing
+    pilot.pressKey(KeyCode.Escape).waitForIdle()
+    pilot.typeText("d").waitForIdle()
+    assert(baseKeys.toSeq == Seq("d", "d"))          // live again once the modal is popped
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
+  test("clicks never reach the layer a modal covers"):
+    val backend     = HeadlessBackend(Size(40, 8))
+    var baseClicks  = 0
+    var modalClicks = 0
+    val app         = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(
+        binding("ctrl+o", "open dialog")(openDialog()),
+        binding("ctrl+q", "quit")(quit()),
+      )
+      def view(using ReactiveScope): Element =
+        column(text("base screen")).onMouseEvent { _ =>
+          baseClicks += 1
+          true
+        }
+      private def openDialog(): Unit         = pushScreen(Screen {
+        centered(30, 5)(panel("Delete?")(text("confirm?"))).onMouseEvent { _ =>
+          modalClicks += 1
+          true
+        }
+      })
+    val pilot       = Pilot.start(backend) { val _ = app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.click(0, 0).waitForIdle()
+    val baseBefore  = baseClicks
+    assert(baseBefore > 0)           // the base handler is live to begin with (click posts Down and Up)
+    pilot.pressKey(KeyCode.Char('o'), KeyModifiers.Ctrl).waitForIdle()
+    pilot.click(20, 4).waitForIdle() // inside the dialog
+    pilot.click(0, 0).waitForIdle()  // outside it
+    assert(baseClicks == baseBefore) // the covered layer took neither click
+    assert(modalClicks > 0)          // the top layer still receives mouse input
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
+  test("suppression reaches a responsive branch that resolves after the modal was composed"):
+    val field    = TextInputState()
+    val composed = layers(FocusPass.suppressFocus(responsive(_ => column(input(field)))), text("dialog"))
+    val resolved = ResponsivePass.resolve(composed, Size(40, 8))
+    assert(FocusPass.focusKeys(resolved).isEmpty)
+    assert(!EventRouter.dispatchKey(resolved, KeyEvent(KeyCode.Char('x'), KeyModifiers.None)))
+    assert(field.value == "")
+
+  test("a focusable inside a responsive branch below a modal stops receiving keys"):
+    val backend   = HeadlessBackend(Size(40, 8))
+    val baseField = TextInputState()
+    val app       = new TuiApp:
+      override def bindings: KeyBindings     = KeyBindings(
+        binding("ctrl+o", "open dialog")(openDialog()),
+        binding("ctrl+q", "quit")(quit()),
+      )
+      def view(using ReactiveScope): Element = responsive(_ => column(input(baseField)))
+      private def openDialog(): Unit         = pushScreen(Screen(centered(30, 5)(panel("Delete?")(text("confirm?")))))
+    val pilot     = Pilot.start(backend) { val _ = app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.typeText("a").waitForIdle()
+    assert(baseField.value == "a")
+    pilot.pressKey(KeyCode.Char('o'), KeyModifiers.Ctrl).waitForIdle()
+    pilot.typeText("b").pressKey(KeyCode.Tab).typeText("c").waitForIdle()
+    assert(baseField.value == "a") // neither typing nor a Tab move reaches the covered branch
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())

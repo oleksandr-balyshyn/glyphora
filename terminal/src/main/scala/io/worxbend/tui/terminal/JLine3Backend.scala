@@ -29,7 +29,13 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   @volatile private var cursorHidden                                           = false
   @volatile private var suspendedState                                         = TerminalState.None
 
+  // owned by the render thread alone — no other thread may read or write it. A thread that takes the screen away (the
+  // SIGCONT handler re-entering the alternate screen) raises `fullRedrawRequested` instead: a reset written here from
+  // the signal-dispatch thread would be overwritten by an in-flight `draw`'s snapshot and the repaint would be lost.
   private var lastFlushed: Option[Buffer] = scala.None
+
+  // raised by any thread that disturbed the screen (alternate-screen entry, SIGCONT's reacquire), consumed by `draw`
+  private val fullRedrawRequested = RedrawRequest()
 
   private val pendingResize    = AtomicReference[Option[Size]](scala.None)
   private val pendingInterrupt = AtomicBoolean(false)
@@ -52,9 +58,11 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   def size: Either[BackendError, Size] = attempt(currentSize)
 
   def draw(buffer: Buffer): Either[BackendError, Unit] =
-    attempt {
-      val previous = lastFlushed.getOrElse(Buffer(buffer.area))
-      val body     = encodeChangedCells(previous, buffer)
+    // claimed before the frame is composed, so a request raised while this frame is in flight survives for the next one
+    val forced = fullRedrawRequested.claim()
+    val result = attempt {
+      val previous = if forced then scala.None else lastFlushed
+      val body     = encodeChangedCells(previous.getOrElse(Buffer(buffer.area)), buffer)
       // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent
       if body.nonEmpty then
         // one atomic update: the terminal shows the previous frame until the whole batch has arrived
@@ -64,6 +72,18 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
         terminal.writer().flush()
       lastFlushed = Some(buffer.snapshot)
     }
+    // the forced frame never reached the terminal and the baseline was not updated: the request has not been served
+    if forced && result.isLeft then requestFullRedraw()
+    result
+
+  /** Asks the next [[draw]] to repaint every cell. Safe to call from any thread.
+    *
+    * Raised whenever the screen stops showing what `lastFlushed` describes: the alternate screen was just cleared, or
+    * something else owned the terminal in between (the shell, between SIGTSTP and SIGCONT). A flag rather than a reset
+    * of the baseline keeps `lastFlushed` render-thread-private, so a request raised while a `draw` is in flight is
+    * consumed by the *following* frame instead of being overwritten by that frame's snapshot.
+    */
+  private[terminal] def requestFullRedraw(): Unit = fullRedrawRequested.raise()
 
   /** The cell-level ANSI for everything that differs between `previous` and `next`, in row-major order.
     *
@@ -132,7 +152,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
         write(AnsiSequences.EnterAlternateScreen)
         write(AnsiSequences.ClearScreen)
         alternateScreenActive = true
-        lastFlushed = scala.None // the alternate screen starts blank; the next draw must repaint everything
+        requestFullRedraw() // the alternate screen starts blank; the next draw must repaint everything
       }
 
   def leaveAlternateScreen(): Either[BackendError, Unit] =
@@ -252,7 +272,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     if state.alternateScreen then bestEffort(enterAlternateScreen())
     if state.cursorHidden then bestEffort(hideCursor())
     if state.mouse then bestEffort(enableMouseCapture())
-    lastFlushed = scala.None // whatever ran in between owned the screen: repaint everything
+    requestFullRedraw() // whatever ran in between owned the screen: repaint everything
 
   private def onResize(): Unit =
     pendingResize.set(Some(currentSize))
@@ -301,6 +321,14 @@ private[terminal] object TerminalState:
 
 object JLine3Backend:
 
+  /** Wraps an already-built JLine terminal.
+    *
+    * [[create]] is the production entry point; this exists so tests can drive a real backend over a pair of streams,
+    * because `create` needs the controlling TTY that CI does not have.
+    */
+  private[terminal] def wrapping(terminal: Terminal, colorDepth: ColorDepth): JLine3Backend =
+    JLine3Backend(terminal, colorDepth)
+
   /** Opens the process's controlling terminal. Fails with `UnsupportedTerminal` when there is no usable TTY.
     *
     * `colorDepth` defaults to environment-based detection (honoring `NO_COLOR`/`CLICOLOR_FORCE`); pass an explicit
@@ -327,7 +355,7 @@ object JLine3Backend:
       if terminal.getType == Terminal.TYPE_DUMB || terminal.getType == Terminal.TYPE_DUMB_COLOR then
         terminal.close()
         Left(BackendError.UnsupportedTerminal("dumb terminal (no TTY attached)"))
-      else Right(JLine3Backend(terminal, colorDepth))
+      else Right(wrapping(terminal, colorDepth))
     catch case NonFatal(error) => Left(BackendError.Io(error))
 
   /** Stops this process the way the shell expects, after the TSTP handler has handed the terminal back.
@@ -363,3 +391,25 @@ object JLine3Backend:
   private[terminal] def logTeardownFailure(error: BackendError): Unit =
     if System.getenv("GLYPHORA_DEBUG") != null then // scalafix:ok DisableSyntax; JLine Java API returns null
       System.err.println(s"glyphora: terminal teardown step failed: $error")
+
+/** The "repaint every cell next frame" request that [[JLine3Backend]] uses to keep `lastFlushed` render-thread-private.
+  *
+  * A separate value rather than a bare flag because the ordering is the whole point and is worth testing on its own:
+  * `draw` [[claim]]s before it composes a frame, so a [[raise]] from another thread *during* that frame is not consumed
+  * by it and survives for the next one. Writing the baseline directly from the raising thread would instead lose the
+  * repaint, because the in-flight frame's snapshot would overwrite it.
+  *
+  * Every operation is safe from any thread.
+  */
+private[terminal] final class RedrawRequest:
+
+  private val raised = AtomicBoolean(false)
+
+  /** Asks the next claim to repaint everything. Idempotent: two raises before a claim are one repaint. */
+  def raise(): Unit = raised.set(true)
+
+  /** Takes the pending request, if any, and clears it. Call before composing the frame that will serve it. */
+  def claim(): Boolean = raised.getAndSet(false)
+
+  /** Whether a request is pending, without taking it. Test and diagnostic use only. */
+  def isPending: Boolean = raised.get()

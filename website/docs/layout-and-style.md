@@ -168,6 +168,9 @@ for live switching.
   rendering might otherwise move focus to a different positional index.
 - Deep fixed sizes fail on small terminals. Reserve fixed cells for chrome, then let
   primary content fill.
+- Constraints reflow, but they cannot decide that a layout has stopped working. When
+  a narrow terminal needs *different components* rather than smaller ones, branch on
+  size — see [Responsive layouts](./responsive).
 
 Next, browse the [Widget catalog](./widgets) or assemble these pieces into
 [The app shell](./app-shell).

@@ -19,6 +19,7 @@ export const docsNavigation = [
     items: [
       'state-and-signals',
       'layout-and-style',
+      'responsive',
       'widgets',
       'mouse',
       'unicode-and-accessibility',

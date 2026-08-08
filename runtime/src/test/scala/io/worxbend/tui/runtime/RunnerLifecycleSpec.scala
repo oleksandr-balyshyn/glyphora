@@ -104,3 +104,54 @@ final class RunnerLifecycleSpec extends AnyFunSuite:
     assert(result.isRight)
     assert(backend.wakeCount > 0, "runLater did not ask the backend to wake")
     assert(ran, "queued work never ran")
+
+  test("a throwing continuation does not tear the runner down and is reported after it exits"):
+    // the regression: one `.get` on a failed request used to unwind out of `run`, taking the app and every other
+    // queued body with it
+    val backend = HeadlessBackend(Size(20, 3))
+    var ran     = false
+    backend.postEvent(Event.Key(KeyEvent.of(KeyCode.Char('x'))))
+    backend.postEvent(Event.Key(KeyEvent.of(KeyCode.Char('q'))))
+    val result  = TerminalRunner(backend).run(
+      (event, handle) =>
+        event match
+          case Event.Key(KeyEvent(KeyCode.Char('x'), _)) =>
+            RenderThread.runLater(throw RuntimeException("continuation boom"))
+            RenderThread.runLater { ran = true }
+            false
+          case _                                         =>
+            handle.quit()
+            false
+      ,
+      _ => (),
+    )
+    assert(ran, "the body queued behind the throwing one never ran")
+    result match
+      case Left(RunnerError.QueuedTask(QueuedTaskFailures(error, count))) =>
+        assert(error.getMessage == "continuation boom")
+        assert(count == 1)
+      case other => fail(s"expected a recorded queued-task failure, got $other")
+    assert(!backend.isRawMode, "raw mode was not restored")
+    assert(!backend.isAlternateScreen, "the alternate screen was not left")
+    assert(backend.isCursorVisible, "the cursor was left hidden")
+
+  test("an installed onTaskError handler takes over reporting and the run still succeeds"):
+    val backend                        = HeadlessBackend(Size(20, 3))
+    val seen                           = scala.collection.mutable.ArrayBuffer.empty[Throwable]
+    val record: RenderTaskErrorHandler = error => { val _ = seen.append(error) }
+    backend.postEvent(Event.Key(KeyEvent.of(KeyCode.Char('x'))))
+    backend.postEvent(Event.Key(KeyEvent.of(KeyCode.Char('q'))))
+    val result                         = TerminalRunner(backend, RunnerConfig(onTaskError = Some(record))).run(
+      (event, handle) =>
+        event match
+          case Event.Key(KeyEvent(KeyCode.Char('x'), _)) =>
+            RenderThread.runLater(throw RuntimeException("continuation boom"))
+            false
+          case _                                         =>
+            handle.quit()
+            false
+      ,
+      _ => (),
+    )
+    assert(result.isRight, s"an installed handler owns reporting, so the run should succeed: $result")
+    assert(seen.map(_.getMessage).toList == List("continuation boom"))

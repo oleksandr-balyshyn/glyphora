@@ -248,3 +248,70 @@ final class ReactiveSpec extends AnyFunSuite:
     assert(invalidations == 0)
     hot.set(2)
     assert(invalidations == 1)
+
+  test("a mapped value subscribes nothing to its source"):
+    val signal  = Signal(2)
+    val squared = signal.map(n => n * n)
+    assert(signal.subscriberCount == 0)
+    assert(squared.peek == 4)
+    assert(signal.subscriberCount == 0, "an untracked read of a derived value must leave no edge behind")
+    signal.set(3)
+    assert(squared.peek == 9)
+    assert(signal.subscriberCount == 0)
+
+  test("deriving a mapped value once per generation does not grow the source's subscriber set"):
+    var invalidations = 0
+    val scope         = ReactiveScope.generational(() => invalidations += 1)
+    val count         = Signal(0)
+    var lastLabel     = ""
+
+    for generation <- 1 to 100 do
+      scope.beginGeneration()
+      lastLabel = count.map(n => s"$n items").get(using scope)
+      count.set(generation)
+
+    assert(lastLabel == "99 items")
+    assert(
+      count.subscriberCount == 1,
+      "only the scope's own subscriber may remain — before the fix this grew by one per generation",
+    )
+    assert(invalidations == 100)
+
+  test("repeatedly mapping and reading a signal leaves nothing to dispose"):
+    val signal = Signal(1)
+    for _ <- 1 to 1000 do assert(signal.map(_ + 1).peek == 2)
+    assert(signal.subscriberCount == 0)
+
+  test("disposing a computed removes it from its source's subscriber set"):
+    val signal  = Signal(1)
+    val doubled = Computed(signal.get * 2)
+    assert(doubled.peek == 2)
+    assert(signal.subscriberCount == 1)
+    doubled.dispose()
+    assert(signal.subscriberCount == 0)
+
+  test("chained derivations stay transparent to the reading scope"):
+    var invalidations = 0
+    val scope         = ReactiveScope.onInvalidation(() => invalidations += 1)
+    val signal        = Signal(2)
+    val label         = signal.map(_ * 2).map(n => s"= $n")
+    val other         = signal.map(_ + 1).map(n => s"+ $n")
+    assert(label.get(using scope) == "= 4")
+    assert(other.get(using scope) == "+ 3")
+    // both chains passed the caller's scope through to the signal, so the scope's own subscriber is all there is
+    assert(signal.subscriberCount == 1, "a chain of derivations must contribute no subscriber of its own")
+    signal.set(3)
+    assert(invalidations == 1)
+    assert(label.peek == "= 6")
+    assert(other.peek == "+ 4")
+
+  test("an equal-value set notifies nobody through a derived value"):
+    var invalidations = 0
+    val scope         = ReactiveScope.onInvalidation(() => invalidations += 1)
+    val signal        = Signal(1)
+    val label         = signal.map(n => s"n=$n")
+    assert(label.get(using scope) == "n=1")
+    signal.set(1)
+    assert(invalidations == 0)
+    signal.set(2)
+    assert(invalidations == 1)

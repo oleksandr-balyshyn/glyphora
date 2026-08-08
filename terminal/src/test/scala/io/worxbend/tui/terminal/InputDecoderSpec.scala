@@ -114,3 +114,12 @@ final class InputDecoderSpec extends AnyFunSuite:
     decoded(bytes*) match
       case Event.Paste(text) => assert(text.startsWith("a") && text.contains("b"))
       case other             => fail(s"expected paste, got $other")
+
+  test("an 8-bit C1 control decodes to no event"):
+    // C1 names no key; reporting one as an unmodified Char inserts it into whatever text field has focus
+    assert(decoderFor(0x85).decode(10).isEmpty)
+    assert(decoderFor(0x9b).decode(10).isEmpty)
+    assert(decoderFor(0x1b, 0x9b).decode(10).isEmpty)
+
+  test("a printable Latin-1 character just above the C1 range still decodes"):
+    assert(decoded(0xe9) == Event.Key(KeyEvent(KeyCode.Char(0xe9), KeyModifiers.None)))

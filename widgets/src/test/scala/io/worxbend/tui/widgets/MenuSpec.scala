@@ -48,3 +48,11 @@ final class MenuSpec extends AnyFunSuite:
     val menu = Menu(items)
     assert(menu.height == items.size + 2)
     assert(menu.width >= "Save".length + "^S".length) // widest content plus borders/padding
+
+  test("a shortcut hint landing on a wide label's continuation column still renders"):
+    // the label truncates to " 設定パネ" (9 columns) so ネ sits at inner.x + 7 with its continuation at inner.x + 8,
+    // and the hint "q " is written at inner.right - 2, i.e. exactly that continuation column. The buffer used to hold
+    // the `q` while every reader of the frame — the diff engine included — stepped straight over it.
+    val buffer = Buffer(Rect(0, 0, 12, 3))
+    Menu(Seq(MenuItem("設定パネル", shortcut = Some("q")))).render(buffer.area, buffer, MenuState())
+    assert(trimmedLines(buffer)(1).contains("q"))

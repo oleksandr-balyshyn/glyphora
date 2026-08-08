@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{CharWidth, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Style}
+import io.worxbend.tui.core.{CharWidth, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Size, Style}
 import io.worxbend.tui.runtime.{
   Effect,
   Frame,
@@ -47,6 +47,30 @@ trait TuiApp:
 
   /** Called when the terminal window gains or loses focus (terminals with mode-1004 reporting). */
   def onTerminalFocus(focused: Boolean): Unit = ()
+
+  /** Called on the render thread whenever the terminal is resized, before the frame that reflects the new size.
+    *
+    * A redraw already happens on every resize, and [[terminalSize]] is already updated by the time this runs — this is
+    * for the side effects a resize implies, like clamping a scroll offset or re-fetching a differently sized page.
+    * Overriding it is not needed to make the view respond to size.
+    */
+  def onResize(size: Size): Unit = ()
+
+  /** The terminal's current size, as a reactive read: a `view` that branches on it re-evaluates on every resize.
+    *
+    * {{{
+    * def view(using ReactiveScope): Element =
+    *   if terminalSize.width < 80 then column(header, tabbedContent(pages, active))
+    *   else row(sidebar.percent(25), detail.fill)
+    * }}}
+    *
+    * This is the whole-terminal size. To branch deeper in the tree without threading it through every builder, use
+    * [[Element.responsive]], which resolves against the same size.
+    */
+  protected final def terminalSize(using scope: ReactiveScope): Size = terminalSizeSignal.get(using scope)
+
+  /** The current [[Breakpoint]] band, as a reactive read — `terminalSize` bucketed by width. */
+  protected final def breakpoint(using scope: ReactiveScope): Breakpoint = Breakpoint.of(terminalSize)
 
   /** Called when an interrupt (`Ctrl+C`, i.e. SIGINT/SIGQUIT) reaches the app.
     *
@@ -153,13 +177,8 @@ trait TuiApp:
               true
             case _                                            => false
         else false
-      val consumed   = hit match
-        case Some(index) =>
-          val targeted = tracker
-            .areaOf(index)
-            .exists(area => lastTree.exists(EventRouter.dispatchMouseAt(_, index, area, mouse)))
-          targeted || lastTree.exists(EventRouter.dispatchMouse(_, mouse))
-        case None        => lastTree.exists(EventRouter.dispatchMouse(_, mouse))
+      val target     = hit.flatMap(index => tracker.areaOf(index).map(area => (index, area)))
+      val consumed   = lastTree.exists(EventRouter.dispatchMouse(_, mouse, target))
       consumed || focusMoved
 
     def handleEvent(event: Event, handle: RunnerHandle): Boolean =
@@ -177,7 +196,12 @@ trait TuiApp:
           onTerminalFocus(false)
           invalidated
         case Event.Interrupt    => onInterrupt()
-        case Event.Resize(_)    => true
+        case Event.Resize(size) =>
+          // the render pass sets this too, from the frame it is about to draw; doing it here as well means an
+          // `onResize` override — and anything it calls — already peeks the new size rather than the previous frame's
+          terminalSizeSignal.set(size)
+          onResize(size)
+          true
         case Event.Tick         =>
           // before user code, so an `onTick` that reads the clock sees this tick's value rather than the last one's
           AnimationClock.advance()
@@ -193,11 +217,16 @@ trait TuiApp:
     val result          = TerminalRunner(backend, effectiveConfig, redrawRequested = () => invalidated).run(
       handleEvent,
       frame =>
+        // the frame's area is what is actually about to be painted, so it — not the last resize event — is the size
+        // the view branches on. Published before `invalidated` is cleared: the write invalidates the *previous*
+        // generation's subscribers, and letting that survive into this frame would schedule a redundant redraw.
+        val frameSize = Size(frame.area.width, frame.area.height)
+        terminalSizeSignal.set(frameSize)
         invalidated = false
         if splashActive then renderSplash(frame)
         else
           scope.beginGeneration()
-          val rawTree = effectiveView(using scope)
+          val rawTree = ResponsivePass.resolve(effectiveView(using scope), frameSize)
           tracker.reconcile(FocusPass.focusKeys(rawTree))
           val tree    = FocusPass.decorate(rawTree, tracker, theme.focus)
           lastTree = Some(tree)
@@ -305,6 +334,10 @@ trait TuiApp:
 
   private final case class ActiveToast(message: String, level: NoticeLevel, remainingTicks: Int)
 
+  /** The size the last frame was drawn at. Zero until the first render publishes the real one — nothing can observe
+    * that gap through [[terminalSize]], which is only readable from `view`.
+    */
+  private val terminalSizeSignal: Signal[Size]    = Signal(Size(0, 0))
   private val screenStack: Signal[List[Screen]]   = Signal(Nil)
   private val toasts: Signal[Vector[ActiveToast]] = Signal(Vector.empty)
   private val paletteOpen: Signal[Boolean]        = Signal(false)

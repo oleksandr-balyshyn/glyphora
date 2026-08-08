@@ -3,7 +3,7 @@ package io.worxbend.tui.runtime
 import scala.collection.mutable
 import scala.compiletime.uninitialized
 
-/** A readable reactive value: either a mutable [[Signal]] or a derived [[Computed]].
+/** A readable reactive value: a mutable [[Signal]], a cached [[Computed]], or a transparent [[Derived]] view.
   *
   * Reads come in two flavors: `get` requires a [[ReactiveScope]] capability and subscribes the enclosing computation to
   * future changes (automatic dependency tracking — no manual dependency arrays); `peek` reads untracked. Dependency
@@ -22,8 +22,14 @@ sealed trait Reactive[A]:
   /** Read and subscribe the computation this scope tracks for. */
   def get(using scope: ReactiveScope): A
 
-  /** A derived value that recomputes (lazily) whenever this one changes. */
-  def map[B](f: A => B): Reactive[B] = Computed(f(get))
+  /** A derived view of this value: `f` is applied on every read, and the result subscribes to nothing of its own.
+    *
+    * Safe to create inside a repeatedly evaluated `view` body — reading the result through a scope subscribes that
+    * scope to *this* value, not to a per-generation intermediate, so nothing accumulates. `f` therefore re-runs per
+    * read: when the derivation is expensive enough to be worth caching, write `Computed { f(source.get) }` instead and
+    * dispose it when its owner goes away.
+    */
+  def map[B](f: A => B): Derived[B] = Derived(f(get))
 
 /** A mutable reactive variable.
   *
@@ -69,6 +75,9 @@ final class Signal[A] private (initial: A) extends Reactive[A], Subscribable:
 
   private[runtime] def unsubscribe(subscriber: Subscriber): Unit =
     subscribers -= subscriber
+
+  /** Live subscriber count. Package-private: regression tests assert that repeated derivation does not grow it. */
+  private[runtime] def subscriberCount: Int = subscribers.size
 
 object Signal:
   def apply[A](initial: A): Signal[A] = new Signal(initial)
@@ -153,3 +162,21 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
 
 object Computed:
   def apply[A](thunk: ReactiveScope ?=> A): Computed[A] = new Computed(thunk)
+
+/** A transparent view of another reactive value: `read` re-runs on every access and nothing is cached.
+  *
+  * Unlike [[Computed]] this holds no subscription of its own — a tracked read passes the caller's scope straight
+  * through to the underlying values, so the caller subscribes to the source rather than to an intermediate. There is
+  * consequently no lifecycle and nothing to dispose: an instance created inside a `view` body and abandoned after one
+  * frame leaves no edge behind. The trade is that `read` is evaluated per access; use [[Computed]] when the derivation
+  * is expensive enough to be worth caching, and give that computed an owner that disposes it.
+  *
+  * Holds no mutable state, so an instance may be read from any thread its source allows.
+  */
+final class Derived[A] private (read: ReactiveScope ?=> A) extends Reactive[A]:
+
+  def peek: A                            = read(using ReactiveScope.untracked)
+  def get(using scope: ReactiveScope): A = read(using scope)
+
+object Derived:
+  def apply[A](read: ReactiveScope ?=> A): Derived[A] = new Derived(read)

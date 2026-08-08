@@ -20,7 +20,7 @@ interactive elements opt in automatically.
 - `Shift+Tab` moves to the previous one;
 - clicking an interactive element focuses it first;
 - the active theme's `focus` style decorates the focused element;
-- opening a modal removes everything below it from the tab order.
+- opening a modal removes everything below it from the tab order and from key and mouse routing.
 
 Make any custom element focusable with `.focusable`:
 
@@ -125,6 +125,28 @@ You do not need custom handlers for common interactions:
 
 A user `.onMouseEvent` runs first. Return `false` when the widget's built-in behavior
 should still run.
+
+## Mouse delivery order
+
+Mouse events are delivered only to elements that actually rendered under the
+pointer, innermost first: the deepest handler-carrying element under the pointer,
+outward to the element the click resolved to, then that element's ancestors. At each
+step the element's own `.onMouseEvent` runs first and its built-in behavior second,
+so a **wheel** a built-in declines keeps travelling outward — that is how the wheel
+still scrolls a `scrollView` when the pointer sits over a button inside it. Only the
+wheel does that: scrolling targets the nearest scrollable ancestor, while a press or a
+drag stays with the element it landed on, so dragging inside a `splitPane` pane does
+not move the divider. An element's built-in only ever acts on a pointer inside that
+element's own rendered area. Each handler sees a given event at most once — returning
+`false` bubbles the event outward, it never redelivers it. A handler on an element the
+pointer is not over is not called.
+
+Where overlapping elements *carrying handlers* compete, the topmost one wins.
+Containers paint children in order and `layers(base, overlays*)` paints later children
+over earlier ones, so a click on an overlay goes to the overlay, not to the base drawn
+underneath it. Focusable elements are resolved differently — by smallest covering area,
+which has no notion of z-order — so give an overlay's controls their own layer rather
+than relying on paint order to shadow a focusable beneath them.
 
 ## Backend support
 
