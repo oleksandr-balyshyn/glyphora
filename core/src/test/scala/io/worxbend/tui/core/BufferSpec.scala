@@ -46,6 +46,24 @@ final class BufferSpec extends AnyFunSuite:
     assert(buf.get(1, 0) == Cell.Empty)
     assert(buf.get(2, 0).symbol == "a")
 
+  test("overwriting a wide grapheme in place releases the column it reserved"):
+    val buf = buffer(4, 1)
+    buf.setString(0, 0, "你", Style.Default)
+    buf.set(0, 0, Cell("a", Style.Default))
+    buf.set(1, 0, Cell("b", Style.Default))
+    // had the stale continuation on column 1 survived, the write at 1 would have blanked the 'a' next to it
+    assert(buf.get(0, 0).symbol == "a")
+    assert(buf.get(1, 0).symbol == "b")
+
+  test("writing the empty cell onto a continuation leaves the wide grapheme intact"):
+    // `set(x, wide)` followed by `set(x + 1, Cell.Empty)` is how setString and seven widgets spell the filler; the
+    // second write must not be read as a claim on the column, or every wide glyph erases itself
+    val buf = buffer(4, 1)
+    buf.setString(0, 0, "你", Style.Default)
+    buf.set(1, 0, Cell.Empty)
+    assert(buf.get(0, 0).symbol == "你")
+    assert(buf.get(1, 0) == Cell.Empty)
+
   test("setString drops a wide character that would only half-fit at the right edge"):
     val buf = buffer(3, 1)
     buf.setString(2, 0, "你", Style.Default)

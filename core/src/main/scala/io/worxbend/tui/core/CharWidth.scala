@@ -68,6 +68,25 @@ object CharWidth:
         used += width
     prefix.result()
 
+  /** `text` with every grapheme cluster whose base code point is a control character (C0, DEL, C1) removed.
+    *
+    * The input-side counterpart of the `width > 0` guard in [[Buffer.setString]], for the editable-text models that
+    * write cells directly instead of going through it. A control occupies zero terminal columns but one `Cell`, so a
+    * TAB or an `ESC` stored in a text model is drawn as a one-column cell and emitted raw: the terminal moves its
+    * cursor somewhere the frame diff does not expect, and every later cell in that row lands in the wrong column.
+    * Combining marks are *not* controls and are deliberately kept — they are zero-width but they belong to the cluster
+    * they follow.
+    */
+  def withoutControls(text: String): String =
+    if isPrintableAscii(text) then text
+    else
+      val kept     = StringBuilder()
+      val clusters = graphemeClusters(text)
+      while clusters.hasNext do
+        val cluster = clusters.next()
+        if !isControlCluster(cluster) then kept ++= cluster
+      kept.result()
+
   /** Whether `codePoint` has East Asian Width `W` (Wide) or `F` (Fullwidth), i.e. occupies two columns. */
   def isWideCodePoint(codePoint: Int): Boolean =
     val table    = WidthTable.WideRanges
@@ -117,6 +136,21 @@ object CharWidth:
         */
       private def joinsEmoji(base: Int, after: Int): Boolean =
         after < text.length && isEmojiCapable(base) && isEmojiCapable(text.codePointAt(after))
+
+  /** [[of]] specialised for a string that is already exactly one grapheme cluster.
+    *
+    * [[Buffer]] calls this on every cell it writes, so unlike [[of]] it must never build a cluster iterator or a
+    * substring: the single-printable-ASCII early-out covers the overwhelmingly common cell, and everything else goes
+    * straight to the allocation-free cluster measurement. Behaviour on multi-cluster input is unspecified — it measures
+    * the first cluster's rules against the whole string. Callers that hold arbitrary text must use [[of]].
+    */
+  private[core] def ofCluster(cluster: String): Int =
+    // 0x20-0x7E is exactly one column and covers no combining mark, no East Asian W/F, and no control character
+    if cluster.length == 1 && cluster.charAt(0) >= 0x20 && cluster.charAt(0) < 0x7f then 1
+    else clusterWidth(cluster)
+
+  private def isControlCluster(cluster: String): Boolean =
+    cluster.nonEmpty && Character.isISOControl(cluster.codePointAt(0))
 
   private def clusterWidth(cluster: String): Int =
     if cluster.isEmpty then 0

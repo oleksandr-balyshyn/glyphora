@@ -127,7 +127,50 @@ final class CharWidthSpec extends AnyFunSuite:
     assert(CharWidth.graphemeClusters(heartOnFire).size == 1)
     assert(CharWidth.of(heartOnFire) == 2)
 
+  test("withoutControls drops C0, DEL and C1 but keeps everything else"):
+    assert(CharWidth.withoutControls("a\tb") == "ab")
+    assert(CharWidth.withoutControls("a" + Escape + "[31mb") == "a[31mb")
+    assert(CharWidth.withoutControls("a" + Delete + "b" + NextLine + "c") == "abc")
+    assert(CharWidth.withoutControls("plain text") == "plain text")
+
+  test("withoutControls keeps combining marks and emoji clusters"):
+    // the filter is a *control* filter, not a zero-width filter: a combining mark belongs to the cluster it follows
+    val combining = "e" + CombiningAcute
+    assert(CharWidth.withoutControls(combining) == combining)
+    val family    = "\ud83d\udc68" + ZeroWidthJoiner + "\ud83d\udc69"
+    assert(CharWidth.withoutControls(family) == family)
+    assert(CharWidth.withoutControls(CombiningAcute) == CombiningAcute)
+
+  test("ofCluster agrees with of on single grapheme clusters"):
+    // Buffer measures every cell it writes with ofCluster; its printable-ASCII early-out is the only new width logic
+    // in the fix, and a single disagreement with `of` would silently mis-reserve continuation columns
+    val clusters = Seq(
+      "",
+      " ",
+      "a",
+      "~",
+      0x7f.toChar.toString,                // DEL: the printable-ASCII fast path deliberately stops one short of it
+      0x01.toChar.toString,                // a C0 control, zero columns
+      0x00ad.toChar.toString,              // SOFT HYPHEN: category Cf below U+0300, so also zero columns
+      0x0301.toChar.toString,              // a lone combining mark
+      "\u4f60",
+      "\u3042",
+      "\ud55c",
+      "\u4f60" + TextPresentationSelector, // VS15 after an ideograph is inert: still two columns
+      "\u2500",
+      "\u283f",
+      "\ud83c\uddfa\ud83c\uddf8",
+      "\ud83d\udc68" + ZeroWidthJoiner + "\ud83d\udc69",
+    )
+    clusters.foreach(cluster => assert(CharWidth.ofCluster(cluster) == CharWidth.of(cluster), s"cluster [$cluster]"))
+
   /** Spelled by codepoint rather than as literals: all three are invisible in an editor. */
   private val ZeroWidthJoiner: String           = 0x200d.toChar.toString
   private val TextPresentationSelector: String  = 0xfe0e.toChar.toString
   private val EmojiPresentationSelector: String = 0xfe0f.toChar.toString
+  private val CombiningAcute: String            = 0x0301.toChar.toString
+
+  /** Controls spelled by codepoint: a literal one in a source file is invisible and survives no reformat. */
+  private val Escape: String   = 0x1b.toChar.toString
+  private val Delete: String   = 0x7f.toChar.toString
+  private val NextLine: String = 0x85.toChar.toString // C1
