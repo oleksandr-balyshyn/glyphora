@@ -1,37 +1,292 @@
+/* ==========================================================================
+   glyphora API reference theme.
+
+   One stylesheet serves both halves of /api/:
+     · body.glyphora-api-index — the hand-written landing page (index.html)
+     · every other page        — generated Scala 3 Scaladoc, into whose <head>
+                                 scripts/style-scaladoc.mjs injects this file
+                                 last, after all of Scaladoc's own stylesheets.
+
+   THEME SWITCH. One signal for the whole site: `theme-dark` on <html>. Light
+   is the class-free default. Scaladoc's own scripts/theme.js sets the class
+   before first paint from localStorage["use-dark-theme"], falling back to
+   prefers-color-scheme; index.html runs the same logic inline against the same
+   key, so a choice made on either side carries across. There is deliberately
+   no prefers-color-scheme media query here — it would re-darken the page after
+   a visitor explicitly picked light.
+
+   HOW THE SCALADOC HALF IS THEMED. Scaladoc's ~200 colour rules all resolve
+   through custom properties it defines at `:root` and `:root.theme-dark`, none
+   of them !important. Because this file loads last, redefining those tokens at
+   equal specificity wins outright — so this file re-points the tokens and lets
+   Scaladoc's own cascade recolour itself, instead of painting over components.
+   That is what makes both themes correct at once. Note the repeated
+   `:root.theme-dark` in selector lists below: Scaladoc defines its dark values
+   at that specificity, and a bare `:root` would lose to it.
+
+   Do not wrap this file in @layer — unlayered styles beat layered ones, so a
+   layer would demote it below the sheets it needs to override.
+   ========================================================================== */
+
+/* Self-hosted so the API pages get the real faces. They are outside the
+   Docusaurus bundle that @imports @fontsource-variable, and until these
+   @font-face rules existed every weight (580/650/720...) and every negative
+   tracking value on these pages was being applied to a fallback system font. */
+@font-face {
+  font-family: 'Space Grotesk Variable';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('fonts/space-grotesk-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans Variable';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url('fonts/ibm-plex-sans-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('fonts/jetbrains-mono-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ==========================================================================
+   1. Palette — light is the default, dark is the .theme-dark override.
+   Accents are retuned per theme rather than shared: the dark set (#ff5c64,
+   #22d3ee, #a78bfa, #34d399, #fbbf24) sits between 1.7:1 and 3.0:1 on a light
+   background, so light gets same-hue counterparts that clear 4.5:1.
+   ========================================================================== */
+
 :root {
+  color-scheme: light;
+
+  --api-display: 'Space Grotesk Variable', 'Arial Narrow', system-ui, sans-serif;
+  --api-body: 'IBM Plex Sans Variable', Inter, system-ui, sans-serif;
+  --api-mono: 'JetBrains Mono Variable', 'SFMono-Regular', Consolas, monospace;
+
+  --api-bg: #f6f7f9;
+  --api-panel: #ffffff;
+  --api-panel-raised: #f2f5f9;
+  --api-code-surface: #f4f6fa;
+  --api-text: #111522;
+  --api-muted: #4a5566;
+  --api-faint: #6c778a;
+
+  /* Two border tokens, two jobs: hairlines are decorative, --api-border is for
+     anything WCAG 1.4.11 treats as a control boundary and must clear 3:1. */
+  --api-rule: rgba(27, 34, 51, 0.13);
+  --api-border: rgba(27, 34, 51, 0.42);
+  --api-stripe: rgba(27, 34, 51, 0.032);
+
+  --api-coral: #ce2634;
+  --api-cyan: #147d8c;
+  --api-violet: #755ac7;
+  --api-mint: #0c8752;
+  --api-amber: #946b00;
+  --api-magenta: #b625cc;
+
+  --api-selected-wash: rgba(206, 38, 52, 0.08);
+  --api-shadow-violet: rgba(117, 90, 199, 0.12);
+  --api-shadow-coral: rgba(206, 38, 52, 0.18);
+  --api-bloom: rgba(117, 90, 199, 0.07);
+  --api-on-accent: #ffffff;
+  --api-gradient: linear-gradient(92deg, #ce2634, #147d8c 58%, #755ac7);
+
+  /* Scaladoc primitive ramps. Every semantic token it defines resolves through
+     these, so overriding the ramps reskins the generated pages wholesale. */
+  --grey1: #ffffff;
+  --grey2: #f7f8fa;
+  --grey3: #eef1f5;
+  --grey4: #e6eaf0;
+  --grey5: #dce2ea;
+  --grey6: #ccd4df;
+  --grey7: #b3bdcc;
+  --grey8: #93a0b2;
+  --grey9: #6c778a;
+  --grey10: #5f697a;
+  --grey11: #4a5566;
+  --grey12: #111522;
+  --mauve1: #ffffff;
+  --crimson3: #fff1f2;
+  --crimson4: #ffe4e6;
+  --crimson9: #ce2634;
+  --crimson11: #b81f2c;
+  --red3: #fff1f2;
+  --red4: #ffe4e6;
+  --red11: #b91c1c;
+  --indigo8: #0e7490;
+  --indigo9: #0e7490;
+  --indigo11: #146b7d;
+  --sky3: #ecfeff;
+  --sky4: #cffafe;
+  --sky9: #0891b2;
+  --sky11: #0e6f8a;
+  --mint9: #0c8752;
+  --mint11: #0b7a55;
+  --grass3: #f0fdf4;
+  --grass4: #dcfce7;
+  --grass9: #15803d;
+  --grass11: #15803d;
+  --lime9: #4d7c0f;
+  --lime11: #4d7c0f;
+  --yellow3: #fffbeb;
+  --yellow4: #fef3c7;
+  --yellow9: #946b00;
+  --yellow11: #8a6300;
+  --orange9: #c2410c;
+  --orange11: #b23c0b;
+  --purple9: #755ac7;
+  --purple11: #6a4fbd;
+  --shadow1: rgba(17, 21, 34, 0.14);
+  --shadow2: rgba(17, 21, 34, 0.08);
+}
+
+:root.theme-dark {
   color-scheme: dark;
+
   --api-bg: #070910;
-  --api-panel: #0d1220;
+  --api-panel: #0b0f19;
   --api-panel-raised: #111827;
+  --api-code-surface: #0a0f1a;
   --api-text: #f5f7fa;
-  --api-muted: #98a4b7;
+  --api-muted: #a9b6cb;
+  --api-faint: #7d8ba3;
+
   --api-rule: rgba(166, 180, 206, 0.15);
+  --api-border: rgba(166, 180, 206, 0.5);
+  --api-stripe: rgba(255, 255, 255, 0.027);
+
   --api-coral: #ff5c64;
   --api-cyan: #22d3ee;
   --api-violet: #a78bfa;
   --api-mint: #34d399;
   --api-amber: #fbbf24;
-  --api-display: 'Space Grotesk Variable', 'Arial Narrow', system-ui, sans-serif;
-  --api-body: 'IBM Plex Sans Variable', Inter, system-ui, sans-serif;
-  --api-mono: 'JetBrains Mono Variable', 'SFMono-Regular', Consolas, monospace;
+  --api-magenta: #e879f9;
+
+  --api-selected-wash: rgba(255, 92, 100, 0.09);
+  --api-shadow-violet: rgba(167, 139, 250, 0.05);
+  --api-shadow-coral: rgba(255, 92, 100, 0.16);
+  --api-bloom: rgba(139, 92, 246, 0.13);
+  --api-on-accent: #090b11;
+  --api-gradient: linear-gradient(92deg, #ff5c64, #22d3ee 58%, #a78bfa);
+
+  --grey1: #0b0f19;
+  --grey2: #090d16;
+  --grey3: #0d1220;
+  --grey4: #111827;
+  --grey5: #182234;
+  --grey6: #1f2b41;
+  --grey7: #2a3852;
+  --grey8: #3c4d6d;
+  --grey9: #6b7c99;
+  --grey10: #8a99b4;
+  --grey11: #a9b6cb;
+  --grey12: #f5f7fa;
+  --mauve1: #070910;
+  --crimson3: #24121a;
+  --crimson4: #341620;
+  --crimson9: #ff5c64;
+  --crimson11: #ff7a82;
+  --red3: #24121a;
+  --red4: #341620;
+  --red11: #ff8a90;
+  --indigo8: #1e6f87;
+  --indigo9: #22d3ee;
+  --indigo11: #67e8f9;
+  --sky3: #08202b;
+  --sky4: #0a2a38;
+  --sky9: #22d3ee;
+  --sky11: #7dd3fc;
+  --mint9: #34d399;
+  --mint11: #5eead4;
+  --grass3: #08241a;
+  --grass4: #0a2e22;
+  --grass9: #34d399;
+  --grass11: #6ee7b7;
+  --lime9: #a3e635;
+  --lime11: #bef264;
+  --yellow3: #2a1f05;
+  --yellow4: #372907;
+  --yellow9: #fbbf24;
+  --yellow11: #fcd34d;
+  --orange9: #fb923c;
+  --orange11: #fdba74;
+  --purple9: #a78bfa;
+  --purple11: #c4b5fd;
+  --shadow1: rgba(0, 0, 0, 0.55);
+  --shadow2: rgba(0, 0, 0, 0.4);
 }
 
-* { box-sizing: border-box; }
-html { background: var(--api-bg); scroll-behavior: smooth; }
-body {
+/* Scaladoc's semantic layer, re-pointed where the ramps alone don't say enough:
+   its light theme flattens header/nav/main onto one colour, and its light block
+   ships a missing semicolon that leaves --border-background-color undefined. */
+:root,
+:root.theme-dark {
+  --background-main: var(--api-bg);
+  --background-default: var(--api-panel);
+  --background-subtle: var(--api-panel);
+  --background-neutral: var(--api-panel-raised);
+  --background-header: var(--api-panel);
+  --background-nav: var(--api-panel);
+  --border-background-color: var(--api-panel);
+  --focus-default: var(--api-cyan);
+}
+
+/* ==========================================================================
+   2. The landing page (index.html).
+   Everything here is scoped: bare element selectors would otherwise reach the
+   Scaladoc pages, which is how the old global reset broke Scaladoc's layout.
+   ========================================================================== */
+
+.glyphora-api-index,
+.glyphora-api-index *,
+.glyphora-api-index *::before,
+.glyphora-api-index *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body.glyphora-api-index {
   margin: 0;
-  color: var(--api-text) !important;
+  color: var(--api-text);
   background:
-    linear-gradient(90deg, rgba(255,255,255,.027) 1px, transparent 1px),
-    var(--api-bg) !important;
-  background-size: 72px 100% !important;
-  font-family: var(--api-body) !important;
+    linear-gradient(90deg, var(--api-stripe) 1px, transparent 1px),
+    var(--api-bg);
+  background-size: 72px 100%;
+  font-family: var(--api-body);
+  font-feature-settings: 'kern' 1, 'liga' 1;
+  text-rendering: optimizeLegibility;
 }
 
-body a { color: var(--api-cyan); text-underline-offset: .18em; }
-body code, body pre, body .monospace { font-family: var(--api-mono) !important; font-variant-ligatures: none; }
-body h1, body h2, body h3, body h4 { color: var(--api-text); font-family: var(--api-display) !important; letter-spacing: -.035em; }
-body pre { border: 1px solid var(--api-rule) !important; border-radius: 4px !important; background: #090d16 !important; box-shadow: 8px 8px 0 rgba(167,139,250,.05); }
+/* Prose links only. Every component anchor here — the brand, the CTAs, the
+   module cards — carries a class and owns its colour; an unqualified `a` rule
+   outranks those component rules and would tint their text. */
+.glyphora-api-index a:not([class]) { color: var(--api-cyan); text-underline-offset: .18em; }
+.glyphora-api-index code,
+.glyphora-api-index pre { font-family: var(--api-mono); font-variant-ligatures: none; }
+.glyphora-api-index :is(h1, h2, h3, h4) {
+  color: var(--api-text);
+  font-family: var(--api-display);
+  letter-spacing: -.035em;
+}
+.glyphora-api-index pre {
+  border: 1px solid var(--api-rule);
+  border-radius: 4px;
+  background: var(--api-code-surface);
+  box-shadow: 8px 8px 0 var(--api-shadow-violet);
+}
 
 .api-nav {
   position: sticky;
@@ -43,138 +298,223 @@ body pre { border: 1px solid var(--api-rule) !important; border-radius: 4px !imp
   min-height: 68px;
   padding: 0 max(1.2rem, calc((100vw - 1320px) / 2));
   border-bottom: 1px solid var(--api-rule);
-  background: rgba(7,9,16,.89);
+  background: color-mix(in srgb, var(--api-bg) 89%, transparent);
   backdrop-filter: blur(18px) saturate(150%);
 }
 
-.api-brand { display: inline-flex; gap: .65rem; align-items: center; color: var(--api-text); text-decoration: none; }
+/* Outranks the blanket link colour above, which would otherwise tint the brand. */
+.glyphora-api-index .api-brand { display: inline-flex; gap: .65rem; align-items: center; color: var(--api-text); text-decoration: none; }
 .api-brand img { width: 35px; height: 35px; }
 .api-brand strong { font-family: var(--api-display); font-size: 1.05rem; letter-spacing: -.04em; }
-.api-nav nav { display: flex; gap: 1.2rem; }
-.api-nav nav a { color: #a7b1c0; font: 650 .7rem/1 var(--api-mono); text-decoration: none; }
-.api-nav nav a:hover { color: var(--api-cyan); }
+.api-nav nav { display: flex; gap: 1.2rem; align-items: center; }
+.glyphora-api-index .api-nav nav a { color: var(--api-muted); font: 650 .74rem/1 var(--api-mono); text-decoration: none; }
+.glyphora-api-index .api-nav nav a:hover { color: var(--api-cyan); }
+
+/* Theme toggle. index.html is a plain static file with no framework behind it,
+   so it carries its own pre-paint script; this is only the control's skin.
+   The two labels both live in the DOM and CSS hides the inactive one, which
+   keeps the button's accessible name equal to its visible text. */
+.api-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 .6rem;
+  border: 1px solid var(--api-border);
+  border-radius: 3px;
+  color: var(--api-muted);
+  background: transparent;
+  font: 650 .68rem/1 var(--api-mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.api-theme-toggle:hover { color: var(--api-text); border-color: var(--api-cyan); }
+.api-theme-toggle:focus-visible { outline: 2px solid var(--api-cyan); outline-offset: 2px; }
+.api-theme-toggle .api-theme-to-light { display: none; }
+:root.theme-dark .api-theme-toggle .api-theme-to-light { display: inline; }
+:root.theme-dark .api-theme-toggle .api-theme-to-dark { display: none; }
 
 .api-wrap { max-width: 1320px; margin: 0 auto; padding: 0 1.2rem; }
 .api-hero { position: relative; min-height: 650px; padding: clamp(6rem, 11vw, 10rem) 0 6rem; border-bottom: 1px solid var(--api-rule); }
-.api-hero::after { position: absolute; top: 15%; right: 3%; width: 23rem; height: 23rem; border-radius: 50%; content: ''; background: rgba(139,92,246,.13); filter: blur(90px); }
-.api-kicker { display: flex; gap: .65rem; align-items: center; color: #adb7c7; font: 700 .68rem/1 var(--api-mono); letter-spacing: .1em; }
-.api-kicker i { width: .52rem; height: .52rem; border-radius: 50%; background: var(--api-mint); box-shadow: 0 0 16px var(--api-mint); }
-.api-index-number { margin: 3rem 0 .8rem; color: var(--api-coral); font: 700 .68rem/1 var(--api-mono); letter-spacing: .08em; }
+.api-hero::after { position: absolute; top: 15%; right: 3%; width: 23rem; height: 23rem; border-radius: 50%; content: ''; background: var(--api-bloom); filter: blur(90px); }
+.api-kicker { display: flex; gap: .65rem; align-items: center; color: var(--api-muted); font: 700 .7rem/1 var(--api-mono); letter-spacing: .1em; }
+.api-kicker i { width: .52rem; height: .52rem; border-radius: 50%; background: var(--api-mint); box-shadow: 0 0 0 4px color-mix(in srgb, var(--api-mint) 16%, transparent); }
+:root.theme-dark .api-kicker i { box-shadow: 0 0 16px var(--api-mint); }
+.api-index-number { margin: 3rem 0 .8rem; color: var(--api-coral); font: 700 .7rem/1 var(--api-mono); letter-spacing: .08em; }
 .api-hero h1 { position: relative; z-index: 1; max-width: 980px; margin: 0; font-size: clamp(4.2rem, 10vw, 9.4rem); font-weight: 580; line-height: .86; letter-spacing: -.075em; }
-.api-hero h1 span { color: transparent; background: linear-gradient(92deg, var(--api-coral), var(--api-cyan) 58%, var(--api-violet)); background-clip: text; -webkit-background-clip: text; }
+.api-hero h1 span { color: transparent; background: var(--api-gradient); background-clip: text; -webkit-background-clip: text; }
 .api-lead { max-width: 670px; margin: 2rem 0; color: var(--api-muted); font-size: clamp(1.05rem, 1.7vw, 1.25rem); line-height: 1.75; }
 .api-actions { display: flex; flex-wrap: wrap; gap: .85rem; }
-.api-actions a { display: inline-flex; min-height: 50px; align-items: center; padding: .8rem 1.05rem; border: 1px solid var(--api-rule); border-radius: 3px; font: 700 .74rem/1 var(--api-mono); text-decoration: none; }
-.api-actions .api-primary { border-color: var(--api-coral); color: #090b11; background: var(--api-coral); box-shadow: 7px 7px 0 rgba(255,92,100,.16); }
-.api-actions .api-secondary { color: var(--api-text); background: rgba(255,255,255,.03); }
+.api-actions a { display: inline-flex; min-height: 50px; align-items: center; padding: .8rem 1.05rem; border: 1px solid var(--api-border); border-radius: 3px; font: 700 .78rem/1 var(--api-mono); text-decoration: none; }
+.api-actions .api-primary { border-color: var(--api-coral); color: var(--api-on-accent); background: var(--api-coral); box-shadow: 7px 7px 0 var(--api-shadow-coral); }
+.api-actions .api-secondary { color: var(--api-text); background: var(--api-panel); }
 
 .api-modules { padding: 7rem 0 9rem; }
-.api-section-heading span { color: var(--api-coral); font: 700 .66rem/1 var(--api-mono); letter-spacing: .1em; }
+.api-section-heading span { color: var(--api-coral); font: 700 .7rem/1 var(--api-mono); letter-spacing: .1em; }
 .api-section-heading h2 { margin: .8rem 0 2.5rem; font-size: clamp(2.8rem, 6vw, 5.2rem); font-weight: 580; line-height: .95; letter-spacing: -.06em; }
 .api-grid { display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px solid var(--api-rule); border-left: 1px solid var(--api-rule); }
-.api-card { display: flex; grid-column: span 2; flex-direction: column; min-height: 320px; padding: 2rem; border-right: 1px solid var(--api-rule); border-bottom: 1px solid var(--api-rule); color: var(--api-text); background: linear-gradient(145deg, rgba(255,255,255,.032), transparent 55%), var(--api-panel); text-decoration: none; transition: transform 150ms ease, background 150ms ease; }
-.api-card:hover { position: relative; z-index: 1; color: var(--api-text); background-color: var(--api-panel-raised); transform: translate(-3px,-3px); }
-.api-card > span { font: 700 .62rem/1 var(--api-mono); letter-spacing: .07em; }
+.api-card { display: flex; grid-column: span 2; flex-direction: column; min-height: 320px; padding: 2rem; border-right: 1px solid var(--api-rule); border-bottom: 1px solid var(--api-rule); color: var(--api-text); background: var(--api-panel); text-decoration: none; transition: transform 150ms ease, background 150ms ease; }
+.api-card:hover { position: relative; z-index: 1; color: var(--api-text); background-color: var(--api-panel-raised); transform: translate(-3px, -3px); }
+.api-card > span { font: 700 .68rem/1 var(--api-mono); letter-spacing: .07em; }
 .api-card strong { margin: 3.8rem 0 .7rem; font-family: var(--api-display); font-size: 2rem; letter-spacing: -.05em; }
 .api-card p { margin: 0; color: var(--api-muted); font-size: .9rem; line-height: 1.65; }
-.api-card code { margin-top: auto; padding: .55rem; border-left: 2px solid currentColor; color: #aeb8c8; background: #080b13; font-size: .63rem; }
-.api-card.coral > span { color: var(--api-coral); }.api-card.cyan > span { color: var(--api-cyan); }.api-card.violet > span { color: var(--api-violet); }.api-card.amber > span { color: var(--api-amber); }.api-card.mint > span { color: var(--api-mint); }.api-card.magenta > span { color: #e879f9; }
-.api-card.coral code { border-color: var(--api-coral); }.api-card.cyan code { border-color: var(--api-cyan); }.api-card.violet code { border-color: var(--api-violet); }.api-card.amber code { border-color: var(--api-amber); }.api-card.mint code { border-color: var(--api-mint); }.api-card.magenta code { border-color: #e879f9; }
-.api-footer { display: flex; justify-content: space-between; padding: 2rem max(1.2rem, calc((100vw - 1320px) / 2)); border-top: 1px solid var(--api-rule); color: #66758c; background: #070910; font: 600 .62rem/1.5 var(--api-mono); letter-spacing: .04em; }
+.api-card code { margin-top: auto; padding: .55rem; border-left: 2px solid currentColor; color: var(--api-muted); background: var(--api-code-surface); font-size: .72rem; }
+.api-card.coral > span { color: var(--api-coral); }
+.api-card.cyan > span { color: var(--api-cyan); }
+.api-card.violet > span { color: var(--api-violet); }
+.api-card.amber > span { color: var(--api-amber); }
+.api-card.mint > span { color: var(--api-mint); }
+.api-card.magenta > span { color: var(--api-magenta); }
+.api-card.coral code { border-color: var(--api-coral); }
+.api-card.cyan code { border-color: var(--api-cyan); }
+.api-card.violet code { border-color: var(--api-violet); }
+.api-card.amber code { border-color: var(--api-amber); }
+.api-card.mint code { border-color: var(--api-mint); }
+.api-card.magenta code { border-color: var(--api-magenta); }
 
-/* Scala 3 Scaladoc skin: appended after generated styles by style-scaladoc.mjs. */
-body:not(.glyphora-api-index) { color: var(--api-text) !important; background-color: var(--api-bg) !important; }
-body:not(.glyphora-api-index) header,
-body:not(.glyphora-api-index) nav,
-body:not(.glyphora-api-index) aside { border-color: var(--api-rule) !important; background-color: #0b0f19 !important; }
-body:not(.glyphora-api-index) #header {
+/* The footer stays dark in both themes, matching the Docusaurus site's footer. */
+.api-footer { display: flex; justify-content: space-between; padding: 2rem max(1.2rem, calc((100vw - 1320px) / 2)); border-top: 1px solid var(--api-rule); color: #a9b6cb; background: #070910; font: 600 .7rem/1.5 var(--api-mono); letter-spacing: .04em; }
+
+/* ==========================================================================
+   3. Generated Scaladoc.
+   Section 1 already did most of the work through Scaladoc's own tokens. What
+   remains is the brand's own furniture plus a handful of Scaladoc bugs.
+   Selectors here are Scaladoc-specific ids and classes that never appear on
+   the landing page, so they need no extra scoping.
+   ========================================================================== */
+
+#header {
   min-height: 64px;
-  border-bottom: 1px solid var(--api-rule) !important;
-  background: rgba(7, 9, 16, .96) !important;
-  box-shadow: none !important;
+  border-bottom: 1px solid var(--api-rule);
 }
-body:not(.glyphora-api-index) #header .logo-container {
+#header .logo-container {
   display: inline-flex;
   gap: .65rem;
   align-items: center;
-  color: var(--api-text) !important;
-  font-family: var(--api-display) !important;
+  font-family: var(--api-display);
   letter-spacing: -.035em;
 }
-body:not(.glyphora-api-index) #header .logo-container::before {
+/* Relative to this stylesheet, which lives at a stable /api/ — an absolute
+   /glyphora/img/... 404s on a custom domain, a PR preview, or a local build. */
+#header .logo-container::before {
   width: 34px;
   height: 34px;
   flex: 0 0 34px;
   content: '';
-  background: url('/glyphora/img/logo.svg') center / contain no-repeat;
+  background: url('../img/logo.svg') center / contain no-repeat;
 }
-body:not(.glyphora-api-index) #leftColumn,
-body:not(.glyphora-api-index) #footer {
-  border-color: var(--api-rule) !important;
-  background: #090d16 !important;
-}
-body:not(.glyphora-api-index) #main {
+
+#main {
   background:
-    linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px),
-    var(--api-bg) !important;
-  background-size: 72px 100% !important;
+    linear-gradient(90deg, var(--api-stripe) 1px, transparent 1px),
+    var(--api-bg);
+  background-size: 72px 100%;
 }
-body:not(.glyphora-api-index) #content { max-width: 980px; }
-body:not(.glyphora-api-index) a { color: var(--api-cyan) !important; }
-body:not(.glyphora-api-index) .breadcrumbs {
-  color: #748096 !important;
-  font-family: var(--api-mono) !important;
-  font-size: .68rem !important;
-  letter-spacing: .03em;
-}
-body:not(.glyphora-api-index) .cover-header {
-  position: relative;
-  padding-top: 1.25rem;
-}
-body:not(.glyphora-api-index) .cover-header::before {
+
+/* #content is the flex row of [article, TOC]; the cap belongs on the article,
+   since capping the row squeezes the 232px TOC out of its own track. */
+#content > div:first-child { max-width: 980px; }
+
+#content a { color: var(--api-cyan); }
+/* Signature tokens carry meaning — keyword vs name vs type — so they opt out
+   of the blanket link colour above. */
+#content [t='k'] { color: var(--api-coral); }
+#content a[t='n'] { color: var(--api-cyan); }
+#content [t='t'],
+#content a[t='t'] { color: var(--api-violet); }
+
+.cover-header { position: relative; padding-top: 1.25rem; }
+.cover-header::before {
   position: absolute;
   top: 0;
   left: 0;
   width: 46px;
   height: 2px;
   content: '';
-  background: linear-gradient(90deg, var(--api-coral), var(--api-cyan), var(--api-violet));
+  background: var(--api-gradient);
 }
-body:not(.glyphora-api-index) .cover-header h1 {
-  font-size: clamp(2.8rem, 5vw, 4.8rem) !important;
-  font-weight: 580 !important;
-  letter-spacing: -.06em !important;
+.cover-header h1 {
+  font-family: var(--api-display);
+  font-size: clamp(2.8rem, 5vw, 4.8rem);
+  font-weight: 580;
+  letter-spacing: -.06em;
 }
-body:not(.glyphora-api-index) .fqname {
-  color: #8995a9 !important;
-  font-family: var(--api-mono) !important;
-  font-size: .78rem !important;
+
+.fqname {
+  color: var(--api-faint);
+  font-family: var(--api-mono);
+  font-size: .78rem;
 }
-body:not(.glyphora-api-index) .main-signature {
-  border: 1px solid var(--api-rule) !important;
-  border-left: 3px solid var(--api-coral) !important;
-  border-radius: 3px !important;
-  background: #0a0f1a !important;
-  box-shadow: 7px 7px 0 rgba(167, 139, 250, .05);
+
+.main-signature {
+  border: 1px solid var(--api-rule);
+  border-left: 3px solid var(--api-coral);
+  border-radius: 3px;
+  background: var(--api-code-surface);
+  box-shadow: 7px 7px 0 var(--api-shadow-violet);
 }
-body:not(.glyphora-api-index) [t='k'] { color: var(--api-coral) !important; }
-body:not(.glyphora-api-index) [t='n'] { color: var(--api-cyan) !important; }
-body:not(.glyphora-api-index) #api-nav .selected {
-  border-left: 2px solid var(--api-coral) !important;
-  border-radius: 0 3px 3px 0 !important;
-  background: rgba(255, 92, 100, .09) !important;
+
+#api-nav .nh.selected {
+  border-left: 2px solid var(--api-coral);
+  border-radius: 0 3px 3px 0;
+  background: var(--api-selected-wash);
 }
-body:not(.glyphora-api-index) #api-nav-button {
-  color: var(--api-coral) !important;
-  font-family: var(--api-mono) !important;
-  letter-spacing: .08em;
+
+/* The sidebar's API switcher. Scaladoc ships a two-tab segmented control but
+   only ever renders the API tab — no static-doc siteroot is configured, so the
+   Docs tab cannot appear — and it sizes the tab with `height: 36px` plus 48px
+   of padding, which only works under content-box. This file used to apply a
+   global `* { box-sizing: border-box }`, which collapsed that content box to
+   zero and left the label spilling out of a squashed grey slab. The reset is
+   now scoped to the landing page; the rest restyles the lone tab as a labelled
+   link back to the module index, and degrades correctly if a Docs tab ever
+   appears, since the accent is on .selected rather than the tab itself. */
+.switcher-container {
+  height: auto;
+  padding: calc(2 * var(--base-spacing)) calc(1.5 * var(--base-spacing));
+  gap: 2px;
 }
-body:not(.glyphora-api-index) [class*='sidebar'],
-body:not(.glyphora-api-index) [class*='toc'] { border-color: var(--api-rule) !important; background-color: #0b0f19 !important; }
-body:not(.glyphora-api-index) [class*='documentable'],
-body:not(.glyphora-api-index) [class*='member'] { border-color: var(--api-rule) !important; }
-body:not(.glyphora-api-index) [class*='signature'],
-body:not(.glyphora-api-index) [class*='code'] { border-color: var(--api-rule) !important; background-color: #0b0f19 !important; font-family: var(--api-mono) !important; }
+.switcher {
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 34px;
+  padding: 0 calc(1.25 * var(--base-spacing));
+  border: 1px solid var(--api-rule);
+  border-radius: 3px;
+  margin: 0;
+  color: var(--api-muted);
+  font: 700 .68rem/1 var(--api-mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.switcher.selected {
+  border-left: 2px solid var(--api-coral);
+  color: var(--api-text);
+}
+#api-nav-button:hover {
+  border-color: var(--api-border);
+  background: var(--api-panel);
+  color: var(--api-text);
+}
+/* Scaladoc budgets a fixed 88px for the switcher block; let the tree take
+   whatever the restyled control leaves instead of stranding dead space. */
+#leftColumn .side-menu {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The filter bar itself is sticky and deliberately matches the page ground, so
+   only the input is given a field's surface. */
+.filterableInput {
+  border: 1px solid var(--api-rule);
+  background-color: var(--api-panel);
+}
+.filterableInput:focus-visible { outline: 2px solid var(--api-cyan); outline-offset: 1px; }
+
+/* Two surfaces Scaladoc hard-codes past its own tokens. */
+.snippet-popup-content { background-color: var(--api-panel); color: var(--api-text); }
+.tooltip:hover .tooltip-container::after { color: var(--api-on-accent); background-color: var(--api-text); }
 
 @media (max-width: 900px) {
   .api-card { grid-column: span 3; }
