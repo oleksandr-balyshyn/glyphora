@@ -92,16 +92,24 @@ final class JLine3BackendRedrawSpec extends AnyFunSuite:
 
   private def withBackend(body: (JLine3Backend, CaptureStream) => Unit): Unit =
     val out      = CaptureStream()
-    val terminal = headlessTerminal(out)
+    val input    = NeverReadable()
+    val terminal = headlessTerminal(input, out)
     try body(JLine3Backend.wrapping(terminal, ColorDepth.Ansi16), out)
-    finally terminal.close()
+    finally
+      // Release before closing. Nothing in this suite reads — `JLine3Backend`'s decoder only touches
+      // `terminal.reader()` from inside its lambda — so today JLine's pump never starts and `close()` returns at once.
+      // That is a property of what these tests happen to exercise, not a guarantee: anything that resumes the terminal
+      // would leave the pump parked on a stream with no EOF, and `close()` pauses the terminal by *joining* that pump.
+      // Releasing first costs nothing and takes the deadlock off the table.
+      input.release()
+      terminal.close()
 
-  private def headlessTerminal(out: OutputStream): Terminal =
+  private def headlessTerminal(in: InputStream, out: OutputStream): Terminal =
     TerminalBuilder
       .builder()
       .name("glyphora-test")
       .system(false)
-      .streams(NeverReadable(), out)
+      .streams(in, out)
       .`type`("xterm-256color") // JLine bundles this terminfo entry, and it has smcup
       .encoding(StandardCharsets.UTF_8)
       .paused(true)
@@ -126,13 +134,22 @@ private final class CaptureStream extends OutputStream:
     text
   }
 
-/** An input stream that never yields and never ends, so JLine cannot see EOF and close the terminal under the test. */
+/** An input stream that yields nothing while the test runs, so JLine cannot see EOF and close the terminal underneath
+  * it — but that can be released at teardown, so JLine's pump thread is never left parked on it.
+  *
+  * The distinction matters: a reader that blocks forever also blocks `Terminal.close()`, which joins the pump.
+  */
 private final class NeverReadable extends InputStream:
 
-  private val never = CountDownLatch(1)
+  private val until = CountDownLatch(1)
+
+  /** Lets a blocked reader see EOF, so the terminal can be closed without hanging on its own pump thread. */
+  def release(): Unit = until.countDown()
 
   def read(): Int =
     try
-      never.await()
+      until.await()
       -1
     catch case _: InterruptedException => -1
+
+  override def close(): Unit = release()
