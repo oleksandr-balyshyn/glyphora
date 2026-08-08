@@ -6,6 +6,7 @@ import io.worxbend.tui.terminal.HeadlessBackend
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.util.concurrent.CountDownLatch
 import scala.concurrent.duration.DurationInt
 
 /** Pins that a throwable escaping the app body reaches the *test* thread. Every one of these assertions passes
@@ -65,12 +66,20 @@ final class PilotFailureSpec extends AnyFunSuite:
     assert(pilot.screenLines.nonEmpty)
     assert(!pilot.isRunning)
 
+  /** The app blocks on a latch rather than on a sleep so the busy app outlives the assertion by microseconds instead of
+    * seconds: a test that leaves a live app thread behind hands its cost to whatever runs next, which on a two-core CI
+    * runner executing several forked JVMs at once is not free.
+    */
   test("an app that never goes idle still reports the timeout, not a crash"):
     val backend = HeadlessBackend(Size(10, 3))
-    val pilot   = Pilot.start(backend)(Thread.sleep(10_000L))
-    val error   = intercept[AssertionError](pilot.waitForIdle(100.millis))
-    assert(error.getMessage.contains("did not go idle"))
-    assert(Option(error.getCause).isEmpty)
+    val release = CountDownLatch(1)
+    val pilot   = Pilot.start(backend)(release.await())
+    try
+      val error = intercept[AssertionError](pilot.waitForIdle(100.millis))
+      assert(error.getMessage.contains("did not go idle"))
+      assert(Option(error.getCause).isEmpty)
+    finally release.countDown()
+    assert(pilot.awaitTermination()) // and the app really is gone before the next test starts
 
   private def render(frame: Frame): Unit =
     frame.renderWidget(
