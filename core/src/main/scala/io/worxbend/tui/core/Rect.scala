@@ -34,14 +34,13 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
     pos.x >= x && pos.x < right && pos.y >= y && pos.y < bottom
 
   /** This rectangle shrunk by `margin` cells on every side; zero-sized when the margin exhausts it. */
-  def inset(margin: Int): Rect =
-    val shrunkWidth  = math.max(0, width - 2 * margin)
-    val shrunkHeight = math.max(0, height - 2 * margin)
-    if shrunkWidth == 0 || shrunkHeight == 0 then Rect(x + width / 2, y + height / 2, 0, 0)
-    else Rect(x + margin, y + margin, shrunkWidth, shrunkHeight)
+  def inset(margin: Int): Rect = inner(margin, margin)
 
   /** This rectangle shrunk by `horizontal` cells on the left/right and `vertical` on the top/bottom (ratatui's per-axis
     * `Margin`); zero-sized on an axis the margin exhausts.
+    *
+    * When a margin does exhaust an axis the result collapses to a zero-sized rect at this rectangle's centre rather
+    * than at its origin, so an overlay positioned against the leftover still lands where the caller was aiming.
     */
   def inner(horizontal: Int, vertical: Int): Rect =
     val shrunkWidth  = math.max(0, width - 2 * horizontal)
