@@ -24,6 +24,36 @@ final class StyleModifierSpec extends AnyFunSuite:
   test("removing a modifier is idempotent on a style that lacks it"):
     assert(Style.Default.notReverse == Style.Default)
 
+  /** One `notX` per `x`, so the negative half of the builder set is not missing arbitrary members. Each is checked
+    * against a style carrying *every* modifier, which also pins that clearing one leaves the other seven alone.
+    */
+  test("every modifier builder has a matching clearing builder"):
+    val all      = Style.Default.bold.dim.italic.underline.blink.reverse.hidden.crossedOut
+    val cleared  = List(
+      Modifiers.Bold       -> all.notBold,
+      Modifiers.Dim        -> all.notDim,
+      Modifiers.Italic     -> all.notItalic,
+      Modifiers.Underline  -> all.notUnderline,
+      Modifiers.Blink      -> all.notBlink,
+      Modifiers.Reverse    -> all.notReverse,
+      Modifiers.Hidden     -> all.notHidden,
+      Modifiers.CrossedOut -> all.notCrossedOut,
+    )
+    val everyOne = List(
+      Modifiers.Bold,
+      Modifiers.Dim,
+      Modifiers.Italic,
+      Modifiers.Underline,
+      Modifiers.Blink,
+      Modifiers.Reverse,
+      Modifiers.Hidden,
+      Modifiers.CrossedOut,
+    )
+    cleared.foreach { (flag, style) =>
+      assert(!style.modifiers.has(flag))
+      everyOne.filterNot(_ == flag).foreach(other => assert(style.modifiers.has(other)))
+    }
+
   test("has is an ANY test, not an ALL test, when given more than one flag"):
     // documented rather than changed: the name and the `Modifiers`-typed parameter read as "has all of these", but
     // the implementation is a non-zero bitwise AND. Changing it would silently flip the meaning of every existing
