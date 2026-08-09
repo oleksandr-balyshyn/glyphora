@@ -63,18 +63,34 @@ object ColorDepth:
   private def cubeStep(value: Int): Int =
     if value < 48 then 0 else if value < 115 then 1 else (value - 35) / 40
 
+  /** The sixteen colors [[Ansi16]] can name: the eight base ones (SGR 30-37) and their bright counterparts (SGR 90-97).
+    *
+    * The bright half belongs here because this depth already emits it — a style naming [[Color.BrightRed]] passes
+    * through [[downsample]] untouched and reaches the encoder as `91`. Leaving those eight out of the *search* only
+    * meant that a color arriving as RGB could never reach them, so pure red downsampled to the muted (205, 49, 49) of
+    * `Color.Red` while an exact match sat unused one entry away.
+    */
+  private val Ansi16Palette: Seq[Color] = Seq(
+    Color.Black,
+    Color.Red,
+    Color.Green,
+    Color.Yellow,
+    Color.Blue,
+    Color.Magenta,
+    Color.Cyan,
+    Color.White,
+    Color.BrightBlack,
+    Color.BrightRed,
+    Color.BrightGreen,
+    Color.BrightYellow,
+    Color.BrightBlue,
+    Color.BrightMagenta,
+    Color.BrightCyan,
+    Color.BrightWhite,
+  )
+
   private def nearestNamed(r: Int, g: Int, b: Int): Color =
-    val candidates = Seq(
-      Color.Black,
-      Color.Red,
-      Color.Green,
-      Color.Yellow,
-      Color.Blue,
-      Color.Magenta,
-      Color.Cyan,
-      Color.White,
-    )
-    candidates.minBy { candidate =>
+    Ansi16Palette.minBy { candidate =>
       val (cr, cg, cb) = Color.approximateRgb(candidate)
       val (dr, dg, db) = (cr - r, cg - g, cb - b)
       dr * dr + dg * dg + db * db
