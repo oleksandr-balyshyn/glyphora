@@ -127,9 +127,7 @@ object RenderThread:
     */
   private[tui] def drainPending(): Unit =
     val own = loops.get(Thread.currentThread())
-    if own != null then // scalafix:ok DisableSyntax; java.util.concurrent interop
-      own.head.drain()
-      detached.drain(own.head.onError)
+    if own != null then drainPending(own.head) // scalafix:ok DisableSyntax; java.util.concurrent interop
     else detached.drain()
 
   private[tui] def hasPending(loop: RenderLoop): Boolean =
