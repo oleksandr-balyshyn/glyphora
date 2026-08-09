@@ -137,8 +137,17 @@ private[dsl] object EventRouter:
       case Some(leafToRoot) => leafToRoot.head.builtinPasteHandler.exists(_(text))
       case None             => false
 
+  /** The user's `onKeyEvent` first, then the framework's own behavior for this element.
+    *
+    * A built-in only runs on the *focused* element. Both key walks offer the event to elements that are not focused —
+    * the ancestors an unconsumed key bubbles through, and every node of the depth-first walk when nothing is focusable
+    * at all — and a built-in firing there would mean typing into an unfocused text input, or one arrow key moving two
+    * nested lists. The user's own handler is deliberately not gated: `onKeyEvent` on a container is how an app takes
+    * keys that no focused descendant wanted.
+    */
   private def handlesKey(element: Element, event: KeyEvent): Boolean =
-    element.props.onKey.exists(_(event)) || element.builtinKeyHandler.exists(_(event))
+    element.props.onKey.exists(_(event)) ||
+      (element.props.focused && element.builtinKeyHandler.exists(_(event)))
 
   private def dispatchKeyDepthFirst(element: Element, event: KeyEvent): Boolean =
     !element.props.inert &&

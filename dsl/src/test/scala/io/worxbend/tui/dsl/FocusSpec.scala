@@ -3,7 +3,7 @@ package io.worxbend.tui.dsl
 import io.worxbend.tui.core.{Buffer, MouseEventKind, Rect, Size, Style}
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
-import io.worxbend.tui.widgets.TextInputState
+import io.worxbend.tui.widgets.{ScrollViewState, TextInputState}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -333,3 +333,35 @@ final class FocusSpec extends AnyFunSuite:
     assert(baseField.value == "a") // neither typing nor a Tab move reaches the covered branch
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
+
+  /** A built-in belongs to the *focused* element alone. Both key walks hand the event to unfocused elements as well —
+    * the ancestors an unconsumed key bubbles through, and every node of the depth-first walk when nothing is focusable
+    * — so without that gate an arrow key typed at an inner control would also drive whatever container encloses it.
+    *
+    * Both cases render before dispatching: `ScrollViewState.scrollDown` clamps against the content and viewport heights
+    * the last render recorded, so on an unrendered view the offset cannot move and the negative case would pass for the
+    * wrong reason.
+    */
+  private def scrollViewOverInput(focusedIndex: Int): (ScrollViewState, Element) =
+    val scroll  = ScrollViewState()
+    val tracker = FocusTracker()
+    // content twice the viewport height, so there is somewhere to scroll to
+    val root    = scrollView(column(input(TextInputState())), contentHeight = 8, scroll)
+    tracker.reconcile(FocusPass.focusKeys(root))
+    tracker.focusTo(focusedIndex)
+    val tree    = FocusPass.decorate(root, tracker, Style.Default)
+    val area    = Rect(0, 0, 20, 4)
+    tree.widget.render(area, Buffer(area))
+    (scroll, tree)
+
+  test("a key bubbling past an unfocused ancestor does not trigger the ancestor's built-in"):
+    // depth-first pre-order: 0 is the scroll view, 1 is the input inside it
+    val (scroll, tree) = scrollViewOverInput(focusedIndex = 1)
+    // the input ignores Down, so it bubbles to the scroll view — which is on the path but not focused
+    assert(!EventRouter.dispatchKey(tree, KeyEvent(KeyCode.Down, KeyModifiers.None)))
+    assert(scroll.offset == 0)
+
+  test("the same key does scroll once the scroll view itself is focused"):
+    val (scroll, tree) = scrollViewOverInput(focusedIndex = 0)
+    assert(EventRouter.dispatchKey(tree, KeyEvent(KeyCode.Down, KeyModifiers.None)))
+    assert(scroll.offset == 1)
