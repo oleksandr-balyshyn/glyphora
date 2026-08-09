@@ -87,6 +87,10 @@ object Signal:
   * Lazily cached: `set` on a dependency only marks this stale (cascading to dependents); the thunk re-runs on the next
   * read. Each recomputation first unsubscribes from the previous dependency set, then re-subscribes to exactly what the
   * thunk reads this time — the mechanism that makes conditional dependencies correct.
+  *
+  * The dependency graph must be acyclic. A thunk that reads the value it is itself computing — directly, or around a
+  * cycle through other computeds — throws `IllegalStateException` on the read that closes the loop, rather than
+  * recursing until the stack runs out.
   */
 final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A], Subscriber, Subscribable:
 
@@ -140,6 +144,15 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
     subscribers.clear()
 
   private def recompute(): Unit =
+    // a thunk that reads its own value — directly, or around a cycle through another computed — would otherwise
+    // recurse until the stack runs out. `StackOverflowError` is fatal, so a render loop cannot report it through its
+    // `NonFatal` handler and the runner dies with nothing pointing at the cycle. A programming error, not a
+    // recoverable condition, so it throws rather than returning a stale value and pretending the graph is acyclic.
+    if recomputing then
+      throw IllegalStateException(
+        "Computed value depends on itself: its body read the value it is in the middle of computing, " +
+          "directly or through a cycle of other Computed values"
+      )
     dependencies.toSeq.foreach(_.unsubscribe(this))
     dependencies.clear()
     val recomputeScope: ReactiveScope = dependency =>

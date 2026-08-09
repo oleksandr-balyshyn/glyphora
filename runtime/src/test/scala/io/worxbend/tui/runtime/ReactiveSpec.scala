@@ -315,3 +315,22 @@ final class ReactiveSpec extends AnyFunSuite:
     assert(invalidations == 0)
     signal.set(2)
     assert(invalidations == 1)
+
+  test("a computed that reads its own value reports the cycle instead of overflowing the stack"):
+    lazy val self: Computed[Int] = Computed(self.peek + 1)
+    val failure                  = intercept[IllegalStateException](self.peek)
+    assert(failure.getMessage.contains("depends on itself"))
+
+  test("a cycle through a second computed is reported the same way"):
+    lazy val first: Computed[Int]  = Computed(second.get + 1)
+    lazy val second: Computed[Int] = Computed(first.get + 1)
+    val failure                    = intercept[IllegalStateException](first.peek)
+    assert(failure.getMessage.contains("depends on itself"))
+
+  test("a computed still recomputes normally after a cycle threw"):
+    // the recomputing flag is cleared on the way out, so one bad read does not wedge the value forever
+    val source                     = Signal(1)
+    lazy val cyclic: Computed[Int] = Computed(if source.peek == 1 then cyclic.peek else source.get * 10)
+    val _                          = intercept[IllegalStateException](cyclic.peek)
+    source.set(2)
+    assert(cyclic.peek == 20)
