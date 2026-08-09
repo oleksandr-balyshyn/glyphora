@@ -55,7 +55,18 @@ final class Tier4Spec extends AnyFunSuite:
     val buffer = rendered(widget, 2, 2)
     assert(trimmedLines(buffer) == Seq("██", "▄▄"))
 
-  test("Dialog.centered centers and clamps"):
-    import io.worxbend.tui.core.Rect
-    assert(Dialog.centered(Rect(0, 0, 20, 10), 10, 4) == Rect(5, 3, 10, 4))
-    assert(Dialog.centered(Rect(0, 0, 6, 3), 10, 4) == Rect(0, 0, 6, 3))
+  /** Geometry only — the box is centred on both axes and never escapes the area it was given. `Rect.centered` itself is
+    * covered by core's `RectOpsSpec`; these pin that the dialog actually routes its box through it.
+    */
+  test("a dialog centres its box on both axes"):
+    val lines  = trimmedLines(rendered(Dialog("T", Text.raw("hi")), 30, 9))
+    val top    = lines.indexWhere(_.contains("\u2554"))
+    val bottom = lines.indexWhere(_.contains("\u255a"))
+    assert((top, bottom) == (2, 6))           // a 5-row box in 9 rows leaves 2 rows above and below
+    assert(lines(top).indexOf("\u2554") == 5) // a 20-column box in 30 columns leaves 5 columns either side
+    assert(lines(top).length == 25)
+
+  test("a dialog too large for its area is clamped inside it, not overflowed"):
+    val lines = trimmedLines(rendered(Dialog("T", Text.raw("hi")), 8, 6))
+    assert(lines.forall(_.length <= 8))
+    assert(lines.head.startsWith("\u2554") && lines.head.endsWith("\u2557"))

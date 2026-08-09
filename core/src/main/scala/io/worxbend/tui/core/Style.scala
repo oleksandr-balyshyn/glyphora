@@ -40,11 +40,14 @@ final case class Style(
     */
   def without(flags: Modifiers): Style = copy(modifiers = modifiers.without(flags))
 
-  def notBold: Style      = without(Modifiers.Bold)
-  def notDim: Style       = without(Modifiers.Dim)
-  def notItalic: Style    = without(Modifiers.Italic)
-  def notUnderline: Style = without(Modifiers.Underline)
-  def notReverse: Style   = without(Modifiers.Reverse)
+  def notBold: Style       = without(Modifiers.Bold)
+  def notDim: Style        = without(Modifiers.Dim)
+  def notItalic: Style     = without(Modifiers.Italic)
+  def notUnderline: Style  = without(Modifiers.Underline)
+  def notBlink: Style      = without(Modifiers.Blink)
+  def notReverse: Style    = without(Modifiers.Reverse)
+  def notHidden: Style     = without(Modifiers.Hidden)
+  def notCrossedOut: Style = without(Modifiers.CrossedOut)
 
   /** Drops the foreground color, restoring the terminal default. */
   def withoutFg: Style = copy(fg = None)

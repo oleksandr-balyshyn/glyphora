@@ -20,7 +20,7 @@ final case class Dialog(
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    val box = Dialog.centered(area, math.min(area.width, math.max(message.width + 4, 20)), message.height + 4)
+    val box = area.centered(math.min(area.width, math.max(message.width + 4, 20)), message.height + 4)
     if box.width >= 4 && box.height >= 4 then
       clear(box, buffer)
       Block(Some(Line.styled(title, style)), borderType, style).render(box, buffer)
@@ -52,10 +52,3 @@ final case class Dialog(
       if x + width <= inner.right then buffer.setString(x, y, label, buttonStyle)
       x += width + 1
     }
-
-object Dialog:
-  /** A `width` x `height` box centered inside `area`, clamped to fit. */
-  def centered(area: Rect, width: Int, height: Int): Rect =
-    val w = math.min(width, area.width)
-    val h = math.min(height, area.height)
-    Rect(area.x + (area.width - w) / 2, area.y + (area.height - h) / 2, w, h)

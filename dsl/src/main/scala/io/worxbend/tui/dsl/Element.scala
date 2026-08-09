@@ -559,31 +559,29 @@ final case class InputElement(
   }
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
-          state.insert(Character.toString(c))
-          true
-        case KeyCode.Backspace                                                                   =>
-          state.backspace()
-          true
-        case KeyCode.Delete                                                                      =>
-          state.delete()
-          true
-        case KeyCode.Left                                                                        =>
-          state.moveLeft()
-          true
-        case KeyCode.Right                                                                       =>
-          state.moveRight()
-          true
-        case KeyCode.Home                                                                        =>
-          state.moveHome()
-          true
-        case KeyCode.End                                                                         =>
-          state.moveEnd()
-          true
-        case _                                                                                   => false
+    event.code match
+      case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
+        state.insert(Character.toString(c))
+        true
+      case KeyCode.Backspace                                                                   =>
+        state.backspace()
+        true
+      case KeyCode.Delete                                                                      =>
+        state.delete()
+        true
+      case KeyCode.Left                                                                        =>
+        state.moveLeft()
+        true
+      case KeyCode.Right                                                                       =>
+        state.moveRight()
+        true
+      case KeyCode.Home                                                                        =>
+        state.moveHome()
+        true
+      case KeyCode.End                                                                         =>
+        state.moveEnd()
+        true
+      case _                                                                                   => false
 
 /** A labelled checkbox over a caller-owned `Signal`. Space/Enter (or a click) flips it while focused. */
 final case class CheckboxElement(
@@ -595,7 +593,7 @@ final case class CheckboxElement(
   private[dsl] def withProps(props: ElementProps): CheckboxElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
-    Some(toggleOnActivate(props, () => checked.update(value => !value)))
+    Some(toggleOnActivate(() => checked.update(value => !value)))
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(clickActivates(() => checked.update(value => !value)))
 
@@ -609,7 +607,7 @@ final case class ToggleElement(
   private[dsl] def withProps(props: ElementProps): ToggleElement = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
-    Some(toggleOnActivate(props, () => on.update(value => !value)))
+    Some(toggleOnActivate(() => on.update(value => !value)))
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(clickActivates(() => on.update(value => !value)))
 
@@ -629,7 +627,7 @@ final case class SelectElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused || options.isEmpty then false
+    if options.isEmpty then false
     else
       event.code match
         case KeyCode.Left  =>
@@ -658,16 +656,14 @@ final case class ListElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Down =>
-          state.selectNext(items.size)
-          true
-        case KeyCode.Up   =>
-          state.selectPrevious(items.size)
-          true
-        case _            => false
+    event.code match
+      case KeyCode.Down =>
+        state.selectNext(items.size)
+        true
+      case KeyCode.Up   =>
+        state.selectPrevious(items.size)
+        true
+      case _            => false
 
 /** A collapsible tree over an in-memory node list. Up/Down move the selection through the *visible* rows and Enter
   * expands or collapses the selected branch (a no-op on a leaf), all while focused.
@@ -685,19 +681,17 @@ final case class TreeElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Down  =>
-          state.selectNext(nodes)
-          true
-        case KeyCode.Up    =>
-          state.selectPrevious(nodes)
-          true
-        case KeyCode.Enter =>
-          state.toggle(nodes)
-          true
-        case _             => false
+    event.code match
+      case KeyCode.Down  =>
+        state.selectNext(nodes)
+        true
+      case KeyCode.Up    =>
+        state.selectPrevious(nodes)
+        true
+      case KeyCode.Enter =>
+        state.toggle(nodes)
+        true
+      case _             => false
 
 /** A vertical menu / dropdown / context menu popup. Up/Down move the highlight (skipping separators and disabled
   * items), Enter (or a click) fires `onSelect` with the chosen index, the wheel scrolls. Escape is left unconsumed so
@@ -722,20 +716,18 @@ final case class MenuElement(
     Some(handleMouse)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Down                      =>
-          state.selectNext(items)
-          true
-        case KeyCode.Up                        =>
-          state.selectPrevious(items)
-          true
-        case KeyCode.Enter | KeyCode.Char(' ') =>
-          if items.lift(state.selected).exists(_.selectable) then onSelect(state.selected)
-          true
-        case _                                 =>
-          false
+    event.code match
+      case KeyCode.Down                      =>
+        state.selectNext(items)
+        true
+      case KeyCode.Up                        =>
+        state.selectPrevious(items)
+        true
+      case KeyCode.Enter | KeyCode.Char(' ') =>
+        if items.lift(state.selected).exists(_.selectable) then onSelect(state.selected)
+        true
+      case _                                 =>
+        false
 
   private def handleMouse(event: MouseEvent, area: Rect): Boolean =
     event.kind match
@@ -885,22 +877,20 @@ final case class ScrollViewElement(
     Some(wheelScrolls(() => state.scrollUp(), () => state.scrollDown()))
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Up       =>
-          state.scrollUp()
-          true
-        case KeyCode.Down     =>
-          state.scrollDown()
-          true
-        case KeyCode.PageUp   =>
-          state.scrollUp(10)
-          true
-        case KeyCode.PageDown =>
-          state.scrollDown(10)
-          true
-        case _                => false
+    event.code match
+      case KeyCode.Up       =>
+        state.scrollUp()
+        true
+      case KeyCode.Down     =>
+        state.scrollDown()
+        true
+      case KeyCode.PageUp   =>
+        state.scrollUp(10)
+        true
+      case KeyCode.PageDown =>
+        state.scrollDown(10)
+        true
+      case _                => false
 
 /** A tab row plus the selected page (Textual's `TabbedContent`): Left/Right switch pages while focused. Only the active
   * page's focusables participate in the tab order.
@@ -928,7 +918,7 @@ final case class TabbedContentElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]             = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused || pageCount == 0 then false
+    if pageCount == 0 then false
     else
       event.code match
         case KeyCode.Left  =>
@@ -967,7 +957,7 @@ final case class CollapsibleElement(
       case Direction.Vertical if !expanded.peek => Constraint.Length(1)
       case _                                    => Constraint.Fill(1)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]           =
-    Some(toggleOnActivate(props, () => expanded.update(open => !open)))
+    Some(toggleOnActivate(() => expanded.update(open => !open)))
 
 /** Two panes split by an adjustable divider: `[`/`]` shift the split while the pane itself is focused. */
 final case class SplitPaneElement(
@@ -1005,16 +995,14 @@ final case class SplitPaneElement(
   private def direction: Direction = if horizontal then Direction.Horizontal else Direction.Vertical
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Char('[') =>
-          splitPercent.update(value => math.max(10, value - 5))
-          true
-        case KeyCode.Char(']') =>
-          splitPercent.update(value => math.min(90, value + 5))
-          true
-        case _                 => false
+    event.code match
+      case KeyCode.Char('[') =>
+        splitPercent.update(value => math.max(10, value - 5))
+        true
+      case KeyCode.Char(']') =>
+        splitPercent.update(value => math.min(90, value + 5))
+        true
+      case _                 => false
 
 /** A text input with a live suggestion dropdown: typing filters `suggestions` (subsequence match), Up/Down move the
   * highlight, Enter accepts it into the input and fires `onAccept`.
@@ -1050,37 +1038,35 @@ final case class AutocompleteElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
-          state.input.insert(Character.toString(c))
-          state.highlighted = 0
-          true
-        case KeyCode.Backspace                                                                   =>
-          state.input.backspace()
-          state.highlighted = 0
-          true
-        case KeyCode.Down                                                                        =>
-          state.highlighted = math.min(state.highlighted + 1, math.max(0, matches.size - 1))
-          true
-        case KeyCode.Up                                                                          =>
-          state.highlighted = math.max(0, state.highlighted - 1)
-          true
-        case KeyCode.Enter                                                                       =>
-          matches.lift(math.min(state.highlighted, math.max(0, matches.size - 1))) match
-            case Some(choice) =>
-              state.accept(choice)
-              onAccept(choice)
-              true
-            case None         => false
-        case KeyCode.Left                                                                        =>
-          state.input.moveLeft()
-          true
-        case KeyCode.Right                                                                       =>
-          state.input.moveRight()
-          true
-        case _                                                                                   => false
+    event.code match
+      case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
+        state.input.insert(Character.toString(c))
+        state.highlighted = 0
+        true
+      case KeyCode.Backspace                                                                   =>
+        state.input.backspace()
+        state.highlighted = 0
+        true
+      case KeyCode.Down                                                                        =>
+        state.highlighted = math.min(state.highlighted + 1, math.max(0, matches.size - 1))
+        true
+      case KeyCode.Up                                                                          =>
+        state.highlighted = math.max(0, state.highlighted - 1)
+        true
+      case KeyCode.Enter                                                                       =>
+        matches.lift(math.min(state.highlighted, math.max(0, matches.size - 1))) match
+          case Some(choice) =>
+            state.accept(choice)
+            onAccept(choice)
+            true
+          case None         => false
+      case KeyCode.Left                                                                        =>
+        state.input.moveLeft()
+        true
+      case KeyCode.Right                                                                       =>
+        state.input.moveRight()
+        true
+      case _                                                                                   => false
 
 /** A file chooser over a [[FilePickerState]]: arrows navigate, Enter opens directories or accepts a file into
   * `state.chosen`.
@@ -1100,25 +1086,23 @@ final case class FilePickerElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Down  =>
-          state.tree.selectNext()
-          true
-        case KeyCode.Up    =>
-          state.tree.selectPrevious()
-          true
-        case KeyCode.Enter =>
-          state.tree.selected match
-            case Some(path) if java.nio.file.Files.isDirectory(path) =>
-              state.tree.toggle()
-              true
-            case Some(path)                                          =>
-              state.chosen.set(Some(path))
-              true
-            case None                                                => false
-        case _             => false
+    event.code match
+      case KeyCode.Down  =>
+        state.tree.selectNext()
+        true
+      case KeyCode.Up    =>
+        state.tree.selectPrevious()
+        true
+      case KeyCode.Enter =>
+        state.tree.selected match
+          case Some(path) if java.nio.file.Files.isDirectory(path) =>
+            state.tree.toggle()
+            true
+          case Some(path)                                          =>
+            state.chosen.set(Some(path))
+            true
+          case None                                                => false
+      case _             => false
 
 /** Mutually exclusive options: Up/Down move the selection while focused. */
 final case class RadioGroupElement(
@@ -1135,7 +1119,7 @@ final case class RadioGroupElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused || options.isEmpty then false
+    if options.isEmpty then false
     else
       event.code match
         case KeyCode.Down =>
@@ -1170,22 +1154,20 @@ final case class SliderElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Left  =>
-          value.update(v => math.max(min, v - step))
-          true
-        case KeyCode.Right =>
-          value.update(v => math.min(max, v + step))
-          true
-        case KeyCode.Home  =>
-          value.set(min)
-          true
-        case KeyCode.End   =>
-          value.set(max)
-          true
-        case _             => false
+    event.code match
+      case KeyCode.Left  =>
+        value.update(v => math.max(min, v - step))
+        true
+      case KeyCode.Right =>
+        value.update(v => math.min(max, v + step))
+        true
+      case KeyCode.Home  =>
+        value.set(min)
+        true
+      case KeyCode.End   =>
+        value.set(max)
+        true
+      case _             => false
 
 /** A multi-select list: Up/Down move the cursor, Space toggles membership of the cursor row. */
 final case class SelectionListElement(
@@ -1206,21 +1188,19 @@ final case class SelectionListElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Down      =>
-          state.selectNext(items.size)
-          true
-        case KeyCode.Up        =>
-          state.selectPrevious(items.size)
-          true
-        case KeyCode.Char(' ') =>
-          state.selected.foreach { cursor =>
-            selected.update(current => if current.contains(cursor) then current - cursor else current + cursor)
-          }
-          true
-        case _                 => false
+    event.code match
+      case KeyCode.Down      =>
+        state.selectNext(items.size)
+        true
+      case KeyCode.Up        =>
+        state.selectPrevious(items.size)
+        true
+      case KeyCode.Char(' ') =>
+        state.selected.foreach { cursor =>
+          selected.update(current => if current.contains(cursor) then current - cursor else current + cursor)
+        }
+        true
+      case _                 => false
 
 /** A text input restricted to numbers (optional single leading minus and, with `allowDecimal`, one dot). */
 final case class NumberInputElement(
@@ -1236,31 +1216,29 @@ final case class NumberInputElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Char(c) if event.modifiers.isEmpty =>
-          if accepts(c) then state.insert(Character.toString(c))
-          true // swallow rejected characters too: they must not bubble as global keys while typing
-        case KeyCode.Backspace =>
-          state.backspace()
-          true
-        case KeyCode.Delete    =>
-          state.delete()
-          true
-        case KeyCode.Left      =>
-          state.moveLeft()
-          true
-        case KeyCode.Right     =>
-          state.moveRight()
-          true
-        case KeyCode.Home      =>
-          state.moveHome()
-          true
-        case KeyCode.End       =>
-          state.moveEnd()
-          true
-        case _                 => false
+    event.code match
+      case KeyCode.Char(c) if event.modifiers.isEmpty =>
+        if accepts(c) then state.insert(Character.toString(c))
+        true // swallow rejected characters too: they must not bubble as global keys while typing
+      case KeyCode.Backspace =>
+        state.backspace()
+        true
+      case KeyCode.Delete    =>
+        state.delete()
+        true
+      case KeyCode.Left      =>
+        state.moveLeft()
+        true
+      case KeyCode.Right     =>
+        state.moveRight()
+        true
+      case KeyCode.Home      =>
+        state.moveHome()
+        true
+      case KeyCode.End       =>
+        state.moveEnd()
+        true
+      case _                 => false
 
   private def accepts(codePoint: Int): Boolean =
     if Character.isDigit(codePoint) then true
@@ -1282,16 +1260,14 @@ final case class MaskedInputElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Char(c) if event.modifiers.isEmpty =>
-          typeChar(c)
-          true
-        case KeyCode.Backspace                          =>
-          eraseSlot()
-          true
-        case _                                          => false
+    event.code match
+      case KeyCode.Char(c) if event.modifiers.isEmpty =>
+        typeChar(c)
+        true
+      case KeyCode.Backspace                          =>
+        eraseSlot()
+        true
+      case _                                          => false
 
   private def typeChar(codePoint: Int): Unit =
     state.moveEnd()
@@ -1327,7 +1303,7 @@ final case class PaginatorElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]  = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused || total == 0 then false
+    if total == 0 then false
     else
       event.code match
         case KeyCode.Left  =>
@@ -1348,7 +1324,7 @@ final case class ButtonElement(
   private[dsl] def withProps(props: ElementProps): ButtonElement             = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
-    Some(toggleOnActivate(props, action))
+    Some(toggleOnActivate(action))
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(clickActivates(action))
 
@@ -1368,22 +1344,20 @@ final case class LogElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Up       =>
-          state.scrollUp()
-          true
-        case KeyCode.Down     =>
-          state.scrollDown()
-          true
-        case KeyCode.PageUp   =>
-          state.scrollUp(10)
-          true
-        case KeyCode.PageDown =>
-          state.scrollDown(10)
-          true
-        case _                => false
+    event.code match
+      case KeyCode.Up       =>
+        state.scrollUp()
+        true
+      case KeyCode.Down     =>
+        state.scrollDown()
+        true
+      case KeyCode.PageUp   =>
+        state.scrollUp(10)
+        true
+      case KeyCode.PageDown =>
+        state.scrollDown(10)
+        true
+      case _                => false
 
 /** Multi-line editor element. While focused it consumes printable characters, Enter (newline), Backspace, Delete,
   * arrows, Home/End, Ctrl+Z (undo) and Ctrl+Y (redo) — Tab stays free for focus traversal. A bracketed paste lands as
@@ -1406,46 +1380,44 @@ final case class TextAreaElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event match
-        case KeyEvent(KeyCode.Char('z'), modifiers) if modifiers.has(KeyModifiers.Ctrl)                   =>
-          state.undo()
-          true
-        case KeyEvent(KeyCode.Char('y'), modifiers) if modifiers.has(KeyModifiers.Ctrl)                   =>
-          state.redo()
-          true
-        case KeyEvent(KeyCode.Char(c), modifiers) if modifiers.isEmpty || modifiers == KeyModifiers.Shift =>
-          state.insert(Character.toString(c))
-          true
-        case KeyEvent(KeyCode.Enter, _)                                                                   =>
-          state.newline()
-          true
-        case KeyEvent(KeyCode.Backspace, _)                                                               =>
-          state.backspace()
-          true
-        case KeyEvent(KeyCode.Delete, _)                                                                  =>
-          state.delete()
-          true
-        case KeyEvent(KeyCode.Left, _)                                                                    =>
-          state.moveLeft()
-          true
-        case KeyEvent(KeyCode.Right, _)                                                                   =>
-          state.moveRight()
-          true
-        case KeyEvent(KeyCode.Up, _)                                                                      =>
-          state.moveUp()
-          true
-        case KeyEvent(KeyCode.Down, _)                                                                    =>
-          state.moveDown()
-          true
-        case KeyEvent(KeyCode.Home, _)                                                                    =>
-          state.moveHome()
-          true
-        case KeyEvent(KeyCode.End, _)                                                                     =>
-          state.moveEnd()
-          true
-        case _                                                                                            => false
+    event match
+      case KeyEvent(KeyCode.Char('z'), modifiers) if modifiers.has(KeyModifiers.Ctrl)                   =>
+        state.undo()
+        true
+      case KeyEvent(KeyCode.Char('y'), modifiers) if modifiers.has(KeyModifiers.Ctrl)                   =>
+        state.redo()
+        true
+      case KeyEvent(KeyCode.Char(c), modifiers) if modifiers.isEmpty || modifiers == KeyModifiers.Shift =>
+        state.insert(Character.toString(c))
+        true
+      case KeyEvent(KeyCode.Enter, _)                                                                   =>
+        state.newline()
+        true
+      case KeyEvent(KeyCode.Backspace, _)                                                               =>
+        state.backspace()
+        true
+      case KeyEvent(KeyCode.Delete, _)                                                                  =>
+        state.delete()
+        true
+      case KeyEvent(KeyCode.Left, _)                                                                    =>
+        state.moveLeft()
+        true
+      case KeyEvent(KeyCode.Right, _)                                                                   =>
+        state.moveRight()
+        true
+      case KeyEvent(KeyCode.Up, _)                                                                      =>
+        state.moveUp()
+        true
+      case KeyEvent(KeyCode.Down, _)                                                                    =>
+        state.moveDown()
+        true
+      case KeyEvent(KeyCode.Home, _)                                                                    =>
+        state.moveHome()
+        true
+      case KeyEvent(KeyCode.End, _)                                                                     =>
+        state.moveEnd()
+        true
+      case _                                                                                            => false
 
 /** A filesystem browser. Up/Down move the selection, Enter expands or collapses the selected directory, while focused.
   * Listings are read lazily and cached in `state` — it touches the disk on expansion, never per frame.
@@ -1461,19 +1433,17 @@ final case class DirectoryTreeElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Down  =>
-          state.selectNext()
-          true
-        case KeyCode.Up    =>
-          state.selectPrevious()
-          true
-        case KeyCode.Enter =>
-          state.toggle()
-          true
-        case _             => false
+    event.code match
+      case KeyCode.Down  =>
+        state.selectNext()
+        true
+      case KeyCode.Up    =>
+        state.selectPrevious()
+        true
+      case KeyCode.Enter =>
+        state.toggle()
+        true
+      case _             => false
 
 /** A sortable, filterable table. Up/Down move the row selection while focused, and PageUp/PageDown turn the page once
   * `state.pageSize` is set (they are left unconsumed otherwise, so they keep bubbling). Sorting and filtering have no
@@ -1490,22 +1460,20 @@ final case class DataTableElement(
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
   private def handleKey(event: KeyEvent): Boolean =
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Down                                =>
-          state.selectNext(table.visibleRows(state).size)
-          true
-        case KeyCode.Up                                  =>
-          state.selectPrevious(table.visibleRows(state).size)
-          true
-        case KeyCode.PageDown if state.pageSize.nonEmpty =>
-          state.nextPage(table.filteredRows(state).size)
-          true
-        case KeyCode.PageUp if state.pageSize.nonEmpty   =>
-          state.previousPage()
-          true
-        case _                                           => false
+    event.code match
+      case KeyCode.Down                                =>
+        state.selectNext(table.visibleRows(state).size)
+        true
+      case KeyCode.Up                                  =>
+        state.selectPrevious(table.visibleRows(state).size)
+        true
+      case KeyCode.PageDown if state.pageSize.nonEmpty =>
+        state.nextPage(table.filteredRows(state).size)
+        true
+      case KeyCode.PageUp if state.pageSize.nonEmpty   =>
+        state.previousPage()
+        true
+      case _                                           => false
 
 /** Wraps a focusable element during the focus pass so its rendered area is recorded for click-to-focus hit-testing.
   * Transparent for everything else: props, children, and handlers delegate to the wrapped node.
@@ -1627,16 +1595,16 @@ private def wheelScrolls(up: () => Unit, down: () => Unit): BuiltinMouseHandler 
         true
       case _                         => false
 
-/** Space/Enter activates a focused two-state control. */
-private def toggleOnActivate(props: ElementProps, activate: () => Unit): KeyEvent => Boolean =
+/** Space/Enter activates a two-state control. Only reached while the element is focused — [[EventRouter]] gates every
+  * built-in key handler on that.
+  */
+private def toggleOnActivate(activate: () => Unit): KeyEvent => Boolean =
   event =>
-    if !props.focused then false
-    else
-      event.code match
-        case KeyCode.Char(' ') | KeyCode.Enter =>
-          activate()
-          true
-        case _                                 => false
+    event.code match
+      case KeyCode.Char(' ') | KeyCode.Enter =>
+        activate()
+        true
+      case _                                 => false
 
 /** Focused interactive elements render with the focus style (the theme's, once the focus pass ran) layered over their
   * own, so the user can see where keystrokes go.

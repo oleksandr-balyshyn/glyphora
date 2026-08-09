@@ -38,11 +38,21 @@ sealed trait Reactive[A]:
   * (see `unchanged`). A value mutated *in place* is equal to itself, so `set(sameInstance)` never notifies: hold
   * immutable values in a signal, or set a new instance. Must only be called from the render thread once one is
   * registered — enforced by `RenderThread.checkRenderThread()`, which is a no-op in tests with no running runtime.
+  *
+  * Writing is render-thread-only, but [[peek]] may be called from any thread: the value is `@volatile`, so a reader
+  * outside the render thread is guaranteed to see the most recently set value rather than an arbitrarily stale one.
+  * That guarantee is what makes a test harness sound — `Pilot` drives the app from the test thread while the runner
+  * mutates signals on its own, and asserting on `peek` from there would otherwise be reading a field with no
+  * happens-before edge to the write. The subscriber set is deliberately *not* published that way; it is touched only on
+  * the render thread.
   */
 final class Signal[A] private (initial: A) extends Reactive[A], Subscribable:
 
-  private var currentValue: A = initial
-  private val subscribers     = mutable.LinkedHashSet[Subscriber]()
+  // @volatile for cross-thread readers of `peek` only — see the class Scaladoc. The cost is a plain load on the read
+  // side of every architecture glyphora targets; the fence is on `set`, which is orders of magnitude rarer than the
+  // per-frame reads.
+  @volatile private var currentValue: A = initial
+  private val subscribers               = mutable.LinkedHashSet[Subscriber]()
 
   def peek: A = currentValue
 
@@ -87,6 +97,10 @@ object Signal:
   * Lazily cached: `set` on a dependency only marks this stale (cascading to dependents); the thunk re-runs on the next
   * read. Each recomputation first unsubscribes from the previous dependency set, then re-subscribes to exactly what the
   * thunk reads this time — the mechanism that makes conditional dependencies correct.
+  *
+  * The dependency graph must be acyclic. A thunk that reads the value it is itself computing — directly, or around a
+  * cycle through other computeds — throws `IllegalStateException` on the read that closes the loop, rather than
+  * recursing until the stack runs out.
   */
 final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A], Subscriber, Subscribable:
 
@@ -140,6 +154,15 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
     subscribers.clear()
 
   private def recompute(): Unit =
+    // a thunk that reads its own value — directly, or around a cycle through another computed — would otherwise
+    // recurse until the stack runs out. `StackOverflowError` is fatal, so a render loop cannot report it through its
+    // `NonFatal` handler and the runner dies with nothing pointing at the cycle. A programming error, not a
+    // recoverable condition, so it throws rather than returning a stale value and pretending the graph is acyclic.
+    if recomputing then
+      throw IllegalStateException(
+        "Computed value depends on itself: its body read the value it is in the middle of computing, " +
+          "directly or through a cycle of other Computed values"
+      )
     dependencies.toSeq.foreach(_.unsubscribe(this))
     dependencies.clear()
     val recomputeScope: ReactiveScope = dependency =>

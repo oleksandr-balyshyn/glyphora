@@ -44,13 +44,23 @@ final class ColorDepthSpec extends AnyFunSuite:
     assert(ColorDepth.downsample(Color.Rgb(128, 128, 128), ColorDepth.Ansi256) == Color.Indexed(244))
 
   test("16-color terminals get the nearest named color"):
-    assert(ColorDepth.downsample(Color.Rgb(255, 0, 0), ColorDepth.Ansi16) == Color.Red)
     assert(ColorDepth.downsample(Color.Rgb(0, 0, 0), ColorDepth.Ansi16) == Color.Black)
-    assert(ColorDepth.downsample(Color.Indexed(196), ColorDepth.Ansi16) == Color.Red)
+    assert(ColorDepth.downsample(Color.Rgb(200, 50, 50), ColorDepth.Ansi16) == Color.Red)
     assert(ColorDepth.downsample(Color.Cyan, ColorDepth.Ansi16) == Color.Cyan)
+
+  /** The bright half of the palette is searched too, so a saturated color reduces to its exact entry instead of the
+    * muted base one. `Color.Red` is (205, 49, 49), a visibly different red from (255, 0, 0).
+    */
+  test("16-color downsampling reaches the bright half of the palette"):
+    assert(ColorDepth.downsample(Color.Rgb(255, 0, 0), ColorDepth.Ansi16) == Color.BrightRed)
+    assert(ColorDepth.downsample(Color.Rgb(255, 255, 255), ColorDepth.Ansi16) == Color.BrightWhite)
+    assert(ColorDepth.downsample(Color.Indexed(196), ColorDepth.Ansi16) == Color.BrightRed)
+    // and the bright codes really are what a 16-color terminal receives
+    val bright = Style.Default.withFg(Color.Rgb(255, 0, 0))
+    assert(AnsiSequences.sgr(bright, ColorDepth.Ansi16).contains("91"))
 
   test("sgr downsampling changes the emitted codes"):
     val style = Style.Default.withFg(Color.Rgb(255, 0, 0))
     assert(AnsiSequences.sgr(style, ColorDepth.TrueColor).contains("38;2;255;0;0"))
     assert(AnsiSequences.sgr(style, ColorDepth.Ansi256).contains("38;5;196"))
-    assert(AnsiSequences.sgr(style, ColorDepth.Ansi16).contains("31"))
+    assert(AnsiSequences.sgr(style, ColorDepth.Ansi16).contains("91"))
