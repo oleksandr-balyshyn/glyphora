@@ -38,11 +38,21 @@ sealed trait Reactive[A]:
   * (see `unchanged`). A value mutated *in place* is equal to itself, so `set(sameInstance)` never notifies: hold
   * immutable values in a signal, or set a new instance. Must only be called from the render thread once one is
   * registered — enforced by `RenderThread.checkRenderThread()`, which is a no-op in tests with no running runtime.
+  *
+  * Writing is render-thread-only, but [[peek]] may be called from any thread: the value is `@volatile`, so a reader
+  * outside the render thread is guaranteed to see the most recently set value rather than an arbitrarily stale one.
+  * That guarantee is what makes a test harness sound — `Pilot` drives the app from the test thread while the runner
+  * mutates signals on its own, and asserting on `peek` from there would otherwise be reading a field with no
+  * happens-before edge to the write. The subscriber set is deliberately *not* published that way; it is touched only on
+  * the render thread.
   */
 final class Signal[A] private (initial: A) extends Reactive[A], Subscribable:
 
-  private var currentValue: A = initial
-  private val subscribers     = mutable.LinkedHashSet[Subscriber]()
+  // @volatile for cross-thread readers of `peek` only — see the class Scaladoc. The cost is a plain load on the read
+  // side of every architecture glyphora targets; the fence is on `set`, which is orders of magnitude rarer than the
+  // per-frame reads.
+  @volatile private var currentValue: A = initial
+  private val subscribers               = mutable.LinkedHashSet[Subscriber]()
 
   def peek: A = currentValue
 
