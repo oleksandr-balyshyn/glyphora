@@ -12,6 +12,11 @@ import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent,
   * that timed out mid-flight — decodes to `None` and is dropped. It must never be reported as a key: synthesizing an
   * `Escape` from unparsed bytes means a capability probe silently closes the user's dialog.
   *
+  * An instance is **not** thread-safe: it owns a shared read cursor and one character of pushback, so exactly one
+  * reading thread may call `decode`. Two threads calling it at once interleave their reads into sequences neither of
+  * them sent, and the single pushback slot can hand one thread's character to the other. `JLine3Backend` upholds this
+  * by only ever decoding from the thread parked in its blocking read.
+  *
   * `escapeTimeoutMillis` bounds how long the decoder waits for the rest of a sequence after `ESC`. It also decides how
   * long a lone `ESC` takes to report; raise it on high-latency links where a real `ESC [ A` can arrive split.
   */
@@ -172,10 +177,23 @@ private[terminal] final class InputDecoder(
       decodeSgrMouse(params.drop(1), finalByte == 'M')
     else if isPrivateReply(params) then None // DA/DECRPM/kitty-query replies: not input, must not surface as keys
     else
-      val numbers = params.split(';').toSeq.filter(_.nonEmpty).flatMap(_.takeWhile(_ != ':').toIntOption)
+      val numbers = parameterNumbers(params)
       numbers.drop(1).headOption match
         case Some(code) => modifiersFromCode(code).flatMap(decodeCsiKey(numbers, finalByte, _))
         case None       => decodeCsiKey(numbers, finalByte, KeyModifiers.None)
+
+  /** The numeric parameters of a CSI sequence, in order.
+    *
+    * One reading of the parameter string for every sequence shape, because the two that existed disagreed: the mouse
+    * one accepted neither an empty field nor a sub-parameter, so an SGR report written as `CSI <0:1;10;5M` — legal, and
+    * what a terminal that reports a sub-parameter sends — matched nothing and the whole click was dropped.
+    *
+    * An empty field (`CSI ;5H`, a sequence that omits its first parameter) is skipped rather than defaulted, and a `:`
+    * sub-parameter (kitty writes the shifted key and the base layout key after a colon) is discarded: glyphora has no
+    * vocabulary for either, and a parameter it cannot read must not shift the ones after it out of position.
+    */
+  private def parameterNumbers(params: String): Seq[Int] =
+    params.split(';').toSeq.filter(_.nonEmpty).flatMap(_.takeWhile(_ != ':').toIntOption)
 
   private def decodeCsiKey(numbers: Seq[Int], finalByte: Int, modifiers: KeyModifiers): Option[Event] =
     finalByte match
@@ -187,7 +205,7 @@ private[terminal] final class InputDecoder(
       case 'F'                                            => key(KeyCode.End, modifiers)
       case 'P' | 'Q' | 'S'                                => key(functionKey(finalByte), modifiers)
       case 'R' if isFunctionKey3(numbers)                 => key(KeyCode.F(3), modifiers)
-      case 'Z'                                            => key(KeyCode.Tab, KeyModifiers.Shift)
+      case 'Z'                                            => key(KeyCode.Tab, modifiers | KeyModifiers.Shift)
       case 'I'                                            => Some(Event.FocusGained)
       case 'O'                                            => Some(Event.FocusLost)
       case 'u'                                            => decodeKittyKey(numbers, modifiers)
@@ -224,74 +242,14 @@ private[terminal] final class InputDecoder(
 
   /** `CSI n ~` navigation/function keys; the modifier, when present, is the second parameter. */
   private def decodeTilde(numbers: Seq[Int], modifiers: KeyModifiers): Option[Event] =
-    val code = numbers.headOption match
-      case Some(1) | Some(7)             => Some(KeyCode.Home)
-      case Some(2)                       => Some(KeyCode.Insert)
-      case Some(3)                       => Some(KeyCode.Delete)
-      case Some(4) | Some(8)             => Some(KeyCode.End)
-      case Some(5)                       => Some(KeyCode.PageUp)
-      case Some(6)                       => Some(KeyCode.PageDown)
-      case Some(n) if n >= 11 && n <= 15 => Some(KeyCode.F(n - 10))
-      case Some(n) if n >= 17 && n <= 21 => Some(KeyCode.F(n - 11))
-      case Some(23)                      => Some(KeyCode.F(11))
-      case Some(24)                      => Some(KeyCode.F(12))
-      case _                             => None
-    code.map(c => Event.Key(KeyEvent(c, modifiers)))
+    numbers.headOption.flatMap(CsiKeys.tildeKey).map(c => Event.Key(KeyEvent(c, modifiers)))
 
   /** Kitty keyboard protocol `CSI codepoint ; modifiers u`: unambiguous keys, no Esc timeout heuristic.
     *
-    * Code points in the Private Use Area 57344-63743 are the protocol's functional keys, not text — emitting them as
-    * characters would insert garbage glyphs into text inputs.
+    * The code point vocabulary itself lives in [[KittyKeys]].
     */
   private def decodeKittyKey(numbers: Seq[Int], modifiers: KeyModifiers): Option[Event] =
-    val code = numbers.headOption match
-      case Some(27)                                                      => Some(KeyCode.Escape)
-      case Some(13)                                                      => Some(KeyCode.Enter)
-      case Some(9)                                                       => Some(KeyCode.Tab)
-      case Some(127)                                                     => Some(KeyCode.Backspace)
-      case Some(cp) if cp >= FunctionalKeyLow && cp <= FunctionalKeyHigh => kittyFunctionalKey(cp)
-      case Some(cp) if cp >= 32 && isTextCodePoint(cp)                   => Some(KeyCode.Char(cp))
-      case _                                                             => None
-    code.map(c => Event.Key(KeyEvent(c, modifiers)))
-
-  /** Whether `codePoint` is a character a string can actually hold.
-    *
-    * `Character.isValidCodePoint` only bounds by 0x10FFFF, so on its own it admits the surrogate range — and a lone
-    * surrogate corrupts every string it is appended to, which is exactly what [[printable]] exists to prevent.
-    */
-  private def isTextCodePoint(codePoint: Int): Boolean =
-    Character.isValidCodePoint(codePoint) && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
-
-  /** The kitty functional-key block, mapped onto glyphora's [[KeyCode]] vocabulary.
-    *
-    * Keypad keys report as their non-keypad equivalents (`KP_7` is `Home`, `KP_ENTER` is `Enter`, `KP_3` is `3`) —
-    * glyphora has no separate keypad concept and an application almost never wants one. Media keys and the
-    * modifier-only keys (a bare Shift press) are dropped: they are not key events in this model.
-    */
-  private def kittyFunctionalKey(codePoint: Int): Option[KeyCode] =
-    codePoint match
-      case 57358 | 57359 | 57360 | 57361 | 57362 | 57363 => None // caps/scroll/num lock, print screen, pause, menu
-      case cp if cp >= 57376 && cp <= 57398 => Some(KeyCode.F(cp - 57376 + 13))       // F13-F35
-      case cp if cp >= 57399 && cp <= 57408 => Some(KeyCode.Char('0' + (cp - 57399))) // KP_0-KP_9
-      case 57409                            => Some(KeyCode.Char('.'))
-      case 57410                            => Some(KeyCode.Char('/'))
-      case 57411                            => Some(KeyCode.Char('*'))
-      case 57412                            => Some(KeyCode.Char('-'))
-      case 57413                            => Some(KeyCode.Char('+'))
-      case 57414                            => Some(KeyCode.Enter)
-      case 57415                            => Some(KeyCode.Char('='))
-      case 57416                            => Some(KeyCode.Char(','))
-      case 57417                            => Some(KeyCode.Left)
-      case 57418                            => Some(KeyCode.Right)
-      case 57419                            => Some(KeyCode.Up)
-      case 57420                            => Some(KeyCode.Down)
-      case 57421                            => Some(KeyCode.PageUp)
-      case 57422                            => Some(KeyCode.PageDown)
-      case 57423                            => Some(KeyCode.Home)
-      case 57424                            => Some(KeyCode.End)
-      case 57425                            => Some(KeyCode.Insert)
-      case 57426                            => Some(KeyCode.Delete)
-      case _ => None // media keys, modifier-only keys, unassigned
+    numbers.headOption.flatMap(KittyKeys.keyCode).map(c => Event.Key(KeyEvent(c, modifiers)))
 
   /** Bracketed paste: everything between `CSI 200~` and `CSI 201~` is one paste payload.
     *
@@ -319,14 +277,20 @@ private[terminal] final class InputDecoder(
         tail.append(c.toChar)
         if tail.length > PasteEnd.length then tail.deleteCharAt(0)
         if isTerminator(tail) then
-          // `read` counts everything consumed, terminator included, while `content` holds only what fitted under
-          // PasteLimit — so the terminator's own characters are in `content` exactly when the payload stayed under the
-          // cap, and only that many of them are trimmed off the end.
-          val payloadChars        = read - PasteEnd.length
-          val terminatorCharsKept = math.max(0, content.length - payloadChars)
-          content.setLength(content.length - terminatorCharsKept)
+          trimTerminator(content, read)
           done = true
     Event.Paste(content.result())
+
+  /** Drops whatever part of the paste terminator was appended to `content`.
+    *
+    * `charsRead` counts everything consumed from the wire, the terminator included, while `content` holds only what
+    * fitted under [[PasteLimit]] — so the terminator's own characters are in `content` exactly when the payload stayed
+    * under the cap, and only that many of them are trimmed off the end.
+    */
+  private def trimTerminator(content: StringBuilder, charsRead: Int): Unit =
+    val payloadChars        = charsRead - PasteEnd.length
+    val terminatorCharsKept = math.max(0, content.length - payloadChars)
+    content.setLength(content.length - terminatorCharsKept)
 
   /** Whether the rolling tail *is* the paste terminator. Compared character by character so that a payload the size of
     * a file costs no allocation per byte.
@@ -360,7 +324,7 @@ private[terminal] final class InputDecoder(
   /** SGR mouse report `CSI < b ; x ; y (M|m)`: button bits carry drag/scroll/modifier flags, coordinates are one-based.
     */
   private def decodeSgrMouse(params: String, isPress: Boolean): Option[Event] =
-    params.split(';').toSeq.flatMap(_.toIntOption) match
+    parameterNumbers(params) match
       case Seq(button, column, row) => mouseEvent(button, column - 1, row - 1, isPress)
       case _                        => None
 
@@ -387,12 +351,8 @@ private[terminal] final class InputDecoder(
       else if (button & 32) != 0 then Some(MouseEventKind.Drag)
       else if isPress then Some(MouseEventKind.Down)
       else Some(MouseEventKind.Up)
-    val modifiers =
-      combine(
-        if (button & 4) != 0 then Some(KeyModifiers.Shift) else None,
-        if (button & 8) != 0 then Some(KeyModifiers.Alt) else None,
-        if (button & 16) != 0 then Some(KeyModifiers.Ctrl) else None,
-      )
+    // a mouse report carries the same shift/alt/ctrl bitmask as a CSI modifier parameter, shifted up by two positions
+    val modifiers = modifiersFromBits(button >> MouseModifierShift)
     kind.map(k => Event.Mouse(MouseEvent(math.max(0, x), math.max(0, y), k, modifiers)))
 
   /** Wheel buttons 64 and 65 are wheel-up and wheel-down; 66 and 67 are wheel-left and wheel-right, which
@@ -417,18 +377,19 @@ private[terminal] final class InputDecoder(
     */
   private def modifiersFromCode(code: Int): Option[KeyModifiers] =
     val bits = code - 1
-    if (bits & UnrepresentableModifiers) != 0 then None
-    else
-      Some(
-        combine(
-          if (bits & 1) != 0 then Some(KeyModifiers.Shift) else None,
-          if (bits & 2) != 0 then Some(KeyModifiers.Alt) else None,
-          if (bits & 4) != 0 then Some(KeyModifiers.Ctrl) else None,
-        )
-      )
+    if (bits & UnrepresentableModifiers) != 0 then None else Some(modifiersFromBits(bits))
 
-  private def combine(flags: Option[KeyModifiers]*): KeyModifiers =
-    flags.flatten.foldLeft(KeyModifiers.None)(_ | _)
+  /** The xterm shift/alt/ctrl bitmask (bit 0 shift, bit 1 alt, bit 2 ctrl) as a [[KeyModifiers]] set.
+    *
+    * Bits above those three are ignored here; a caller that must reject them — [[modifiersFromCode]], because a key
+    * held with a modifier glyphora cannot express must not be delivered bare — checks for them before calling.
+    */
+  private def modifiersFromBits(bits: Int): KeyModifiers =
+    var modifiers = KeyModifiers.None
+    if (bits & 1) != 0 then modifiers = modifiers | KeyModifiers.Shift
+    if (bits & 2) != 0 then modifiers = modifiers | KeyModifiers.Alt
+    if (bits & 4) != 0 then modifiers = modifiers | KeyModifiers.Ctrl
+    modifiers
 
   private def key(code: KeyCode, modifiers: KeyModifiers = KeyModifiers.None): Option[Event] =
     Some(Event.Key(KeyEvent(code, modifiers)))
@@ -470,8 +431,11 @@ private[terminal] object InputDecoder:
   private val PasteStart         = 200
   private val PasteEnd           = "\u001b[201~"
   private val MaxParamLength     = 64
-  private val FunctionalKeyLow   = 57344
-  private val FunctionalKeyHigh  = 63743
+
+  /** How far a mouse report's shift/alt/ctrl bits sit above the CSI modifier parameter's: mouse uses 4/8/16 where a CSI
+    * modifier bitmask uses 1/2/4.
+    */
+  private val MouseModifierShift = 2
 
   /** How much of an oversized paste is read (and discarded) while looking for the terminator, so that a payload whose
     * terminator never arrives cannot hold the event loop indefinitely.

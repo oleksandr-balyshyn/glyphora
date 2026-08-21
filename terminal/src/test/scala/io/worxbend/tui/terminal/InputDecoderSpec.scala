@@ -72,6 +72,14 @@ final class InputDecoderSpec extends AnyFunSuite:
   test("shift-tab decodes from CSI Z"):
     assert(decoded(csi("Z")*) == Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Shift)))
 
+  test("CSI Z folds the parsed modifiers in rather than replacing them with Shift"):
+    // xterm sends CSI 1;5Z for Ctrl+Shift+Tab; the sequence's own `Z` already means Shift
+    assert(decoded(csi("1;5Z")*) == Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Ctrl | KeyModifiers.Shift)))
+    assert(decoded(csi("1;3Z")*) == Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Alt | KeyModifiers.Shift)))
+
+  test("an SGR mouse report keeps decoding when a field carries a sub-parameter"):
+    assert(decoded(csi("<0:1;10;5M")*) == Event.Mouse(MouseEvent(9, 4, MouseEventKind.Down, KeyModifiers.None)))
+
   test("an SGR mouse press decodes with zero-based coordinates"):
     assert(decoded(csi("<0;10;5M")*) == Event.Mouse(MouseEvent(9, 4, MouseEventKind.Down, KeyModifiers.None)))
 
@@ -88,6 +96,22 @@ final class InputDecoderSpec extends AnyFunSuite:
   test("mouse modifier bits decode to key modifiers"):
     assert(decoded(csi("<16;2;2M")*) == Event.Mouse(MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.Ctrl)))
     assert(decoded(csi("<4;2;2M")*) == Event.Mouse(MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.Shift)))
+
+  test("a mouse report carrying several modifier bits decodes to all of them"):
+    // 4|8|16 is the mouse encoding of shift|alt|ctrl, the same bitmask a CSI modifier parameter carries at 1|2|4
+    assert(
+      decoded(csi("<28;2;2M")*) ==
+        Event.Mouse(MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.Shift | KeyModifiers.Alt | KeyModifiers.Ctrl))
+    )
+
+  test("kitty keypad keys decode to their non-keypad equivalents"):
+    assert(decoded(csi("57399u")*) == Event.Key(KeyEvent.of(KeyCode.Char('0')))) // KP_0
+    assert(decoded(csi("57408u")*) == Event.Key(KeyEvent.of(KeyCode.Char('9')))) // KP_9
+    assert(decoded(csi("57414u")*) == Event.Key(KeyEvent.of(KeyCode.Enter)))     // KP_ENTER
+    assert(decoded(csi("57423u")*) == Event.Key(KeyEvent.of(KeyCode.Home)))      // KP_HOME
+    assert(decoded(csi("57376u")*) == Event.Key(KeyEvent.of(KeyCode.F(13))))
+    assert(decoded(csi("57398u")*) == Event.Key(KeyEvent.of(KeyCode.F(35))))
+    assert(decoderFor(csi("57358u")*).decode(10).isEmpty) // CAPS_LOCK is a lock state, not a key event
 
   test("a torn escape sequence is dropped rather than reported as a key"):
     // reporting Escape here would mean a half-arrived arrow key silently closes the user's dialog

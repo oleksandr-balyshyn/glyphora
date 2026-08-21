@@ -83,6 +83,20 @@ trait Backend:
 
   def close(): Unit
 
+private[terminal] object Backend:
+
+  /** Enforces the strictly-positive (or infinite) timeout that [[Backend.readEvent]] documents.
+    *
+    * Lives here so every implementation raises the identical failure: JLine reads a non-positive timeout as an
+    * unbounded blocking read, so a zero that slipped through one backend and not the other would wedge the event loop
+    * in production while the headless tests kept passing.
+    *
+    * `> Zero` rather than a finiteness test: it accepts `Duration.Inf` (block until an event arrives) and rejects
+    * `Duration.MinusInf`, which would otherwise take the blocking branch and never return.
+    */
+  def requirePositiveTimeout(timeout: Duration): Unit =
+    require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
+
 enum BackendError:
   case Io(cause: Throwable)
   case UnsupportedTerminal(reason: String)

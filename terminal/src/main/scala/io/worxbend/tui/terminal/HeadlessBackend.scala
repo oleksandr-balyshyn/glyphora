@@ -70,11 +70,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     Right(())
 
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
-    // the same contract the real backend enforces: a zero timeout there means "block forever", so it must never be
-    // silently absorbed here — that divergence is what let a wedged event loop pass the whole test suite
-    // `> Zero` rather than a finiteness test: it accepts `Duration.Inf` and rejects `Duration.MinusInf`, which would
-    // otherwise take the blocking branch and never return
-    require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
+    Backend.requirePositiveTimeout(timeout)
     val polled =
       if timeout.isFinite then Option(events.poll(timeout.toMillis, TimeUnit.MILLISECONDS))
       else Some(events.take())

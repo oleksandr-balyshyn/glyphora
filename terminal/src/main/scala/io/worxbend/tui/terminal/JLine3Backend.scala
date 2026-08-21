@@ -1,11 +1,12 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Event, Size}
+import io.worxbend.tui.core.{Buffer, Event, Size}
 
-import org.jline.terminal.{Terminal, TerminalBuilder}
+import org.jline.terminal.{Attributes, Terminal, TerminalBuilder}
 import org.jline.utils.InfoCmp
 
-import java.io.InterruptedIOException
+import java.io.{FileDescriptor, FileOutputStream, InterruptedIOException}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
@@ -23,25 +24,28 @@ import scala.util.control.NonFatal
 final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) extends Backend:
 
   // written on the render thread, read by JLine's signal-dispatch thread and by the shutdown hook
-  @volatile private var savedAttributes: Option[org.jline.terminal.Attributes] = None
-  @volatile private var alternateScreenActive                                  = false
-  @volatile private var mouseCaptureActive                                     = false
-  @volatile private var cursorHidden                                           = false
-  @volatile private var suspendedState                                         = TerminalState.None
+  // holds the *cooked*-mode attributes captured when raw mode was entered, so it doubles as "are we in raw mode?"
+  @volatile private var cookedAttributes: Option[Attributes] = None
+  @volatile private var alternateScreenActive                = false
+  @volatile private var mouseCaptureActive                   = false
+  @volatile private var cursorHidden                         = false
+  @volatile private var suspendedState                       = TerminalState.Undressed
 
   // owned by the render thread alone — no other thread may read or write it. A thread that takes the screen away (the
   // SIGCONT handler re-entering the alternate screen) raises `fullRedrawRequested` instead: a reset written here from
   // the signal-dispatch thread would be overwritten by an in-flight `draw`'s snapshot and the repaint would be lost.
-  private var lastFlushed: Option[Buffer] = scala.None
+  private var lastFlushed: Option[Buffer] = None
 
   // raised by any thread that disturbed the screen (alternate-screen entry, SIGCONT's reacquire), consumed by `draw`
   private val fullRedrawRequested = RedrawRequest()
 
-  private val pendingResize    = AtomicReference[Option[Size]](scala.None)
+  private val frameEncoder = FrameEncoder(colorDepth)
+
+  private val pendingResize    = AtomicReference[Option[Size]](None)
   private val pendingInterrupt = AtomicBoolean(false)
   private val woken            = AtomicBoolean(false)
   // the thread currently parked in `blockingRead`, if any, so `wake` knows whom to interrupt
-  private val pollingThread    = AtomicReference[Option[Thread]](scala.None)
+  private val pollingThread    = AtomicReference[Option[Thread]](None)
   private val decoder          = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
 
   private val supportsAlternateScreen =
@@ -62,8 +66,8 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     // claimed before the frame is composed, so a request raised while this frame is in flight survives for the next one
     val forced = fullRedrawRequested.claim()
     val result = attempt {
-      val previous = if forced then scala.None else lastFlushed
-      val body     = encodeChangedCells(previous.getOrElse(Buffer(buffer.area)), buffer)
+      val previous = if forced then None else lastFlushed
+      val body     = frameEncoder.encode(previous.getOrElse(Buffer(buffer.area)), buffer)
       // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent
       if body.nonEmpty then
         // one atomic update: the terminal shows the previous frame until the whole batch has arrived
@@ -86,42 +90,9 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     */
   private[terminal] def requestFullRedraw(): Unit = fullRedrawRequested.raise()
 
-  /** The cell-level ANSI for everything that differs between `previous` and `next`, in row-major order.
-    *
-    * Cursor position, SGR state and the open hyperlink carry across cells, so each is re-emitted only where it actually
-    * changes — that suppression is most of the reason a diffed frame is small enough to write in one go. Returns the
-    * empty string when the frame is unchanged.
-    */
-  private def encodeChangedCells(previous: Buffer, next: Buffer): String =
-    val body                        = StringBuilder()
-    var expectedX                   = -1
-    var currentY                    = -1
-    var currentStyle                = ""
-    var currentLink: Option[String] = scala.None
-    previous.diff(
-      next,
-      (x, y, cell) => {
-        if y != currentY || x != expectedX then body ++= AnsiSequences.moveTo(x, y)
-        val sgr = AnsiSequences.sgr(cell.style, colorDepth)
-        if sgr != currentStyle then
-          body ++= sgr
-          currentStyle = sgr
-        if cell.style.link != currentLink then
-          if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
-          cell.style.link.foreach(url => body ++= AnsiSequences.linkOpen(url))
-          currentLink = cell.style.link
-        body ++= cell.symbol
-        currentY = y
-        expectedX = x + math.max(1, CharWidth.of(cell.symbol))
-      },
-    )
-    // a link left open would swallow everything drawn after this frame
-    if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
-    body.result()
-
   def enableRawMode(): Either[BackendError, Unit] =
     attempt {
-      savedAttributes = Some(terminal.enterRawMode())
+      cookedAttributes = Some(terminal.enterRawMode())
       // modern input modes; terminals without support ignore them and keep legacy behavior
       write(AnsiSequences.EnableBracketedPaste)
       write(AnsiSequences.EnableFocusReporting)
@@ -129,15 +100,15 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     }
 
   def disableRawMode(): Either[BackendError, Unit] =
-    savedAttributes match
-      case scala.None       => Left(BackendError.NotInRawMode)
+    cookedAttributes match
+      case None             => Left(BackendError.NotInRawMode)
       case Some(attributes) =>
         attempt {
           write(AnsiSequences.PopKittyKeyboard)
           write(AnsiSequences.DisableFocusReporting)
           write(AnsiSequences.DisableBracketedPaste)
           terminal.setAttributes(attributes)
-          savedAttributes = scala.None
+          cookedAttributes = None
         }
 
   /** Enters the alternate screen, or reports that the terminal has none.
@@ -187,23 +158,23 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     }
 
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
-    require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
+    Backend.requirePositiveTimeout(timeout)
     if pendingInterrupt.getAndSet(false) then Right(Some(Event.Interrupt))
     else
-      pendingResize.getAndSet(scala.None) match
+      pendingResize.getAndSet(None) match
         case Some(resized) => Right(Some(Event.Resize(resized)))
-        case scala.None    =>
+        case None          =>
           // something queued render-thread work while we were away: go round the loop instead of blocking again
-          if woken.getAndSet(false) then Right(scala.None) else blockingRead(timeout)
+          if woken.getAndSet(false) then Right(None) else blockingRead(timeout)
 
   private def blockingRead(timeout: Duration): Either[BackendError, Option[Event]] =
     pollingThread.set(Some(Thread.currentThread()))
     try Right(decoder.decode(JLine3Backend.readTimeoutMillis(timeout)))
     catch
-      case _: InterruptedIOException => Right(scala.None) // woken deliberately by `wake()`
+      case _: InterruptedIOException => Right(None) // woken deliberately by `wake()`
       case NonFatal(error)           => Left(BackendError.Io(error))
     finally
-      pollingThread.set(scala.None) // no read is in flight any more: `wake` has nobody to interrupt
+      pollingThread.set(None) // no read is in flight any more: `wake` has nobody to interrupt
       val _ = Thread.interrupted() // drop an interrupt that landed after the read completed
 
   /** Cuts short an in-flight [[readEvent]].
@@ -251,14 +222,24 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     */
   override def emergencyRestore(): Unit =
     try
-      val out = java.io.FileOutputStream(java.io.FileDescriptor.out)
-      out.write(AnsiSequences.RestoreAll.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+      // deliberately never closed: this wraps the process's own stdout descriptor, and closing the wrapper would close
+      // stdout for everything that runs after this hook. The wrapper itself holds no resource beyond that descriptor.
+      val out = FileOutputStream(FileDescriptor.out)
+      out.write(AnsiSequences.RestoreAll.getBytes(UTF_8))
       out.flush()
     catch case NonFatal(_) => ()
 
-  /** Hands the terminal back to the shell, returning what was active so [[reacquireTerminal]] can restore it. */
+  /** Hands the terminal back to the shell, returning what was active so [[reacquireTerminal]] can restore it.
+    *
+    * Called from two threads with no lock between them: the render thread (via [[suspend]], [[printAbove]] and
+    * `close()`) and JLine's signal-dispatch thread (via the SIGTSTP handler). The mode flags above are volatile per
+    * field rather than atomic as a set, so a Ctrl+Z landing in the middle of a `suspend` can interleave two
+    * undress/redress sequences over them. That is knowingly tolerated: every step either way is an idempotent mode
+    * reset written to the terminal, so the worst outcome is a mode disabled or re-enabled twice, and the final
+    * [[reacquireTerminal]] to run leaves the terminal dressed as its snapshot describes.
+    */
   private def releaseTerminal(): TerminalState =
-    val state = TerminalState(savedAttributes.nonEmpty, alternateScreenActive, cursorHidden, mouseCaptureActive)
+    val state = TerminalState(isRawMode, alternateScreenActive, cursorHidden, mouseCaptureActive)
     if state.mouse then bestEffort(disableMouseCapture())
     if state.cursorHidden then bestEffort(showCursor())
     if state.alternateScreen then bestEffort(leaveAlternateScreen())
@@ -267,6 +248,10 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     catch case NonFatal(_) => ()
     state
 
+  /** Whether raw mode is currently on, which is exactly "we are holding someone's cooked attributes to put back". */
+  private def isRawMode: Boolean = cookedAttributes.nonEmpty
+
+  /** Restores what [[releaseTerminal]] undressed. Same two callers, same two threads, same tolerated interleave. */
   private def reacquireTerminal(state: TerminalState): Unit =
     if state.raw then bestEffort(enableRawMode())
     if state.alternateScreen then bestEffort(enterAlternateScreen())
@@ -290,7 +275,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   /** SIGCONT: take the terminal back and force a full repaint at whatever size it is now. */
   private def onContinue(): Unit =
     reacquireTerminal(suspendedState)
-    suspendedState = TerminalState.None
+    suspendedState = TerminalState.Undressed
     onResize()
 
   private def currentSize: Size =
@@ -317,7 +302,8 @@ private[terminal] final case class TerminalState(
 )
 
 private[terminal] object TerminalState:
-  val None: TerminalState = TerminalState(false, false, false, false)
+  /** Nothing was dressed up: cooked mode, primary screen, visible cursor, no mouse capture. */
+  val Undressed: TerminalState = TerminalState(false, false, false, false)
 
 object JLine3Backend:
 
@@ -348,9 +334,9 @@ object JLine3Backend:
         // locale a locale-derived encoder renders the entire UI as '?'. All three must be set — `encoding` is only
         // the fallback JLine consults *after* the `stdin.encoding`/`stdout.encoding` system properties, so on its own
         // it is silently ignored wherever the JDK derived those from the locale.
-        .encoding(java.nio.charset.StandardCharsets.UTF_8)
-        .stdinEncoding(java.nio.charset.StandardCharsets.UTF_8)
-        .stdoutEncoding(java.nio.charset.StandardCharsets.UTF_8)
+        .encoding(UTF_8)
+        .stdinEncoding(UTF_8)
+        .stdoutEncoding(UTF_8)
         .build()
       if terminal.getType == Terminal.TYPE_DUMB || terminal.getType == Terminal.TYPE_DUMB_COLOR then
         terminal.close()
