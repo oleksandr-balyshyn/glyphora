@@ -30,8 +30,8 @@ final class Buffer(val area: Rect):
     */
   private val continuations: Array[Boolean] = Array.fill(area.area)(false)
 
-  def get(x: Int, y: Int): Cell =
-    if area.contains(Position(x, y)) then cells(indexOf(x, y)) else Cell.Empty
+  /** The cell at `(x, y)`, or [[Cell.Empty]] when the coordinates fall outside `area`. */
+  def get(x: Int, y: Int): Cell = cellAt(x, y)
 
   /** Writes `cell` at `(x, y)`; writes outside `area` are silently clipped.
     *
@@ -96,8 +96,10 @@ final class Buffer(val area: Rect):
     if CharWidth.isPrintableAscii(text) then setAsciiString(x, y, text, style)
     else
       var column   = x
+      // set by the branch below, so that "dropped a half-fitting cluster" is a distinct exit from "ran out of columns"
+      var stopped  = false
       val clusters = CharWidth.graphemeClusters(text)
-      while clusters.hasNext && column < area.right do
+      while clusters.hasNext && !stopped && column < area.right do
         val cluster = clusters.next()
         val width   = CharWidth.of(cluster)
         // a zero-width cluster (a combining mark with no base character before it) claims no cell at all
@@ -105,7 +107,7 @@ final class Buffer(val area: Rect):
           if column + width <= area.right then
             set(column, y, Cell(cluster, style))
             column += width
-          else column = area.right // a wide cluster that only half-fits at the edge: stop
+          else stopped = true // a wide cluster that only half-fits at the edge
       end while
 
   /** Allocation-free [[setString]] for printable ASCII: one column per char, symbols taken from a shared table. */
@@ -145,7 +147,7 @@ final class Buffer(val area: Rect):
           val safe =
             // a wide grapheme cut in half by the window edge would render torn — blank the half instead
             if dx == 0 && source.isContinuationAt(clipped.x, y) then Cell.Empty
-            else if dx == clipped.width - 1 && CharWidth.of(cell.symbol) == 2 then Cell.Empty
+            else if dx == clipped.width - 1 && CharWidth.ofCluster(cell.symbol) == 2 then Cell.Empty
             else cell
           set(originX + dx, originY + dy, safe)
           dx += 1
@@ -210,7 +212,9 @@ final class Buffer(val area: Rect):
   private def sameCell(a: Cell, b: Cell): Boolean =
     (a eq b) || a == b
 
-  /** Like [[get]] but without the `Position` allocation `Rect.contains` would need. */
+  /** The single bounds-check-and-index site behind [[get]], without the `Position` allocation `Rect.contains` would
+    * need. Kept separate from [[get]] so the hot diff loop reads a `private` method the compiler can inline freely.
+    */
   private def cellAt(x: Int, y: Int): Cell =
     if x >= area.x && x < area.right && y >= area.y && y < area.bottom then cells(indexOf(x, y)) else Cell.Empty
 

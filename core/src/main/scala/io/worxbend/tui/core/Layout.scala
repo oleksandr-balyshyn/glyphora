@@ -2,12 +2,12 @@ package io.worxbend.tui.core
 
 /** Splits a rectangle into segments along one axis according to a list of [[Constraint]]s.
   *
-  * Solving happens in two passes: fixed demands first (`Length`, `Percentage`, `Ratio`, and `Min`'s floor), then any
-  * leftover space is shared among the flexible constraints (`Fill` by weight, `Min` and `Max` with weight 1, `Max`
-  * additionally capped). Sizes use integer cells; distribution remainders go to the earliest segments with the largest
-  * fractional share, so results are deterministic. When the fixed demands exceed the available space, trailing segments
-  * are truncated (possibly to zero width) rather than failing — consistent with the library-wide silent-clipping
-  * philosophy.
+  * `Layout` owns the positioning half of the problem: it deducts `spacing`, asks `LayoutSolver` how many cells each
+  * constraint gets, then places those sizes on the axis according to [[flex]], clamping anything that would run past
+  * the far edge. How the sizes themselves are decided is documented on `LayoutSolver`.
+  *
+  * When the fixed demands exceed the available space, trailing segments are truncated (possibly to zero width) rather
+  * than failing — consistent with the library-wide silent-clipping philosophy.
   */
 final case class Layout(
     direction: Direction,
@@ -19,144 +19,36 @@ final case class Layout(
   def split(area: Rect): Seq[Rect] =
     if constraints.isEmpty then Seq.empty
     else
-      val total     = direction match
-        case Direction.Horizontal => area.width
-        case Direction.Vertical   => area.height
+      val total     = axisExtent(area)
       val available = math.max(0, total - spacing * (constraints.size - 1))
-      val sizes     = solve(available)
-      positioned(area, sizes, total)
+      val sizes     = LayoutSolver.solve(constraints, available)
+      layOutSegments(area, sizes, total)
 
-  private def solve(available: Int): IndexedSeq[Int] =
-    val fixed    = constraints.map(fixedDemand(_, available)).toArray
-    val leftover = available - fixed.sum
-    if leftover <= 0 then fixed.toIndexedSeq
-    else
-      val extras           = distributeLeftover(leftover)
-      // a `Fill`/`Min`/`Max` claimed the slack, so what is still unclaimed is real free space for [[flex]] to position
-      val absorbedByGrowth = extras.sum > 0
-      if absorbedByGrowth then fixed.indices.map(i => fixed(i) + extras(i))
-      else absorbProportionalRemainder(fixed.toIndexedSeq, leftover, available)
-
-  /** Hands the integer-division remainder to the proportional segments so they fill the container exactly.
-    *
-    * `Percentage(33) x 3` at width 100 truncates to 33+33+33 and would otherwise leave a stray column at the right
-    * edge. Two conditions gate it, and both matter. Every constraint must be proportional — with a `Length` or `Fill`
-    * in the mix the leftover is real free space that [[flex]] positions, not a rounding artifact. And the constraints
-    * must claim the whole axis to within [[claimsWholeAxis]]'s tolerance: `Percentage(50)` on its own asks for half the
-    * container and must *get* half, with the other half left free.
-    *
-    * The spare cells go to the segments whose exact demand lost the most to integer division, so the solved sizes stay
-    * as close as integers allow to the ratio the constraints asked for.
+  /** How many cells `area` offers along [[direction]] — its width when horizontal, its height when vertical. The three
+    * axis helpers are the only place in this file that knows which `Rect` fields the direction selects.
     */
-  private def absorbProportionalRemainder(
-      sizes: IndexedSeq[Int],
-      remainder: Int,
-      available: Int,
-  ): IndexedSeq[Int] =
-    if remainder <= 0 || sizes.isEmpty || !claimsWholeAxis then sizes
-    else
-      val fractions = proportionalFractions(available)
-      val order     = sizes.indices.sortBy(index => (-fractions(index), index))
-      val granted   = sizes.toArray
-      var pending   = remainder
-      var position  = 0
-      // one cell at a time, largest shortfall first and wrapping if there is more than one cell per segment, so the
-      // distribution is deterministic and any two segments differ by at most one
-      while pending > 0 do
-        granted(order(position % order.length)) += 1
-        pending -= 1
-        position += 1
-      granted.toIndexedSeq
+  private def axisExtent(area: Rect): Int =
+    direction match
+      case Direction.Horizontal => area.width
+      case Direction.Vertical   => area.height
 
-  /** Whether every constraint is proportional *and* together they ask for the whole axis.
-    *
-    * The tolerance is one percentage point per constraint: an integer percentage can only approximate the share its
-    * author meant, so three thirds spell 99% and still mean "all of it", while `Percentage(50)` alone means half and
-    * `Percentage(10), Percentage(30)` means a 1:3 split with 60% of the axis left free.
-    */
-  private def claimsWholeAxis: Boolean =
-    val proportional = constraints.forall {
-      case Constraint.Percentage(_) | Constraint.Ratio(_, _) => true
-      case _                                                 => false
-    }
-    proportional && claimedShare > 1.0 - constraints.size / 100.0
-
-  /** The fraction of the axis the constraints ask for; anything not proportional contributes nothing. */
-  private def claimedShare: Double =
-    constraints.map {
-      case Constraint.Percentage(pct) => math.max(0, pct) / 100.0
-      case Constraint.Ratio(num, den) => if den <= 0 then 0.0 else math.max(0, num).toDouble / den
-      case _                          => 0.0
-    }.sum
-
-  /** For each constraint, the fraction of a cell its exact demand lost to the integer division in [[fixedDemand]] — the
-    * ranking key for handing out the remainder.
-    */
-  private def proportionalFractions(available: Int): IndexedSeq[Double] =
-    constraints.map {
-      case Constraint.Percentage(pct) => (available.toLong * math.max(0, pct) % 100) / 100.0
-      case Constraint.Ratio(num, den) =>
-        if den <= 0 then 0.0 else (available.toLong * math.max(0, num) % den).toDouble / den
-      case _                          => 0.0
-    }.toIndexedSeq
-
-  private def fixedDemand(constraint: Constraint, available: Int): Int =
-    constraint match
-      case Constraint.Length(cells)   => math.max(0, cells)
-      case Constraint.Percentage(pct) => available * math.max(0, pct) / 100
-      case Constraint.Ratio(num, den) => if den <= 0 then 0 else available * math.max(0, num) / den
-      case Constraint.Min(cells)      => math.max(0, cells)
-      case Constraint.Max(_)          => 0
-      case Constraint.Fill(_)         => 0
-
-  /** Shares `leftover` cells among flexible constraints by weight, honoring `Max` caps; capped residue is
-    * re-distributed among the still-uncapped until nothing changes.
-    */
-  private def distributeLeftover(leftover: Int): IndexedSeq[Int] =
-    val weights    = constraints.map {
-      case Constraint.Fill(weight) => math.max(0, weight)
-      case Constraint.Min(_)       => 1
-      case Constraint.Max(_)       => 1
-      case _                       => 0
-    }.toIndexedSeq
-    val caps       = constraints.map {
-      case Constraint.Max(cells) => math.max(0, cells)
-      case _                     => Int.MaxValue
-    }.toIndexedSeq
-    val granted    = Array.fill(constraints.size)(0)
-    var remaining  = leftover
-    var progressed = true
-    while remaining > 0 && progressed do
-      val open   = constraints.indices.filter(i => weights(i) > 0 && granted(i) < caps(i))
-      val shares = weightedShares(remaining, open.map(weights), open.map(i => caps(i) - granted(i)))
-      progressed = shares.sum > 0
-      open.zip(shares).foreach { (index, share) => granted(index) += share }
-      remaining -= shares.sum
-    granted.toIndexedSeq
-
-  /** Integer division of `amount` by `weights` with largest-remainder rounding (ties to the earlier index), each share
-    * clamped to its `limits` entry.
-    */
-  private def weightedShares(amount: Int, weights: Seq[Int], limits: Seq[Int]): IndexedSeq[Int] =
-    val totalWeight = weights.sum
-    if totalWeight == 0 then IndexedSeq.fill(weights.size)(0)
-    else
-      val base        = weights.map(w => amount.toLong * w / totalWeight)
-      val remainders  = weights.map(w => amount.toLong * w % totalWeight)
-      var extras      = amount - base.sum
-      val byRemainder = weights.indices.sortBy(i => (-remainders(i), i))
-      val shares      = base.map(_.toInt).toArray
-      byRemainder.foreach { index =>
-        if extras > 0 then
-          shares(index) += 1
-          extras -= 1
-      }
-      weights.indices.map(i => math.min(shares(i), limits(i)))
-
-  private def positioned(area: Rect, sizes: IndexedSeq[Int], total: Int): Seq[Rect] =
-    val (axisStart, axisEnd) = direction match
+  /** The first coordinate along [[direction]] and the one past the last. */
+  private def axisBounds(area: Rect): (Int, Int) =
+    direction match
       case Direction.Horizontal => (area.x, area.right)
       case Direction.Vertical   => (area.y, area.bottom)
+
+  /** A segment covering `size` cells from `start` along [[direction]], spanning `area` fully on the other axis. */
+  private def segmentRect(area: Rect, start: Int, size: Int): Rect =
+    direction match
+      case Direction.Horizontal => Rect(start, area.y, size, area.height)
+      case Direction.Vertical   => Rect(area.x, start, area.width, size)
+
+  /** Places the solved `sizes` onto the axis of `area`, applying the [[flex]] offsets and clamping any segment that
+    * would run past the far edge.
+    */
+  private def layOutSegments(area: Rect, sizes: IndexedSeq[Int], total: Int): Seq[Rect] =
+    val (axisStart, axisEnd) = axisBounds(area)
     val (leading, gaps)      = flexOffsets(sizes, total)
     var offset               = axisStart + leading
     sizes.indices.map { i =>
@@ -165,9 +57,7 @@ final case class Layout(
       val clampedSize = math.max(0, math.min(size, axisEnd - start))
       val gapAfter    = if i < sizes.size - 1 then gaps(i) else 0
       offset = start + size + gapAfter
-      direction match
-        case Direction.Horizontal => Rect(start, area.y, clampedSize, area.height)
-        case Direction.Vertical   => Rect(area.x, start, area.width, clampedSize)
+      segmentRect(area, start, clampedSize)
     }
 
   /** The leading offset and the inter-segment gaps (each already including the base `spacing`) that realize the current
@@ -176,10 +66,10 @@ final case class Layout(
     * `Start`.
     */
   private def flexOffsets(sizes: IndexedSeq[Int], total: Int): (Int, IndexedSeq[Int]) =
-    val n        = sizes.size
-    val baseGaps = spacing * math.max(0, n - 1)
-    val free     = math.max(0, total - sizes.sum - baseGaps)
-    val betweens = IndexedSeq.fill(math.max(0, n - 1))(spacing)
+    val segmentCount = sizes.size
+    val baseGaps     = spacing * math.max(0, segmentCount - 1)
+    val free         = math.max(0, total - sizes.sum - baseGaps)
+    val betweens     = IndexedSeq.fill(math.max(0, segmentCount - 1))(spacing)
     if free == 0 then (0, betweens)
     else
       flex match
@@ -187,23 +77,24 @@ final case class Layout(
         case Flex.End          => (free, betweens)
         case Flex.Center       => (free / 2, betweens)
         case Flex.SpaceBetween =>
-          if n <= 1 then (0, betweens)
-          else (0, addSpacing(evenSplit(free, n - 1)))
+          if segmentCount <= 1 then (0, betweens)
+          else (0, addSpacing(evenSplit(free, segmentCount - 1)))
         case Flex.SpaceEvenly  =>
-          val slots = evenSplit(free, n + 1)
-          (slots(0), addSpacing((1 until n).map(i => slots(i)).toIndexedSeq))
+          val slots = evenSplit(free, segmentCount + 1)
+          (slots(0), addSpacing((1 until segmentCount).map(i => slots(i)).toIndexedSeq))
         case Flex.SpaceAround  =>
-          val halves = evenSplit(free, 2 * n)
-          val gaps   = (1 until n).map(i => halves(2 * i - 1) + halves(2 * i)).toIndexedSeq
+          val halves = evenSplit(free, 2 * segmentCount)
+          val gaps   = (1 until segmentCount).map(i => halves(2 * i - 1) + halves(2 * i)).toIndexedSeq
           (halves(0), addSpacing(gaps))
 
   /** Splits `total` cells into `parts` as evenly as possible, giving the remainder to the earliest slots. */
   private def evenSplit(total: Int, parts: Int): IndexedSeq[Int] =
     if parts <= 0 then IndexedSeq.empty
     else
-      val base = total / parts
-      val rem  = total % parts
-      (0 until parts).map(i => if i < rem then base + 1 else base).toIndexedSeq
+      val base  = total / parts
+      // all keys equal, so [[LayoutSolver.distributeRemainder]] falls back to index order: the earliest slots get the spare cells
+      val extra = LayoutSolver.distributeRemainder(total % parts, IndexedSeq.fill(parts)(0.0))
+      (0 until parts).map(i => base + extra(i)).toIndexedSeq
 
   private def addSpacing(gaps: IndexedSeq[Int]): IndexedSeq[Int] = gaps.map(_ + spacing)
 

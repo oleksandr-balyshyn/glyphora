@@ -36,7 +36,7 @@ object CharWidth:
     var plain = true
     while plain && index < text.length do
       val c = text.charAt(index)
-      if c < 0x20 || c > 0x7e then plain = false
+      if c < FirstPrintableAscii || c > LastPrintableAscii then plain = false
       index += 1
     plain
 
@@ -45,7 +45,7 @@ object CharWidth:
     * Returns `null` for anything outside `0x20`–`0x7E`; callers on the fast path have already checked.
     */
   def asciiSymbol(c: Char): String =
-    if c >= 0x20 && c <= 0x7e then AsciiSymbols(c - 0x20)
+    if c >= FirstPrintableAscii && c <= LastPrintableAscii then AsciiSymbols(c - FirstPrintableAscii)
     else null // scalafix:ok DisableSyntax; hot-path sentinel: an Option here allocates on every ASCII character
 
   /** The longest prefix of `text` that fits in `maxWidth` columns; never splits a grapheme cluster. */
@@ -146,7 +146,7 @@ object CharWidth:
     */
   private[core] def ofCluster(cluster: String): Int =
     // 0x20-0x7E is exactly one column and covers no combining mark, no East Asian W/F, and no control character
-    if cluster.length == 1 && cluster.charAt(0) >= 0x20 && cluster.charAt(0) < 0x7f then 1
+    if cluster.length == 1 && cluster.charAt(0) >= FirstPrintableAscii && cluster.charAt(0) <= LastPrintableAscii then 1
     else clusterWidth(cluster)
 
   private def isControlCluster(cluster: String): Boolean =
@@ -231,10 +231,18 @@ object CharWidth:
       index += Character.charCount(cp)
     found
 
+  /** The first and last code point of printable US-ASCII: space and tilde. Every fast path in this file tests this same
+    * closed range, and [[AsciiSymbols]] is sized and indexed from it.
+    */
+  private val FirstPrintableAscii = 0x20
+  private val LastPrintableAscii  = 0x7e
+
   private val ZeroWidthJoiner           = 0x200d
   private val TextPresentationSelector  = 0xfe0e
   private val EmojiPresentationSelector = 0xfe0f
 
-  /** Interned one-char strings for `0x20`–`0x7E`, indexed by `codePoint - 0x20`. */
+  /** Interned one-char strings for the printable-ASCII range, indexed by `codePoint - FirstPrintableAscii`. */
   private val AsciiSymbols: Array[String] =
-    Array.tabulate(0x7f - 0x20)(offset => (0x20 + offset).toChar.toString)
+    Array.tabulate(LastPrintableAscii - FirstPrintableAscii + 1)(offset =>
+      (FirstPrintableAscii + offset).toChar.toString
+    )
