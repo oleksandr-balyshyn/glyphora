@@ -149,8 +149,3 @@ final class EffectSpec extends AnyFunSuite:
     val buffer = filledBuffer()
     effect.process(1.second, buffer, buffer.area)
     assert(buffer.get(0, 0).style.fg.contains(Color.White)) // zero repetitions render nothing
-
-  test("indexed colors approximate into the rgb cube"):
-    assert(Effect.approximateRgb(Color.Indexed(196)) == (255, 0, 0))
-    assert(Effect.approximateRgb(Color.Indexed(232)) == (8, 8, 8))
-    assert(Effect.approximateRgb(Color.Rgb(1, 2, 3)) == (1, 2, 3))

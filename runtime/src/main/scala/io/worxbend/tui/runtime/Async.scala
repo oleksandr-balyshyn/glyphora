@@ -30,24 +30,22 @@ object Async:
     */
   def run[A](work: => A)(onResult: A => Unit)(using onError: AsyncErrorHandler = AsyncErrorHandler.rethrow): Unit =
     val deliver = deliverToRenderThread(onResult)
-    val _       = worker.submit(new Runnable {
-      def run(): Unit =
-        try deliver(work)
-        catch case NonFatal(error) => onError.handle(error)
-    })
+    onWorker {
+      try deliver(work)
+      catch case NonFatal(error) => onError.handle(error)
+    }
 
   /** Like [[run]] but delivers `Right(value)` or `Left(throwable)` to `onDone` on the render thread — no ambient error
     * handler needed. The idiomatic way to drive a load into `Signal[Either[Throwable, A]]` (or a loading/error state).
     */
   def runCatching[A](work: => A)(onDone: Either[Throwable, A] => Unit): Unit =
     val deliver = deliverToRenderThread(onDone)
-    val _       = worker.submit(new Runnable {
-      def run(): Unit =
-        val outcome: Either[Throwable, A] =
-          try Right(work)
-          catch case NonFatal(error) => Left(error)
-        deliver(outcome)
-    })
+    onWorker {
+      val outcome: Either[Throwable, A] =
+        try Right(work)
+        catch case NonFatal(error) => Left(error)
+      deliver(outcome)
+    }
 
   /** Runs `body` on the render thread once, after `delay`. Returns a handle to cancel it before it fires. */
   def after(delay: FiniteDuration)(body: => Unit): Cancelable =
@@ -72,6 +70,15 @@ object Async:
         TimeUnit.MILLISECONDS,
       )
     )
+
+  /** Hands `body` to a background thread. The returned `Future` is discarded on purpose: cancellation of one-shot work
+    * is not offered (only the scheduled entry points return a [[Cancelable]]), and every failure is already dealt with
+    * inside `body` by the entry point that built it.
+    */
+  private def onWorker(body: => Unit): Unit =
+    // named rather than passed inline because `submit` is overloaded for `Runnable` and `Callable`
+    val task: Runnable = () => body
+    val _              = worker.submit(task)
 
   /** Wraps `onValue` so that it is invoked on the render thread rather than on whichever thread produced the value.
     *

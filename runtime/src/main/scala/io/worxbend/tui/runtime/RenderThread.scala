@@ -52,6 +52,12 @@ object RenderThread:
     */
   private val detached = RenderLoop(() => (), RenderTaskErrorHandler.rethrow)
 
+  /** Whether the calling thread may mutate UI state.
+    *
+    * `true` when this thread has a registered [[RenderLoop]] — and, deliberately, also when *no* loop is registered
+    * anywhere: with no runtime running there is no render thread to be off, so plain unit tests of widgets and signals
+    * need no runner. A caller reading this as "am I on the render thread?" gets `true` in that zero-runner case.
+    */
   def isRenderThread: Boolean =
     loops.isEmpty || loops.containsKey(Thread.currentThread())
 
@@ -72,7 +78,14 @@ object RenderThread:
   def runLater(body: => Unit): Unit =
     capture().enqueue(() => body)
 
-  /** The loop that should receive work queued from *this* thread.
+  /** The loop that should receive work queued from *this* thread, resolved in three steps.
+    *
+    *   1. The calling thread's own innermost registration, when it has one — a runner's own continuations always come
+    *      back to that runner.
+    *   1. Otherwise the sole registered loop, when exactly one runner exists. A background worker that never registered
+    *      itself still has an unambiguous destination.
+    *   1. Otherwise the shared `detached` queue: with no runner there is nobody to deliver to yet, and with several the
+    *      destination is genuinely ambiguous, so the work goes to whichever render thread drains it first.
     *
     * Background workers must call this while still on the render thread (before they go async) so their continuation
     * comes back to the runner that started it — see [[Async]].
@@ -80,12 +93,20 @@ object RenderThread:
   def capture(): RenderLoop =
     val own = loops.get(Thread.currentThread())
     if own != null then own.head // scalafix:ok DisableSyntax; java.util.concurrent interop
+    else soleRegisteredLoop.getOrElse(detached)
+
+  /** The one registered loop when exactly one runner is running, `None` when there are zero or several.
+    *
+    * Reads the registry through a single iterator rather than `loops.size`: the map is concurrent, so asking for a size
+    * and then for the entry can straddle a registration, while one traversal answers "is there exactly one" and "which
+    * one" from the same view.
+    */
+  private def soleRegisteredLoop: Option[RenderLoop] =
+    val all = loops.values.iterator
+    if !all.hasNext then None
     else
-      val all = loops.values.iterator
-      if !all.hasNext then detached
-      else
-        val first = all.next()
-        if all.hasNext then detached else first.head
+      val first = all.next()
+      if all.hasNext then None else Some(first.head)
 
   /** Registers `thread` as a render thread and returns its queue. `wake` nudges a blocked runner when work is queued
     * (drivers that poll instead of blocking can leave it at the no-op default); `onError` receives throwables escaping

@@ -1,6 +1,7 @@
 package io.worxbend.tui.runtime
 
 import io.worxbend.tui.core.{Buffer, Rect, StatefulWidget, Widget}
+import scala.concurrent.duration.FiniteDuration
 
 /** One frame being rendered: the drawable `area` plus the buffer widgets write into.
   *
@@ -22,5 +23,5 @@ final class Frame(val area: Rect, private[runtime] val buffer: Buffer):
     * one that has to remember each effect's start. `TuiApp.runEffect` in `tui-dsl` keeps that timestamp for every
     * active effect and passes the difference here; code driving a bare [[Runner]] must do the same.
     */
-  def applyEffect(effect: Effect, elapsed: scala.concurrent.duration.FiniteDuration): Unit =
+  def applyEffect(effect: Effect, elapsed: FiniteDuration): Unit =
     effect.process(elapsed, buffer, area)

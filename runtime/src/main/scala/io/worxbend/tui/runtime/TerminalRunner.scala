@@ -95,24 +95,13 @@ final class TerminalRunner(
       render: Frame => Unit,
       loop: RenderThread.RenderLoop,
   ): Either[BackendError, Unit] =
-    val state                       = LoopState()
-    var frameBuffer: Option[Buffer] = None
-    var lastTick                    = nanoTime()
+    val state    = LoopState()
+    var lastTick = nanoTime()
 
-    val handle = BackendHandle(backend, state)
+    val handle   = BackendHandle(backend, state)
+    val composer = FrameComposer(backend, render)
 
-    def redraw(): Unit =
-      val drawn = backend.size.flatMap { size =>
-        val area   = Rect(size)
-        // the previous frame's buffer is reused whenever the terminal did not resize: the backend diffs against what
-        // it last flushed, so only the composition has to be redone
-        val buffer = frameBuffer.filter(_.area == area).getOrElse(Buffer(area))
-        buffer.reset()
-        frameBuffer = Some(buffer)
-        render(Frame(area, buffer))
-        backend.draw(buffer)
-      }
-      state.record(drawn)
+    def redraw(): Unit = state.record(composer.compose())
 
     /** Dispatches one event; `true` when the frame should be repainted afterward. */
     def dispatch(event: Event): Boolean =
@@ -170,6 +159,32 @@ final class TerminalRunner(
         val remainingNanos = rate.toNanos - (nanoTime() - lastTick)
         val clamped        = math.max(MinPollNanos, math.min(remainingNanos, rate.toNanos))
         Duration.fromNanos(clamped)
+
+/** Composes one frame into a [[Buffer]] and hands it to the backend to flush, for the lifetime of one
+  * [[TerminalRunner]] loop.
+  *
+  * This exists to own the buffer-reuse policy in one place. The backend diffs each frame against the one it last
+  * flushed, so nothing is gained by allocating a fresh buffer per frame — the previous one is cleared and reused for as
+  * long as the terminal keeps the same size, and only a resize forces a new allocation.
+  *
+  * Confined to the render thread, which is where the loop calls it; the cached buffer needs no synchronisation.
+  */
+private final class FrameComposer(backend: Backend, render: Frame => Unit):
+
+  private var frameBuffer: Option[Buffer] = None
+
+  /** Asks the backend for the current size, composes the frame into the (reused or freshly sized) buffer and flushes
+    * it. A failure at either backend call is returned rather than thrown, for the loop to record.
+    */
+  def compose(): Either[BackendError, Unit] =
+    backend.size.flatMap { size =>
+      val area   = Rect(size)
+      val buffer = frameBuffer.filter(_.area == area).getOrElse(Buffer(area))
+      buffer.reset()
+      frameBuffer = Some(buffer)
+      render(Frame(area, buffer))
+      backend.draw(buffer)
+    }
 
 /** The two reasons a [[TerminalRunner]] loop stops, held in one place so every site asks the same question.
   *

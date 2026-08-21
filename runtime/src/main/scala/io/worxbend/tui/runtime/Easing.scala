@@ -69,51 +69,19 @@ object Easing:
     else if x == 1 then 1.0
     else math.pow(2, -10 * x) * math.sin((x * 10 - 0.75) * (2 * math.Pi / 3)) + 1
 
+  /** The four-segment Penner bounce (the `easeOutBounce` of easings.net): four upward parabolas of the same steepness,
+    * each one starting later, narrower and higher than the last, so the value drops and rebounds three times before
+    * settling on 1.
+    *
+    * `amplitude` is the shared steepness of those parabolas and `segments` splits `[0, 1]` into the four spans. The
+    * per-segment offsets (the centre `1.5 / segments`, `2.25 / segments`, `2.625 / segments` and the floors `0.75`,
+    * `0.9375`, `0.984375`) are the published constants of that curve: they are what makes each parabola touch the
+    * previous one exactly where it lands. Changing one in isolation puts a visible kink in the bounce.
+    */
   private def bounceOut(x: Double): Double =
-    val n1 = 7.5625
-    val d1 = 2.75
-    if x < 1 / d1 then n1 * x * x
-    else if x < 2 / d1 then { val y = x - 1.5 / d1; n1 * y * y + 0.75 }
-    else if x < 2.5 / d1 then { val y = x - 2.25 / d1; n1 * y * y + 0.9375 }
-    else { val y = x - 2.625 / d1; n1 * y * y + 0.984375 }
-
-/** A damped-spring integrator (à la Charm's Harmonica) for physical, non-linear motion — scrolling, progress fills,
-  * layout transitions.
-  *
-  * Unlike an [[Easing]], a spring has no fixed duration: call [[step]] each tick with the current position and velocity
-  * and it eases toward `target`, overshooting or settling per `frequency` (stiffness) and `damping` (`< 1` bouncy, `1`
-  * critically damped, `> 1` sluggish). Integrated semi-implicitly, stable for the usual TUI tick rates.
-  *
-  * `deltaTime` must be positive: a spring with a non-positive step can never advance, so the documented
-  * `while !settled(...) do step(...)` loop would hang. A defect in the caller, hence a construction-time throw.
-  */
-final case class Spring(frequency: Double = 6.0, damping: Double = 0.7, deltaTime: Double = 1.0 / 60):
-
-  require(deltaTime > 0, s"a spring needs a positive time step, got $deltaTime")
-
-  /** The next `(position, velocity)` as the value eases one `deltaTime` step toward `target`. */
-  def step(position: Double, velocity: Double, target: Double): (Double, Double) =
-    val accel       = -frequency * frequency * (position - target) - 2 * damping * frequency * velocity
-    val newVelocity = velocity + accel * deltaTime
-    val newPosition = position + newVelocity * deltaTime
-    (newPosition, newVelocity)
-
-  /** Whether the value has effectively settled on `target` (within `epsilon` of it and nearly at rest). */
-  def settled(position: Double, velocity: Double, target: Double, epsilon: Double = 1e-3): Boolean =
-    math.abs(position - target) < epsilon && math.abs(velocity) < epsilon
-
-/** A value animated from `from` to `to` over `duration` with an easing curve — for animating gauge ratios, offsets, and
-  * the like from `onTick` state.
-  */
-final case class Tween(
-    from: Double,
-    to: Double,
-    duration: scala.concurrent.duration.FiniteDuration,
-    easing: Easing = Easing.QuadOut,
-):
-  def at(elapsed: scala.concurrent.duration.FiniteDuration): Double =
-    val t = if duration.toNanos == 0 then 1.0 else elapsed.toNanos.toDouble / duration.toNanos
-    from + (to - from) * easing(t)
-
-  def isDone(elapsed: scala.concurrent.duration.FiniteDuration): Boolean =
-    elapsed >= duration
+    val amplitude = 7.5625
+    val segments  = 2.75
+    if x < 1 / segments then amplitude * x * x
+    else if x < 2 / segments then { val y = x - 1.5 / segments; amplitude * y * y + 0.75 }
+    else if x < 2.5 / segments then { val y = x - 2.25 / segments; amplitude * y * y + 0.9375 }
+    else { val y = x - 2.625 / segments; amplitude * y * y + 0.984375 }

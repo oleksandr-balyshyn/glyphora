@@ -87,7 +87,7 @@ object Effect:
       def duration: Duration                                                 = Duration.Inf
       def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
         val phase      = (elapsed.toMillis % periodMillis).toDouble / periodMillis
-        val brightness = 0.55 + 0.45 * math.sin(phase * 2 * math.Pi)
+        val brightness = PulseMidBrightness + PulseBrightnessSwing * math.sin(phase * 2 * math.Pi)
         mapCells(buffer, area)(style => withFgScaled(style, brightness))
 
   /** Runs `effects` one after another. */
@@ -138,12 +138,17 @@ object Effect:
 
   // ---- shared machinery ----
 
+  // `pulse` oscillates each cell's brightness between 10% and 100% of its colour: the midpoint is where the sine sits
+  // at phase zero, the swing is how far either side of it the sine reaches. Kept as the midpoint/swing pair the sine
+  // consumes rather than as a min/max pair, so the numbers the curve uses are the numbers written here.
+  private val PulseMidBrightness   = 0.55
+  private val PulseBrightnessSwing = 0.45
+
   private abstract class TimedEffect(val totalDuration: FiniteDuration, easing: Easing = Easing.Linear) extends Effect:
     def duration: Duration                                                       = totalDuration
     def transform(progress: Double, buffer: Buffer, area: Rect): Unit
     final def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
-      val t = if totalDuration.toNanos == 0 then 1.0 else elapsed.toNanos.toDouble / totalDuration.toNanos
-      transform(easing(t), buffer, area)
+      transform(easing(Progress.normalized(elapsed, totalDuration)), buffer, area)
 
   /** Brightness ramp shared by [[fadeIn]] and [[fadeOut]]. `level` turns eased progress into the fraction of each
     * cell's colour that survives — `identity` fades content up, `1 - _` fades it down to black.
@@ -194,7 +199,7 @@ object Effect:
     * zero mid-flight, and an unclamped negative channel would reach the terminal as a literal `38;2;-7;-7;-7`.
     */
   private def withFgScaled(style: Style, level: Double): Style =
-    val (r, g, b) = approximateRgb(style.fg.getOrElse(Color.White))
+    val (r, g, b) = Color.approximateRgb(style.fg.getOrElse(Color.White))
     style.withFg(
       Color.rgb(
         math.round(r * level).toInt,
@@ -202,7 +207,3 @@ object Effect:
         math.round(b * level).toInt,
       )
     )
-
-  /** RGB approximation, delegated to the shared core table. */
-  private[runtime] def approximateRgb(color: Color): (Int, Int, Int) =
-    Color.approximateRgb(color)

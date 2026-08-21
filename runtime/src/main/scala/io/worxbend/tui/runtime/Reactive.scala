@@ -50,13 +50,12 @@ sealed trait Reactive[A]:
   * happens-before edge to the write. The subscriber set is deliberately *not* published that way; it is touched only on
   * the render thread.
   */
-final class Signal[A] private (initial: A) extends Reactive[A], Subscribable:
+final class Signal[A] private (initial: A) extends Reactive[A], SubscriberRegistry:
 
   // @volatile for cross-thread readers of `peek` only — see the class Scaladoc. The cost is a plain load on the read
   // side of every architecture glyphora targets; the fence is on `set`, which is orders of magnitude rarer than the
   // per-frame reads.
   @volatile private var currentValue: A = initial
-  private val subscribers               = mutable.LinkedHashSet[Subscriber]()
 
   def peek: A = currentValue
 
@@ -68,7 +67,7 @@ final class Signal[A] private (initial: A) extends Reactive[A], Subscribable:
     RenderThread.checkRenderThread()
     if !unchanged(value, currentValue) then
       currentValue = value
-      subscribers.toSeq.foreach(_.markStale())
+      notifySubscribers()
 
   def update(f: A => A): Unit = set(f(currentValue))
 
@@ -83,15 +82,6 @@ final class Signal[A] private (initial: A) extends Reactive[A], Subscribable:
       case (next: Double, previous: Double) => java.lang.Double.compare(next, previous) == 0
       case (next: Float, previous: Float)   => java.lang.Float.compare(next, previous) == 0
       case _                                => value == current
-
-  private[runtime] def subscribe(subscriber: Subscriber): Unit =
-    subscribers += subscriber
-
-  private[runtime] def unsubscribe(subscriber: Subscriber): Unit =
-    subscribers -= subscriber
-
-  /** Live subscriber count. Package-private: regression tests assert that repeated derivation does not grow it. */
-  private[runtime] def subscriberCount: Int = subscribers.size
 
 object Signal:
   def apply[A](initial: A): Signal[A] = new Signal(initial)
@@ -114,7 +104,7 @@ object Signal:
   * [[Async]] worker corrupts the dependency graph quietly, with no exception thrown and nothing for a test to catch.
   * Read the signals a background thread needs directly, or marshal the read back with [[RenderThread.runLater]].
   */
-final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A], Subscriber, Subscribable:
+final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A], Subscriber, SubscriberRegistry:
 
   private var cachedValue: A = uninitialized
   private var stale          = true
@@ -122,7 +112,6 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
   // while its own thunk was running
   private var dirtyEpoch     = 0L
   private var recomputing    = false
-  private val subscribers    = mutable.LinkedHashSet[Subscriber]()
   private val dependencies   = mutable.LinkedHashSet[Subscribable]()
 
   def peek: A =
@@ -144,7 +133,7 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
     dirtyEpoch += 1
     val wasFresh = !stale
     stale = true
-    if wasFresh || recomputing then subscribers.toSeq.foreach(_.markStale())
+    if wasFresh || recomputing then notifySubscribers()
 
   /** Detaches this computed from its dependencies and dependents.
     *
@@ -162,8 +151,8 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
     dependencies.clear()
     stale = true
     dirtyEpoch += 1
-    subscribers.toSeq.foreach(_.markStale())
-    subscribers.clear()
+    notifySubscribers()
+    clearSubscribers()
 
   private def recompute(): Unit =
     // a thunk that reads its own value — directly, or around a cycle through another computed — would otherwise
@@ -188,12 +177,6 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
     // a thunk that wrote to one of its own dependencies invalidated the value it just produced: stay stale so the next
     // read re-runs, rather than caching a value that is already out of date
     stale = dirtyEpoch != epochBefore
-
-  private[runtime] def subscribe(subscriber: Subscriber): Unit =
-    subscribers += subscriber
-
-  private[runtime] def unsubscribe(subscriber: Subscriber): Unit =
-    subscribers -= subscriber
 
 object Computed:
   def apply[A](thunk: ReactiveScope ?=> A): Computed[A] = new Computed(thunk)
