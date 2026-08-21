@@ -87,7 +87,7 @@ assert(pilot.awaitTermination())
 an idle read. It is stronger and less flaky than sleeping for an arbitrary number of
 milliseconds.
 
-> **0.11.0 packaging note:** `Pilot` and `BufferAssertions` currently live in this
+> **0.12.0 packaging note:** `Pilot` and `BufferAssertions` currently live in this
 > repository's internal `test-support` module and are not published to Maven Central.
 > They document and test the intended public test API; downstream projects can drive
 > `HeadlessBackend` directly until that artifact is published.

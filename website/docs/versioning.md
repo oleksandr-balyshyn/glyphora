@@ -18,12 +18,12 @@ All published modules share one synchronized version under `io.worxbend`:
 
 ```scala
 // Mill
-def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.11.0")
+def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.12.0")
 ```
 
 ```scala
 // sbt
-libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.11.0"
+libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.12.0"
 ```
 
 Applications normally need only `tui-dsl`. Lower-tier artifacts are `tui-core`,

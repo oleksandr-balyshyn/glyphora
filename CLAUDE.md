@@ -71,7 +71,7 @@ Every module is `<module>/src/{main,test}/scala/io/worxbend/tui/<module>/`. Exam
 
 ## Build-file conventions
 
-`build.mill` holds the two shared traits: `TuiModule` (Scala version, strict flags, `TuiTests` ScalaTest wiring) and `TuiPublishModule` (POM metadata + the single synchronized `publishVersion`, currently `0.11.0` — bump it in one place). Each module has a small `package.mill`. Test-only dependencies go through `def extraTestDeps`, not by overriding `mvnDeps`, because Mill cannot resolve a second `super.mvnDeps` chain in nested test objects.
+`build.mill` holds the two shared traits: `TuiModule` (Scala version, strict flags, `TuiTests` ScalaTest wiring) and `TuiPublishModule` (POM metadata + the single synchronized `publishVersion`, currently `0.12.0` — bump it in one place). Each module has a small `package.mill`. Test-only dependencies go through `def extraTestDeps`, not by overriding `mvnDeps`, because Mill cannot resolve a second `super.mvnDeps` chain in nested test objects.
 
 ## Adding a widget
 

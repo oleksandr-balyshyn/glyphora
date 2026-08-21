@@ -54,7 +54,7 @@ object `package` extends build.TuiModule with NativeImageModule {
 Why the module lists all five published modules, and why the nested test object
 needs its own `moduleDeps`, is argued in
 [Build a process monitor](./build-a-process-monitor#1-create-the-module). Outside
-this repository the same app is one `mvn"io.worxbend::tui-dsl:0.11.0"` dependency;
+this repository the same app is one `mvn"io.worxbend::tui-dsl:0.12.0"` dependency;
 see [Getting started](./getting-started#1-add-glyphora).
 
 Every Scala source below lives in
