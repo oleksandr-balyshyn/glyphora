@@ -7,6 +7,13 @@ package io.worxbend.tui.core
   * are silently clipped, never errors; reads outside `area` return [[Cell.Empty]].
   *
   * Mutability is an implementation detail of the render loop — it never escapes through `Widget.render`'s contract.
+  *
+  * '''Not thread-safe.''' The grid is a plain array with no synchronization, so a `Buffer` is owned by whichever thread
+  * renders into it — in a running application that is the runner's render thread, the same thread `Signal` writes are
+  * pinned to. Staging content on a background thread is safe only if the buffer is fully written before the reference
+  * is published to the render thread (`RenderThread.capture` in `tui-runtime` is how background work hands its
+  * continuation back) and is never touched again afterwards. Concurrent writes, or reads racing a write, produce a torn
+  * frame or a dropped diff rather than an error.
   */
 final class Buffer(val area: Rect):
 
@@ -51,22 +58,33 @@ final class Buffer(val area: Rect):
     */
   private def write(index: Int, x: Int, cell: Cell): Unit =
     val hasRight = x + 1 < area.right
-    // the cell being replaced may itself be a wide grapheme; its continuation only ever holds `Cell.Empty`, so
-    // releasing it can never destroy content
-    if hasRight && continuations(index + 1) then
-      cells(index + 1) = Cell.Empty
-      continuations(index + 1) = false
+    // the cell being replaced may itself be a wide grapheme, in which case it owns the column to its right
+    if hasRight && continuations(index + 1) then releaseContinuation(index + 1)
     cells(index) = cell
     continuations(index) = false
     if hasRight && CharWidth.ofCluster(cell.symbol) == 2 then
       // the column being claimed may itself be a wide grapheme's left half, in which case it owns the column beyond
-      // it; that continuation is orphaned the moment we blank its owner, so release it in the same breath — leaving
-      // it set would make `diff` suppress a column the frame has already blanked
-      if x + 2 < area.right && continuations(index + 2) then
-        cells(index + 2) = Cell.Empty
-        continuations(index + 2) = false
-      cells(index + 1) = Cell.Empty
-      continuations(index + 1) = true
+      // it; that continuation is orphaned the moment we blank its owner, so release it in the same breath
+      if x + 2 < area.right && continuations(index + 2) then releaseContinuation(index + 2)
+      claimContinuation(index + 1)
+
+  /** Gives up the continuation flag at `index`, blanking the cell with it.
+    *
+    * A flagged cell only ever holds [[Cell.Empty]], so this can never destroy content. Leaving a stale flag set would
+    * make [[diff]] suppress a column the frame has already blanked.
+    */
+  private def releaseContinuation(index: Int): Unit =
+    cells(index) = Cell.Empty
+    continuations(index) = false
+
+  /** Reserves `index` as the second column of the two-column grapheme to its left.
+    *
+    * The cell is blanked as well as flagged, which is the invariant [[continuations]] documents: a terminal draws the
+    * wide grapheme across both columns, so the second one must carry no symbol of its own.
+    */
+  private def claimContinuation(index: Int): Unit =
+    cells(index) = Cell.Empty
+    continuations(index) = true
 
   /** Writes `text` starting at `(x, y)`, one grapheme cluster per cell, clipping at the area's right edge.
     *
@@ -108,6 +126,9 @@ final class Buffer(val area: Rect):
     *
     * Blitting a buffer onto itself works on a snapshot: without it, overlapping rows would read cells this call has
     * already overwritten and smear them across the region.
+    *
+    * Both buffers must belong to the calling thread for the duration of the call: `source` is read cell by cell with no
+    * synchronization, so another thread writing into it mid-blit copies half of one frame and half of the next.
     */
   def blit(source: Buffer, at: Position, region: Rect): Unit =
     if source eq this then blit(source.snapshot, at, region)
@@ -136,6 +157,9 @@ final class Buffer(val area: Rect):
 
   /** An independent copy of this buffer. Backends snapshot the frame they just flushed so later mutation of the
     * caller's buffer cannot corrupt the next diff.
+    *
+    * The copy is unsynchronized, so it must be taken on the thread that owns this buffer; the result is a fresh buffer
+    * owned by the caller, which is what makes it safe to hand to another thread once no further writes follow.
     */
   def snapshot: Buffer =
     val copied = Buffer(area)
@@ -180,10 +204,11 @@ final class Buffer(val area: Rect):
         x += 1
       y += 1
 
+  /** Whether two cells would render identically: a reference-equality fast path before the structural compare, because
+    * `Cell.equals` walks a `String`.
+    */
   private def sameCell(a: Cell, b: Cell): Boolean =
-    (a.asInstanceOf[AnyRef] eq b.asInstanceOf[
-      AnyRef
-    ]) || a == b // scalafix:ok DisableSyntax; reference-equality fast path before the structural compare
+    (a eq b) || a == b
 
   /** Like [[get]] but without the `Position` allocation `Rect.contains` would need. */
   private def cellAt(x: Int, y: Int): Cell =

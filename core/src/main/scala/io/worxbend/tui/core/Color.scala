@@ -98,16 +98,34 @@ object Color:
       case Reset          => (192, 192, 192)
       case Indexed(index) =>
         // an index outside the palette is a caller mistake, not a crash: clamp rather than index off the cube
-        val entry = math.max(0, math.min(255, index))
-        // 0-15 are the named ANSI colors, so they must agree with the cases above rather than form a grey ramp
-        if entry < 16 then approximateRgb(AnsiPalette(entry))
-        else if entry >= 232 then
-          val gray = 8 + (entry - 232) * 10
-          (gray, gray, gray)
-        else
-          val cube  = entry - 16
-          val steps = Vector(0, 95, 135, 175, 215, 255)
-          (steps(cube / 36), steps(cube / 6 % 6), steps(cube % 6))
+        paletteRgb(math.max(0, math.min(255, index)))
+
+  /** Decodes one xterm-256 palette `entry`, which must already be in `0..255`.
+    *
+    * The palette is three regions laid end to end: `0..15` are the named ANSI colors, so they resolve through
+    * [[AnsiPalette]] and agree with [[approximateRgb]]'s named cases rather than forming a grey ramp; `16..231` are a
+    * 6x6x6 color cube whose index decomposes base-6 into red, green and blue levels from [[CubeLevels]]; `232..255` are
+    * a 24-step grayscale ramp starting at 8 and rising by 10 per step.
+    */
+  private def paletteRgb(entry: Int): (Int, Int, Int) =
+    if entry < CubeBase then approximateRgb(AnsiPalette(entry))
+    else if entry >= GrayscaleBase then
+      val gray = GrayscaleStart + (entry - GrayscaleBase) * GrayscaleStep
+      (gray, gray, gray)
+    else
+      val cube = entry - CubeBase
+      (CubeLevels(cube / 36), CubeLevels(cube / 6 % 6), CubeLevels(cube % 6))
+
+  /** The six per-channel levels of the xterm 6x6x6 color cube, in cube-index order. */
+  private val CubeLevels: Vector[Int] = Vector(0, 95, 135, 175, 215, 255)
+
+  /** The first palette entry of the 6x6x6 color cube. */
+  private val CubeBase: Int = 16
+
+  /** The first palette entry of the 24-step grayscale ramp, and the ramp's first level and per-step increment. */
+  private val GrayscaleBase: Int  = 232
+  private val GrayscaleStart: Int = 8
+  private val GrayscaleStep: Int  = 10
 
   /** The first sixteen palette entries, in xterm order — what `Indexed(0)`..`Indexed(15)` name. */
   private val AnsiPalette: Vector[Color] =

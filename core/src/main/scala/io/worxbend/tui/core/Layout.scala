@@ -31,9 +31,11 @@ final case class Layout(
     val leftover = available - fixed.sum
     if leftover <= 0 then fixed.toIndexedSeq
     else
-      val extras = distributeLeftover(leftover)
-      val shared = fixed.indices.map(i => fixed(i) + extras(i))
-      if extras.sum > 0 then shared else absorbProportionalRemainder(shared, available - shared.sum, available)
+      val extras           = distributeLeftover(leftover)
+      // a `Fill`/`Min`/`Max` claimed the slack, so what is still unclaimed is real free space for [[flex]] to position
+      val absorbedByGrowth = extras.sum > 0
+      if absorbedByGrowth then fixed.indices.map(i => fixed(i) + extras(i))
+      else absorbProportionalRemainder(fixed.toIndexedSeq, leftover, available)
 
   /** Hands the integer-division remainder to the proportional segments so they fill the container exactly.
     *
