@@ -30,3 +30,15 @@ final class ChartSpec extends AnyFunSuite:
   test("a degenerate area renders nothing"):
     val chart = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0))
     assert(trimmedLines(rendered(chart, 2, 2)).forall(_.isEmpty))
+
+  test("a chart renders at braille resolution with axis labels"):
+    val chart = Chart(
+      Seq(Dataset("d", Seq((0.0, 0.0), (10.0, 10.0)))),
+      (0.0, 10.0),
+      (0.0, 10.0),
+      resolution = CanvasResolution.Braille,
+      showLabels = true,
+    )
+    val text  = trimmedLines(rendered(chart, 12, 6)).mkString("\n")
+    assert(text.contains("10")) // y-max label
+    assert(text.exists(c => c >= 0x2800.toChar && c <= 0x28ff.toChar)) // braille cells

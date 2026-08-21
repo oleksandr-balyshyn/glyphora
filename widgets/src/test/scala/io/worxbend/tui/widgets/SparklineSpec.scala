@@ -25,3 +25,7 @@ final class SparklineSpec extends AnyFunSuite:
   test("zero values draw nothing"):
     val buffer = rendered(Sparkline(Seq(0, 8), max = Some(8)), 2, 1)
     assert(trimmedLines(buffer) == Seq(" █"))
+
+  test("dual sparklines render in the top and bottom halves"):
+    val widget = DualSparkline(Seq(8, 8), Seq(4, 4), max = Some(8))
+    assert(trimmedLines(rendered(widget, 2, 2)) == Seq("██", "▄▄"))

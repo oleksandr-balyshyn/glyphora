@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Text, Widget}
 
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -42,7 +42,7 @@ final case class Notice(
       if x < area.right then
         if wrap then
           val body = Rect(x, area.y, area.right - x, area.height)
-          Paragraph(io.worxbend.tui.core.Text.raw(message), wrap = true, style = style).render(body, buffer)
+          Paragraph(Text.raw(message), wrap = true, style = style).render(body, buffer)
         else buffer.setString(x, area.y, CharWidth.substringByWidth(message, area.right - x), style)
 
   /** How many rows this notice needs at `width` — one unless it wraps. */
@@ -51,9 +51,11 @@ final case class Notice(
     else
       val prefix = CharWidth.of(prefixText)
       if width - prefix <= 0 then 1
-      else Paragraph.heightOf(io.worxbend.tui.core.Text.raw(message), width - prefix)
+      else Paragraph.heightOf(Text.raw(message), width - prefix)
 
-  /** The width of everything before the message: the timestamp and the icon. */
+  /** Everything drawn before the message — the timestamp and the icon — so a caller can measure the room the body has
+    * left.
+    */
   def prefixText: String =
     val stamp = timestamp.fold("")(at => s"[${Notice.Clock.format(at)}] ")
     s"$stamp${icon.getOrElse(level.icon)} "

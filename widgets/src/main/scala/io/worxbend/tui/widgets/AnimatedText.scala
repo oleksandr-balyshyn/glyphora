@@ -104,9 +104,8 @@ final case class AnimatedText(
 
   private def renderShimmer(area: Rect, buffer: Buffer, sparkle: String, period: FiniteDuration): Unit =
     // the sweep crosses in the first half of the period and rests for the second, so it reads as a shine, not a strobe
-    val sweepSlots = clusters.size * 2
-    val slot       = Animation.step(elapsed, period, math.max(1, sweepSlots))
-    val head       = slot
+    val sweepSlots = math.max(1, clusters.size * 2)
+    val head       = Animation.step(elapsed, period, sweepSlots)
     var x          = area.x
     clusters.zipWithIndex.foreach: (cluster, index) =>
       val distance  = head - index
@@ -131,13 +130,15 @@ final case class AnimatedText(
         var back   = math.max(0, trail)
         while back > 0 do
           val trailRow = row + back
-          if trailRow < area.bottom then buffer.set(x, trailRow, Cell(cluster, style.dim))
+          // the after-image is the same glyph as the head, so it occupies the same columns: a two-column cluster has to
+          // claim its continuation cell on the trail row too, or whatever was underneath shows through the middle of it
+          if trailRow < area.bottom then
+            val _ = put(buffer, x, trailRow, cluster, style.dim, area.right)
           back -= 1
-        buffer.set(x, row, Cell(cluster, highlightStyle))
-        if width == 2 then buffer.set(x + 1, row, Cell.Empty)
+        val _      = put(buffer, x, row, cluster, highlightStyle, area.right)
       x += width
 
-  /** The rows this text needs at `width`: one, except for a bounce, which needs room to move. */
+  /** The rows this text needs: one, except for a bounce, which needs room to move. */
   def preferredHeight: Int = effect match
     case TextEffect.Bounce(trail, _) => math.max(2, trail + 2)
     case _                           => 1

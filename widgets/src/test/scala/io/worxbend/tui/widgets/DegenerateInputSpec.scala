@@ -1,8 +1,11 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Color, Constraint, Line, Rect, Style, Text}
+import io.worxbend.tui.core.{Buffer, Cell, Color, Constraint, Line, Rect, Style, Text, Widget}
+import io.worxbend.tui.testsupport.BufferAssertions.trimmedLines
 
 import org.scalatest.funsuite.AnyFunSuite
+
+import scala.concurrent.duration.DurationInt
 
 /** Widgets under the inputs a real app reaches by ordinary means: state that outlived the data it indexes, a viewport
   * that changed size between frames, a caller-supplied collection that turned out to be empty, a count that came from
@@ -166,3 +169,21 @@ final class DegenerateInputSpec extends AnyFunSuite:
     (1 to 3).foreach(n => small.append(Line.raw(s"line$n")))
     small.offset = 10
     assert(small.visibleSlice(5).nonEmpty, "an offset past the end must not blank the panel")
+
+  // ---------------------------------------------------------------- single-line controls versus a narrow area
+
+  /** Renders `widget` into the left `width` columns of a 20-column buffer and returns what landed to the right of it,
+    * which must stay blank: a widget clips at the `Rect` it was handed, never at the buffer's own edge.
+    */
+  private def spillToTheRight(widget: Widget, width: Int, height: Int): Seq[String] =
+    val buf = buffer(20, height)
+    widget.render(Rect(0, 0, width, height), buf)
+    trimmedLines(buf).map(_.drop(width))
+
+  test("single-line controls truncate at their own right edge, not the buffer's"):
+    assert(spillToTheRight(Checkbox("ship it now please", checked = true), 6, 1) == Seq(""))
+    assert(spillToTheRight(Toggle("dark mode please", on = true), 6, 1) == Seq(""))
+    assert(spillToTheRight(Select(Seq("a-long-option"), selected = 0), 6, 1) == Seq(""))
+    assert(spillToTheRight(Spinner(0.millis, "loading the world"), 6, 1) == Seq(""))
+    assert(spillToTheRight(Link("a-long-label", "https://example.com"), 6, 1) == Seq(""))
+    assert(spillToTheRight(RadioGroup(Seq("first option", "second option"), selected = 0), 6, 2) == Seq("", ""))

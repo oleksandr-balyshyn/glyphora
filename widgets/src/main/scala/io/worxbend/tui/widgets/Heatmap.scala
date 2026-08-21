@@ -15,7 +15,7 @@ final case class Heatmap(
     if !area.isEmpty && ceiling > 0 then
       values.take(area.height).zipWithIndex.foreach { (row, y) =>
         row.take(area.width).zipWithIndex.foreach { (value, x) =>
-          val normalized = math.max(0.0, math.min(1.0, value / ceiling))
+          val normalized = Fraction.clamped(value / ceiling)
           val level      = math.round(normalized * (Heatmap.Ramp.size - 1)).toInt
           buffer.set(area.x + x, area.y + y, Cell(Heatmap.Ramp(level), style))
         }

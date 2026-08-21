@@ -31,11 +31,7 @@ final class TreeState:
 
   private def moveSelection(nodes: Seq[TreeNode], delta: Int): Unit =
     val visible = Tree.visiblePaths(nodes, expanded.toSet)
-    if visible.nonEmpty then
-      val noSelectionStart = if delta > 0 then -1 else 1 // so the first move in either direction lands on index 0
-      val currentIndex     = selected.map(path => visible.indexOf(path)).filter(_ >= 0).getOrElse(noSelectionStart)
-      val nextIndex        = math.max(0, math.min(currentIndex + delta, visible.size - 1))
-      selected = Some(visible(nextIndex))
+    if visible.nonEmpty then selected = Selection.moveWithin(visible, selected, delta)
 
 /** A collapsible tree with keyboard-driven selection: branch markers (`▸` collapsed, `▾` expanded), two-column
   * indentation per depth, and ListView-style scroll-to-selection.

@@ -165,7 +165,7 @@ final case class OrbitSpinner(
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
       val grid   = DotGrid(area, resolution, marker)
-      val dots   = math.max(0, math.min(RingWalk.MaxHalfExtent / 2, radius.getOrElse(OrbitSpinner.fittedRadius(grid))))
+      val dots   = OrbitSpinner.safeRadius(grid, radius)
       val aspect = grid.columnAspect
       val bands  = bandCount(dots, aspect)
       val outer  = path.walk(dots * aspect, dots)
@@ -252,5 +252,16 @@ object OrbitSpinner:
     */
   private[widgets] def fittedRadius(grid: DotGrid): Int =
     math.max(0, math.min((grid.dotWidth - 1) / (2 * grid.columnAspect), (grid.dotHeight - 1) / 2))
+
+  /** The radius in dots to draw at: `requested` if the caller gave one, otherwise whatever fits `grid`.
+    *
+    * Bounded above by half of [[RingWalk.MaxHalfExtent]] rather than by the whole of it, because the loop is built at
+    * half-extents of `radius * columnAspect` by `radius`, and `columnAspect` is at most 2 (one cell is two dots wide at
+    * [[CanvasResolution.Cell]]). Half the maximum is therefore the largest radius whose wider axis still lands inside
+    * the walk's own clamp, so no figure is silently squashed by being clamped on one axis only. Never negative, so a
+    * nonsensical radius draws the single centre dot instead of nothing.
+    */
+  private[widgets] def safeRadius(grid: DotGrid, requested: Option[Int]): Int =
+    math.max(0, math.min(RingWalk.MaxHalfExtent / 2, requested.getOrElse(fittedRadius(grid))))
 
   private def ceilDiv(value: Int, divisor: Int): Int = (value + divisor - 1) / divisor

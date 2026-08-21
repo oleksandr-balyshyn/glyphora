@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Color, Rect, Style}
+import io.worxbend.tui.core.{Color, Modifiers, Rect, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -126,3 +126,14 @@ final class AnimatedTextSpec extends AnyFunSuite:
     every.foreach: effect =>
       val buffer = rendered(AnimatedText("你好", 250.millis, effect), 6, 3)
       assert(buffer.area == Rect(0, 0, 6, 3))
+
+  test("wave text highlights the clusters at the crest"):
+    val buffer = rendered(AnimatedText("hello", 200.millis, TextEffect.Wave(crestWidth = 1)), 6, 1)
+    assert(trimmedLines(buffer) == Seq("hello"))
+    assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Bold))
+    assert(!buffer.get(0, 0).style.modifiers.has(Modifiers.Bold))
+
+  test("the wave crest advances with the phase"):
+    val buffer = rendered(AnimatedText("hello", 400.millis, TextEffect.Wave(crestWidth = 1)), 6, 1)
+    assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Bold))
+    assert(!buffer.get(2, 0).style.modifiers.has(Modifiers.Bold))

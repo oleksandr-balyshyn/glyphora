@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, StatefulWidget, Style}
+import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Style}
 
 import scala.collection.mutable
 
@@ -150,6 +150,10 @@ final case class TextArea(
         renderLine(buffer, area, clusters, area.y + row, state, lineIndex == cursorLine)
       }
 
+  /** Paints one visible line. The blank one past the last cluster is left untouched unless the cursor sits on it, so an
+    * editor does not paint its own background over whatever is behind the end of a short line — see [[ClusterRow.draw]]
+    * for the wide-glyph and cursor rules.
+    */
   private def renderLine(
       buffer: Buffer,
       area: Rect,
@@ -159,20 +163,19 @@ final case class TextArea(
       isCursorLine: Boolean,
   ): Unit =
     val (_, cursorColumn) = state.cursor
-    var x                 = area.x
-    var index             = state.scrollColumn
-    while index <= clusters.size && x < area.right do
-      val atEnd  = index == clusters.size
-      val symbol = if atEnd then " " else clusters(index)
-      val width  = renderedWidth(symbol)
-      if x + width <= area.right then
-        val isCursor  = showCursor && isCursorLine && index == cursorColumn
-        val cellStyle = if isCursor then style.patch(cursorStyle) else style
-        if !atEnd || isCursor then
-          buffer.set(x, y, Cell(drawnSymbol(symbol), cellStyle))
-          if width == 2 then buffer.set(x + 1, y, Cell.Empty)
-      x += width
-      index += 1
+    ClusterRow.draw(
+      buffer,
+      x0 = area.x,
+      y = y,
+      right = area.right,
+      clusters = clusters,
+      scroll = state.scrollColumn,
+      cursorAt = cursorColumn,
+      showCursor = showCursor && isCursorLine,
+      style = style,
+      cursorStyle = cursorStyle,
+      paintEndCell = false,
+    )
 
   /** Scrolls vertically just enough to keep the cursor's line visible.
     *
@@ -186,36 +189,11 @@ final case class TextArea(
     else if cursorLine >= clamped + height then cursorLine - height + 1
     else clamped
 
-  /** Scrolls all lines left just enough that the cursor's column (measured on its own line) stays visible, and no
-    * further than the offset that just fits the end of that line — see `TextInput.rightmostUsefulScroll`. The
-    * reservation is the display width of the cluster under the cursor, not a flat column, or [[renderLine]] would
-    * refuse to draw a two-column cursor cluster the solver had called visible; a cursor past the end of the line
-    * renders a one-column trailing space.
+  /** Scrolls all lines left just enough that the cursor's column, measured on the cursor's own line, stays visible. The
+    * rule and the reason it reserves the cursor cluster's display width rather than a flat column both live in
+    * [[ClusterRow.scrolledTo]]; every line is drawn at this one offset, so the cursor's line is the one that decides
+    * it.
     */
   private def scrolledHorizontally(state: TextAreaState, cursorColumn: Int, width: Int): Int =
     val (cursorLine, _) = state.cursor
-    val clusters        = state.clusterLines(cursorLine)
-    val cursorWidth     = if cursorColumn < clusters.size then renderedWidth(clusters(cursorColumn)) else 1
-    var scroll          = math.min(math.min(state.scrollColumn, cursorColumn), rightmostUsefulColumn(clusters, width))
-    while visibleWidth(clusters, scroll, cursorColumn) + cursorWidth > width && scroll < cursorColumn do scroll += 1
-    scroll
-
-  private def rightmostUsefulColumn(clusters: Vector[String], width: Int): Int =
-    var index = clusters.size
-    var used  = 1 // the end-of-line cursor always occupies one column
-    while index > 0 && used + renderedWidth(clusters(index - 1)) <= width do
-      used += renderedWidth(clusters(index - 1))
-      index -= 1
-    index
-
-  private def visibleWidth(clusters: Vector[String], from: Int, until: Int): Int =
-    clusters.slice(from, until).map(renderedWidth).sum
-
-  /** Measurement has to agree with the render loop, which gives every cluster at least one cell. */
-  private def renderedWidth(cluster: String): Int = math.max(1, CharWidth.of(cluster))
-
-  /** The symbol actually drawn for `cluster`. A zero-width cluster — a bare combining mark, or a control that predates
-    * [[TextAreaState]]'s filter — is drawn as a blank: [[renderedWidth]] gives every cluster a whole cell, and a symbol
-    * whose width disagrees with the cell it occupies desynchronises the backend's cursor model from the terminal's.
-    */
-  private def drawnSymbol(cluster: String): String = if CharWidth.of(cluster) == 0 then " " else cluster
+    ClusterRow.scrolledTo(state.clusterLines(cursorLine), state.scrollColumn, cursorColumn, width)

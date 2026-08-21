@@ -9,10 +9,10 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, Rect, StatefulWidget, Styl
 final class ListState(var selected: Option[Int] = None, var offset: Int = 0):
 
   def selectNext(itemCount: Int): Unit =
-    if itemCount > 0 then selected = Some(selected.fold(0)(current => math.min(current + 1, itemCount - 1)))
+    if itemCount > 0 then selected = Selection.next(selected, itemCount)
 
   def selectPrevious(itemCount: Int): Unit =
-    if itemCount > 0 then selected = Some(selected.fold(0)(current => math.max(current - 1, 0)))
+    if itemCount > 0 then selected = Selection.previous(selected, itemCount)
 
 /** A scrollable list of single-row items with an optional highlighted selection.
   *

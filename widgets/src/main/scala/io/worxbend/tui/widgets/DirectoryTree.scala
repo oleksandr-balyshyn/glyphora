@@ -9,9 +9,18 @@ import scala.util.control.NonFatal
 
 /** Caller-owned [[DirectoryTree]] state rooted at a directory.
   *
-  * Directory listings are loaded lazily on first visibility and cached together with each entry's directory flag — the
-  * filesystem is only touched when a branch is first listed (or after [[invalidate]]), never while rendering or moving
-  * the selection. Unreadable directories degrade to empty.
+  * Directory listings are loaded lazily on first visibility and cached together with each entry's directory flag, so a
+  * directory is read from disk once and then served from memory until [[invalidate]] drops it.
+  *
+  * WHERE THAT READ HAPPENS IS WORTH KNOWING. "On first visibility" means the first frame that makes a branch visible
+  * does the listing, and that frame runs on the render thread: [[DirectoryTree.render]] calls [[visibleEntries]], and
+  * [[selectNext]] / [[selectPrevious]] call [[visiblePaths]], both of which walk into a blocking `Files.list` for any
+  * branch not cached yet. On a local disk that is not measurable; on a network mount, a fuse filesystem, or a directory
+  * with very many entries, it stalls the render loop for as long as the listing takes. A caller that expects such a
+  * filesystem should pre-warm the cache by calling [[childrenOf]] from a background thread before expanding the branch,
+  * so the render-thread call finds the entries already there.
+  *
+  * Unreadable directories degrade to empty rather than raising, so a permission-denied folder shows as a leaf.
   */
 final class DirectoryTreeState(val root: Path):
   var selected: Option[Path]      = None
@@ -65,11 +74,7 @@ final class DirectoryTreeState(val root: Path):
 
   private def moveSelection(delta: Int): Unit =
     val visible = visiblePaths()
-    if visible.nonEmpty then
-      val noSelectionStart = if delta > 0 then -1 else 1
-      val currentIndex     = selected.map(visible.indexOf).filter(_ >= 0).getOrElse(noSelectionStart)
-      val nextIndex        = math.max(0, math.min(currentIndex + delta, visible.size - 1))
-      selected = Some(visible(nextIndex))
+    if visible.nonEmpty then selected = Selection.moveWithin(visible, selected, delta)
 
   private def listDirectory(directory: Path): Vector[(Path, Boolean)] =
     try

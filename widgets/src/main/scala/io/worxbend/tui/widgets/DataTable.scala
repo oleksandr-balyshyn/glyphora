@@ -63,10 +63,10 @@ final class DataTableState:
     offset = 0
 
   def selectNext(visibleCount: Int): Unit =
-    if visibleCount > 0 then selected = Some(selected.fold(0)(index => math.min(index + 1, visibleCount - 1)))
+    if visibleCount > 0 then selected = Selection.next(selected, visibleCount)
 
   def selectPrevious(visibleCount: Int): Unit =
-    if visibleCount > 0 then selected = Some(selected.fold(0)(index => math.max(index - 1, 0)))
+    if visibleCount > 0 then selected = Selection.previous(selected, visibleCount)
 
 object DataTableState:
   /** Everything that can change the filtered/sorted view, used as the memoization key. */

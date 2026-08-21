@@ -24,10 +24,7 @@ final class Painter private[widgets] (
     marker: String,
 ):
 
-  private val (subWidth, subHeight) = resolution match
-    case CanvasResolution.Cell      => (1, 1)
-    case CanvasResolution.HalfBlock => (1, 2)
-    case CanvasResolution.Braille   => (2, 4)
+  private val (subWidth, subHeight) = SubCell.dotsPerCell(resolution)
 
   private val gridWidth  = area.width * subWidth
   private val gridHeight = area.height * subHeight
