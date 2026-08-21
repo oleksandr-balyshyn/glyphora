@@ -71,11 +71,11 @@ Every module is `<module>/src/{main,test}/scala/io/worxbend/tui/<module>/`. Exam
 
 ## Build-file conventions
 
-`build.mill` holds the two shared traits: `TuiModule` (Scala version, strict flags, `TuiTests` ScalaTest wiring) and `TuiPublishModule` (POM metadata + the single synchronized `publishVersion`, currently `0.10.0` — bump it in one place). Each module has a small `package.mill`. Test-only dependencies go through `def extraTestDeps`, not by overriding `mvnDeps`, because Mill cannot resolve a second `super.mvnDeps` chain in nested test objects.
+`build.mill` holds the two shared traits: `TuiModule` (Scala version, strict flags, `TuiTests` ScalaTest wiring) and `TuiPublishModule` (POM metadata + the single synchronized `publishVersion`, currently `0.11.0` — bump it in one place). Each module has a small `package.mill`. Test-only dependencies go through `def extraTestDeps`, not by overriding `mvnDeps`, because Mill cannot resolve a second `super.mvnDeps` chain in nested test objects.
 
 ## Adding a widget
 
-1. Implement in `widgets/` depending only on `tui-core`; render inside the given `Rect`, clip safely, all width math via `CharWidth`. Stateless → `Widget`; interactive → `StatefulWidget[S]` with caller-owned state.
+1. Implement in `widgets/` in its **own file named after the widget** — no grab-bag files — depending only on `tui-core`; render inside the given `Rect`, clip safely, all width math via `CharWidth`. Stateless → `Widget`; interactive → `StatefulWidget[S]` with caller-owned state. Shared render helpers go in a `private[widgets]` object named for the concept (`Fraction`, `BlockLadder`), not copied per widget.
 2. Test the buffer with `BufferAssertions`: empty/tiny areas, truncation, Unicode, focus/selection styling, state boundaries.
 3. Add the DSL node and its built-in key/mouse behavior in `dsl/Element.scala`, a factory in `object Element`, and an export in `dsl.scala`.
 4. Drive interaction through `Pilot` (focus, keys, mouse, resize, redraw).

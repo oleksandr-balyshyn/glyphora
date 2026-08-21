@@ -25,7 +25,7 @@ import mill.*, scalalib.*
 
 object app extends ScalaModule:
   def scalaVersion = "3.7.1"
-  def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.10.0")
+  def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.11.0")
 ```
 
 Put application sources under `app/src/`, then run them with `mill app.run` (or
@@ -36,7 +36,7 @@ Put application sources under `app/src/`, then run them with `mill app.run` (or
 ```scala title="build.sbt"
 scalaVersion := "3.7.1"
 
-libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.10.0"
+libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.11.0"
 ```
 
 Put application sources under `src/main/scala/`, then use `sbt run`.

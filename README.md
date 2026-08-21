@@ -90,18 +90,18 @@
 ## 🚀 Your first app
 
 > [!NOTE]
-> **Not on Maven Central yet.** `v0.10.0` is tagged but unreleased, so the coordinates below
+> **Not on Maven Central yet.** `v0.11.0` is tagged but unreleased, so the coordinates below
 > will not resolve. Until the first release lands, use `./mill __.publishLocal` and depend on
-> `0.10.0` from your local Ivy cache — see [Build from source](#-build-from-source).
+> `0.11.0` from your local Ivy cache — see [Build from source](#-build-from-source).
 
 ```scala
 // build.mill
-def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.10.0")
+def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.11.0")
 ```
 
 ```scala
 // build.sbt
-libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.10.0"
+libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.11.0"
 ```
 
 Then return an ordinary Scala `Element` tree:
@@ -254,7 +254,7 @@ cd glyphora
 
 ./mill __.compile        # build everything
 ./mill __.test           # run every suite
-./mill __.publishLocal   # install 0.10.0 into your local Ivy cache
+./mill __.publishLocal   # install 0.11.0 into your local Ivy cache
 ```
 
 Day-to-day development:
