@@ -78,6 +78,12 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   batched into one ANSI string per frame, with OSC 8 hyperlink transitions.
 - **`InputDecoder`** — ANSI/CSI/SS3/SGR-mouse decoder, injected with a plain
   `read(timeoutMillis) => Int` function so it is fully unit-tested without a TTY.
+  The two key vocabularies it decodes into — the kitty keyboard protocol's code
+  points (`KittyKeys`) and the legacy `CSI n ~` numbers (`CsiKeys`) — are separate
+  lookup tables, so they can be read against their specifications on their own.
+- **`FrameEncoder`** — the pure buffer-diff-to-ANSI step `JLine3Backend.draw` uses.
+  It takes the previous and the next frame and returns one string, so the
+  cursor/style/hyperlink carry-over rules are unit-tested without a terminal.
 - **`HeadlessBackend`** — in-memory backend for the `Pilot` end-to-end test harness.
 
 The trait is deliberately JLine-free: a fake backend can implement it without

@@ -55,10 +55,24 @@ def scaffold(
   val rows   = topBar.toSeq ++ Seq(middle) ++ statusBar.toSeq
   Element.column(rows*)
 
+/** Cells between a key label and its description in [[helpOverlay]], and the width past which a long key spec stops
+  * widening the key column (a longer one runs into its own description rather than pushing the whole table wider).
+  */
+private val HelpColumnGap    = 3
+private val MaxHelpKeyColumn = 24
+
 /** A centered help dialog listing every hinted binding — render it last (over the view) while visible. */
 def helpOverlay(bindings: KeyBindings, title: String = "Help")(using theme: Theme): Element =
-  val width = bindings.hints.map((key, description) => key.length + description.length + 3).maxOption.getOrElse(4)
-  val lines = bindings.hints.map((key, description) => s"%-${math.min(width, 24)}s".format(key) + description)
+  // display columns, not UTF-16 lengths: a binding labelled with a CJK or emoji key otherwise asks for fewer cells
+  // than it renders into and the second column stops lining up
+  val width  = bindings.hints
+    .map((key, description) => CharWidth.of(key) + CharWidth.of(description) + HelpColumnGap)
+    .maxOption
+    .getOrElse(4)
+  val column = math.min(width, MaxHelpKeyColumn)
+  val lines  = bindings.hints.map { (key, description) =>
+    key + " " * math.max(0, column - CharWidth.of(key)) + description
+  }
   Element.widget(
     w.Dialog(title, Text.raw(lines.mkString("\n")), buttons = Seq.empty, style = theme.primary)
   )

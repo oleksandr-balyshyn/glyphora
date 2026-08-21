@@ -4,6 +4,7 @@ import io.worxbend.tui.core.{CharWidth, Event, KeyCode, KeyEvent, KeyModifiers, 
 import io.worxbend.tui.runtime.{
   Effect,
   Frame,
+  GenerationalScope,
   ReactiveScope,
   RunnerConfig,
   RunnerError,
@@ -16,6 +17,42 @@ import io.worxbend.tui.widgets.{NoticeLevel, TextInputState}
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
+
+/** Dimensions of the built-in command palette overlay: how wide the panel is, how many rows its chrome costs on top of
+  * the matches (the panel border plus the filter input), and the height it stops growing at.
+  */
+private val PaletteWidth     = 46
+private val PaletteChrome    = 4
+private val PaletteMaxHeight = 14
+
+/** How many toasts are drawn at once — older ones stay queued and appear as the visible ones age out. */
+private val MaxVisibleToasts = 5
+
+/** How long a toast lives, in ticks, when the caller does not say. */
+private val DefaultToastTicks = 30
+
+/** The tick rate a splash screen forces on an app that declared none: the intro is animated frame by frame, so it needs
+  * a clock even when the app itself does not.
+  */
+private val SplashTickRate = 50.millis
+
+/** How far in from the right edge the toast stack sits, and which row it starts on. Row 0 is normally an app's own
+  * chrome, so toasts begin one row below it.
+  */
+private val ToastRightMargin = 1
+private val ToastTopRow      = 1
+
+/** The mutable state of a single [[TuiApp.runWith]] invocation: whether a redraw is pending, the focus-decorated tree
+  * the last frame produced (events are routed against that tree, not against a freshly evaluated one), and the focus
+  * tracker.
+  *
+  * Owned by one `runWith` call and touched only on the render thread — the event callbacks, the render lambda, and the
+  * app's own hooks all run there, so none of these fields is synchronised.
+  */
+private final class RunState:
+  var invalidated: Boolean      = false
+  var lastTree: Option[Element] = None
+  val tracker: FocusTracker     = FocusTracker()
 
 /** The application entry point for the declarative DSL.
   *
@@ -112,7 +149,11 @@ trait TuiApp:
   // ---- notifications ----
 
   /** Shows a toast in the top-right corner for `ttlTicks` ticks (needs a `config.tickRate` to age out). */
-  protected final def notify(message: String, level: NoticeLevel = NoticeLevel.Info, ttlTicks: Int = 30): Unit =
+  protected final def notify(
+      message: String,
+      level: NoticeLevel = NoticeLevel.Info,
+      ttlTicks: Int = DefaultToastTicks,
+  ): Unit =
     toasts.update(_ :+ ActiveToast(message, level, ttlTicks))
 
   protected final def dismissToasts(): Unit =
@@ -135,106 +176,119 @@ trait TuiApp:
       case Left(error)    => Left(RunnerError.Backend(error))
       case Right(backend) => runWith(backend)
 
-  /** Runs over an explicit backend — how headless tests drive a `TuiApp`. */
+  /** Runs over an explicit backend — how headless tests drive a `TuiApp`.
+    *
+    * Everything this sets up lives in one [[RunState]], and every stage below is handed that state explicitly rather
+    * than closing over it, so the four-stage key precedence the trait's Scaladoc promises is four named methods.
+    */
   final def runWith(backend: Backend): Either[RunnerError, Unit] =
-    var invalidated               = false
-    var lastTree: Option[Element] = None
-    val tracker                   = FocusTracker()
-    val scope                     = ReactiveScope.generational(() => invalidated = true)
-
-    def handleKey(key: KeyEvent, handle: RunnerHandle): Boolean =
-      if splashActive then
-        splashSkipped = true // any key skips the intro; it never reaches the view
-        true
-      else routeKey(key, handle)
-
-    /** Focused element first, then its ancestors, then the app bindings, then the framework's own keys. */
-    def routeKey(key: KeyEvent, handle: RunnerHandle): Boolean =
-      val consumed   = lastTree.exists(EventRouter.dispatchKey(_, key))
-      val bound      = !consumed && !paletteOpen.peek && bindings.handle(key)
-      var focusMoved = false
-      if !consumed && !bound then
-        key match
-          case KeyEvent(KeyCode.Tab, modifiers) if modifiers.has(KeyModifiers.Shift)      =>
-            focusMoved = tracker.focusPrevious()
-          case KeyEvent(KeyCode.Tab, _)                                                   =>
-            focusMoved = tracker.focusNext()
-          case KeyEvent(KeyCode.Char('p'), modifiers)
-              if modifiers.has(KeyModifiers.Ctrl) && bindings.bindings.nonEmpty && !paletteOpen.peek =>
-            openPalette()
-          case KeyEvent(KeyCode.Char('c'), modifiers) if modifiers.has(KeyModifiers.Ctrl) =>
-            handle.quit()
-          case _                                                                          => ()
-      consumed || bound || focusMoved
-
-    def handleMouse(mouse: MouseEvent): Boolean =
-      val hit        = tracker.hitTest(mouse.x, mouse.y)
-      val focusMoved =
-        if mouse.kind == MouseEventKind.Down then
-          hit match
-            case Some(index) if index != tracker.focusedIndex =>
-              tracker.focusTo(index)
-              true
-            case _                                            => false
-        else false
-      val target     = hit.flatMap(index => tracker.areaOf(index).map(area => (index, area)))
-      val consumed   = lastTree.exists(EventRouter.dispatchMouse(_, mouse, target))
-      consumed || focusMoved
-
-    def handleEvent(event: Event, handle: RunnerHandle): Boolean =
-      activeHandle.set(Some(handle))
-      event match
-        case Event.Key(key)     => handleKey(key, handle) || invalidated
-        case Event.Mouse(mouse) => handleMouse(mouse) || invalidated
-        case Event.Paste(text)  =>
-          val consumed = lastTree.exists(EventRouter.dispatchPaste(_, text))
-          consumed || invalidated
-        case Event.FocusGained  =>
-          onTerminalFocus(true)
-          invalidated
-        case Event.FocusLost    =>
-          onTerminalFocus(false)
-          invalidated
-        case Event.Interrupt    => onInterrupt()
-        case Event.Resize(size) =>
-          // the render pass sets this too, from the frame it is about to draw; doing it here as well means an
-          // `onResize` override — and anything it calls — already peeks the new size rather than the previous frame's
-          terminalSizeSignal.set(size)
-          onResize(size)
-          true
-        case Event.Tick         =>
-          // before user code, so an `onTick` that reads the clock sees this tick's value rather than the last one's
-          AnimationClock.advance()
-          ageToasts()
-          onTick()
-          val splashJustFinished  = updateSplashProgress()
-          val effectsJustFinished = pruneEffects()
-          invalidated || activeEffects.nonEmpty || splashActive || splashJustFinished || effectsJustFinished
-
+    val run             = RunState()
+    val scope           = ReactiveScope.generational(() => run.invalidated = true)
     val effectiveConfig =
-      if splash.nonEmpty && config.tickRate.isEmpty then config.copy(tickRate = Some(50.millis))
+      if splash.nonEmpty && config.tickRate.isEmpty then config.copy(tickRate = Some(SplashTickRate))
       else config
-    val result          = TerminalRunner(backend, effectiveConfig, redrawRequested = () => invalidated).run(
-      handleEvent,
-      frame =>
-        // the frame's area is what is actually about to be painted, so it — not the last resize event — is the size
-        // the view branches on. Published before `invalidated` is cleared: the write invalidates the *previous*
-        // generation's subscribers, and letting that survive into this frame would schedule a redundant redraw.
-        val frameSize = Size(frame.area.width, frame.area.height)
-        terminalSizeSignal.set(frameSize)
-        invalidated = false
-        if splashActive then renderSplash(frame)
-        else
-          scope.beginGeneration()
-          val rawTree = ResponsivePass.resolve(effectiveView(using scope), frameSize)
-          tracker.reconcile(FocusPass.focusKeys(rawTree))
-          val tree    = FocusPass.decorate(rawTree, tracker, theme.focus)
-          lastTree = Some(tree)
-          frame.renderWidget(tree.widget, frame.area)
-          processEffects(frame),
+    val result          = TerminalRunner(backend, effectiveConfig, redrawRequested = () => run.invalidated).run(
+      handleEvent(_, run, _),
+      frame => renderFrame(frame, run, scope),
     )
     activeHandle.set(None)
     result
+
+  /** Composes one frame: publish the size the view branches on, then either the intro or the reconciled view tree. */
+  private def renderFrame(frame: Frame, run: RunState, scope: GenerationalScope): Unit =
+    // the frame's area is what is actually about to be painted, so it — not the last resize event — is the size
+    // the view branches on. Published before `invalidated` is cleared: the write invalidates the *previous*
+    // generation's subscribers, and letting that survive into this frame would schedule a redundant redraw.
+    val frameSize = Size(frame.area.width, frame.area.height)
+    terminalSizeSignal.set(frameSize)
+    run.invalidated = false
+    if splashActive then renderSplash(frame)
+    else
+      scope.beginGeneration()
+      val rawTree = ResponsivePass.resolve(effectiveView(using scope), frameSize)
+      run.tracker.reconcile(FocusPass.focusKeys(rawTree))
+      val tree    = FocusPass.decorate(rawTree, run.tracker, theme.focus)
+      run.lastTree = Some(tree)
+      frame.renderWidget(tree.widget, frame.area)
+      processEffects(frame)
+
+  /** The runner's single event entry point: dispatches one event and answers whether the frame must be redrawn. */
+  private def handleEvent(event: Event, run: RunState, handle: RunnerHandle): Boolean =
+    activeHandle.set(Some(handle))
+    event match
+      case Event.Key(key)     => handleKey(key, run, handle) || run.invalidated
+      case Event.Mouse(mouse) => handleMouse(mouse, run) || run.invalidated
+      case Event.Paste(text)  =>
+        val consumed = run.lastTree.exists(EventRouter.dispatchPaste(_, text))
+        consumed || run.invalidated
+      case Event.FocusGained  =>
+        onTerminalFocus(true)
+        run.invalidated
+      case Event.FocusLost    =>
+        onTerminalFocus(false)
+        run.invalidated
+      case Event.Interrupt    => onInterrupt()
+      case Event.Resize(size) =>
+        // the render pass sets this too, from the frame it is about to draw; doing it here as well means an
+        // `onResize` override — and anything it calls — already peeks the new size rather than the previous frame's
+        terminalSizeSignal.set(size)
+        onResize(size)
+        true
+      case Event.Tick         => handleTick(run)
+
+  private def handleTick(run: RunState): Boolean =
+    // before user code, so an `onTick` that reads the clock sees this tick's value rather than the last one's
+    AnimationClock.advance()
+    ageToasts()
+    onTick()
+    val splashJustFinished  = updateSplashProgress()
+    val effectsJustFinished = pruneEffects()
+    run.invalidated || activeEffects.nonEmpty || splashActive || splashJustFinished || effectsJustFinished
+
+  private def handleKey(key: KeyEvent, run: RunState, handle: RunnerHandle): Boolean =
+    if splashActive then
+      splashSkipped = true // any key skips the intro; it never reaches the view
+      true
+    else routeKey(key, run, handle)
+
+  /** Focused element first, then its ancestors, then the app bindings, then the framework's own keys. */
+  private def routeKey(key: KeyEvent, run: RunState, handle: RunnerHandle): Boolean =
+    val consumed = run.lastTree.exists(EventRouter.dispatchKey(_, key))
+    val bound    = !consumed && !paletteOpen.peek && bindings.handle(key)
+    if consumed || bound then true else handleFrameworkKey(key, run.tracker, handle)
+
+  /** The last stage: the keys the framework reserves for itself once nothing else claimed the event — `Tab` /
+    * `Shift+Tab` focus traversal, `Ctrl+P` for the command palette, `Ctrl+C` to quit.
+    *
+    * Answers `true` only when focus actually moved, because that is the one outcome here that changes the next frame
+    * without going through a signal; opening the palette and quitting each schedule their own redraw.
+    */
+  private def handleFrameworkKey(key: KeyEvent, tracker: FocusTracker, handle: RunnerHandle): Boolean =
+    key match
+      case KeyEvent(KeyCode.Tab, modifiers) if modifiers.has(KeyModifiers.Shift)      => tracker.focusPrevious()
+      case KeyEvent(KeyCode.Tab, _)                                                   => tracker.focusNext()
+      case KeyEvent(KeyCode.Char('p'), modifiers)
+          if modifiers.has(KeyModifiers.Ctrl) && bindings.bindings.nonEmpty && !paletteOpen.peek =>
+        openPalette()
+        false
+      case KeyEvent(KeyCode.Char('c'), modifiers) if modifiers.has(KeyModifiers.Ctrl) =>
+        handle.quit()
+        false
+      case _                                                                          => false
+
+  private def handleMouse(mouse: MouseEvent, run: RunState): Boolean =
+    val hit        = run.tracker.hitTest(mouse.x, mouse.y)
+    val focusMoved =
+      if mouse.kind == MouseEventKind.Down then
+        hit match
+          case Some(index) if index != run.tracker.focusedIndex =>
+            run.tracker.focusTo(index)
+            true
+          case _                                                => false
+      else false
+    val target     = hit.flatMap(index => run.tracker.areaOf(index).map(area => (index, area)))
+    val consumed   = run.lastTree.exists(EventRouter.dispatchMouse(_, mouse, target))
+    consumed || focusMoved
 
   /** Requests a clean exit; safe to call from event handlers. No-op when the app is not running. */
   protected final def quit(): Unit =
@@ -304,21 +358,30 @@ trait TuiApp:
           true
         case _                           => false
       }
-    centered(46, math.min(4 + matches.size, 14))(body)
+    centered(PaletteWidth, math.min(PaletteChrome + matches.size, PaletteMaxHeight))(body)
 
   private def paletteMatches: Seq[KeyBinding] =
     val accepts = Fuzzy.matcher(paletteQuery.value)
     bindings.bindings.filter(bound => accepts(bound.description))
 
+  /** The toast stack, composed from [[NoticeElement]] rather than painted into the buffer directly, so it inherits the
+    * widget layer's clipping and severity icons instead of re-implementing them.
+    *
+    * Each toast is its own [[Element.positioned]] overlay because the stack is right-aligned and every row is a
+    * different width. The offset is measured against the last published terminal size, which the render pass sets from
+    * the frame it is about to paint before it evaluates the view — so it is this frame's width, not the previous one's.
+    */
   private def toastsElement(active: Vector[ActiveToast])(using theme: Theme): Element =
-    Element.widget { (area, buffer) =>
-      active.takeRight(5).zipWithIndex.foreach { (toast, index) =>
-        val text  = s" ${toast.message} "
-        val width = CharWidth.of(text)
-        val x     = math.max(area.x, area.right - width - 1)
-        buffer.setString(x, area.y + 1 + index, text, toastStyle(toast.level))
-      }
+    val areaWidth = terminalSizeSignal.peek.width
+    val overlays  = active.takeRight(MaxVisibleToasts).zipWithIndex.map { (toast, index) =>
+      val style  = toastStyle(toast.level)
+      // the trailing space keeps the reversed style reading as a padded badge rather than as text ending mid-cell
+      val notice = NoticeElement(s"${toast.message} ", toast.level, None, style, style, style)
+      val width  = CharWidth.of(s"${toast.level.icon} ${toast.message} ")
+      val dx     = math.max(0, areaWidth - width - ToastRightMargin)
+      Element.positioned(dx, ToastTopRow + index, width, 1)(notice)
     }
+    Element.layers(overlays.head, overlays.tail*)
 
   private def toastStyle(level: NoticeLevel)(using theme: Theme): Style =
     val base = level match
@@ -338,6 +401,10 @@ trait TuiApp:
     * that gap through [[terminalSize]], which is only readable from `view`.
     */
   private val terminalSizeSignal: Signal[Size]    = Signal(Size(0, 0))
+  // Everything below — these signals, the palette cursor, and the splash/effect fields further down — is per-instance
+  // state written only from the render thread (event handlers, the render lambda, and the app's own callbacks all run
+  // there). None of it is reset by `runWith`, so a `TuiApp` instance is meant to be run once: running the same
+  // instance a second time keeps the splash marked finished and any still-running effects queued from the first run.
   private val screenStack: Signal[List[Screen]]   = Signal(Nil)
   private val toasts: Signal[Vector[ActiveToast]] = Signal(Vector.empty)
   private val paletteOpen: Signal[Boolean]        = Signal(false)

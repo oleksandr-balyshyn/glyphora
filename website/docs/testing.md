@@ -107,6 +107,12 @@ assert(app.listState.selected.contains(0))
 assert(pilot.screenText.contains("· buy milk"))
 ```
 
+`typeText` posts one key event per Unicode *code point*, which is what the real
+input decoder delivers: an emoji outside the Basic Multilingual Plane arrives as
+a single `KeyCode.Char`, and a combining accent arrives as its own key event
+after the letter it modifies. The number of events is therefore the number of
+code points, not `text.length`.
+
 Assert both visible behavior and important state. Visible output proves rendering;
 state narrows failures when an event was not routed as expected.
 

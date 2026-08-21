@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.Color
+import io.worxbend.tui.core.{CharWidth, Color}
 import io.worxbend.tui.macros.{Field, FieldInput, FieldSpec, FormSpec}
 import io.worxbend.tui.runtime.{ReactiveScope, Signal}
 import io.worxbend.tui.widgets.TextInputState
@@ -97,11 +97,34 @@ object FormState:
   */
 object Form:
 
-  def apply[A](state: FormState[A])(using ReactiveScope): Element =
+  /** The traversal both renderings share: one column of fields, each optionally followed by its validation error.
+    *
+    * `field` renders one binding (the index is its zero-based position, which only [[accessible]] announces) and
+    * `errorText` decorates the failure message for that rendering. Reading `state.errors` here is what subscribes the
+    * caller's `ReactiveScope`, so a failed submit repaints the form.
+    */
+  private def fieldColumn[A](state: FormState[A], errorText: String => String)(
+      field: (FieldBinding, Int) => Element
+  )(using ReactiveScope): Element =
     val currentErrors = state.errors.get
-    val labelWidth    = state.bindings.map(_.spec.name.length).maxOption.getOrElse(0) + 2
-    val rows          = state.bindings.flatMap { binding =>
-      val field = binding match
+    val rows          = state.bindings.zipWithIndex.flatMap { (binding, index) =>
+      val error = currentErrors.get(binding.spec.name).map(message => errorRow(errorText(message)))
+      field(binding, index) +: error.toSeq
+    }
+    Element.column(rows*)
+
+  /** The single-row rendering of a validation failure, shared by [[apply]] and [[accessible]] so a change to how an
+    * error looks lands in both renderings at once. The two differ only in the text they hand in.
+    */
+  private def errorRow(message: String): Element =
+    Element.text(message).color(Color.Red).length(1)
+
+  def apply[A](state: FormState[A])(using ReactiveScope): Element =
+    // display columns, not UTF-16 lengths: a field named with CJK or emoji characters otherwise gets a label column
+    // narrower than it renders into, and the error line below it no longer lines up with the input
+    val labelWidth = state.bindings.map(binding => CharWidth.of(binding.spec.name)).maxOption.getOrElse(0) + 2
+    fieldColumn(state, message => s"${" ".repeat(labelWidth)}! $message") { (binding, _) =>
+      binding match
         case FieldBinding.TextLike(spec, inputState, _) =>
           Element
             .row(
@@ -111,23 +134,17 @@ object Form:
             .length(1)
         case FieldBinding.BoolLike(spec, value, _)      =>
           Element.checkbox(spec.name, value)
-      val error = currentErrors.get(binding.spec.name).map { message =>
-        Element.text(s"${" ".repeat(labelWidth)}! $message").color(Color.Red).length(1)
-      }
-      field +: error.toSeq
     }
-    Element.column(rows*)
 
   /** A screen-reader-friendly rendering of the same [[FormState]] (Huh's `WithAccessible`): every field on its own
     * labeled line announced as "Field N of M", checkbox state spelled out as text, and validation failures prefixed
     * with "Error:" rather than signalled by color alone. Pair with a plain Tab/Enter key flow for assistive tech.
     */
   def accessible[A](state: FormState[A])(using ReactiveScope): Element =
-    val currentErrors = state.errors.get
-    val total         = state.bindings.size
-    val rows          = state.bindings.zipWithIndex.flatMap { case (binding, index) =>
+    val total = state.bindings.size
+    fieldColumn(state, message => s"Error: $message") { (binding, index) =>
       val position = s"Field ${index + 1} of $total"
-      val field    = binding match
+      binding match
         case FieldBinding.TextLike(spec, inputState, _) =>
           Element.column(
             Element.text(s"$position: ${spec.name}").length(1),
@@ -139,9 +156,4 @@ object Form:
             Element.text(s"$position: ${spec.name} ($announced)").length(1),
             Element.checkbox(spec.name, value).length(1),
           )
-      val error    = currentErrors.get(binding.spec.name).map { message =>
-        Element.text(s"Error: $message").color(Color.Red).length(1)
-      }
-      field +: error.toSeq
     }
-    Element.column(rows*)

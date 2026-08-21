@@ -3,6 +3,7 @@ package io.worxbend.tui.dsl
 import io.worxbend.tui.core.{
   Cell,
   CharWidth,
+  Color,
   Constraint,
   Direction,
   Flex,
@@ -75,126 +76,10 @@ sealed trait Element:
   private[dsl] final def layoutItem(direction: Direction): w.LayoutItem =
     w.LayoutItem(props.constraint.getOrElse(preferredSize(direction)), widget)
 
-// ---- the shared built-in vocabulary ----
-//
-// The small combinators every element below reuses for its layout claim, its focus styling, and the framework key and
-// mouse behavior it performs while focused. They own no state of their own — each closes over state the *element*
-// (and therefore the app) owns — and they are called only from `builtinKeyHandler`/`builtinMouseHandler`, so they run
-// on the render thread like every other part of a frame.
-
-/** How far PageUp/PageDown move a scrollable, in rows. One place to change the page step for every scrollable. */
-private val PageStep = 10
-
-/** What a one-line control claims from its container: exactly one row when stacked vertically, whatever width is going
-  * when laid out horizontally.
-  */
-private def singleRow(direction: Direction): Constraint =
-  direction match
-    case Direction.Vertical   => Constraint.Length(1)
-    case Direction.Horizontal => Constraint.Fill(1)
-
-/** Focused interactive elements render with the focus style (the theme's, once the focus pass ran) layered over their
-  * own, so the user can see where keystrokes go.
-  */
-private def focusStyled(props: ElementProps): Style =
-  if props.focused then props.style.patch(props.focusStyle) else props.style
-
-/** A mouse press activates the control (focus already moved on the press). */
-private def clickActivates(activate: () => Unit): BuiltinMouseHandler =
-  (event, _) =>
-    if event.kind == MouseEventKind.Down then
-      activate()
-      true
-    else false
-
-/** Wheel events scroll by one step. */
-private def wheelScrolls(up: () => Unit, down: () => Unit): BuiltinMouseHandler =
-  (event, _) =>
-    event.kind match
-      case MouseEventKind.ScrollUp   =>
-        up()
-        true
-      case MouseEventKind.ScrollDown =>
-        down()
-        true
-      case _                         => false
-
-/** Space/Enter activates a two-state control. Only reached while the element is focused — [[EventRouter]] gates every
-  * built-in key handler on that.
-  */
-private def toggleOnActivate(activate: () => Unit): KeyEvent => Boolean =
-  event =>
-    event.code match
-      case KeyCode.Char(' ') | KeyCode.Enter =>
-        activate()
-        true
-      case _                                 => false
-
-/** The scrolling key vocabulary shared by every viewport-shaped element: Up/Down move one row, PageUp/PageDown move
-  * [[PageStep]] rows. `up`/`down` are handed the row count to move and do the scrolling on the caller-owned state;
-  * anything else is left unconsumed so it keeps bubbling.
-  */
-private def scrollKeys(up: Int => Unit, down: Int => Unit): KeyEvent => Boolean =
-  event =>
-    event.code match
-      case KeyCode.Up       =>
-        up(1)
-        true
-      case KeyCode.Down     =>
-        down(1)
-        true
-      case KeyCode.PageUp   =>
-        up(PageStep)
-        true
-      case KeyCode.PageDown =>
-        down(PageStep)
-        true
-      case _                => false
-
-/** The caret and erase key vocabulary shared by every single-line text field: Backspace/Delete erase either side of the
-  * caret, Left/Right/Home/End move it. `state` is the caller-owned editing state the keys mutate; anything else is left
-  * unconsumed, which is what lets a field layer its own `Char` handling on top and fall through to this.
-  */
-private def cursorKeys(state: w.TextInputState): KeyEvent => Boolean =
-  event =>
-    event.code match
-      case KeyCode.Backspace =>
-        state.backspace()
-        true
-      case KeyCode.Delete    =>
-        state.delete()
-        true
-      case KeyCode.Left      =>
-        state.moveLeft()
-        true
-      case KeyCode.Right     =>
-        state.moveRight()
-        true
-      case KeyCode.Home      =>
-        state.moveHome()
-        true
-      case KeyCode.End       =>
-        state.moveEnd()
-        true
-      case _                 => false
-
-/** Left/Right step `index` through `size` positions, wrapping at both ends. `size` is by-name because it is derived
-  * from the element's current contents, and nothing is consumed when there is nothing to step through — an empty option
-  * list or a tab bar with no pages leaves the arrows free to bubble.
-  */
-private def stepsWrapping(size: => Int, index: Signal[Int]): KeyEvent => Boolean =
-  event =>
-    val count = size
-    if count == 0 then false
-    else
-      event.code match
-        case KeyCode.Left  =>
-          index.update(current => (current - 1 + count) % count)
-          true
-        case KeyCode.Right =>
-          index.update(current => (current + 1) % count)
-          true
-        case _             => false
+// The element case classes live in this file rather than one per family because `Element` is sealed: Scala permits a
+// sealed hierarchy's cases only in the file that declares it, and the sealing is what gives construction tests
+// exhaustive pattern matching. The two halves that are *not* forced to sit here — the shared built-in key/mouse
+// combinators and the `Element` factory set — live in ElementBuiltins.scala and ElementFactories.scala.
 
 final case class TextElement(content: String, props: ElementProps = ElementProps()) extends Element:
   def widget: Widget                                           = w.Paragraph(Text.styled(content, props.style))
@@ -218,9 +103,10 @@ final case class PanelElement(
       w.Column(children.map(_.layoutItem(Direction.Vertical))).render(block.inner(area), buffer)
   private[dsl] def withProps(props: ElementProps): PanelElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PanelElement = copy(children = children)
-  private[dsl] override def intrinsicHeight(width: Int): Option[Int]           =
-    val heights = children.map(_.intrinsicHeight(math.max(0, width - 2)))
-    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + 2) else None
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+    // the same fact twice: `w.Block`'s border eats a column on each side and a row at the top and bottom
+    val heights = children.map(_.intrinsicHeight(math.max(0, width - PanelBorderCells)))
+    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + PanelBorderCells) else None
 
 final case class RowElement(
     override val children: Seq[Element],
@@ -745,17 +631,8 @@ final case class ListElement(
     val view = w.ListView(items.map(Line.raw), style = props.style)
     (area, buffer) => view.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): ListElement               = copy(props = props)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
-
-  private def handleKey(event: KeyEvent): Boolean =
-    event.code match
-      case KeyCode.Down =>
-        state.selectNext(items.size)
-        true
-      case KeyCode.Up   =>
-        state.selectPrevious(items.size)
-        true
-      case _            => false
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
+    Some(selectionKeys(() => state.selectNext(items.size), () => state.selectPrevious(items.size)))
 
 /** A collapsible tree over an in-memory node list. Up/Down move the selection through the *visible* rows and Enter
   * expands or collapses the selected branch (a no-op on a leaf), all while focused.
@@ -772,18 +649,15 @@ final case class TreeElement(
   private[dsl] def withProps(props: ElementProps): TreeElement             = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
+  private val moveSelection: KeyEvent => Boolean =
+    selectionKeys(() => state.selectNext(nodes), () => state.selectPrevious(nodes))
+
   private def handleKey(event: KeyEvent): Boolean =
     event.code match
-      case KeyCode.Down  =>
-        state.selectNext(nodes)
-        true
-      case KeyCode.Up    =>
-        state.selectPrevious(nodes)
-        true
       case KeyCode.Enter =>
         state.toggle(nodes)
         true
-      case _             => false
+      case _             => moveSelection(event)
 
 /** A vertical menu / dropdown / context menu popup. Up/Down move the highlight (skipping separators and disabled
   * items), Enter (or a click) fires `onSelect` with the chosen index, the wheel scrolls. Escape is left unconsumed so
@@ -807,19 +681,16 @@ final case class MenuElement(
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(handleMouse)
 
+  private val moveSelection: KeyEvent => Boolean =
+    selectionKeys(() => state.selectNext(items), () => state.selectPrevious(items))
+
   private def handleKey(event: KeyEvent): Boolean =
     event.code match
-      case KeyCode.Down                      =>
-        state.selectNext(items)
-        true
-      case KeyCode.Up                        =>
-        state.selectPrevious(items)
-        true
       case KeyCode.Enter | KeyCode.Char(' ') =>
         if items.lift(state.selected).exists(_.selectable) then onSelect(state.selected)
         true
       case _                                 =>
-        false
+        moveSelection(event)
 
   private def handleMouse(event: MouseEvent, area: Rect): Boolean =
     event.kind match
@@ -1030,27 +901,29 @@ final case class SplitPaneElement(
     first: Element,
     second: Element,
     splitPercent: Signal[Int],
-    horizontal: Boolean = true,
+    axis: Direction = Direction.Horizontal,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler]       =
     Some { (event, area) =>
       if event.kind == MouseEventKind.Drag then
-        val fraction =
-          if horizontal then (event.x - area.x).toDouble / math.max(1, area.width)
-          else (event.y - area.y).toDouble / math.max(1, area.height)
-        splitPercent.set(math.max(10, math.min(90, math.round(fraction * 100).toInt)))
+        val fraction = axis match
+          case Direction.Horizontal => (event.x - area.x).toDouble / math.max(1, area.width)
+          case Direction.Vertical   => (event.y - area.y).toDouble / math.max(1, area.height)
+        splitPercent.set(clampSplit(math.round(fraction * 100).toInt))
         true
       else false
     }
   override def children: Seq[Element]                                              = Seq(first, second)
   def widget: Widget                                                               =
-    val percent = math.max(10, math.min(90, splitPercent.peek))
+    val percent = clampSplit(splitPercent.peek)
     val items   = Seq(
-      first.layoutItem(direction).copy(constraint = Constraint.Percentage(percent)),
-      second.layoutItem(direction).copy(constraint = Constraint.Fill(1)),
+      first.layoutItem(axis).copy(constraint = Constraint.Percentage(percent)),
+      second.layoutItem(axis).copy(constraint = Constraint.Fill(1)),
     )
-    if horizontal then w.Row(items, spacing = 1) else w.Column(items, spacing = 0)
+    axis match
+      case Direction.Horizontal => w.Row(items, spacing = 1)
+      case Direction.Vertical   => w.Column(items, spacing = 0)
   private[dsl] def withProps(props: ElementProps): SplitPaneElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): SplitPaneElement =
     children match
@@ -1058,15 +931,13 @@ final case class SplitPaneElement(
       case _         => this
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]         = Some(handleKey)
 
-  private def direction: Direction = if horizontal then Direction.Horizontal else Direction.Vertical
-
   private def handleKey(event: KeyEvent): Boolean =
     event.code match
       case KeyCode.Char('[') =>
-        splitPercent.update(value => math.max(10, value - 5))
+        splitPercent.update(value => clampSplit(value - SplitStep))
         true
       case KeyCode.Char(']') =>
-        splitPercent.update(value => math.min(90, value + 5))
+        splitPercent.update(value => clampSplit(value + SplitStep))
         true
       case _                 => false
 
@@ -1086,9 +957,16 @@ final case class AutocompleteElement(
     if query.isEmpty then Seq.empty
     else suggestions.filter(Fuzzy.matcher(query)).take(maxSuggestions)
 
+  /** The row the highlight actually lands on: `state.highlighted` survives edits that shorten the match list, so it is
+    * clamped here rather than at every place that writes it. Both the rendered highlight and the row Enter accepts go
+    * through this, which is what keeps them the same row.
+    */
+  private def highlightedIndex(visible: Seq[String]): Int =
+    math.max(0, math.min(state.highlighted, math.max(0, visible.size - 1)))
+
   def widget: Widget                                                        =
     val visible   = matches
-    val highlight = math.max(0, math.min(state.highlighted, math.max(0, visible.size - 1)))
+    val highlight = highlightedIndex(visible)
     val input     = w.TextInput(showCursor = props.focused, style = props.style)
     (area, buffer) =>
       input.render(Rect(area.x, area.y, area.width, 1), buffer, state.input)
@@ -1120,7 +998,8 @@ final case class AutocompleteElement(
         state.highlighted = math.max(0, state.highlighted - 1)
         true
       case KeyCode.Enter                                                                       =>
-        matches.lift(math.min(state.highlighted, math.max(0, matches.size - 1))) match
+        val visible = matches
+        visible.lift(highlightedIndex(visible)) match
           case Some(choice) =>
             state.accept(choice)
             onAccept(choice)
@@ -1151,14 +1030,11 @@ final case class FilePickerElement(
   private[dsl] def withProps(props: ElementProps): FilePickerElement       = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
+  private val moveSelection: KeyEvent => Boolean =
+    selectionKeys(() => state.tree.selectNext(), () => state.tree.selectPrevious())
+
   private def handleKey(event: KeyEvent): Boolean =
     event.code match
-      case KeyCode.Down  =>
-        state.tree.selectNext()
-        true
-      case KeyCode.Up    =>
-        state.tree.selectPrevious()
-        true
       case KeyCode.Enter =>
         state.tree.selected match
           case Some(path) if java.nio.file.Files.isDirectory(path) =>
@@ -1168,7 +1044,7 @@ final case class FilePickerElement(
             state.chosen.set(Some(path))
             true
           case None                                                => false
-      case _             => false
+      case _             => moveSelection(event)
 
 /** Mutually exclusive options: Up/Down move the selection while focused. */
 final case class RadioGroupElement(
@@ -1253,20 +1129,17 @@ final case class SelectionListElement(
   private[dsl] def withProps(props: ElementProps): SelectionListElement    = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
+  private val moveSelection: KeyEvent => Boolean =
+    selectionKeys(() => state.selectNext(items.size), () => state.selectPrevious(items.size))
+
   private def handleKey(event: KeyEvent): Boolean =
     event.code match
-      case KeyCode.Down      =>
-        state.selectNext(items.size)
-        true
-      case KeyCode.Up        =>
-        state.selectPrevious(items.size)
-        true
       case KeyCode.Char(' ') =>
         state.selected.foreach { cursor =>
           selected.update(current => if current.contains(cursor) then current - cursor else current + cursor)
         }
         true
-      case _                 => false
+      case _                 => moveSelection(event)
 
 /** A text input restricted to numbers (optional single leading minus and, with `allowDecimal`, one dot). */
 final case class NumberInputElement(
@@ -1317,27 +1190,34 @@ final case class MaskedInputElement(
         true
       case _                                          => false
 
+  /** The mask split into grapheme clusters, which is the unit [[currentLength]] counts the typed value in. Indexing the
+    * raw `String` instead would mix UTF-16 code units with clusters and read the wrong slot for any mask holding a
+    * non-BMP or combining character.
+    */
+  private val maskSlots: IndexedSeq[String] = CharWidth.graphemeClusters(mask).toIndexedSeq
+
   private def typeChar(codePoint: Int): Unit =
     state.moveEnd()
     var position = currentLength
     // literals between fillable slots insert themselves
-    while position < mask.length && !isSlot(mask.charAt(position)) do
-      state.insert(mask.charAt(position).toString)
+    while position < maskSlots.size && !isSlot(maskSlots(position)) do
+      state.insert(maskSlots(position))
       position += 1
-    if position < mask.length && slotAccepts(mask.charAt(position), codePoint) then
+    if position < maskSlots.size && slotAccepts(maskSlots(position), codePoint) then
       state.insert(Character.toString(codePoint))
 
   private def eraseSlot(): Unit =
     state.moveEnd()
     state.backspace()
-    while currentLength > 0 && !isSlot(mask.charAt(currentLength - 1)) do state.backspace()
+    while currentLength > 0 && currentLength <= maskSlots.size && !isSlot(maskSlots(currentLength - 1)) do
+      state.backspace()
 
   private def currentLength: Int = CharWidth.graphemeClusters(state.value).size
 
-  private def isSlot(m: Char): Boolean = m == '#' || m == 'A'
+  private def isSlot(slot: String): Boolean = slot == "#" || slot == "A"
 
-  private def slotAccepts(m: Char, codePoint: Int): Boolean =
-    (m == '#' && Character.isDigit(codePoint)) || (m == 'A' && Character.isLetter(codePoint))
+  private def slotAccepts(slot: String, codePoint: Int): Boolean =
+    (slot == "#" && Character.isDigit(codePoint)) || (slot == "A" && Character.isLetter(codePoint))
 
 /** A page indicator: Left/Right change the page while focused. */
 final case class PaginatorElement(
@@ -1465,18 +1345,15 @@ final case class DirectoryTreeElement(
   private[dsl] def withProps(props: ElementProps): DirectoryTreeElement    = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
+  private val moveSelection: KeyEvent => Boolean =
+    selectionKeys(() => state.selectNext(), () => state.selectPrevious())
+
   private def handleKey(event: KeyEvent): Boolean =
     event.code match
-      case KeyCode.Down  =>
-        state.selectNext()
-        true
-      case KeyCode.Up    =>
-        state.selectPrevious()
-        true
       case KeyCode.Enter =>
         state.toggle()
         true
-      case _             => false
+      case _             => moveSelection(event)
 
 /** A sortable, filterable table. Up/Down move the row selection while focused, and PageUp/PageDown turn the page once
   * `state.pageSize` is set (they are left unconsumed otherwise, so they keep bubbling). Sorting and filtering have no
@@ -1492,21 +1369,21 @@ final case class DataTableElement(
   private[dsl] def withProps(props: ElementProps): DataTableElement        = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean] = Some(handleKey)
 
+  private val moveSelection: KeyEvent => Boolean =
+    selectionKeys(
+      () => state.selectNext(table.visibleRows(state).size),
+      () => state.selectPrevious(table.visibleRows(state).size),
+    )
+
   private def handleKey(event: KeyEvent): Boolean =
     event.code match
-      case KeyCode.Down                                =>
-        state.selectNext(table.visibleRows(state).size)
-        true
-      case KeyCode.Up                                  =>
-        state.selectPrevious(table.visibleRows(state).size)
-        true
       case KeyCode.PageDown if state.pageSize.nonEmpty =>
         state.nextPage(table.filteredRows(state).size)
         true
       case KeyCode.PageUp if state.pageSize.nonEmpty   =>
         state.previousPage()
         true
-      case _                                           => false
+      case _                                           => moveSelection(event)
 
 /** Wraps a focusable element during the focus pass so its rendered area is recorded for click-to-focus hit-testing.
   * Transparent for everything else: props, children, and handlers delegate to the wrapped node.
@@ -1920,13 +1797,16 @@ object Element:
   def collapsible(title: String, expanded: Signal[Boolean])(body: Element): CollapsibleElement =
     CollapsibleElement(title, body, expanded)
 
+  /** Two panes divided by a draggable split. `axis` is the axis the panes are laid out along: [[Direction.Horizontal]]
+    * puts them side by side, [[Direction.Vertical]] stacks them.
+    */
   def splitPane(
       first: Element,
       second: Element,
       splitPercent: Signal[Int],
-      horizontal: Boolean = true,
+      axis: Direction = Direction.Horizontal,
   ): SplitPaneElement =
-    SplitPaneElement(first, second, splitPercent, horizontal)
+    SplitPaneElement(first, second, splitPercent, axis)
 
   def log(state: w.LogState): LogElement =
     LogElement(state)

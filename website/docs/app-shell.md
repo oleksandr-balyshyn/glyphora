@@ -153,8 +153,9 @@ notify("Authentication expired", NoticeLevel.Error, ttlTicks = 60)
 dismissToasts()
 ```
 
-Toasts stack in the top-right corner and age on application ticks. Set a tick rate
-when you use them:
+Toasts stack in the top-right corner and age on application ticks. Each one renders
+through the same `Notice` widget the rest of the toolkit uses, so it carries that
+severity's icon and theme colour. Set a tick rate when you use them:
 
 ```scala
 import io.worxbend.tui.runtime.RunnerConfig

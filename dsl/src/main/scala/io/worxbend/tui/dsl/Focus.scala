@@ -95,7 +95,9 @@ private[dsl] final class FocusTracker:
     * asking not to happen; the render pass re-derives the key from the new index.
     */
   def focusTo(index: Int): Unit =
-    focusedIndex = index
+    // clamped here as well as in `reconcile`, so the class holds its own invariant no matter which caller moves focus:
+    // an index outside the range would render a frame with nothing focused at all
+    focusedIndex = if focusableCount > 0 then math.max(0, math.min(index, focusableCount - 1)) else 0
     focusedKey = None
 
   def areaOf(index: Int): Option[Rect] = areas.get(index)
