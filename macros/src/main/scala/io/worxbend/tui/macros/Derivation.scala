@@ -35,17 +35,7 @@ object ActionHandler:
 inline def deriveForm[A](using m: Mirror.ProductOf[A]): FormSpec[A] =
   val names  = constValueTuple[m.MirroredElemLabels].toList.map(_.toString)
   val inputs = fieldInputs[m.MirroredElemLabels, m.MirroredElemTypes]
-  val fields = names.zip(inputs).map(FieldSpec(_, _))
-  FormSpec(
-    fields,
-    values =>
-      if values.sizeIs != names.size then
-        throw IllegalArgumentException(
-          s"assembling a form value needs one value per field, in order — ${names.size} " +
-            s"(${names.mkString(", ")}) — but got ${values.size}"
-        )
-      m.fromProduct(Tuple.fromArray(values.toArray)),
-  )
+  FormSpec.ofProduct(names.zip(inputs).map(FieldSpec(_, _)), m.fromProduct)
 
 /** Wraps a function as a named [[ActionHandler]] for the action type `A`.
   *

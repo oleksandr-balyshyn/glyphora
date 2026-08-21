@@ -14,6 +14,13 @@ import scala.concurrent.duration.{Deadline, DurationInt, FiniteDuration}
   * A throwable escaping the app body kills the app thread; the pilot records it and rethrows it on the *test* thread
   * from the next observation of the app's state, so a crash never reads as a clean exit. `appFailure` is owned by
   * [[Pilot.start]], written once by the app thread's uncaught-exception handler and read by the test thread.
+  *
+  * Ownership of the observed state: the frame and the input queue live in the [[HeadlessBackend]], not in the pilot.
+  * The app thread writes them (it draws frames and consumes posted events) and the test thread reads them through
+  * `screenLines`/`screenText`/`lastFrame`/`cellAt` and `waitForIdle`. `HeadlessBackend` keeps that state in thread-safe
+  * holders, so reading from the test thread is safe at any moment — but "safe" only means the read will not tear, never
+  * that the app has caught up. Posting input and reading the frame without a `waitForIdle` in between can observe the
+  * frame from before that input was handled. Call `waitForIdle()` after posting and before asserting.
   */
 final class Pilot private (
     val backend: HeadlessBackend,
@@ -25,10 +32,22 @@ final class Pilot private (
     backend.postEvent(Event.Key(KeyEvent(code, modifiers)))
     this
 
+  /** Posts one key event per Unicode **code point** of `text`, in order.
+    *
+    * Code points, not UTF-16 code units and not grapheme clusters, because that is what a real terminal delivers: the
+    * `InputDecoder` recombines a surrogate pair into one [[KeyCode.Char]] and reports a combining mark as its own key
+    * event. A letter followed by a combining accent therefore drives the app with two events here, exactly as it would
+    * at a real keyboard, while an emoji outside the Basic Multilingual Plane arrives as the single key event it is —
+    * iterating `Char`s would have split it into two lone surrogates that mean nothing to the app.
+    */
   def typeText(text: String): Pilot =
-    text.foreach(c => pressKey(KeyCode.Char(c)))
+    text.codePoints().forEach(cp => pressKey(KeyCode.Char(cp)))
     this
 
+  /** Synthesises a press/release pair at `(x, y)`: a `Down` immediately followed by an `Up` at the same coordinates,
+    * with no `Moved` event in between and no drag. As with every posting method, the caller is responsible for calling
+    * [[waitForIdle]] before asserting on the frame.
+    */
   def click(x: Int, y: Int): Pilot =
     backend.postEvent(Event.Mouse(MouseEvent(x, y, MouseEventKind.Down, KeyModifiers.None)))
     backend.postEvent(Event.Mouse(MouseEvent(x, y, MouseEventKind.Up, KeyModifiers.None)))
@@ -42,12 +61,12 @@ final class Pilot private (
     * has exited. Throws on deadline overrun — an assertion failure, not a modeled error. An app thread that died from a
     * throwable is not an exit: this fails with that throwable as the cause.
     */
-  def waitForIdle(timeout: FiniteDuration = 2.seconds): Pilot =
+  def waitForIdle(timeout: FiniteDuration = Pilot.DefaultTimeout): Pilot =
     val deadline         = Deadline.now + timeout
     val idleReadsBefore  = backend.idleReads
     def settled: Boolean =
       !thread.isAlive || (backend.pendingEvents == 0 && backend.idleReads > idleReadsBefore)
-    while !settled && deadline.hasTimeLeft() do Thread.sleep(PollSleep.toMillis)
+    while !settled && deadline.hasTimeLeft() do Thread.sleep(Pilot.PollSleep.toMillis)
     rethrowAppFailure()
     if !settled then throw AssertionError(s"app did not go idle within $timeout")
     this
@@ -82,7 +101,7 @@ final class Pilot private (
   /** Waits for the app to exit on its own (e.g. after posting its quit key). A thread that died from a throwable is not
     * a clean exit: this fails with that throwable as the cause rather than reporting success.
     */
-  def awaitTermination(timeout: FiniteDuration = 2.seconds): Boolean =
+  def awaitTermination(timeout: FiniteDuration = Pilot.DefaultTimeout): Boolean =
     thread.join(timeout.toMillis)
     rethrowAppFailure()
     !thread.isAlive
@@ -95,9 +114,17 @@ final class Pilot private (
       case Some(error) => throw AssertionError(s"the tui-pilot-app thread died with $error", error)
       case None        => ()
 
+object Pilot:
+
+  /** How long the test thread sleeps between checks while waiting for the app to go idle. Small enough that a settled
+    * app is noticed almost at once, large enough not to spin a core.
+    */
   private val PollSleep: FiniteDuration = 5.millis
 
-object Pilot:
+  /** The pilot's patience, shared by [[Pilot.waitForIdle]] and [[Pilot.awaitTermination]] so that one value sets how
+    * long a test waits before reporting a hung app.
+    */
+  private[testsupport] val DefaultTimeout: FiniteDuration = 2.seconds
 
   /** Starts `app` — any blocking function that drives a runner over `backend` — on a daemon thread and hands back the
     * driver. A throwable escaping `app` is captured on that thread and rethrown on the test thread by the next
