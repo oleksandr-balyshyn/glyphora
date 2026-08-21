@@ -122,28 +122,49 @@ private[terminal] final class InputDecoder(
     None
 
   /** CSI sequences: parameters (digits, `;`, `:` and the private `<`/`>`/`=`/`?` prefixes) then a final byte in
-    * 0x40-0x7E.
-    *
-    * Parameters past [[MaxParamLength]] are not kept, but the sequence is still read to its final byte before being
-    * dropped: a verbose primary-DA reply really does overrun that budget on some terminals, and stopping mid-sequence
-    * left the remaining parameter digits in the buffer to be decoded as keystrokes at startup. [[MaxSequenceLength]] is
-    * the backstop that keeps that resynchronization from running forever.
+    * 0x40-0x7E. [[scanCsi]] reads the sequence off the wire and says how it ended; only a complete one becomes an
+    * event, because a torn or oversized sequence must never be turned into an invented key.
     */
   private def decodeCsi(): Option[Event] =
-    val params    = StringBuilder()
-    var finalByte = NoChar
-    var torn      = false
-    var runaway   = false
-    var consumed  = 0
-    while finalByte < 0 && !torn do
-      val c = next(escapeTimeoutMillis)
-      consumed += 1
-      if c < 0 then torn = true // the sequence never completed: drop it rather than invent a key
-      else if c >= 0x40 && c <= 0x7e then finalByte = c
-      else if params.length < MaxParamLength then params.append(c.toChar)
-      else if consumed >= MaxSequenceLength then torn = true // not a sequence at all: stop looking for a final byte
-      else runaway = true // over the parameter budget: read on to the final byte, then drop the whole sequence
-    if torn || runaway then None else decodeCsiFinal(params.result(), finalByte)
+    scanCsi() match
+      case CsiScan.Complete(params, finalByte) => decodeCsiFinal(params, finalByte)
+      case CsiScan.Torn | CsiScan.Overrun      => None
+
+  /** Reads the body of a CSI sequence — everything after the `ESC [` introducer — and names how it ended.
+    *
+    * Called only from [[decodeCsi]], on the same thread as [[decode]], because it advances the decoder's shared read
+    * cursor (and therefore its one-character pushback slot). It never decides what a sequence *means*; it only hands
+    * back the parameters and the final byte, or the reason there are none.
+    *
+    * The three outcomes:
+    *   - [[CsiScan.Complete]] — a final byte in 0x40-0x7E arrived with the parameters intact.
+    *   - [[CsiScan.Torn]] — the read timed out mid-flight, so the sequence never finished arriving.
+    *   - [[CsiScan.Overrun]] — the sequence outgrew [[MaxParamLength]] (and possibly [[MaxSequenceLength]] on top of
+    *     that), so its parameters are no longer trustworthy.
+    *
+    * Only `Complete` produces an event; the other two are dropped by the caller. Past [[MaxParamLength]] the scan keeps
+    * reading anyway, discarding characters until the final byte, because a verbose primary-DA reply really does overrun
+    * that budget on some terminals and stopping mid-sequence left the remaining parameter digits in the buffer to be
+    * decoded as keystrokes at startup. [[MaxSequenceLength]] is the backstop that keeps that resynchronization from
+    * running forever: reached only once the parameter budget has already overflowed, it abandons the read outright.
+    */
+  private def scanCsi(): CsiScan =
+    val params = StringBuilder()
+
+    // `overrun` records that parameters have been dropped; the scan continues so the stream stays aligned
+    @annotation.tailrec
+    def scan(consumed: Int, overrun: Boolean): CsiScan =
+      val c    = next(escapeTimeoutMillis)
+      val read = consumed + 1
+      if c < 0 then CsiScan.Torn
+      else if c >= 0x40 && c <= 0x7e then if overrun then CsiScan.Overrun else CsiScan.Complete(params.result(), c)
+      else if params.length < MaxParamLength then
+        params.append(c.toChar)
+        scan(read, overrun)
+      else if read >= MaxSequenceLength then CsiScan.Overrun // not a sequence at all: stop looking for a final byte
+      else scan(read, overrun = true)
+
+    scan(consumed = 0, overrun = false)
 
   private def decodeCsiFinal(params: String, finalByte: Int): Option[Event] =
     if params.isEmpty && finalByte == 'M' then decodeX10Mouse()
@@ -298,9 +319,12 @@ private[terminal] final class InputDecoder(
         tail.append(c.toChar)
         if tail.length > PasteEnd.length then tail.deleteCharAt(0)
         if isTerminator(tail) then
-          // trim only the terminator characters that were actually kept: past the cap, none of them were
-          val kept = math.max(0, content.length - (read - PasteEnd.length))
-          content.setLength(content.length - kept)
+          // `read` counts everything consumed, terminator included, while `content` holds only what fitted under
+          // PasteLimit — so the terminator's own characters are in `content` exactly when the payload stayed under the
+          // cap, and only that many of them are trimmed off the end.
+          val payloadChars        = read - PasteEnd.length
+          val terminatorCharsKept = math.max(0, content.length - payloadChars)
+          content.setLength(content.length - terminatorCharsKept)
           done = true
     Event.Paste(content.result())
 
@@ -424,12 +448,27 @@ private[terminal] object InputDecoder:
   /** How long to wait for the rest of an escape sequence — and therefore how long a lone `ESC` takes to report. */
   val DefaultEscapeTimeoutMillis: Long = 50L
 
+  /** How a CSI sequence ended, as read off the wire by `InputDecoder.scanCsi`.
+    *
+    * Purely a description of the bytes: what a completed sequence *means* is decided afterwards, by `decodeCsiFinal`.
+    */
+  private enum CsiScan:
+
+    /** A final byte in 0x40-0x7E arrived; `params` is everything between the introducer and it. */
+    case Complete(params: String, finalByte: Int)
+
+    /** The read timed out before the final byte: the sequence never finished arriving and is dropped. */
+    case Torn
+
+    /** The sequence outgrew its size budget, so its parameters are incomplete and the whole sequence is dropped. */
+    case Overrun
+
   private val NoChar             = -1
   private val Bel                = 7
   private val PasteTimeoutMillis = 200L
   private val PasteLimit         = 1 << 20
   private val PasteStart         = 200
-  private val PasteEnd           = "[201~"
+  private val PasteEnd           = "\u001b[201~"
   private val MaxParamLength     = 64
   private val FunctionalKeyLow   = 57344
   private val FunctionalKeyHigh  = 63743

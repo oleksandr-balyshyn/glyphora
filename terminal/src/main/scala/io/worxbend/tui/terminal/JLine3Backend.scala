@@ -40,13 +40,14 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   private val pendingResize    = AtomicReference[Option[Size]](scala.None)
   private val pendingInterrupt = AtomicBoolean(false)
   private val woken            = AtomicBoolean(false)
-  private val pollingThread    = AtomicReference[Thread](null) // scalafix:ok DisableSyntax; JLine Java API returns null
+  // the thread currently parked in `blockingRead`, if any, so `wake` knows whom to interrupt
+  private val pollingThread    = AtomicReference[Option[Thread]](scala.None)
   private val decoder          = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
 
   private val supportsAlternateScreen =
     terminal.getStringCapability(
       InfoCmp.Capability.enter_ca_mode
-    ) != null // scalafix:ok DisableSyntax; JLine Java API returns null
+    ) != null // scalafix:ok DisableSyntax; getStringCapability returns null when the capability is absent
 
   terminal.handle(Terminal.Signal.WINCH, _ => onResize())
   // INT/QUIT must not kill the JVM: the process would die before any teardown and hand back a raw, alt-screen terminal
@@ -196,13 +197,13 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
           if woken.getAndSet(false) then Right(scala.None) else blockingRead(timeout)
 
   private def blockingRead(timeout: Duration): Either[BackendError, Option[Event]] =
-    pollingThread.set(Thread.currentThread())
+    pollingThread.set(Some(Thread.currentThread()))
     try Right(decoder.decode(JLine3Backend.readTimeoutMillis(timeout)))
     catch
       case _: InterruptedIOException => Right(scala.None) // woken deliberately by `wake()`
       case NonFatal(error)           => Left(BackendError.Io(error))
     finally
-      pollingThread.set(null) // scalafix:ok DisableSyntax; JLine Java API returns null
+      pollingThread.set(scala.None) // no read is in flight any more: `wake` has nobody to interrupt
       val _ = Thread.interrupted() // drop an interrupt that landed after the read completed
 
   /** Cuts short an in-flight [[readEvent]].
@@ -212,9 +213,8 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     */
   override def wake(): Unit =
     woken.set(true)
-    val blocked = pollingThread.get()
-    if blocked != null && (blocked ne Thread.currentThread()) then
-      blocked.interrupt() // scalafix:ok DisableSyntax; JLine Java API returns null
+    // a thread never interrupts its own read: the `woken` flag above already sends it back round the loop
+    pollingThread.get().filter(_ ne Thread.currentThread()).foreach(_.interrupt())
 
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     attempt(write(AnsiSequences.clipboardCopy(text)))
@@ -389,7 +389,7 @@ object JLine3Backend:
 
   /** Teardown steps are best-effort, but a silent failure is how a corrupted terminal goes unnoticed for months. */
   private[terminal] def logTeardownFailure(error: BackendError): Unit =
-    if System.getenv("GLYPHORA_DEBUG") != null then // scalafix:ok DisableSyntax; JLine Java API returns null
+    if System.getenv("GLYPHORA_DEBUG") != null then // scalafix:ok DisableSyntax; getenv returns null when unset
       System.err.println(s"glyphora: terminal teardown step failed: $error")
 
 /** The "repaint every cell next frame" request that [[JLine3Backend]] uses to keep `lastFlushed` render-thread-private.

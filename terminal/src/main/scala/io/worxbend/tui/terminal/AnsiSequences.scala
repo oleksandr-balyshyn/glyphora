@@ -103,49 +103,49 @@ private[terminal] object AnsiSequences:
         val (r, g, b) = Color.approximateRgb(named)
         s"58:2::$r:$g:$b"
 
-  private def foregroundCode(color: Color): String =
-    color match
-      case Color.Reset          => "39"
-      case Color.Black          => "30"
-      case Color.Red            => "31"
-      case Color.Green          => "32"
-      case Color.Yellow         => "33"
-      case Color.Blue           => "34"
-      case Color.Magenta        => "35"
-      case Color.Cyan           => "36"
-      case Color.White          => "37"
-      case Color.BrightBlack    => "90"
-      case Color.BrightRed      => "91"
-      case Color.BrightGreen    => "92"
-      case Color.BrightYellow   => "93"
-      case Color.BrightBlue     => "94"
-      case Color.BrightMagenta  => "95"
-      case Color.BrightCyan     => "96"
-      case Color.BrightWhite    => "97"
-      case Color.Indexed(index) => s"38;5;$index"
-      case Color.Rgb(r, g, b)   => s"38;2;$r;$g;$b"
+  /** The base SGR code of the foreground colour group; every other foreground code is an offset from it. */
+  private val ForegroundBase = 30
 
-  private def backgroundCode(color: Color): String =
+  /** The background group sits ten codes above the foreground one, and mirrors it entry for entry. */
+  private val BackgroundBase = 40
+
+  /** SGR 30-37 / 90-97 for the foreground, plus 38 for the 256-colour and truecolour forms. */
+  private def foregroundCode(color: Color): String = colorCode(color, ForegroundBase)
+
+  /** SGR 40-47 / 100-107 for the background, plus 48 for the 256-colour and truecolour forms. */
+  private def backgroundCode(color: Color): String = colorCode(color, BackgroundBase)
+
+  /** One SGR colour code, offset from `base` — 30 for the foreground, 40 for the background.
+    *
+    * Foreground and background differ by nothing but that constant (ECMA-48 §8.3.117-118): the eight named colours are
+    * `base + 0` to `base + 7`, their bright variants sit 60 codes higher, `Reset` is `base + 9`, and the 256-colour and
+    * truecolour extensions (ISO 8613-6) share the selector `base + 8`. Encoding that once means a new [[Color]] case or
+    * a corrected SGR form cannot be added to one half and forgotten in the other.
+    *
+    * The match stays explicit rather than deriving the offset from `Color.ordinal`, so adding an enum case still fails
+    * compilation instead of silently emitting a wrong code.
+    */
+  private def colorCode(color: Color, base: Int): String =
     color match
-      case Color.Reset          => "49"
-      case Color.Black          => "40"
-      case Color.Red            => "41"
-      case Color.Green          => "42"
-      case Color.Yellow         => "43"
-      case Color.Blue           => "44"
-      case Color.Magenta        => "45"
-      case Color.Cyan           => "46"
-      case Color.White          => "47"
-      case Color.BrightBlack    => "100"
-      case Color.BrightRed      => "101"
-      case Color.BrightGreen    => "102"
-      case Color.BrightYellow   => "103"
-      case Color.BrightBlue     => "104"
-      case Color.BrightMagenta  => "105"
-      case Color.BrightCyan     => "106"
-      case Color.BrightWhite    => "107"
-      case Color.Indexed(index) => s"48;5;$index"
-      case Color.Rgb(r, g, b)   => s"48;2;$r;$g;$b"
+      case Color.Reset          => s"${base + 9}"
+      case Color.Black          => s"${base + 0}"
+      case Color.Red            => s"${base + 1}"
+      case Color.Green          => s"${base + 2}"
+      case Color.Yellow         => s"${base + 3}"
+      case Color.Blue           => s"${base + 4}"
+      case Color.Magenta        => s"${base + 5}"
+      case Color.Cyan           => s"${base + 6}"
+      case Color.White          => s"${base + 7}"
+      case Color.BrightBlack    => s"${base + 60}"
+      case Color.BrightRed      => s"${base + 61}"
+      case Color.BrightGreen    => s"${base + 62}"
+      case Color.BrightYellow   => s"${base + 63}"
+      case Color.BrightBlue     => s"${base + 64}"
+      case Color.BrightMagenta  => s"${base + 65}"
+      case Color.BrightCyan     => s"${base + 66}"
+      case Color.BrightWhite    => s"${base + 67}"
+      case Color.Indexed(index) => s"${base + 8};5;$index"
+      case Color.Rgb(r, g, b)   => s"${base + 8};2;$r;$g;$b"
 
   private def modifierCodes(modifiers: Modifiers): List[String] =
     List(
