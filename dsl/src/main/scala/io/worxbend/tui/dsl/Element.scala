@@ -75,6 +75,127 @@ sealed trait Element:
   private[dsl] final def layoutItem(direction: Direction): w.LayoutItem =
     w.LayoutItem(props.constraint.getOrElse(preferredSize(direction)), widget)
 
+// ---- the shared built-in vocabulary ----
+//
+// The small combinators every element below reuses for its layout claim, its focus styling, and the framework key and
+// mouse behavior it performs while focused. They own no state of their own — each closes over state the *element*
+// (and therefore the app) owns — and they are called only from `builtinKeyHandler`/`builtinMouseHandler`, so they run
+// on the render thread like every other part of a frame.
+
+/** How far PageUp/PageDown move a scrollable, in rows. One place to change the page step for every scrollable. */
+private val PageStep = 10
+
+/** What a one-line control claims from its container: exactly one row when stacked vertically, whatever width is going
+  * when laid out horizontally.
+  */
+private def singleRow(direction: Direction): Constraint =
+  direction match
+    case Direction.Vertical   => Constraint.Length(1)
+    case Direction.Horizontal => Constraint.Fill(1)
+
+/** Focused interactive elements render with the focus style (the theme's, once the focus pass ran) layered over their
+  * own, so the user can see where keystrokes go.
+  */
+private def focusStyled(props: ElementProps): Style =
+  if props.focused then props.style.patch(props.focusStyle) else props.style
+
+/** A mouse press activates the control (focus already moved on the press). */
+private def clickActivates(activate: () => Unit): BuiltinMouseHandler =
+  (event, _) =>
+    if event.kind == MouseEventKind.Down then
+      activate()
+      true
+    else false
+
+/** Wheel events scroll by one step. */
+private def wheelScrolls(up: () => Unit, down: () => Unit): BuiltinMouseHandler =
+  (event, _) =>
+    event.kind match
+      case MouseEventKind.ScrollUp   =>
+        up()
+        true
+      case MouseEventKind.ScrollDown =>
+        down()
+        true
+      case _                         => false
+
+/** Space/Enter activates a two-state control. Only reached while the element is focused — [[EventRouter]] gates every
+  * built-in key handler on that.
+  */
+private def toggleOnActivate(activate: () => Unit): KeyEvent => Boolean =
+  event =>
+    event.code match
+      case KeyCode.Char(' ') | KeyCode.Enter =>
+        activate()
+        true
+      case _                                 => false
+
+/** The scrolling key vocabulary shared by every viewport-shaped element: Up/Down move one row, PageUp/PageDown move
+  * [[PageStep]] rows. `up`/`down` are handed the row count to move and do the scrolling on the caller-owned state;
+  * anything else is left unconsumed so it keeps bubbling.
+  */
+private def scrollKeys(up: Int => Unit, down: Int => Unit): KeyEvent => Boolean =
+  event =>
+    event.code match
+      case KeyCode.Up       =>
+        up(1)
+        true
+      case KeyCode.Down     =>
+        down(1)
+        true
+      case KeyCode.PageUp   =>
+        up(PageStep)
+        true
+      case KeyCode.PageDown =>
+        down(PageStep)
+        true
+      case _                => false
+
+/** The caret and erase key vocabulary shared by every single-line text field: Backspace/Delete erase either side of the
+  * caret, Left/Right/Home/End move it. `state` is the caller-owned editing state the keys mutate; anything else is left
+  * unconsumed, which is what lets a field layer its own `Char` handling on top and fall through to this.
+  */
+private def cursorKeys(state: w.TextInputState): KeyEvent => Boolean =
+  event =>
+    event.code match
+      case KeyCode.Backspace =>
+        state.backspace()
+        true
+      case KeyCode.Delete    =>
+        state.delete()
+        true
+      case KeyCode.Left      =>
+        state.moveLeft()
+        true
+      case KeyCode.Right     =>
+        state.moveRight()
+        true
+      case KeyCode.Home      =>
+        state.moveHome()
+        true
+      case KeyCode.End       =>
+        state.moveEnd()
+        true
+      case _                 => false
+
+/** Left/Right step `index` through `size` positions, wrapping at both ends. `size` is by-name because it is derived
+  * from the element's current contents, and nothing is consumed when there is nothing to step through — an empty option
+  * list or a tab bar with no pages leaves the arrows free to bubble.
+  */
+private def stepsWrapping(size: => Int, index: Signal[Int]): KeyEvent => Boolean =
+  event =>
+    val count = size
+    if count == 0 then false
+    else
+      event.code match
+        case KeyCode.Left  =>
+          index.update(current => (current - 1 + count) % count)
+          true
+        case KeyCode.Right =>
+          index.update(current => (current + 1) % count)
+          true
+        case _             => false
+
 final case class TextElement(content: String, props: ElementProps = ElementProps()) extends Element:
   def widget: Widget                                           = w.Paragraph(Text.styled(content, props.style))
   private[dsl] def withProps(props: ElementProps): TextElement = copy(props = props)
@@ -563,25 +684,7 @@ final case class InputElement(
       case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
         state.insert(Character.toString(c))
         true
-      case KeyCode.Backspace                                                                   =>
-        state.backspace()
-        true
-      case KeyCode.Delete                                                                      =>
-        state.delete()
-        true
-      case KeyCode.Left                                                                        =>
-        state.moveLeft()
-        true
-      case KeyCode.Right                                                                       =>
-        state.moveRight()
-        true
-      case KeyCode.Home                                                                        =>
-        state.moveHome()
-        true
-      case KeyCode.End                                                                         =>
-        state.moveEnd()
-        true
-      case _                                                                                   => false
+      case _ => cursorKeys(state)(event)
 
 /** A labelled checkbox over a caller-owned `Signal`. Space/Enter (or a click) flips it while focused. */
 final case class CheckboxElement(
@@ -624,19 +727,8 @@ final case class SelectElement(
   def widget: Widget = w.Select(options, selected.peek, focusStyled(props))
   private[dsl] def withProps(props: ElementProps): SelectElement             = copy(props = props)
   private[dsl] override def preferredSize(direction: Direction): Constraint  = singleRow(direction)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
-
-  private def handleKey(event: KeyEvent): Boolean =
-    if options.isEmpty then false
-    else
-      event.code match
-        case KeyCode.Left  =>
-          selected.update(index => (index - 1 + options.size) % options.size)
-          true
-        case KeyCode.Right =>
-          selected.update(index => (index + 1) % options.size)
-          true
-        case _             => false
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
+    Some(stepsWrapping(options.size, selected))
 
 /** A scrollable single-selection list. Up/Down move the selection while focused, the wheel does the same on hover; the
   * widget scrolls to keep the selection visible. `state` is caller-owned, so the app can read or set the selection.
@@ -872,25 +964,10 @@ final case class ScrollViewElement(
   private[dsl] def withProps(props: ElementProps): ScrollViewElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): ScrollViewElement =
     copy(content = children.headOption.getOrElse(content))
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]          = Some(handleKey)
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]          =
+    Some(scrollKeys(rows => state.scrollUp(rows), rows => state.scrollDown(rows)))
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler]        =
     Some(wheelScrolls(() => state.scrollUp(), () => state.scrollDown()))
-
-  private def handleKey(event: KeyEvent): Boolean =
-    event.code match
-      case KeyCode.Up       =>
-        state.scrollUp()
-        true
-      case KeyCode.Down     =>
-        state.scrollDown()
-        true
-      case KeyCode.PageUp   =>
-        state.scrollUp(10)
-        true
-      case KeyCode.PageDown =>
-        state.scrollDown(10)
-        true
-      case _                => false
 
 /** A tab row plus the selected page (Textual's `TabbedContent`): Left/Right switch pages while focused. Only the active
   * page's focusables participate in the tab order.
@@ -915,19 +992,8 @@ final case class TabbedContentElement(
   private[dsl] def withProps(props: ElementProps): TabbedContentElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): TabbedContentElement =
     copy(activePage = children.headOption.getOrElse(activePage))
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]             = Some(handleKey)
-
-  private def handleKey(event: KeyEvent): Boolean =
-    if pageCount == 0 then false
-    else
-      event.code match
-        case KeyCode.Left  =>
-          selected.update(index => (index - 1 + pageCount) % pageCount)
-          true
-        case KeyCode.Right =>
-          selected.update(index => (index + 1) % pageCount)
-          true
-        case _             => false
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]             =
+    Some(stepsWrapping(pageCount, selected))
 
 /** A toggleable section: `▸ title` collapsed, `▾ title` plus the body expanded; Enter/Space toggle while focused.
   * Collapsed bodies leave the tab order entirely.
@@ -1220,25 +1286,7 @@ final case class NumberInputElement(
       case KeyCode.Char(c) if event.modifiers.isEmpty =>
         if accepts(c) then state.insert(Character.toString(c))
         true // swallow rejected characters too: they must not bubble as global keys while typing
-      case KeyCode.Backspace =>
-        state.backspace()
-        true
-      case KeyCode.Delete    =>
-        state.delete()
-        true
-      case KeyCode.Left      =>
-        state.moveLeft()
-        true
-      case KeyCode.Right     =>
-        state.moveRight()
-        true
-      case KeyCode.Home      =>
-        state.moveHome()
-        true
-      case KeyCode.End       =>
-        state.moveEnd()
-        true
-      case _                 => false
+      case _ => cursorKeys(state)(event)
 
   private def accepts(codePoint: Int): Boolean =
     if Character.isDigit(codePoint) then true
@@ -1341,23 +1389,8 @@ final case class LogElement(
     val log = w.Log(props.style)
     (area, buffer) => log.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): LogElement                = copy(props = props)
-  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   = Some(handleKey)
-
-  private def handleKey(event: KeyEvent): Boolean =
-    event.code match
-      case KeyCode.Up       =>
-        state.scrollUp()
-        true
-      case KeyCode.Down     =>
-        state.scrollDown()
-        true
-      case KeyCode.PageUp   =>
-        state.scrollUp(10)
-        true
-      case KeyCode.PageDown =>
-        state.scrollDown(10)
-        true
-      case _                => false
+  private[dsl] override def builtinKeyHandler: Option[KeyEvent => Boolean]   =
+    Some(scrollKeys(rows => state.scrollUp(rows), rows => state.scrollDown(rows)))
 
 /** Multi-line editor element. While focused it consumes printable characters, Enter (newline), Backspace, Delete,
   * arrows, Home/End, Ctrl+Z (undo) and Ctrl+Y (redo) — Tab stays free for focus traversal. A bracketed paste lands as
@@ -1567,51 +1600,6 @@ private[dsl] final case class PointerElement(inner: Element, pointerId: Int, tra
   // default here would silently change the measured height of any handler-carrying panel/row/column
   private[dsl] override def intrinsicHeight(width: Int): Option[Int]             = inner.intrinsicHeight(width)
 
-/** What a one-line control claims from its container: exactly one row when stacked vertically, whatever width is going
-  * when laid out horizontally.
-  */
-private def singleRow(direction: Direction): Constraint =
-  direction match
-    case Direction.Vertical   => Constraint.Length(1)
-    case Direction.Horizontal => Constraint.Fill(1)
-
-/** A mouse press activates the control (focus already moved on the press). */
-private def clickActivates(activate: () => Unit): BuiltinMouseHandler =
-  (event, _) =>
-    if event.kind == MouseEventKind.Down then
-      activate()
-      true
-    else false
-
-/** Wheel events scroll by one step. */
-private def wheelScrolls(up: () => Unit, down: () => Unit): BuiltinMouseHandler =
-  (event, _) =>
-    event.kind match
-      case MouseEventKind.ScrollUp   =>
-        up()
-        true
-      case MouseEventKind.ScrollDown =>
-        down()
-        true
-      case _                         => false
-
-/** Space/Enter activates a two-state control. Only reached while the element is focused — [[EventRouter]] gates every
-  * built-in key handler on that.
-  */
-private def toggleOnActivate(activate: () => Unit): KeyEvent => Boolean =
-  event =>
-    event.code match
-      case KeyCode.Char(' ') | KeyCode.Enter =>
-        activate()
-        true
-      case _                                 => false
-
-/** Focused interactive elements render with the focus style (the theme's, once the focus pass ran) layered over their
-  * own, so the user can see where keystrokes go.
-  */
-private def focusStyled(props: ElementProps): Style =
-  if props.focused then props.style.patch(props.focusStyle) else props.style
-
 /** The factory set: one obvious home, re-exported at the package top level so `import io.worxbend.tui.dsl.*` brings
   * every factory in.
   */
@@ -1640,29 +1628,27 @@ object Element:
 
   def tabs(titles: Seq[String], selected: Int = 0): TabsElement = TabsElement(titles, selected)
 
-  // parameter types fully qualified: these factories are re-exported at the package top level alongside
-  // re-exports of the core types themselves, and unqualified names here would form a resolution cycle
-  def table(rows: Seq[Seq[String]], widths: io.worxbend.tui.core.Constraint*): TableElement =
+  def table(rows: Seq[Seq[String]], widths: Constraint*): TableElement =
     TableElement(rows, widths)
 
-  def widget(wrapped: io.worxbend.tui.core.Widget): WidgetElement = WidgetElement(wrapped)
+  def widget(wrapped: Widget): WidgetElement = WidgetElement(wrapped)
 
-  def input(state: io.worxbend.tui.widgets.TextInputState, placeholder: String = ""): InputElement =
+  def input(state: w.TextInputState, placeholder: String = ""): InputElement =
     InputElement(state, placeholder)
 
-  def checkbox(label: String, checked: io.worxbend.tui.runtime.Signal[Boolean]): CheckboxElement =
+  def checkbox(label: String, checked: Signal[Boolean]): CheckboxElement =
     CheckboxElement(label, checked)
 
-  def toggle(label: String, on: io.worxbend.tui.runtime.Signal[Boolean]): ToggleElement =
+  def toggle(label: String, on: Signal[Boolean]): ToggleElement =
     ToggleElement(label, on)
 
-  def select(options: Seq[String], selected: io.worxbend.tui.runtime.Signal[Int]): SelectElement =
+  def select(options: Seq[String], selected: Signal[Int]): SelectElement =
     SelectElement(options, selected)
 
-  def list(items: Seq[String], state: io.worxbend.tui.widgets.ListState): ListElement =
+  def list(items: Seq[String], state: w.ListState): ListElement =
     ListElement(items, state)
 
-  def tree(nodes: Seq[io.worxbend.tui.widgets.TreeNode], state: io.worxbend.tui.widgets.TreeState): TreeElement =
+  def tree(nodes: Seq[w.TreeNode], state: w.TreeState): TreeElement =
     TreeElement(nodes, state)
 
   def barChart(data: Seq[(String, Long)], barWidth: Int = 3): WidgetElement =
@@ -1689,8 +1675,8 @@ object Element:
   /** An animation frame indicator. Needs a `config.tickRate` to animate and nothing else — it reads the ambient
     * [[AnimationClock]], so there is no counter to declare, advance, or thread through.
     *
-    * Colors come from the ambient [[Theme]]'s [[LoadingTheme]]; the animation from
-    * [[io.worxbend.tui.widgets.SpinnerPreset]], swappable with `.preset(...)`.
+    * Colors come from the ambient [[Theme]]'s [[LoadingTheme]]; the animation from [[w.SpinnerPreset]], swappable with
+    * `.preset(...)`.
     */
   def spinner(label: String = "")(using theme: Theme, scope: ReactiveScope): SpinnerElement =
     spinnerAt(AnimationClock.elapsed, label)
@@ -1731,7 +1717,7 @@ object Element:
       case w.NoticeLevel.Error   => theme.error
 
   def dialog(title: String, message: String, buttons: Seq[String] = Seq("OK"), selected: Int = 0): WidgetElement =
-    WidgetElement(w.Dialog(title, io.worxbend.tui.core.Text.raw(message), buttons, selected))
+    WidgetElement(w.Dialog(title, Text.raw(message), buttons, selected))
 
   def dualSparkline(upper: Seq[Long], lower: Seq[Long]): WidgetElement =
     WidgetElement(w.DualSparkline(upper, lower))
@@ -1799,8 +1785,8 @@ object Element:
 
   /** A one-row determinate progress bar: a caption then a filled track.
     *
-    * `ratio` is clamped to `[0, 1]`. The glyphs come from [[io.worxbend.tui.widgets.ProgressStyle]] — the default steps
-    * whole cells, and `.preset(ProgressStyle.Blocks)` moves smoothly with sub-cell partials.
+    * `ratio` is clamped to `[0, 1]`. The glyphs come from [[w.ProgressStyle]] — the default steps whole cells, and
+    * `.preset(ProgressStyle.Blocks)` moves smoothly with sub-cell partials.
     */
   def progressBar(ratio: Double)(using theme: Theme): ProgressBarElement =
     ProgressBarElement(
@@ -1827,26 +1813,26 @@ object Element:
   def filePicker(state: FilePickerState): FilePickerElement =
     FilePickerElement(state)
 
-  def radioGroup(options: Seq[String], selected: io.worxbend.tui.runtime.Signal[Int]): RadioGroupElement =
+  def radioGroup(options: Seq[String], selected: Signal[Int]): RadioGroupElement =
     RadioGroupElement(options, selected)
 
-  def slider(value: io.worxbend.tui.runtime.Signal[Int], min: Int = 0, max: Int = 100, step: Int = 5): SliderElement =
+  def slider(value: Signal[Int], min: Int = 0, max: Int = 100, step: Int = 5): SliderElement =
     SliderElement(value, min, max, step)
 
   def selectionList(
       items: Seq[String],
-      selected: io.worxbend.tui.runtime.Signal[Set[Int]],
-      state: io.worxbend.tui.widgets.ListState,
+      selected: Signal[Set[Int]],
+      state: w.ListState,
   ): SelectionListElement =
     SelectionListElement(items, selected, state)
 
-  def numberInput(state: io.worxbend.tui.widgets.TextInputState, allowDecimal: Boolean = false): NumberInputElement =
+  def numberInput(state: w.TextInputState, allowDecimal: Boolean = false): NumberInputElement =
     NumberInputElement(state, allowDecimal)
 
-  def maskedInput(state: io.worxbend.tui.widgets.TextInputState, mask: String): MaskedInputElement =
+  def maskedInput(state: w.TextInputState, mask: String): MaskedInputElement =
     MaskedInputElement(state, mask)
 
-  def paginator(current: io.worxbend.tui.runtime.Signal[Int], total: Int): PaginatorElement =
+  def paginator(current: Signal[Int], total: Int): PaginatorElement =
     PaginatorElement(current, total)
 
   /** Scrolling ticker text, on the ambient [[AnimationClock]]. */
@@ -1860,7 +1846,7 @@ object Element:
       ElementProps(constraint = Some(Constraint.Length(1))),
     )
 
-  def image(source: io.worxbend.tui.widgets.Image): WidgetElement =
+  def image(source: w.Image): WidgetElement =
     WidgetElement(source)
 
   def link(label: String, url: String): WidgetElement =
@@ -1876,15 +1862,15 @@ object Element:
     )
 
   def dataTable(
-      table: io.worxbend.tui.widgets.DataTable,
-      state: io.worxbend.tui.widgets.DataTableState,
+      table: w.DataTable,
+      state: w.DataTableState,
   ): DataTableElement =
     DataTableElement(table, state)
 
-  def directoryTree(state: io.worxbend.tui.widgets.DirectoryTreeState): DirectoryTreeElement =
+  def directoryTree(state: w.DirectoryTreeState): DirectoryTreeElement =
     DirectoryTreeElement(state)
 
-  def textArea(state: io.worxbend.tui.widgets.TextAreaState): TextAreaElement =
+  def textArea(state: w.TextAreaState): TextAreaElement =
     TextAreaElement(state)
 
   def button(label: String)(action: => Unit): ButtonElement =
@@ -1907,42 +1893,42 @@ object Element:
     * a `splitPane` does not narrow what `build` sees. Branch on [[Breakpoint.of]] instead of raw columns when the named
     * bands say what you mean.
     */
-  def responsive(build: io.worxbend.tui.core.Size => Element): ResponsiveElement =
+  def responsive(build: Size => Element): ResponsiveElement =
     ResponsiveElement(build)
 
   def scrollView(
       content: Element,
       contentHeight: Int,
-      state: io.worxbend.tui.widgets.ScrollViewState,
+      state: w.ScrollViewState,
   ): ScrollViewElement =
     ScrollViewElement(content, contentHeight, state)
 
   /** Scroll view that measures its content's height itself (falls back to the viewport height when the content is
     * unmeasurable — fill-sized children).
     */
-  def scrollView(content: Element, state: io.worxbend.tui.widgets.ScrollViewState): ScrollViewElement =
+  def scrollView(content: Element, state: w.ScrollViewState): ScrollViewElement =
     ScrollViewElement(content, contentHeight = -1, state)
 
   /** `tabbedContent("One" -> pageOne, "Two" -> pageTwo)(selected)` — the selected page is picked at view construction,
     * so the tree always holds exactly the visible page.
     */
-  def tabbedContent(pages: (String, Element)*)(selected: io.worxbend.tui.runtime.Signal[Int]): TabbedContentElement =
+  def tabbedContent(pages: (String, Element)*)(selected: Signal[Int]): TabbedContentElement =
     val index  = math.max(0, math.min(selected.peek, pages.size - 1))
     val active = if pages.isEmpty then Element.text("") else pages(index)._2
     TabbedContentElement(pages.map(_._1), active, selected, pages.size)
 
-  def collapsible(title: String, expanded: io.worxbend.tui.runtime.Signal[Boolean])(body: Element): CollapsibleElement =
+  def collapsible(title: String, expanded: Signal[Boolean])(body: Element): CollapsibleElement =
     CollapsibleElement(title, body, expanded)
 
   def splitPane(
       first: Element,
       second: Element,
-      splitPercent: io.worxbend.tui.runtime.Signal[Int],
+      splitPercent: Signal[Int],
       horizontal: Boolean = true,
   ): SplitPaneElement =
     SplitPaneElement(first, second, splitPercent, horizontal)
 
-  def log(state: io.worxbend.tui.widgets.LogState): LogElement =
+  def log(state: w.LogState): LogElement =
     LogElement(state)
 
   def rule(label: String = ""): WidgetElement =

@@ -72,21 +72,22 @@ object FormState:
     if repeated.nonEmpty then
       throw IllegalArgumentException(s"more than one validator for field(s) ${repeated.mkString(", ")}")
 
-    val byName   = validators.map(field => field.spec.name -> field).toMap
+    val byName                                       = validators.map(field => field.spec.name -> field).toMap
+    // A field with no caller-supplied validator still needs one, and which parser a field type gets is
+    // `deriveForm`'s decision, not this method's — `Field.default` is the other half of that mapping.
+    def validatorFor(fieldSpec: FieldSpec): Field[?] = byName.getOrElse(fieldSpec.name, Field.default(fieldSpec))
+
     val bindings = spec.fields.map { fieldSpec =>
       fieldSpec.input match
         case FieldInput.BoolField                       =>
           // a checkbox holds a Boolean, so its validator sees the same `"true"`/`"false"` text `Field.bool` parses
-          val field = byName.getOrElse(fieldSpec.name, Field.bool(fieldSpec.name))
           FieldBinding.BoolLike(
             fieldSpec,
             Signal(false),
-            checked => field.parse(checked.toString).map(value => value: Any),
+            checked => validatorFor(fieldSpec).parse(checked.toString).map(value => value: Any),
           )
         case FieldInput.TextField | FieldInput.IntField =>
-          val default =
-            if fieldSpec.input == FieldInput.IntField then Field.int(fieldSpec.name) else Field.text(fieldSpec.name)
-          val field   = byName.getOrElse(fieldSpec.name, default)
+          val field = validatorFor(fieldSpec)
           FieldBinding.TextLike(fieldSpec, TextInputState(), raw => field.parse(raw).map(value => value: Any))
     }
     new FormState(bindings, spec.assemble)
