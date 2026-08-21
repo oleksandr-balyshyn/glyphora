@@ -29,13 +29,10 @@ object Async:
     * through `onError` (default: rethrow on the worker thread) — see [[runCatching]] for an `Either` result.
     */
   def run[A](work: => A)(onResult: A => Unit)(using onError: AsyncErrorHandler = AsyncErrorHandler.rethrow): Unit =
-    // captured here, while still on the caller's thread, so the continuation returns to the runner that started it
-    val target = RenderThread.capture()
-    val _      = worker.submit(new Runnable {
+    val deliver = deliverToRenderThread(onResult)
+    val _       = worker.submit(new Runnable {
       def run(): Unit =
-        try
-          val result = work
-          target.enqueue(() => onResult(result))
+        try deliver(work)
         catch case NonFatal(error) => onError.handle(error)
     })
 
@@ -43,37 +40,65 @@ object Async:
     * handler needed. The idiomatic way to drive a load into `Signal[Either[Throwable, A]]` (or a loading/error state).
     */
   def runCatching[A](work: => A)(onDone: Either[Throwable, A] => Unit): Unit =
-    val target = RenderThread.capture()
-    val _      = worker.submit(new Runnable {
+    val deliver = deliverToRenderThread(onDone)
+    val _       = worker.submit(new Runnable {
       def run(): Unit =
-        val outcome =
+        val outcome: Either[Throwable, A] =
           try Right(work)
           catch case NonFatal(error) => Left(error)
-        target.enqueue(() => onDone(outcome))
+        deliver(outcome)
     })
 
   /** Runs `body` on the render thread once, after `delay`. Returns a handle to cancel it before it fires. */
   def after(delay: FiniteDuration)(body: => Unit): Cancelable =
-    val target = RenderThread.capture()
-    val future = scheduler.schedule(
-      (() => target.enqueue(() => body)): Runnable,
-      delay.toMillis,
-      TimeUnit.MILLISECONDS,
+    cancelling(
+      scheduler.schedule(
+        resumeOnRenderThread(body),
+        delay.toMillis,
+        TimeUnit.MILLISECONDS,
+      )
     )
-    () => future.cancel(false)
 
   /** Runs `body` on the render thread every `interval` (first tick after one `interval`). Returns a handle to stop it.
     * The place to drive animation or polling without a global `config.tickRate`.
     */
   def every(interval: FiniteDuration)(body: => Unit): Cancelable =
     val millis = math.max(1L, interval.toMillis)
-    val target = RenderThread.capture()
-    val future = scheduler.scheduleAtFixedRate(
-      (() => target.enqueue(() => body)): Runnable,
-      millis,
-      millis,
-      TimeUnit.MILLISECONDS,
+    cancelling(
+      scheduler.scheduleAtFixedRate(
+        resumeOnRenderThread(body),
+        millis,
+        millis,
+        TimeUnit.MILLISECONDS,
+      )
     )
+
+  /** Wraps `onValue` so that it is invoked on the render thread rather than on whichever thread produced the value.
+    *
+    * **Must be called on the caller's thread, before any work is handed to an executor.** That is the load-bearing part
+    * and the reason this helper exists: [[RenderThread.capture]] resolves *the runner registered right here, right
+    * now*, and it is the returned function — not this one — that runs on the worker. Calling `capture()` from inside
+    * the worker instead still compiles and still passes a single-runner test, but resolves whatever loop that thread
+    * happens to see, so the continuation is delivered to the wrong runner as soon as two runners coexist in one JVM.
+    */
+  private def deliverToRenderThread[A](onValue: A => Unit): A => Unit =
+    val target = RenderThread.capture()
+    value => target.enqueue(() => onValue(value))
+
+  /** The scheduler-side counterpart of [[deliverToRenderThread]]: a `Runnable` the timer thread can run that does
+    * nothing but hand `body` back to the render thread.
+    *
+    * Subject to the same rule — **call it on the caller's thread**, not from inside the scheduled task, so the runner
+    * is captured before the work goes async.
+    */
+  private def resumeOnRenderThread(body: => Unit): Runnable =
+    val target = RenderThread.capture()
+    () => target.enqueue(() => body)
+
+  /** Adapts a scheduled `future` to the [[Cancelable]] the timer entry points return. Never interrupts a body that has
+    * already started running on the render thread; it only prevents runs that have not begun.
+    */
+  private def cancelling(future: java.util.concurrent.Future[?]): Cancelable =
     () => future.cancel(false)
 
   private val worker =

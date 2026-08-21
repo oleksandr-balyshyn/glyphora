@@ -16,6 +16,10 @@ sealed trait Reactive[A]:
     *
     * On a [[Computed]] this still re-establishes the computed's *own* dependency edges when the cached value is stale —
     * `peek` promises only that the reader is not subscribed, not that nothing at all subscribes.
+    *
+    * Which threads may call it is decided by the implementation, not by this trait, and the three differ: see
+    * [[Signal]] (any thread), [[Computed]] (render thread only — `peek` writes) and [[Derived]] (any thread its source
+    * allows). Do not generalise from one to another.
     */
   def peek: A
 
@@ -101,6 +105,14 @@ object Signal:
   * The dependency graph must be acyclic. A thunk that reads the value it is itself computing — directly, or around a
   * cycle through other computeds — throws `IllegalStateException` on the read that closes the loop, rather than
   * recursing until the stack runs out.
+  *
+  * Render-thread-confined in *both* directions, unlike [[Signal]]. Reading is not the safe half here: `peek` (and
+  * therefore `get`) recomputes when the cache is stale, and recomputing rewrites the cached value, the stale flag, the
+  * dirty epoch and both the dependency and subscriber sets — none of which is volatile or guarded by a lock.
+  * `markStale` and `dispose` mutate those same sets. So all four must be called on the render thread. In particular
+  * `Signal.peek` is explicitly safe off the render thread and `Computed.peek` is not: reading a computed from an
+  * [[Async]] worker corrupts the dependency graph quietly, with no exception thrown and nothing for a test to catch.
+  * Read the signals a background thread needs directly, or marshal the read back with [[RenderThread.runLater]].
   */
 final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A], Subscriber, Subscribable:
 

@@ -5,12 +5,19 @@ import io.worxbend.tui.core.{Buffer, Cell, Color, Rect, Style}
 import scala.concurrent.duration.{Duration, DurationInt, DurationLong, FiniteDuration}
 
 /** A post-render frame transform (the tachyonfx model, original implementation): widgets render normally, then active
-  * effects mutate the rendered cells based on elapsed time. Effects are stateless in wall-clock — the runtime tracks
-  * each effect's start and passes total `elapsed`, which keeps combinators pure and replayable.
+  * effects mutate the rendered cells based on elapsed time.
+  *
+  * An effect holds no clock of its own — it is a pure function of the `elapsed` it is handed, which is what keeps the
+  * combinators ([[Effect.sequence]], [[Effect.repeat]], …) composable and replayable. The flip side is that **the
+  * caller owns the clock**: whoever calls [[process]], directly or through [[Frame.applyEffect]], must remember when
+  * this particular effect started and pass the time since then. `TuiApp.runEffect` in `tui-dsl` keeps that timestamp
+  * per active effect, so a DSL app gets it for free; an app driving a bare [[Runner]] has to keep it itself. Passing
+  * time since the frame, or since the application started, compiles and type-checks but leaves the effect pinned at
+  * progress 1.0 or oscillating out of phase.
   */
 trait Effect:
 
-  /** Transforms the rendered frame in place. */
+  /** Transforms the rendered frame in place. `elapsed` is measured from this effect's own start — see the class doc. */
   def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit
 
   /** Total running time; `Duration.Inf` for effects that never finish (pulse, marquee). */
@@ -25,19 +32,19 @@ object Effect:
 
   /** Content fades up from the background: cell colors interpolate from black to their rendered values. */
   def fadeIn(duration: FiniteDuration, easing: Easing = Easing.QuadOut): Effect =
-    fade(duration, easing, reverse = false)
+    fade(duration, easing, level = identity)
 
   /** Content fades away to black. */
   def fadeOut(duration: FiniteDuration, easing: Easing = Easing.QuadIn): Effect =
-    fade(duration, easing, reverse = true)
+    fade(duration, easing, level = 1 - _)
 
   /** Cells materialize in a seeded pseudo-random order (tachyonfx's `coalesce`). */
   def coalesce(duration: FiniteDuration, easing: Easing = Easing.QuadOut, seed: Int = 42): Effect =
-    scatter(duration, easing, seed, revealed = true)
+    scatter(duration, easing, seed, threshold = identity)
 
   /** Cells dissolve away in a seeded pseudo-random order. */
   def dissolve(duration: FiniteDuration, easing: Easing = Easing.QuadIn, seed: Int = 42): Effect =
-    scatter(duration, easing, seed, revealed = false)
+    scatter(duration, easing, seed, threshold = 1 - _)
 
   /** Content reveals column by column, left to right. */
   def sweepIn(duration: FiniteDuration, easing: Easing = Easing.QuadOut): Effect =
@@ -138,17 +145,23 @@ object Effect:
       val t = if totalDuration.toNanos == 0 then 1.0 else elapsed.toNanos.toDouble / totalDuration.toNanos
       transform(easing(t), buffer, area)
 
-  private def fade(totalDuration: FiniteDuration, easing: Easing, reverse: Boolean): Effect =
+  /** Brightness ramp shared by [[fadeIn]] and [[fadeOut]]. `level` turns eased progress into the fraction of each
+    * cell's colour that survives — `identity` fades content up, `1 - _` fades it down to black.
+    */
+  private def fade(totalDuration: FiniteDuration, easing: Easing, level: Double => Double): Effect =
     new TimedEffect(totalDuration, easing):
       def transform(progress: Double, buffer: Buffer, area: Rect): Unit =
-        val level = if reverse then 1 - progress else progress
-        if level < 1.0 then mapCells(buffer, area)(style => withFgScaled(style, level))
+        val scale = level(progress)
+        if scale < 1.0 then mapCells(buffer, area)(style => withFgScaled(style, scale))
 
-  private def scatter(totalDuration: FiniteDuration, easing: Easing, seed: Int, revealed: Boolean): Effect =
+  /** Seeded per-cell reveal shared by [[coalesce]] and [[dissolve]]. `threshold` turns eased progress into the noise
+    * cutoff a cell must beat to stay hidden — `identity` reveals cells as progress rises, `1 - _` hides them.
+    */
+  private def scatter(totalDuration: FiniteDuration, easing: Easing, seed: Int, threshold: Double => Double): Effect =
     new TimedEffect(totalDuration, easing):
       def transform(progress: Double, buffer: Buffer, area: Rect): Unit =
-        val threshold = if revealed then progress else 1 - progress
-        eraseWhere(buffer, area)((x, y) => cellNoise(x, y, seed) >= threshold)
+        val cutoff = threshold(progress)
+        eraseWhere(buffer, area)((x, y) => cellNoise(x, y, seed) >= cutoff)
 
   /** Deterministic per-cell noise in `[0, 1)` — a small integer hash, stable across frames. */
   private def cellNoise(x: Int, y: Int, seed: Int): Double =
