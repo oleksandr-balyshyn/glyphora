@@ -8,7 +8,9 @@ constraint that keeps GraalVM native-image builds free of reflect-config JSON.
   `Mirror.ProductOf` (`inline`, stdlib-only): field names become `FieldSpec`s, field
   types choose the input kind (`String`/`Int`/`Boolean`); anything else is a compile
   error.
-- **`bindAction[A](handler)`** — binds an action handler as a direct call.
+- **`bindAction[A](handler)`** — wraps a function as a named `ActionHandler[A]` an
+  application can pass around; the result is an ordinary function value, so nothing
+  reflective is generated for it.
 - **`FormSpec` / `FieldSpec` / `FieldInput`** — owned here so `tui-dsl` can consume
   them without a circular dependency.
 - **`Field[A]`** — cue4s-style lazily-composed parsing/validation:

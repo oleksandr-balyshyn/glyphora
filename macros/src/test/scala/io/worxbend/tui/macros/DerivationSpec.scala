@@ -2,6 +2,11 @@ package io.worxbend.tui.macros
 
 import org.scalatest.funsuite.AnyFunSuite
 
+/** Top level so the snippet compiled by `typeCheckErrors` can name it. `weight` is a `Double`, which the derivation
+  * deliberately refuses.
+  */
+private final case class Parcel(label: String, weight: Double)
+
 final class DerivationSpec extends AnyFunSuite:
 
   private final case class Signup(username: String, age: Int, subscribe: Boolean)
@@ -19,6 +24,15 @@ final class DerivationSpec extends AnyFunSuite:
   test("assemble rebuilds the case class from submitted values"):
     val spec = deriveForm[Signup]
     assert(spec.assemble(Seq("ada", 36, true)) == Signup("ada", 36, true))
+
+  test("assemble rejects the wrong number of values by naming the fields it wanted"):
+    val spec    = deriveForm[Signup]
+    val failure = intercept[IllegalArgumentException](spec.assemble(Seq("ada", 36)))
+    assert(failure.getMessage.contains("username, age, subscribe"))
+
+  test("deriveForm refuses an unsupported field type and names the field"):
+    val errors = scala.compiletime.testing.typeCheckErrors("deriveForm[Parcel]")
+    assert(errors.exists(_.message.contains("\"weight\"")), errors.map(_.message).mkString("; "))
 
   test("bindAction dispatches directly to the bound handler"):
     enum AppAction:
