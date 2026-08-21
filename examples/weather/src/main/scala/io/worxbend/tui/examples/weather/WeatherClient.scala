@@ -99,6 +99,10 @@ final class OpenMeteoClient(
       isDay = current.field("is_day").flatMap(_.asInt).forall(_ != 0)
     yield WeatherReport(location.name, location.country, temperature, humidity, wind, isDay, code)
 
+  // Near-identical to `AirGradientClient.fetch` in examples/airsensor, on purpose: every example has to read end to
+  // end on its own, so a shared "http" helper module would cost more than the twelve lines it saved. The only
+  // differences that mean anything are the timeout (8s here for a public API over the internet, 5s there for a device
+  // on the LAN) and the error type each one returns.
   private def get(url: String): Either[WeatherError, String] =
     try
       val request  = HttpRequest.newBuilder(URI.create(url)).timeout(JDuration.ofSeconds(8)).GET().build()

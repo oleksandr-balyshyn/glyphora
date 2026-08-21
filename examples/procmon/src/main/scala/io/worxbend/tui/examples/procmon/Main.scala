@@ -124,11 +124,22 @@ final class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) exten
     tableState.sortBy(column) // the same column twice flips the direction — that rule lives in the widget state
     restoreSelection() // sorting moves every row; the selection has to follow its process to the new index
 
-  private def closeFilter(clear: Boolean): Unit =
-    if clear then
-      filterInput.clear()
-      tableState.setFilter("")
-      restoreSelection()
+  /** Enter: hide the filter box and keep filtering. The text stays in `filterInput`, so `/` reopens the box with the
+    * same substring still in it and the table never flickers back to the full list.
+    */
+  private def applyFilter(): Unit =
+    filterOpen.set(false)
+
+  /** Escape: throw the filter away and show every process again.
+    *
+    * `setFilter("")` also drops the widget's selection and scroll offset, which is why `restoreSelection()` runs right
+    * after it — the highlight follows its *process* back into the unfiltered list rather than landing on whatever row
+    * happens to sit at the old index.
+    */
+  private def cancelFilter(): Unit =
+    filterInput.clear()
+    tableState.setFilter("")
+    restoreSelection()
     filterOpen.set(false)
 
   // ---- selection, pinned to a process rather than to a row ----
@@ -142,8 +153,14 @@ final class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) exten
     */
   private def pidOf(row: Seq[String]): Option[Int] = row.headOption.flatMap(_.trim.toIntOption)
 
-  private def rememberSelection(): Unit =
-    selectedPid = tableState.selected.flatMap(visibleRows.lift).flatMap(pidOf)
+  /** Pins the selection to a process by reading the PID out of the row the table is currently highlighting.
+    *
+    * `rows` is passed in rather than read from [[visibleRows]] again because the caller has just built that list —
+    * rebuilding it here would run every `String.format` in [[cellsOf]] a second time per keystroke, and would leave the
+    * reader to prove that the two independently computed lists still agree. Render thread only: it reads `tableState`.
+    */
+  private def rememberSelection(rows: Seq[Seq[String]]): Unit =
+    selectedPid = tableState.selected.flatMap(rows.lift).flatMap(pidOf)
 
   private def restoreSelection(): Unit =
     val rows = visibleRows
@@ -152,7 +169,7 @@ final class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) exten
   private def moveSelection(delta: Int): Unit =
     val rows = visibleRows
     if delta < 0 then tableState.selectPrevious(rows.size) else tableState.selectNext(rows.size)
-    rememberSelection()
+    rememberSelection(rows)
 
   /** The pid under the highlight, for tests and for anything that would act on the selection (a `kill` key). */
   def selectedProcessId: Option[Int] = selectedPid
@@ -208,10 +225,10 @@ final class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) exten
           text(" filter ").dim.length(8),
           input(filterInput, placeholder = "substring — matched against every column").onKeyEvent {
             case KeyEvent(KeyCode.Enter, _)  =>
-              closeFilter(clear = false)
+              applyFilter()
               true
             case KeyEvent(KeyCode.Escape, _) =>
-              closeFilter(clear = true)
+              cancelFilter()
               true
             case _                           => false
           }.fill,

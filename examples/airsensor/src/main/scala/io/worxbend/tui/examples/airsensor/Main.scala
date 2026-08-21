@@ -148,7 +148,7 @@ final class AirSensorApp(
       Async.runCatching(client.read()) { outcome =>
         inFlight = false
         // two failure shapes collapse into one: an `Either` the client returned, and a throwable it did not expect
-        val result = outcome.fold(error => Left(AirSensorApp.describeThrowable(error)), identity)
+        val result = outcome.fold(error => Left(AirGradientClient.describeThrowable(error)), identity)
         result match
           case Right(reading) => accept(reading)
           case Left(problem)  => status.set(Status.Failed(problem))
@@ -284,9 +284,6 @@ object AirSensorApp:
 
   val MinInterval: FiniteDuration = 100.millis
   val MaxInterval: FiniteDuration = 60.seconds
-
-  private[airsensor] def describeThrowable(error: Throwable): String =
-    Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
 
 object Main:
   def main(args: Array[String]): Unit =

@@ -73,8 +73,8 @@ final class LoadTestApp(
     binding("r", "reset counters")(reset()),
     binding("+", "raise concurrency")(adjustConcurrency(1)),
     binding("-", "lower concurrency")(adjustConcurrency(-1)),
-    binding("]", "double the request count")(scaleRequests(double = true)),
-    binding("[", "halve the request count")(scaleRequests(double = false)),
+    binding("]", "double the request count")(scaleRequests(_ * 2)),
+    binding("[", "halve the request count")(scaleRequests(_ / 2)),
     binding("enter", "dismiss the summary")(dismissSummary()),
     binding("q", "quit")(quitCleanly()),
   )
@@ -147,14 +147,16 @@ final class LoadTestApp(
 
   private def adjustConcurrency(delta: Int): Unit =
     if phase.peek != Phase.Running then
-      plan.update(current => current.copy(concurrency = math.max(1, math.min(64, current.concurrency + delta))))
+      plan.update(current => current.copy(concurrency = LoadTestApp.clampConcurrency(current.concurrency + delta)))
 
-  private def scaleRequests(double: Boolean): Unit =
+  /** Rewrites the request count with `scale`, e.g. `_ * 2` for the `]` key and `_ / 2` for `[`.
+    *
+    * Taking the arithmetic as a function rather than a `double: Boolean` flag keeps the two keys reading as what they
+    * do at the call site. Render thread only, like every other key handler: it writes a `Signal`.
+    */
+  private def scaleRequests(scale: Int => Int): Unit =
     if phase.peek != Phase.Running then
-      plan.update { current =>
-        val scaled = if double then current.requests * 2 else current.requests / 2
-        current.copy(requests = math.max(10, math.min(1000000, scaled)))
-      }
+      plan.update(current => current.copy(requests = LoadTestApp.clampRequests(scale(current.requests))))
 
   // ---- view ----
 
@@ -312,6 +314,18 @@ object LoadTestApp:
   private[loadtest] val TickRate: FiniteDuration = 100.millis
   private val ThroughputWindow                   = 60
   private val HistogramBuckets                   = 8
+
+  // What `+`/`-` and `[`/`]` may not push the plan past. One thread is the floor because zero workers would never
+  // finish; 64 is a laptop's worth of sockets, and a million requests is more than an example should ever be asked to
+  // queue. Ten is the floor for the request count so that the percentile table still has something to compute from.
+  private val MinConcurrency = 1
+  private val MaxConcurrency = 64
+  private val MinRequests    = 10
+  private val MaxRequests    = 1000000
+
+  private def clampConcurrency(value: Int): Int = math.max(MinConcurrency, math.min(MaxConcurrency, value))
+
+  private def clampRequests(value: Int): Int = math.max(MinRequests, math.min(MaxRequests, value))
 
   private[loadtest] def ms(micros: Long): Double = micros / 1000.0
 

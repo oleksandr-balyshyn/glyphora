@@ -69,6 +69,10 @@ final class AirGradientClient(
   def read(): Either[String, Reading] =
     fetch(s"$baseUrl/measures/current").flatMap(AirGradientClient.readingFrom)
 
+  // Near-identical to `OpenMeteoClient.get` in examples/weather, on purpose: every example has to read end to end on
+  // its own, so a shared "http" helper module would cost more than the twelve lines it saved. The only differences
+  // that mean anything are the timeout (5s here, 8s there, because a device on the LAN should fail fast) and the
+  // error type each one returns.
   private def fetch(url: String): Either[String, String] =
     try
       val request  = HttpRequest.newBuilder(URI.create(url)).timeout(JDuration.ofSeconds(5)).GET().build()
@@ -76,13 +80,20 @@ final class AirGradientClient(
       if response.statusCode() == 200 then Right(response.body())
       else Left(s"sensor returned HTTP ${response.statusCode()}")
     catch
-      case e: java.io.IOException  => Left(describe(e))
-      case e: InterruptedException => Left(describe(e))
-
-  private def describe(error: Throwable): String =
-    Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
+      case e: java.io.IOException  => Left(AirGradientClient.describeThrowable(e))
+      case e: InterruptedException => Left(AirGradientClient.describeThrowable(e))
 
 object AirGradientClient:
+
+  /** Turns a throwable into one short line for the banner, for every failure path in this example.
+    *
+    * A message is what a reader can act on ("Connection refused"); the class name is the fallback, because some
+    * exceptions — `SocketTimeoutException` among them — carry a null message and `s"$error"` would then print the word
+    * "null" on screen. Pure, so it is safe to call from the worker thread that runs the read as well as from the render
+    * thread that shows the result.
+    */
+  private[airsensor] def describeThrowable(error: Throwable): String =
+    Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
 
   /** `/measures/current` returns a flat object of numbers, so a full JSON parser would be more machinery than the
     * payload deserves. This reads `"name": number` pairs and ignores everything else, which is exactly enough — and it
