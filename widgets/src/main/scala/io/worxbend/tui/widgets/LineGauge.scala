@@ -21,7 +21,7 @@ final case class LineGauge(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val clamped   = LineGauge.clamp(ratio)
+      val clamped   = Fraction.clamped(ratio)
       val caption   = label.render(clamped)
       // a hidden or empty caption must not leave its separator column behind as a stray blank
       val text      = if caption.isEmpty then "" else caption + " "
@@ -47,6 +47,3 @@ object LineGauge:
   /** `current / total` as a fraction, with a zero or negative total reading as no progress rather than `NaN`. */
   private[widgets] def ratioOf(current: Int, total: Int): Double =
     if total <= 0 then 0.0 else current.toDouble / total
-
-  private[widgets] def clamp(ratio: Double): Double =
-    if ratio.isNaN then 0.0 else math.max(0.0, math.min(1.0, ratio))

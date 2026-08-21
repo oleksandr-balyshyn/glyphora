@@ -19,7 +19,7 @@ final case class Gauge(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val clamped     = if ratio.isNaN then 0.0 else math.max(0.0, math.min(1.0, ratio))
+      val clamped     = Fraction.clamped(ratio)
       val filledWidth = math.round(clamped * area.width).toInt
       val fill        =
         fillRamp.fold(filledStyle)(ramp => filledStyle.without(Modifiers.Reverse).withBg(ramp.at(clamped)))

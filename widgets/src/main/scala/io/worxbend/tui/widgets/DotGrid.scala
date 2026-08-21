@@ -34,6 +34,18 @@ private[widgets] object SubCell:
           case _ => "█"
       case CanvasResolution.Braille   => (0x2800 + mask).toChar.toString
 
+  /** Stands in for a marker that is not exactly one column wide. */
+  val FallbackMarker: String = "•"
+
+  /** `marker` if it is exactly one column wide, [[FallbackMarker]] otherwise.
+    *
+    * A two-column marker would smear a sub-cell surface the way it cannot smear a scatter plot — the second column
+    * belongs to the neighbouring cell, which the surface is also drawing into — so it is refused rather than clipped.
+    * One rule for every sub-cell surface ([[DotGrid]], [[LinearDots]]), so changing the fallback glyph cannot leave one
+    * of them behind on the old one.
+    */
+  def safeMarker(marker: String): String = if CharWidth.of(marker) == 1 then marker else FallbackMarker
+
   /** How many dot *columns* one dot *row* is worth if a circle is to come out round.
     *
     * `2` at cell resolution and `1` otherwise, and that is arithmetic rather than a fudge: a terminal cell is about
@@ -83,8 +95,7 @@ private[widgets] final class DotGrid(area: Rect, resolution: CanvasResolution, m
   private val masks       = new Array[Int](area.area)
   private val intensities = new Array[Double](area.area)
 
-  /** A two-column marker would smear a grid the way it cannot smear a scatter plot, so it is refused here. */
-  private val glyphMarker = if CharWidth.of(marker) == 1 then marker else DotGrid.FallbackMarker
+  private val glyphMarker = SubCell.safeMarker(marker)
 
   /** Lights dot `(col, row)` at `intensity` in `[0, 1]`. Coordinates off the grid are dropped rather than wrapped or
     * clamped, so a caller doing its own centring arithmetic cannot smear the edge. Masks accumulate; the cell keeps the
@@ -108,7 +119,3 @@ private[widgets] final class DotGrid(area: Rect, resolution: CanvasResolution, m
         val y = area.y + index / area.width
         buffer.set(x, y, Cell(SubCell.glyphFor(resolution, mask, glyphMarker), styleFor(intensities(index))))
       index += 1
-
-private[widgets] object DotGrid:
-  /** Stands in for a marker that is not exactly one column wide. */
-  val FallbackMarker: String = "•"

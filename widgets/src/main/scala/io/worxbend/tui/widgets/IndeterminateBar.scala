@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
@@ -24,38 +24,6 @@ enum IndeterminateMotion:
     * sits in a dense dashboard without pulling the eye.
     */
   case Pulse
-
-/** A pulsing placeholder for content that has not loaded yet (skeleton screen): a base shade with a brighter band
-  * sweeping through, positioned from how long the animation has been running.
-  *
-  * `period` is one full sweep, in wall-clock time, so the sweep takes the same time whatever the app's tick rate and
-  * whatever the widget's width. `bandWidth` defaults to a fifth of the area, which keeps the highlight proportional to
-  * whatever the skeleton is standing in for; give it an explicit width when several skeletons of different sizes need
-  * to pulse in step.
-  */
-final case class Skeleton(
-    elapsed: FiniteDuration,
-    style: Style = Style.Default.dim,
-    bandStyle: Style = Style.Default,
-    baseSymbol: String = "░",
-    bandSymbol: String = "▒",
-    bandWidth: Option[Int] = None,
-    period: FiniteDuration = 1200.millis,
-) extends Widget:
-
-  def render(area: Rect, buffer: Buffer): Unit =
-    if !area.isEmpty then
-      val band      = math.max(1, bandWidth.getOrElse(math.max(2, area.width / 5)))
-      val cycle     = area.width + band
-      val bandStart = Animation.step(elapsed, period, cycle) - band
-      var y         = area.y
-      while y < area.bottom do
-        var x = area.x
-        while x < area.right do
-          val inBand = x - area.x >= bandStart && x - area.x < bandStart + band
-          buffer.set(x, y, Cell(if inBand then bandSymbol else baseSymbol, if inBand then bandStyle else style))
-          x += 1
-        y += 1
 
 /** An indeterminate progress bar: a segment travelling along a track, advanced by `phase`.
   *
@@ -132,32 +100,3 @@ final case class IndeterminateBar(
 
   private def cellFor(active: Boolean, activeStyle: Style): Cell =
     if active then Cell(progressStyle.fill, activeStyle) else Cell(progressStyle.track, style)
-
-/** Text scrolling horizontally through the area (news-ticker style); the text wraps around with a gap between
-  * repetitions.
-  *
-  * `cellsPerSecond` is a reading speed rather than a step count, so the same marquee scrolls at the same rate whatever
-  * the app's tick rate. Around 8 cells per second is comfortable to read.
-  */
-final case class Marquee(
-    content: String,
-    elapsed: FiniteDuration,
-    style: Style = Style.Default,
-    gap: Int = 4,
-    cellsPerSecond: Double = 8.0,
-) extends Widget:
-
-  def render(area: Rect, buffer: Buffer): Unit =
-    if !area.isEmpty && content.nonEmpty then
-      val clusters = CharWidth.graphemeClusters(content).toVector ++ Vector.fill(gap)(" ")
-      val offset   = Animation.stepAtRate(elapsed, cellsPerSecond, clusters.size)
-      var x        = area.x
-      var index    = offset
-      while x < area.right do
-        val cluster = clusters(index % clusters.size)
-        val width   = math.max(1, CharWidth.of(cluster))
-        if x + width <= area.right then
-          buffer.set(x, area.y, Cell(cluster, style))
-          if width == 2 then buffer.set(x + 1, area.y, Cell.Empty)
-        x += width
-        index += 1

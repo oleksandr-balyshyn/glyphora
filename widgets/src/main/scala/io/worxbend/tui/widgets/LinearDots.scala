@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style}
+import io.worxbend.tui.core.{Buffer, Cell, Rect, Style}
 
 /** A one-cell-thick sub-cell track over one [[Rect]], addressed in slots rather than in cells.
   *
@@ -40,10 +40,7 @@ private[widgets] final class LinearDots(
     case LinearAxis.Horizontal => dotsDown
     case LinearAxis.Vertical   => dotsAcross
 
-  /** A two-column marker would smear a track the way it cannot smear a scatter plot, so it is refused rather than
-    * clipped — the same rule [[DotGrid]] applies.
-    */
-  private val safeMarker: String = if CharWidth.of(marker) == 1 then marker else "•"
+  private val safeMarker: String = SubCell.safeMarker(marker)
 
   /** Cells the track occupies along the direction of travel. */
   val cells: Int = axis match

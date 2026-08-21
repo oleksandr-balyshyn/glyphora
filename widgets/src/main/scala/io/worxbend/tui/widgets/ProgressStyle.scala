@@ -32,11 +32,8 @@ final case class ProgressStyle(
   def glyphs(fraction: Double, width: Int): Vector[String] =
     if width <= 0 then Vector.empty
     else
-      val clamped = if fraction.isNaN then 0.0 else math.max(0.0, math.min(1.0, fraction))
-      val exact   = clamped * width
-      val full    = if isSubCell then math.floor(exact).toInt else math.round(exact).toInt
-      val filled  = math.max(0, math.min(width, full))
-      val partial = if isSubCell then partialAt(exact - filled) else None
+      val filled  = filledCells(fraction, width)
+      val partial = if isSubCell then partialAt(exactCells(fraction, width) - filled) else None
       Vector.tabulate(width): index =>
         if index < filled then fillGlyphAt(index, filled, width)
         else if index == filled then partial.getOrElse(track)
@@ -46,10 +43,19 @@ final case class ProgressStyle(
   def filledCells(fraction: Double, width: Int): Int =
     if width <= 0 then 0
     else
-      val clamped = if fraction.isNaN then 0.0 else math.max(0.0, math.min(1.0, fraction))
-      val exact   = clamped * width
-      val full    = if isSubCell then math.floor(exact).toInt else math.round(exact).toInt
+      val exact = exactCells(fraction, width)
+      val full  = if isSubCell then math.floor(exact).toInt else math.round(exact).toInt
       math.max(0, math.min(width, full))
+
+  /** Where the bar's boundary falls, in cells, before any rounding — `2.75` means two whole cells and three quarters of
+    * a third.
+    *
+    * The one place the fraction is turned into a length, so [[glyphs]] and [[filledCells]] cannot disagree about where
+    * the boundary is. That agreement is not cosmetic: [[LineGauge]] asks both in the same breath, one for the glyphs
+    * and one for which of them to style as done, and a drift of a single cell between them mis-styles the boundary of
+    * every bar in the library.
+    */
+  private def exactCells(fraction: Double, width: Int): Double = Fraction.clamped(fraction) * width
 
   /** The last filled cell becomes `head` when this style has one and the bar is not yet complete. An empty bar draws no
     * head at all — a `>` sitting at column zero reads as progress that has not started.

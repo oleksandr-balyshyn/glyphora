@@ -46,7 +46,7 @@ final case class LinearSpinner(
     if !track.isEmpty then
       val dots       = LinearDots(track, axis, resolution, marker)
       val brightness = LinearMotion.intensities(elapsed, period, dots.slots, path, flow, trail, trailSlots)
-      val resting    = if rail.isNaN then 0.0 else math.max(0.0, math.min(1.0, rail))
+      val resting    = Fraction.clamped(rail)
       var index      = 0
       while index < brightness.length do
         brightness(index) = math.max(brightness(index), resting)

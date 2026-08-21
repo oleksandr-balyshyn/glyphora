@@ -14,7 +14,7 @@ final case class ColorRamp(stops: Vector[Color]):
 
   /** The color at `fraction` along the ramp; out-of-range and `NaN` fractions clamp to an end rather than throwing. */
   def at(fraction: Double): Color =
-    val clamped = if fraction.isNaN then 0.0 else math.max(0.0, math.min(1.0, fraction))
+    val clamped = Fraction.clamped(fraction)
     if stops.sizeIs == 1 then stops.head
     else
       val scaled = clamped * (stops.size - 1)

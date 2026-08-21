@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
 
 /** Vertical bars with optional labels underneath: each `(label, value)` gets a `barWidth`-column bar scaled against
   * `max` (defaulting to the data's maximum), topped with a partial block glyph for sub-cell precision.
@@ -31,22 +31,18 @@ final case class BarChart(
       }
 
   private def drawBar(buffer: Buffer, area: Rect, barLeft: Int, chartHeight: Int, value: Long, ceiling: Long): Unit =
-    val clamped = math.max(0L, math.min(value, ceiling))
-    var eighths = math.round(clamped.toDouble / ceiling * chartHeight * 8).toInt
-    var y       = area.y + chartHeight - 1
-    while y >= area.y && eighths > 0 do
-      val levelIndex = math.min(eighths, 8)
-      var x          = barLeft
-      while x < barLeft + barWidth do
-        buffer.set(x, y, Cell(BarChart.Levels(levelIndex - 1), barStyle))
-        x += 1
-      eighths -= levelIndex
-      y -= 1
+    BlockLadder.fillColumn(
+      buffer,
+      x = barLeft,
+      columns = barWidth,
+      bottom = area.y + chartHeight - 1,
+      top = area.y,
+      value = value,
+      ceiling = ceiling,
+      style = barStyle,
+    )
 
   private def drawLabel(buffer: Buffer, area: Rect, barLeft: Int, label: String): Unit =
     val fitted = CharWidth.substringByWidth(label, barWidth)
     val offset = (barWidth - CharWidth.of(fitted)) / 2
     buffer.setString(barLeft + offset, area.bottom - 1, fitted, labelStyle)
-
-object BarChart:
-  private val Levels: Vector[String] = Vector("▁", "▂", "▃", "▄", "▅", "▆", "▇", "█")

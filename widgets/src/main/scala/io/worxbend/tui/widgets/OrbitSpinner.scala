@@ -73,13 +73,13 @@ private[widgets] object OrbitArc:
   /** How many dots are lit for a `sweep` fraction of the lap.
     *
     * At least one, so the arc never vanishes, and at most the whole lap: `sweep = 1.0` lights everything, which stops
-    * the motion and is the family's static "queued" state. `NaN` reads as no sweep rather than as a full lap, matching
-    * [[ColorRamp.at]] and [[ProgressStyle.glyphs]].
+    * the motion and is the family's static "queued" state. `NaN` reads as no sweep rather than as a full lap, because
+    * the sweep goes through [[Fraction.clamped]] like every other fraction in this module.
     */
   def litCount(sweep: Double, samples: Int): Int =
     if samples <= 0 then 0
     else
-      val clamped = if sweep.isNaN then 0.0 else math.max(0.0, math.min(1.0, sweep))
+      val clamped = Fraction.clamped(sweep)
       math.max(1, math.min(samples, math.round(clamped * samples).toInt))
 
   /** How many dots *behind* the head `index` sits, travelling `direction`.
@@ -167,32 +167,53 @@ final case class OrbitSpinner(
       val grid   = DotGrid(area, resolution, marker)
       val dots   = math.max(0, math.min(RingWalk.MaxHalfExtent / 2, radius.getOrElse(OrbitSpinner.fittedRadius(grid))))
       val aspect = grid.columnAspect
-      // One band per dot of thickness, inset a dot at a time so concentric rings touch; never past the centre dot.
-      val bands  = math.max(1, math.min(thickness, math.min(dots * aspect, dots) + 1))
+      val bands  = bandCount(dots, aspect)
       val outer  = path.walk(dots * aspect, dots)
-      val lap    = outer.length
-      val head   = OrbitArc.headIndex(elapsed, period, lap)
-      val lit    = OrbitArc.litCount(sweep, lap)
+      val head   = OrbitArc.headIndex(elapsed, period, outer.length)
+      val lit    = OrbitArc.litCount(sweep, outer.length)
       var band   = 0
       while band < bands do
-        val walk     = if band == 0 then outer else path.walk(dots * aspect - band, dots - band)
-        // Inner bands are shorter laps, so the head and the arc are rescaled onto each one rather than shared as
-        // indices: matching indices would make the tail of a thick arc lag its own head by more the deeper it went.
-        val samples  = walk.length
-        val bandHead = if band == 0 then head else (head.toLong * samples / lap).toInt
-        val bandLit  =
-          if band == 0 then lit else math.max(1, math.min(samples, (lit.toLong * samples / lap).toInt))
-        var index    = 0
-        while index < samples do
-          val dot = walk.dotAt(index)
-          grid.light(
-            grid.centreColumn + RingWalk.columnOf(dot),
-            grid.centreRow + RingWalk.rowOf(dot),
-            OrbitArc.intensityAt(index, bandHead, bandLit, samples, direction, trail),
-          )
-          index += 1
+        renderBand(grid, band, dots, aspect, outer, head, lit)
         band += 1
       grid.flush(buffer, styleFor)
+
+  /** How many concentric bands `thickness` asks for at a figure of `dots` dot rows.
+    *
+    * One band per dot of thickness, inset a dot at a time so the rings touch rather than leaving a gap, and never past
+    * the centre dot: an inset that ran through the centre would fold the figure inside out. Always at least one, so a
+    * zero or negative `thickness` still draws the figure.
+    */
+  private def bandCount(dots: Int, aspect: Int): Int =
+    math.max(1, math.min(thickness, math.min(dots * aspect, dots) + 1))
+
+  /** Lights one concentric band of the figure in `grid`.
+    *
+    * `band` is the inset in dots from the outer loop, so band zero *is* `outer` and reuses it rather than rasterising
+    * the same loop twice. `head` and `lit` are the arc's state measured on the outer lap.
+    *
+    * This owns the rescaling of the arc onto a shorter lap: an inner band has fewer dots, so the head position and the
+    * lit count are mapped onto its own sample count rather than shared as raw indices. Sharing indices would make the
+    * tail of a thick arc lag its own head by more the deeper into the figure it went.
+    *
+    * Writes to `grid` and to nothing else — no buffer is touched until [[render]] flushes — so it carries `render`'s
+    * thread constraint and adds none of its own.
+    */
+  private def renderBand(grid: DotGrid, band: Int, dots: Int, aspect: Int, outer: RingWalk, head: Int, lit: Int): Unit =
+    val lap      = outer.length
+    val walk     = if band == 0 then outer else path.walk(dots * aspect - band, dots - band)
+    val samples  = walk.length
+    val bandHead = if band == 0 then head else (head.toLong * samples / lap).toInt
+    val bandLit  =
+      if band == 0 then lit else math.max(1, math.min(samples, (lit.toLong * samples / lap).toInt))
+    var index    = 0
+    while index < samples do
+      val dot = walk.dotAt(index)
+      grid.light(
+        grid.centreColumn + RingWalk.columnOf(dot),
+        grid.centreRow + RingWalk.rowOf(dot),
+        OrbitArc.intensityAt(index, bandHead, bandLit, samples, direction, trail),
+      )
+      index += 1
 
   /** The cells an explicit `radius` occupies — exact, not a bound. `None` when the figure is fitted to its area, which
     * is what stops the DSL element claiming a size it will not honour.
