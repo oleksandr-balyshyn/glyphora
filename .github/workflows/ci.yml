@@ -21,18 +21,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Both greps below scan the examples as well as the library. `*/src/main/scala` expands
+      # only to the seven top-level module directories — it never reaches
+      # `examples/<name>/src/main/scala`, so for as long as that was the whole scope the
+      # examples were exempt from the two rules the whole project is built around. They are
+      # the code newcomers copy from, so they are the last place an exemption belongs.
       - name: No runtime reflection in main sources
         # native-image is reflect-config-free by construction; tui-macros derives at
         # compile time through Mirror instead.
         run: |
-          if grep -rn "java\.lang\.reflect\|Class\.forName" --include="*.scala" */src/main/scala 2>/dev/null; then
+          if grep -rn "java\.lang\.reflect\|Class\.forName" --include="*.scala" */src/main/scala examples/*/src/main/scala 2>/dev/null; then
             echo "::error::runtime reflection found in main sources" >&2
             exit 1
           fi
 
       - name: All width arithmetic goes through CharWidth
+        # Two exemptions, both for code that is not doing display-width arithmetic at all:
+        # CharWidth itself (it is the one place allowed to cut a string), and the weather
+        # example's hand-written JSON parser, which indexes ASCII bytes of a wire format.
         run: |
-          violations=$(grep -rn "\.substring(" --include="*.scala" */src/main/scala | grep -v "core/CharWidth.scala" || true)
+          violations=$(grep -rn "\.substring(" --include="*.scala" */src/main/scala examples/*/src/main/scala \
+            | grep -v "core/CharWidth.scala" \
+            | grep -v "examples/weather/src/main/scala/io/worxbend/tui/examples/weather/Json.scala" || true)
           if [ -n "$violations" ]; then
             echo "$violations" >&2
             echo "::error::String.substring outside core/CharWidth.scala" >&2
@@ -234,15 +244,33 @@ jobs:
           ./mill $selectors
 
       - name: Every binary detects the missing TTY and exits cleanly
+        # "Cleanly" means both halves: exit status 1 (TuiApp.main's failure path) *and* the
+        # sentence BackendError.UnsupportedTerminal renders. Asserting only on the message
+        # would pass a binary that printed it and then hung or dumped a stack trace; asserting
+        # only on the status would pass a fallback image that failed for some unrelated reason.
+        # The message text is pinned by terminal/.../BackendErrorMessageSpec.scala, so renaming
+        # it breaks a one-second test rather than this ten-image job.
         run: |
           failed=""
           for ex in $(find examples -mindepth 2 -maxdepth 2 -name package.mill -printf '%h\n' | xargs -n1 basename | sort); do
             binary="./out/examples/$ex/nativeImage.dest/native-executable"
             if [ ! -x "$binary" ]; then
               failed="$failed $ex(missing)"
-            elif ! "$binary" </dev/null 2>&1 | grep -q "UnsupportedTerminal"; then
-              failed="$failed $ex(no-clean-exit)"
+              continue
             fi
+            # `&& ... || ...` rather than a bare assignment: the step's shell is `bash -e`, under
+            # which `output=$(failing-command)` aborts the whole step. A failing exit is exactly
+            # what this loop is here to inspect, so the capture has to survive it.
+            output=$("$binary" </dev/null 2>&1) && status=0 || status=$?
+            echo "$ex: status=$status output=$output"
+            if [ "$status" -ne 1 ]; then
+              failed="$failed $ex(status=$status)"
+              continue
+            fi
+            case "$output" in
+              *"terminal not supported"*) ;;
+              *) failed="$failed $ex(no-clean-exit)" ;;
+            esac
           done
           if [ -n "$failed" ]; then
             echo "::error::native binaries failed:$failed" >&2
