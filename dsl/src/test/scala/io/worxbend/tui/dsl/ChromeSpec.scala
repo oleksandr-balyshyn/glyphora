@@ -68,11 +68,11 @@ final class ChromeSpec extends AnyFunSuite:
     val backend = HeadlessBackend(Size(30, 4))
     var saves   = 0
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(
+      override def bindings: KeyBindings            = KeyBindings(
         binding("ctrl+s", "save") { saves += 1 },
         binding("q", "quit")(quit()),
       )
-      def view(using ReactiveScope): Element = text(s"saves: $saves")
+      def view(using ReactiveScope, Theme): Element = text(s"saves: $saves")
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.press("ctrl+s").waitForIdle()

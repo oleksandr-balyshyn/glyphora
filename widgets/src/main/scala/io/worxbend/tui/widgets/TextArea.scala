@@ -13,6 +13,11 @@ import scala.collection.mutable
   * Control characters other than the `\n` that separates lines are dropped on the way in — by the constructor as well
   * as by [[insert]] — because a control is zero columns wide but still fills a whole `Cell`, so storing one
   * desynchronises the backend's cursor model from the terminal's.
+  *
+  * Render-thread-only, and mutating it does not by itself schedule a frame. This is a plain mutable object, invisible
+  * to the reactive layer: a background result written straight into it stays off screen until something unrelated
+  * happens to repaint. Pair the mutation with a `Signal` write, or call `TuiApp.requestRedraw()` from the same
+  * render-thread callback that made it.
   */
 final class TextAreaState(initial: String = ""):
 

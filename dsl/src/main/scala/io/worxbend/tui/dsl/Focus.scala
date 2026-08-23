@@ -131,33 +131,38 @@ private[dsl] object FocusPass:
     val own = if element.props.focusable then Vector(element.props.focusKey) else Vector.empty
     own ++ element.children.flatMap(focusKeys)
 
-  /** Rebuilds the tree with the focused element marked (`props.focused = true`) and every focusable wrapped in a
-    * [[TrackedElement]] that records its rendered area; a non-focusable element that carries an `onMouseEvent` is
-    * wrapped in a [[PointerElement]] instead, which records its area for pointer-filtered mouse delivery. Focus indices
-    * are assigned in depth-first pre-order — the tab order; pointer ids are a separate numbering that no other pass
-    * reads.
+  /** Rebuilds the tree with the theme's focus cue stamped on every node, the focused element marked (`props.focused =
+    * true`), and every focusable wrapped in a [[TrackedElement]] that records its rendered area; a non-focusable
+    * element that carries an `onMouseEvent` is wrapped in a [[PointerElement]] instead, which records its area for
+    * pointer-filtered mouse delivery. Focus indices are assigned in depth-first pre-order — the tab order; pointer ids
+    * are a separate numbering that no other pass reads.
+    *
+    * `focusStyle` goes onto *every* node, not only the focused one, because it is the app's theme cue and not a
+    * per-element flag: a collection element paints its selected row in it whether or not it currently holds focus (see
+    * [[ListElement]]), so a list sitting beside the focused one — or one in a subtree [[suppressFocus]] cleared for a
+    * modal — still has to draw the app's highlight rather than the plain reverse-video default. `props.focused` is what
+    * distinguishes the one element keystrokes go to, and it is set here on exactly one node.
     */
   def decorate(root: Element, tracker: FocusTracker, focusStyle: Style): Element =
     var counter        = 0
     var pointerCounter = 0
 
+    def themed(element: Element, focused: Boolean): Element =
+      element.withProps(
+        element.props.copy(focusState = element.props.focusState.copy(focused = focused, focusStyle = focusStyle))
+      )
+
     def transform(element: Element): Element =
       val current =
         if element.props.focusable then
-          val index  = counter
+          val index = counter
           counter += 1
-          val marked =
-            if index == tracker.focusedIndex then
-              element.withProps(
-                element.props.copy(focusState = element.props.focusState.copy(focused = true, focusStyle = focusStyle))
-              )
-            else element
-          TrackedElement(marked, index, tracker)
+          TrackedElement(themed(element, focused = index == tracker.focusedIndex), index, tracker)
         else if element.props.onMouse.isDefined then
           val id = pointerCounter
           pointerCounter += 1
-          PointerElement(element, id, tracker)
-        else element
+          PointerElement(themed(element, focused = false), id, tracker)
+        else themed(element, focused = false)
       current.withChildren(viewportWrapped(element, current.children.map(transform), tracker))
 
     transform(root)

@@ -13,12 +13,12 @@ final class LayoutExtrasSpec extends AnyFunSuite:
     val out = render(place(3, 1)(text("###")), 7, 3)
     assert(out == Seq("       ", "  ###  ", "       "))
 
-  test("place aligns to Start on both axes"):
-    val out = render(place(3, 1, Alignment.Left, Alignment.Left)(text("###")), 7, 3)
+  test("place aligns to the near edge of both axes"):
+    val out = render(place(3, 1, Alignment.Left, VerticalAlignment.Top)(text("###")), 7, 3)
     assert(out.head == "###    ")
 
-  test("place aligns to End on both axes"):
-    val out = render(place(3, 1, Alignment.Right, Alignment.Right)(text("###")), 7, 3)
+  test("place aligns to the far edge of both axes"):
+    val out = render(place(3, 1, Alignment.Right, VerticalAlignment.Bottom)(text("###")), 7, 3)
     assert(out(2) == "    ###")
 
   test("row .flex(SpaceBetween) pushes children to the edges"):

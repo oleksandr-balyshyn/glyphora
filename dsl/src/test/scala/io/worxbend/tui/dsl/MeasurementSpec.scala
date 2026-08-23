@@ -33,8 +33,8 @@ final class MeasurementSpec extends AnyFunSuite:
     val state   = ScrollViewState()
     val content = column((0 until 8).map(n => text(s"row $n"))*)
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = scrollView(content, state)
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = scrollView(content, state)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenLines.head.startsWith("row 0"))
@@ -60,8 +60,8 @@ final class MeasurementSpec extends AnyFunSuite:
     val backend = HeadlessBackend(Size(12, 3))
     val state   = ScrollViewState()
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = scrollView(widget(eightRows), state)
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = scrollView(widget(eightRows), state)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenLines.head.startsWith("row 0"))
@@ -82,8 +82,8 @@ final class MeasurementSpec extends AnyFunSuite:
     val content = column(text("row 0"), text("row 1"), spacer) // the fill child makes the column unmeasurable
     assert(content.intrinsicHeight(11).isEmpty)
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = scrollView(content, state)
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = scrollView(content, state)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.PageDown).waitForIdle()

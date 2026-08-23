@@ -80,18 +80,17 @@ For independent horizontal and vertical alignment, use `place`:
 place(
   width = 36,
   height = 5,
-  horizontal = Alignment.Right, // far edge across
-  vertical = Alignment.Left,    // near edge down: the top
+  horizontal = Alignment.Right,     // right edge of the area
+  vertical = VerticalAlignment.Top, // top of the area
 )(toastPreview)
 ```
 
-Both axes use `Alignment`, the same `Left`/`Center`/`Right` enum that positions a `Block`
-title and a `Paragraph`'s text. On the vertical axis read `Left` as *top* and `Right` as
-*bottom*: it is the near edge of the axis and the far one. (There used to be a second
-enum, `Align(Start, Center, End)`, meaning exactly this and landing one keystroke from
-`Alignment` in every application's scope. It is gone.) `Flex` — `Start`, `End`, `Center`,
-`SpaceBetween`, … — is a different question and stays: it says how leftover space is
-shared out among *many* children, not where *one* block sits.
+Each axis is named in its own vocabulary. `horizontal` takes `Alignment` — the same
+`Left`/`Center`/`Right` enum that positions a `Block` title and a `Paragraph`'s text — and
+`vertical` takes `VerticalAlignment`, whose cases are `Top`, `Middle`, and `Bottom`.
+`Flex` — `Start`, `End`, `Center`, `SpaceBetween`, … — is a different question and stays:
+it says how leftover space is shared out among *many* children, not where *one* block
+sits.
 
 App-oriented presets cover frequent shapes:
 
@@ -201,7 +200,8 @@ cells directly.
 
 ## Build with themes, not scattered colors
 
-For application chrome and reusable components, draw from the ambient `Theme`:
+For application chrome and reusable components, take the `Theme` as a context
+parameter and draw the color from a semantic role:
 
 ```scala
 def deploymentStatus(name: String, healthy: Boolean)(using theme: Theme): Element =
@@ -209,10 +209,21 @@ def deploymentStatus(name: String, healthy: Boolean)(using theme: Theme): Elemen
   text(s"● $name").styled(_ => tone)
 ```
 
-`Theme.Dark`, `Theme.Light`, and `Theme.HighContrast` are built in. A custom theme is
-just a value containing semantic styles (`primary`, `accent`, `muted`, `error`,
-`warning`, `success`, `surface`, `border`, and `focus`). See [The app shell](./app-shell)
-for live switching.
+That `(using theme: Theme)` is not ceremony: `view` receives the app's own theme (its
+signature is `def view(using ReactiveScope, Theme)`), and the compiler passes it down
+to helpers that ask for it. A helper that does *not* ask falls back to the library
+default and silently renders dark-theme colors in a light-theme app.
+
+`Theme.Dark`, `Theme.Light`, and `Theme.HighContrast` are built in. A custom theme is a
+value of semantic styles — `primary`, `accent`, `muted`, `error`, `warning`, `success`,
+`surface`, `border`, `focus` — plus the three grouped sub-palettes `loading`,
+`markdown`, and `syntax`. Several factories read them for you already: `panel` and
+`rule` frame themselves with `border`, `dialog` uses `primary` and `focus`, the whole
+progress-and-spinner family reads `loading`, and `markdown` renders through
+`markdown`. Every element that highlights a selected row — `list`, `tree`, `menu`,
+`selectionList`, `filePicker`, `directoryTree` — draws it in `focus`, focused or not,
+because the focus pass stamps the theme's cue onto the whole tree rather than onto the
+one element holding the keyboard. See [The app shell](./app-shell) for live switching.
 
 ## Avoid common layout surprises
 

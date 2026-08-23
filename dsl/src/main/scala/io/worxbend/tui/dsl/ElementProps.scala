@@ -6,7 +6,9 @@ import io.worxbend.tui.core.{Constraint, KeyEvent, MouseEvent, Style}
   *
   * `focused` marks the one element keystrokes go to; `inert` marks a subtree a modal layer covers, which takes no key
   * and no mouse event at all and supplies neither a focus path nor a hit-test path; `focusStyle` is the theme's focus
-  * cue, resolved once per render.
+  * cue, resolved once per render and stamped on *every* node rather than only the focused one — a list draws its
+  * selected row in it whether or not the keyboard is currently there, so reading it unconditionally is correct. The
+  * default here is the widget-level `reverse`, which is what a tree that no focus pass has run over renders with.
   *
   * The constructor is package-private on purpose. [[FocusPass]] rewrites this on every render and [[EventRouter]]
   * honours what it finds, so an application able to build one could hand itself focus that the router would then

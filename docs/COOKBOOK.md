@@ -12,7 +12,7 @@ the [examples](../examples/README.md) are complete runnable versions of these pa
 
 ```scala
 object Hello extends TuiApp:
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("Hello")(text("Welcome!").bold.fg(Color.Cyan)).rounded
   override def bindings = KeyBindings(binding("q", "quit")(quit()))
 ```
@@ -23,7 +23,7 @@ State lives in `Signal`s; any signal the view *reads* re-renders it when set.
 
 ```scala
 val count = Signal(0)
-def view(using ReactiveScope) = text(s"count: ${count.get}")
+def view(using ReactiveScope, Theme) = text(s"count: ${count.get}")
 // in a binding/handler (render thread): count.update(_ + 1)
 ```
 
@@ -37,8 +37,12 @@ scaffold(
 )(content)
 ```
 
-`Theme.Dark`/`Light`/`HighContrast` are ambient (`given Theme`); override `TuiApp.theme`
-and re-render to switch at runtime.
+`Theme.Dark`/`Light`/`HighContrast` ship with the library. `view` takes the app's theme
+as a `using` parameter — `def view(using ReactiveScope, Theme)` — so `panel`, `rule`,
+`dialog`, `markdown`, `statusBar` and every other themed helper it calls pick up an
+overridden `TuiApp.theme` with no `given` to declare. Helpers written as separate
+methods need `(using Theme)` of their own. To switch at runtime, back `theme` with a
+`Signal` and read that signal inside `view`.
 
 ## Keys once, everywhere
 

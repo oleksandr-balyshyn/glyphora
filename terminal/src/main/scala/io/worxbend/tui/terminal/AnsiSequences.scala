@@ -73,19 +73,24 @@ private[terminal] object AnsiSequences:
     * downsampled to what `depth` can display.
     */
   def sgr(style: Style, depth: ColorDepth = ColorDepth.TrueColor): String =
-    val codes = List.newBuilder[String]
-    codes += "0"
+    // appended to directly rather than collected into a List and joined: a full-change frame asks for one sequence per
+    // run of same-styled cells, and the intermediate list was the bulk of what that allocated
+    val codes = StringBuilder(Esc).append("[0")
     if depth != ColorDepth.NoColor then
-      style.fg.foreach(color => codes += foregroundCode(ColorDepth.downsample(color, depth)))
-      style.bg.foreach(color => codes += backgroundCode(ColorDepth.downsample(color, depth)))
-    modifierCodes(style.modifiers).foreach(code => codes += code)
+      style.fg.foreach(color => append(codes, foregroundCode(ColorDepth.downsample(color, depth))))
+      style.bg.foreach(color => append(codes, backgroundCode(ColorDepth.downsample(color, depth))))
+    ModifierCodes.foreach((flag, code) => if style.modifiers.hasAny(flag) then append(codes, code))
     // the styled-underline selector is a text attribute (kept under NoColor); the underline color is a color (dropped)
-    underlineStyleCode(style.underlineStyle).foreach(code => codes += code)
+    underlineStyleCode(style.underlineStyle).foreach(code => append(codes, code))
     if depth != ColorDepth.NoColor then
-      style.underlineColor.foreach(color => codes += underlineColorCode(ColorDepth.downsample(color, depth)))
-    codes.result().mkString(s"$Esc[", ";", "m")
+      style.underlineColor.foreach(color => append(codes, underlineColorCode(ColorDepth.downsample(color, depth))))
+    codes.append('m').result()
 
-  /** SGR 4:n styled-underline selectors; `None`/`Straight` defer to the plain `4` from [[modifierCodes]]. */
+  /** Adds one more SGR parameter to a sequence that already holds at least the leading reset. */
+  private def append(codes: StringBuilder, code: String): Unit =
+    val _ = codes.append(';').append(code)
+
+  /** SGR 4:n styled-underline selectors; `None`/`Straight` defer to the plain `4` from [[ModifierCodes]]. */
   private def underlineStyleCode(style: UnderlineStyle): Option[String] =
     style match
       case UnderlineStyle.None | UnderlineStyle.Straight => scala.None
@@ -147,7 +152,12 @@ private[terminal] object AnsiSequences:
       case Color.Indexed(index) => s"${base + 8};5;$index"
       case Color.Rgb(r, g, b)   => s"${base + 8};2;$r;$g;$b"
 
-  private def modifierCodes(modifiers: Modifiers): List[String] =
+  /** Every text attribute with its SGR code, in the order they are emitted.
+    *
+    * A `val`, not a table rebuilt inside [[sgr]]: `sgr` runs once per style change on a frame, and allocating this
+    * eight-entry list on each of those calls cost more than everything else the method does.
+    */
+  private val ModifierCodes: List[(Modifiers, String)] =
     List(
       Modifiers.Bold       -> "1",
       Modifiers.Dim        -> "2",
@@ -157,4 +167,4 @@ private[terminal] object AnsiSequences:
       Modifiers.Reverse    -> "7",
       Modifiers.Hidden     -> "8",
       Modifiers.CrossedOut -> "9",
-    ).collect { case (flag, code) if modifiers.hasAny(flag) => code }
+    )

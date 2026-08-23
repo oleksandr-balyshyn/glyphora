@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, CharWidth}
+import io.worxbend.tui.core.{Buffer, CharWidth, Style}
 
 /** Turns the difference between two frames into the ANSI text that moves the terminal from one to the other.
   *
@@ -28,11 +28,24 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     var currentY                    = -1
     var currentStyle                = ""
     var currentLink: Option[String] = None
+    // The last style [[AnsiSequences.sgr]] was asked about, and what it answered. Neighbouring cells overwhelmingly
+    // share a style, and on a full-change frame — the first one, every resize, every SIGCONT, every tick of a
+    // whole-frame effect — rebuilding that sequence per cell and throwing it away was most of the encoding cost.
+    // Both halves of the comparison earn their keep: reference equality catches the common case of one `Style` value
+    // reused across a run of cells, and the structural compare catches effects such as `Effect.fadeIn`, which hand
+    // every cell a freshly allocated but usually equal `Style`.
+    // Seeded with `Style.Default` so there is no "nothing cached yet" case, and local to the call so that `encode`
+    // stays pure and callable from any thread, as the class doc promises.
+    var memoStyle: Style            = Style.Default
+    var memoSgr: String             = AnsiSequences.sgr(Style.Default, colorDepth)
     previous.diff(
       next,
       (x, y, cell) => {
         if y != currentY || x != expectedX then body ++= AnsiSequences.moveTo(x, y)
-        val sgr = AnsiSequences.sgr(cell.style, colorDepth)
+        if !((cell.style eq memoStyle) || cell.style == memoStyle) then
+          memoStyle = cell.style
+          memoSgr = AnsiSequences.sgr(cell.style, colorDepth)
+        val sgr = memoSgr
         if sgr != currentStyle then
           body ++= sgr
           currentStyle = sgr

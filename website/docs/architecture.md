@@ -18,11 +18,12 @@ flowchart LR
   DSL["tui-dsl<br/>elements · focus · chrome"] --> Widgets["tui-widgets<br/>render · layout · input"]
   DSL --> Runtime["tui-runtime<br/>signals · loop"]
   DSL --> Terminal["tui-terminal<br/>diff → ANSI"]
-  Widgets --> Core["tui-core<br/>buffer · cells · style · motion"]
+  DSL --> Core["tui-core<br/>buffer · cells · style · motion"]
+  DSL --> Macros["tui-macros<br/>compile-time derivation, no module deps"]
+  Widgets --> Core
   Runtime --> Core
   Runtime --> Terminal
   Terminal --> Core
-  Macros["tui-macros<br/>compile-time derivation, no module deps"] -. generated calls .-> DSL
 ```
 
 Each arrow in the module graph is a real Mill dependency — nothing above `tui-core` reaches back
@@ -56,7 +57,23 @@ maximum-stability tier everything else builds on:
 - **Layout**: `Constraint` (`Length`/`Percentage`/`Ratio`/`Min`/`Max`/`Fill`) and the
   `Layout.split` solver, plus `split2`…`split5`, which hand back a tuple so a
   statically known arity is destructured instead of indexed.
-- **Widget traits**: `Widget`, `StatefulWidget[S]` — SAM-convertible.
+- **Widget traits**: `Widget`, `StatefulWidget[S]`. `Widget` has exactly one abstract
+  method, `render(area: Rect, buffer: Buffer): Unit`, so Scala's SAM conversion means a
+  **plain lambda is a complete widget** — there is no trait to implement, no base class,
+  and nothing to register:
+
+  ```scala
+  import io.worxbend.tui.core.*
+
+  val star: Widget = (area, buffer) =>
+    if !area.isEmpty then buffer.set(area.x, area.y, Cell("*", Style.Default))
+  ```
+
+  That value goes straight into a view with `widget(star)`, or into another widget's
+  `render` with `star.render(inner, buffer)`. `StatefulWidget[S]` is the same idea with
+  the caller-owned state passed in: `(area, buffer, state) => …`. Everything a widget
+  may do is in that signature — write cells inside `area`, and nothing else — which is
+  what makes rendering testable without a terminal.
 - **`Measured`**: the single contract for how much space a widget's content needs,
   `heightAt(width)` / `widthAt(height)`. Both return an `Option`: `None` means *this
   widget cannot say*, and a caller must treat that as unmeasurable rather than as a
@@ -89,8 +106,12 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
 - **`Backend`** — raw mode, alternate screen, cursor visibility, mouse capture,
   diff-based `draw(buffer)`, `readEvent(timeout)`. All fallible operations return
   `Either[BackendError, A]`.
-- **`JLine3Backend`** — the production implementation over `org.jline:jline` 3.30.x,
-  pinned. Keeps a snapshot of the last flushed frame and writes only changed cells,
+- **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`
+  and `org.jline:jline-terminal-jni` 3.30.x, pinned. Those two rather than the
+  `org.jline:jline` bundle: this layer uses four JLine types and never asks JLine to
+  read a line, so the bundle's line reader, SSH server and telnet server are dead
+  weight in every downstream POM and every native image.
+  Keeps a snapshot of the last flushed frame and writes only changed cells,
   batched into one ANSI string per frame, with OSC 8 hyperlink transitions.
 - **`InputDecoder`** — ANSI/CSI/SS3/SGR-mouse decoder, injected with a plain
   `read(timeoutMillis) => Int` function so it is fully unit-tested without a TTY.
@@ -134,7 +155,11 @@ The mid-level framework tier:
 
 `tui-dsl` adds `AnimationClock` on top of these: a signal of elapsed time republished
 each tick, which the animated elements read. Because that read is tracked, a view
-subscribes to the clock only while it actually renders an animation.
+subscribes to the clock only while it actually renders an animation. The elapsed
+*value* is measured from process start, so several runners in one JVM agree on what
+time it is, but the `Signal` carrying it belongs to one render loop — a signal's
+subscriber set is confined to a single render thread, so two runners sharing one
+signal would race on it and silently lose subscriptions.
 
 ## tui-dsl
 

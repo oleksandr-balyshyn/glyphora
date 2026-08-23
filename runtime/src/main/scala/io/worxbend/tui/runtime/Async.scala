@@ -35,18 +35,31 @@ object Cancelable:
   *     including Ctrl+C, or wherever a bare [[Runner]] app finishes — which matters most in the embedded and
   *     multiple-runner cases this module is built for.
   *
-  * The mirror-image rule applies to *starting* repeating work: every entry point here captures the render loop of the
-  * thread that calls it, so arming a task from a constructor — before any runner is registered — attaches it to no
-  * loop, and its bodies are discarded forever. Start it from `TuiApp.onStart` (or a bare runner's `onStart`), which is
-  * the first moment the app is certainly on the render thread.
+  * The mirror-image rule applies to *starting* repeating work. Every entry point here captures the render loop of the
+  * thread that calls it, and a thread that belongs to no runner — a constructor running before any runner is registered
+  * — captures the shared unattributed queue instead. Those bodies are **not** discarded: they wait, and the next runner
+  * to start drains the whole backlog in one go, so a poller armed from a field initialiser fires its accumulated ticks
+  * all at once at startup. Only the oldest are dropped, and only once the backlog passes `RenderThread`'s cap on that
+  * queue. Start repeating work from `TuiApp.onStart` (or a bare runner's `onStart`), which is the first moment the app
+  * is certainly on the render thread.
   */
 object Async:
 
   /** Runs `work` on a background thread; when it finishes, `onResult` runs on the render thread with the value. Use for
-    * one-shot IO (HTTP, disk) whose result feeds a signal: `Async.run(api.fetch())(rows.set)`. Exceptions are reported
-    * through `onError` (default: rethrow on the worker thread) — see [[runCatching]] for an `Either` result.
+    * one-shot IO (HTTP, disk) whose result feeds a signal: `Async.run(api.fetch())(rows.set)`. See [[runCatching]] for
+    * an `Either` result the app handles itself.
+    *
+    * `work` failing is the ordinary case, not a defect — a fetch times out, a file is missing — so the default
+    * `onError` hands the throwable back to the render loop that armed the call ([[AsyncErrorHandler.toRenderThread]]),
+    * where the runner reports it as `RunnerError.QueuedTask` with the others. Throwing it on the worker thread instead
+    * (still available as [[AsyncErrorHandler.rethrow]]) prints a stack trace over the alternate screen the app is
+    * drawing on, which the frame diff never repaints. Install a `given AsyncErrorHandler` to take reporting over.
+    *
+    * The default is evaluated at the call site, on the calling thread, which is what lets it capture the right loop.
     */
-  def run[A](work: => A)(onResult: A => Unit)(using onError: AsyncErrorHandler = AsyncErrorHandler.rethrow): Unit =
+  def run[A](work: => A)(onResult: A => Unit)(using
+      onError: AsyncErrorHandler = AsyncErrorHandler.toRenderThread()
+  ): Unit =
     val deliver = deliverToRenderThread(onResult)
     onWorker {
       try deliver(work)
@@ -147,11 +160,32 @@ trait AsyncErrorHandler:
   def handle(error: Throwable): Unit
 
 object AsyncErrorHandler:
-  /** Rethrows on the worker thread (surfaces in logs / the default uncaught-exception handler). */
+  /** Rethrows on the worker thread, where the JVM's default uncaught-exception handler prints the stack trace to
+    * standard error.
+    *
+    * For a terminal app that is the *same* tty the UI is drawn on, so the trace lands on top of the alternate screen
+    * and stays there: the backend flushes only cells that differ from the frame it last flushed, and that frame still
+    * describes what the app believes is on screen. Nothing repaints until a resize. Use this only where standard error
+    * is not the UI — a bare [[Runner]] app writing elsewhere, or a process with no runner at all. [[toRenderThread]] is
+    * the default for [[Async.run]] for exactly this reason.
+    */
   val rethrow: AsyncErrorHandler = error => throw error
 
   /** Swallows the error silently. */
   val ignore: AsyncErrorHandler = _ => ()
+
+  /** Rethrows on the render loop of the calling thread: the throwable is queued back to that runner, which absorbs it
+    * through its `RenderTaskErrorHandler` and reports it as `RunnerError.QueuedTask` — count, first throwable and
+    * suppressed stack traces — once the app exits. The default for [[Async.run]].
+    *
+    * **Construct it on the arming thread**, which the default argument does automatically: like the result delivery
+    * itself, it resolves the target loop *now*, so a two-runner app reports each failure to the runner that started the
+    * work rather than to whichever loop the worker thread happens to resolve. A handler installed once as a long-lived
+    * `given` should be [[onRenderThread]] instead, which resolves per failure.
+    */
+  def toRenderThread(): AsyncErrorHandler =
+    val target = RenderThread.capture()
+    error => target.enqueue(() => throw error)
 
   /** Reports the error by running `report` on the render thread. */
   def onRenderThread(report: Throwable => Unit): AsyncErrorHandler =

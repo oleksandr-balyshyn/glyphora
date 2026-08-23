@@ -16,7 +16,6 @@ the shell below and fill in each region.
 
 ```scala
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.widgets.{ListState, TextInputState}
 
 final class DeployApp extends TuiApp:
   private val section = Signal(0)
@@ -32,7 +31,7 @@ final class DeployApp extends TuiApp:
     binding("q", "quit")(quit()),
   )
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     scaffold(
       topBar = Some(topBar(
         "deployctl",
@@ -187,7 +186,7 @@ or `Presentation.Full`. A hand-written `Screen` overrides it directly:
 
 ```scala
 val settings = new Screen:
-  def view(using ReactiveScope): Element  = settingsPage
+  def view(using ReactiveScope, Theme): Element  = settingsPage
   override def presentation: Presentation = Presentation.Full
 ```
 
@@ -207,7 +206,6 @@ Ticks are what *notices* that a toast has expired, so an app that uses them need
 tick rate — but the tick rate no longer decides how long "three seconds" is:
 
 ```scala
-import io.worxbend.tui.runtime.RunnerConfig
 import scala.concurrent.duration.*
 
 override def config = RunnerConfig(tickRate = Some(100.millis))
@@ -228,17 +226,40 @@ final case class Theme(
   warning: Style,
   success: Style,
   surface: Style,
-  border: Style,
-  focus: Style,
-  loading: LoadingTheme,
+  border: Style,          // the frame `panel` and `rule` draw with
+  focus: Style,           // the focus cue, and every element's selection highlight
+  loading: LoadingTheme,  // spinners and progress bars
+  markdown: MarkdownTheme,// headings, bullets, quotes, inline code in `markdown(…)`
+  syntax: SyntaxTheme,    // token colours for the standalone `SyntaxHighlighter`
 )
 ```
 
 `Theme.Dark`, `Theme.Light`, and `Theme.HighContrast` ship with glyphora. Built-in
 chrome, palette, focus, and toasts use semantic theme roles rather than hardcoded
-colors. `loading` is the palette the spinners and progress bars draw from — see
-[Widgets](./widgets#theming-the-animations); a custom theme gets a coherent one from
-`LoadingTheme.from(accent, muted, surface)` rather than having to spell out all five.
+colors, and so do the themed element factories: `panel` and `rule` take their frame
+from `border`, `dialog` from `primary` and `focus`, every "pick a row" element —
+`list`, `tree`, `menu`, `selectionList`, `filePicker`, `directoryTree` — highlights the
+selected row with `focus`, and `markdown` renders through `markdown`. That last one is
+the reason the field exists: the widget-level `MarkdownTheme()` defaults are tuned for
+a dark terminal, so a document rendered under `Theme.Light` used to come out with cyan
+headings on white.
+
+The three grouped sub-palettes exist because their fields retheme together.
+`LoadingTheme.from(accent, muted, surface)` derives a coherent loading palette for a
+custom theme rather than making you spell out all five — see
+[Widgets](./widgets#theming-the-animations).
+
+### How a themed helper gets the theme
+
+`view` takes it: `def view(using ReactiveScope, Theme): Element`. Everything it calls
+that needs a theme — `statusBar(bindings)`, `topBar(...)`, `panel(...)` — resolves
+against the app's own `theme` because the compiler passes it down that `using`
+parameter. There is no `given` to declare.
+
+That signature is not decoration. A framework that installed `given Theme = theme`
+*around* the call to `view` would leave it out of scope *inside* the body, so an app
+that overrode `theme` and wrote `statusBar(bindings)` in its own view would silently
+get `Theme.Dark`. Carrying it in the type is what makes the override reach.
 
 For live switching, keep a theme index in a `Signal`, return the selected value from
 `theme`, and read the index in `view` so the tree is invalidated. A complete snippet
@@ -303,14 +324,12 @@ handlers or from `onStart()` — never from a constructor.
 process's controlling terminal. Two overrides change that without giving up `main`:
 
 ```scala
-import io.worxbend.tui.terminal.ColorDepth
-
 object MyApp extends TuiApp:
   // force a palette instead of sniffing NO_COLOR / COLORTERM / TERM — the way to
   // check that a theme still reads on a sixteen-color terminal without finding one
   override protected def colorDepth: ColorDepth = ColorDepth.Ansi16
 
-  def view(using ReactiveScope): Element = ...
+  def view(using ReactiveScope, Theme): Element = ...
 ```
 
 Override `createBackend()` itself to substitute a different `Backend` entirely — a

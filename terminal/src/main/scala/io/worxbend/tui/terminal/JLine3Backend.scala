@@ -36,6 +36,11 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   // the signal-dispatch thread would be overwritten by an in-flight `draw`'s snapshot and the repaint would be lost.
   private var lastFlushed: Option[Buffer] = None
 
+  /** Serialises the three things that decide which screen the terminal is showing: writing a composed frame, handing
+    * the terminal back to the shell, and taking it again. See [[releaseTerminal]] for what goes wrong without it.
+    */
+  private val screenOwnership = Object()
+
   // raised by any thread that disturbed the screen (alternate-screen entry, SIGCONT's reacquire), consumed by `draw`
   private val fullRedrawRequested = RedrawRequest()
 
@@ -73,8 +78,12 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
         // one atomic update: the terminal shows the previous frame until the whole batch has arrived
         val frame =
           AnsiSequences.BeginSynchronized + body + AnsiSequences.ResetStyle + AnsiSequences.EndSynchronized
-        terminal.writer().write(frame)
-        terminal.writer().flush()
+        // under the monitor, so a Ctrl+Z landing mid-frame cannot leave the alternate screen between the two writes
+        // and spill this frame's cursor moves and box-drawing over the user's shell
+        screenOwnership.synchronized {
+          terminal.writer().write(frame)
+          terminal.writer().flush()
+        }
       lastFlushed = Some(buffer.snapshot)
     }
     // the forced frame never reached the terminal and the baseline was not updated: the request has not been served
@@ -229,6 +238,9 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * `ShutdownHooks` closer has run, `terminal.writer()` throws `IllegalStateException: Terminal has been closed` and
     * every teardown write is silently discarded. Every sequence emitted is an idempotent mode *reset*, so this is safe
     * to call even when nothing was enabled, and safe to call twice.
+    *
+    * Deliberately takes no monitor either — unlike [[releaseTerminal]], this is the path that must still work when the
+    * render thread is wedged mid-frame, and a last-resort restore that can block is not one.
     */
   override def emergencyRestore(): Unit =
     try
@@ -247,14 +259,24 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * used to be logged and dropped, which made "your terminal is now unusable" the one failure this library could not
     * tell anyone about.
     *
-    * Called from two threads with no lock between them: the render thread (via [[suspend]], [[printAbove]] and
-    * `close()`) and JLine's signal-dispatch thread (via the SIGTSTP handler). The mode flags above are volatile per
-    * field rather than atomic as a set, so a Ctrl+Z landing in the middle of a `suspend` can interleave two
-    * undress/redress sequences over them. That is knowingly tolerated: every step either way is an idempotent mode
-    * reset written to the terminal, so the worst outcome is a mode disabled or re-enabled twice, and the final
-    * [[reacquireTerminal]] to run leaves the terminal dressed as its snapshot describes.
+    * Called from two threads: the render thread (via [[suspend]], [[printAbove]] and `close()`) and JLine's
+    * signal-dispatch thread (via the SIGTSTP handler). Both take `screenOwnership` for the whole sequence, and so does
+    * the frame write in [[draw]] — which is the case the flags alone could never cover. Undressing writes
+    * `LeaveAlternateScreen`; a frame is a full screen of cursor moves, SGR sequences and box-drawing glyphs. A Ctrl+Z
+    * landing between the two halves of an unguarded `draw` would put that payload on the *primary* screen: the user's
+    * shell and their scrollback, which is durable and outlives the app. Nothing repairs it either, because the
+    * backend's diff still believes `lastFlushed` is on screen. (The mirror case — SIGCONT racing a draw — is
+    * self-healing, since [[reacquireTerminal]] raises a full redraw.) A frame write costs microseconds, so the signal
+    * thread never waits perceptibly.
+    *
+    * What the monitor does *not* make atomic is a whole `suspend`: the body between release and reacquire runs without
+    * it, because that body is `$EDITOR`. A Ctrl+Z arriving then still interleaves two complete undress/redress
+    * sequences, which stays tolerable for the reason it always was — every step either way is an idempotent mode reset,
+    * so the worst outcome is a mode disabled or re-enabled twice, and the last [[reacquireTerminal]] to run leaves the
+    * terminal dressed as its snapshot describes. The flags themselves stay volatile because the single-step public
+    * operations ([[enableRawMode]], [[hideCursor]]) write them from outside this monitor.
     */
-  private def releaseTerminal(): TerminalRelease =
+  private def releaseTerminal(): TerminalRelease = screenOwnership.synchronized:
     val state    = TerminalState(isRawMode, alternateScreenActive, cursorHidden, mouseCaptureActive)
     val failures = Seq.newBuilder[BackendError]
 
@@ -278,8 +300,8 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   /** Whether raw mode is currently on, which is exactly "we are holding someone's cooked attributes to put back". */
   private def isRawMode: Boolean = cookedAttributes.nonEmpty
 
-  /** Restores what [[releaseTerminal]] undressed. Same two callers, same two threads, same tolerated interleave. */
-  private def reacquireTerminal(state: TerminalState): Unit =
+  /** Restores what [[releaseTerminal]] undressed. Same two callers, same two threads, same monitor. */
+  private def reacquireTerminal(state: TerminalState): Unit = screenOwnership.synchronized:
     if state.raw then bestEffort(enableRawMode())
     if state.alternateScreen then bestEffort(enterAlternateScreen())
     if state.cursorHidden then bestEffort(hideCursor())

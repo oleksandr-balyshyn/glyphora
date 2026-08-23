@@ -16,11 +16,11 @@ final class ResponsiveSpec extends AnyFunSuite:
     * different components, not merely different constraints.
     */
   private final class AdaptiveApp extends TuiApp:
-    val sidebarQuery                        = TextInputState()
-    val detailQuery                         = TextInputState()
-    var resizes: List[Size]                 = Nil
-    override def onResize(size: Size): Unit = resizes = size :: resizes
-    def view(using ReactiveScope): Element  =
+    val sidebarQuery                              = TextInputState()
+    val detailQuery                               = TextInputState()
+    var resizes: List[Size]                       = Nil
+    override def onResize(size: Size): Unit       = resizes = size :: resizes
+    def view(using ReactiveScope, Theme): Element =
       val body =
         if terminalSize.width < 60 then column(text("compact"), input(detailQuery, placeholder = "detail"))
         else
@@ -38,8 +38,8 @@ final class ResponsiveSpec extends AnyFunSuite:
   /** The same swap, expressed with a `responsive` node nested inside a panel rather than an `if` at the top of `view`.
     */
   private final class NestedResponsiveApp extends TuiApp:
-    val query                              = TextInputState()
-    def view(using ReactiveScope): Element =
+    val query                                     = TextInputState()
+    def view(using ReactiveScope, Theme): Element =
       panel("Wrapper")(
         responsive {
           case size if size.width < 60 => text("narrow branch")
@@ -151,8 +151,8 @@ final class ResponsiveSpec extends AnyFunSuite:
     quitApp(pilot)
 
   private final class ClickApp extends TuiApp:
-    var clicks                             = 0
-    def view(using ReactiveScope): Element =
+    var clicks                                    = 0
+    def view(using ReactiveScope, Theme): Element =
       responsive(_ => column(button("press")(clicks += 1))).onKeyEvent {
         case KeyEvent(KeyCode.Char('q'), m) if m.hasAny(KeyModifiers.Ctrl) =>
           quit()
@@ -181,7 +181,10 @@ final class ResponsiveSpec extends AnyFunSuite:
   test("a builder that returns itself stops at the nesting limit instead of hanging"):
     lazy val cyclic: ResponsiveElement = responsive(_ => cyclic)
     val resolved                       = ResponsivePass.resolve(cyclic, Size(80, 24))
-    assert(resolved.isInstanceOf[ResponsiveElement]) // degraded to its own render-time fallback, not an infinite loop
+    // degraded to its own render-time fallback, not an infinite loop
+    resolved match
+      case _: ResponsiveElement => ()
+      case other                => fail(s"expected the unresolved node itself, got $other")
 
   test("responsive nodes nested inside containers are resolved too"):
     val tree     = column(panel("outer")(responsive(size => text(s"w=${size.width}"))))

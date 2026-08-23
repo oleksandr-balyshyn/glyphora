@@ -13,7 +13,19 @@ object `package` extends build.TuiPublishModule {
 
   def mvnDeps = super.mvnDeps() ++ Seq(
     // stay on the JLine 3.x line; 4.x is too new to be a safe default dependency yet
-    mvn"org.jline:jline:3.30.13",
+    //
+    // The two focused artifacts rather than the `org.jline:jline` bundle. That bundle is one shaded jar of 712
+    // entries and 1.45 MB — the line reader, a built-in SSH server, a telnet server, a bundled jansi, and every
+    // terminal provider — while this module uses exactly four types from it:
+    // `org.jline.terminal.{Attributes, Terminal, TerminalBuilder}` and `org.jline.utils.InfoCmp`. glyphora draws its
+    // own frames and reads raw bytes; it never asks JLine to read a line, so none of the rest is ever called.
+    //
+    // `jline-terminal` is the API and its pure-Java parts; `jline-terminal-jni` is the provider that actually opens
+    // the TTY, and it pulls in `jline-native` transitively. Together that is 274 entries and 0.50 MB. Every consumer
+    // of tui-terminal inherits the smaller graph, and a native image stops having to reason about an SSH server:
+    // `examples.hello-world.nativeImage` went from 20.98 MB / 5,088 reachable types to 19.54 MB / 4,774.
+    mvn"org.jline:jline-terminal:3.30.13",
+    mvn"org.jline:jline-terminal-jni:3.30.13",
   )
 
   object test extends TuiTests

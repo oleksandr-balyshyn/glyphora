@@ -20,6 +20,10 @@ import scala.concurrent.duration.FiniteDuration
   */
 private[dsl] trait ElementFactories:
 
+  /** A block of plain text; one row per newline-separated line, clipped at the area's edges. Style it with the usual
+    * extensions: `text("hi").bold.fg(Color.Cyan)`. For a single row assembled from differently-styled runs, use
+    * [[line]] instead — it measures in display columns rather than needing hand-counted widths.
+    */
   def text(content: String): TextElement = TextElement(content)
 
   /** One terminal row assembled from differently-styled runs:
@@ -34,12 +38,31 @@ private[dsl] trait ElementFactories:
     */
   def line(parts: Span*): LineElement = LineElement(parts)
 
-  def panel(title: String)(children: Element*): PanelElement = PanelElement(Some(title), children)
+  /** A bordered box around `children`, captioned `title`.
+    *
+    * The frame is drawn in the ambient [[Theme]]'s `border` style and the caption in its `primary` style, so a panel
+    * looks like the rest of the app without being told to. `.fg(...)`/`.styled(...)` recolour the frame;
+    * `.titleStyle(...)` recolours only the caption.
+    */
+  def panel(title: String)(children: Element*)(using theme: Theme): PanelElement =
+    PanelElement(Some(title), children, titleStyle = Some(theme.primary), props = ElementProps(style = theme.border))
 
-  def panel(children: Element*): PanelElement = PanelElement(None, children)
+  /** An untitled bordered box — see [[panel(title:String)*]] for the styling. */
+  def panel(children: Element*)(using theme: Theme): PanelElement =
+    PanelElement(None, children, props = ElementProps(style = theme.border))
 
+  /** Lays `children` out left to right, splitting the width between them.
+    *
+    * Each child's share comes from the layout extension it carries — `.length(n)`, `.percent(n)`, `.fill`,
+    * `.minSize(n)`, `.maxSize(n)` — and a child that carries none claims its natural width. `.gap(n)` inserts blank
+    * columns between neighbours and `.center` / `.spaceBetween` / `.spaceEvenly` decide where leftover space goes (see
+    * [[io.worxbend.tui.core.Flex]]: leftover only exists when no child is greedily filling).
+    */
   def row(children: Element*): RowElement = RowElement(children)
 
+  /** Lays `children` out top to bottom, splitting the height between them. The same constraint and flex vocabulary as
+    * [[row]], one axis over.
+    */
   def column(children: Element*): ColumnElement = ColumnElement(children)
 
   /** Flexible blank space (fills what siblings leave over). */
@@ -49,17 +72,73 @@ private[dsl] trait ElementFactories:
   def spacer(cells: Int): SpacerElement =
     SpacerElement(ElementProps(constraint = Some(Constraint.Length(cells))))
 
-  def gauge(ratio: Double): GaugeElement = GaugeElement(ratio)
+  /** A one-row filled bar with a caption written across it, filling the whole area height.
+    *
+    * `ratio` is a fraction in `[0, 1]` — 0 empty, 1 full — and is clamped, so an out-of-range value is a visual bug
+    * rather than a crash. `NaN` reads as no progress at all. For counts rather than a fraction, divide, or reach for
+    * `progressBar(current, total)`.
+    *
+    * The caption defaults to the percentage; `.label("…")`, `.labelled("…")` and `.bare` change it, and `.ramp(...)`
+    * colours the fill by how far along it is. See [[w.Gauge]].
+    */
+  def gauge(ratio: Double)(using theme: Theme): GaugeElement =
+    GaugeElement(
+      ratio,
+      w.ProgressLabel.Percentage,
+      theme.loading.track,
+      theme.loading.fill,
+      theme.loading.fillRamp,
+    )
 
+  /** A one-row dense chart: one column per data point, oldest on the left, drawn with the eight block glyphs.
+    *
+    * The scale runs from zero to the largest value present, so a series is always drawn using the full row height and
+    * two sparklines side by side are *not* comparable unless you pin the ceiling with `.max(n)`. Points that do not fit
+    * the width are clipped on the right. See [[w.Sparkline]].
+    */
   def sparkline(data: Seq[Long]): SparklineElement = SparklineElement(data)
 
+  /** A one-row tab strip with `selected` highlighted. Purely presentational — it draws the titles and nothing else. For
+    * tabs that actually switch content, use [[tabbedContent]].
+    */
   def tabs(titles: Seq[String], selected: Int = 0): TabsElement = TabsElement(titles, selected)
 
+  /** A static table: one element of `rows` per line, one `widths` constraint per column.
+    *
+    * Columns are solved by the same [[io.worxbend.tui.core.Constraint]] vocabulary as [[row]], and cells are clipped,
+    * never wrapped. Only the visible rows are rendered, so handing it ten thousand rows costs the height of the area,
+    * not the length of the list. Add a header with `.header(...)`.
+    *
+    * This one is a picture. For sorting, filtering, paging and a selection, use [[dataTable]].
+    */
   def table(rows: Seq[Seq[String]], widths: Constraint*): TableElement =
     TableElement(rows, widths)
 
+  /** Any `tui-core` [[Widget]] as a leaf element — the escape hatch down a level when a widget knob has no DSL builder
+    * yet, or when the widget is your own.
+    *
+    * `Widget` is a SAM type, so a lambda is enough: `widget((area, buffer) => …)`. The element's own style is *not*
+    * applied — the wrapped widget draws exactly what it draws.
+    *
+    * '''Say how big it is.''' A wrapped widget claims *all* the space its container has left over, because a bare
+    * `Widget` has no way to say otherwise — implementing [[io.worxbend.tui.core.Measured]] on it does not change this,
+    * as that is consulted by the scroll-view measurement pass and not by the layout solver. So
+    * `column(text("a"), widget(oneRowThing), text("b"))` gives the custom widget every row the two captions did not
+    * take. Say the height with `.rows(n)`: `widget(oneRowThing).rows(1)` is one row tall and full width in a `column`
+    * *and* in a `row`. Reach for `.length(n)` only when the number really is the container'''s decision, because that
+    * extension applies along whichever axis the container runs — in a `row`, `.length(1)` is one column wide.
+    */
   def widget(wrapped: Widget): WidgetElement = WidgetElement(wrapped)
 
+  /** A single-line text field over caller-owned [[w.TextInputState]], showing `placeholder` while empty.
+    *
+    * Create the state once, outside `view` — a `TextInputState()` built inside the view is a new empty editor on every
+    * frame, which is the "my input keeps resetting" bug. It is render-thread-only, and writing to it from outside an
+    * event handler does not by itself schedule a frame: see [[w.TextInputState]].
+    *
+    * Editing keys (typing, arrows, Home/End, Backspace/Delete) are handled while focused; `Enter` is left unconsumed so
+    * the enclosing app can decide what submitting means.
+    */
   def input(state: w.TextInputState, placeholder: String = ""): InputElement =
     InputElement(state, placeholder)
 
@@ -75,30 +154,71 @@ private[dsl] trait ElementFactories:
   def select(options: Seq[String], selected: Signal[Int])(using ReactiveScope): SelectElement =
     SelectElement(options, selected.get, selected.set)
 
+  /** A scrollable single-selection list over caller-owned [[w.ListState]].
+    *
+    * The state must be created once, outside `view` — a `ListState` built inside the view would be a fresh one every
+    * frame and the selection would never move. It is a plain mutable object read and written on the render thread only,
+    * and mutating it does not by itself schedule a frame: see [[w.ListState]].
+    *
+    * The selected row is drawn in the app [[Theme]]'s `focus` style, which the focus pass stamps onto every element —
+    * focused or not — so a list keeps the app's highlight even while the keyboard is somewhere else.
+    */
   def list(items: Seq[String], state: w.ListState): ListElement =
     ListElement(items, state)
 
+  /** A collapsible tree over caller-owned [[w.TreeState]] — same state ownership rules as [[list]]. */
   def tree(nodes: Seq[w.TreeNode], state: w.TreeState): TreeElement =
     TreeElement(nodes, state)
 
+  /** Vertical bars, one per `(label, value)`, each `barWidth` columns wide with the label underneath.
+    *
+    * Bars are scaled against the largest value in `data`, so the tallest always reaches the top of the area; the top of
+    * each bar uses a partial block glyph for sub-cell precision. See [[w.BarChart]] for the styling and gap knobs.
+    */
   def barChart(data: Seq[(String, Long)], barWidth: Int = 3): WidgetElement =
     WidgetElement(w.BarChart(data, barWidth))
 
+  /** An x/y plot of one or more [[w.Dataset]]s with axes, over an explicit world window.
+    *
+    * `xBounds` and `yBounds` are `(min, max)` in the data's own units — they are *not* derived from the points, so a
+    * series outside the window is simply not drawn. A `GraphType.Line` dataset joins its points in the order they are
+    * listed rather than sorting by x, so an unsorted series draws as a zig-zag.
+    */
   def chart(datasets: Seq[w.Dataset], xBounds: (Double, Double), yBounds: (Double, Double)): WidgetElement =
     WidgetElement(w.Chart(datasets, xBounds, yBounds))
 
+  /** A free-form drawing surface: shapes describe themselves in world coordinates (`xBounds` increasing rightward,
+    * `yBounds` increasing *upward*, unlike buffer coordinates) and the canvas maps them onto the cell grid. See
+    * [[w.Canvas]] for the sub-cell resolutions (cell, half-block, braille).
+    */
   def canvas(xBounds: (Double, Double), yBounds: (Double, Double))(shapes: w.Shape*): WidgetElement =
     WidgetElement(w.Canvas(xBounds, yBounds, shapes))
 
+  /** A month grid for `month` (1–12) of `year`, weeks starting Monday, with `selected` (a day of the month)
+    * highlighted. Needs 20 columns and up to 8 rows; anything smaller clips. See [[w.Calendar]].
+    */
   def calendar(year: Int, month: Int, selected: Option[Int] = None): WidgetElement =
     WidgetElement(w.Calendar(year, month, selected))
 
+  /** A filled pie with a legend: each `(label, value)` gets a sector proportional to its share of the total, so the
+    * values are read as parts of a whole and need no normalising. Non-positive values are ignored. The disc corrects
+    * for the cell aspect ratio so it looks round rather than oval. See [[w.PieChart]].
+    */
   def pieChart(data: Seq[(String, Double)]): WidgetElement =
     WidgetElement(w.PieChart(data))
 
+  /** [[barChart]] with each column split into one segment per series: `(label, values)` stacks `values` bottom-up.
+    * Columns are scaled against the tallest *stack*, so the columns are comparable to each other. See
+    * [[w.StackedBarChart]].
+    */
   def stackedBarChart(data: Seq[(String, Seq[Long])], barWidth: Int = 3): WidgetElement =
     WidgetElement(w.StackedBarChart(data, barWidth))
 
+  /** A value grid drawn as shade intensity — outer sequence is rows (top first), inner is columns.
+    *
+    * Each cell is shaded by its value *relative to the largest value in the whole grid*, so the scale is per-heatmap
+    * and two heatmaps are not comparable to each other. An all-zero (or empty) grid renders nothing. See [[w.Heatmap]].
+    */
   def heatmap(values: Seq[Seq[Double]]): WidgetElement =
     WidgetElement(w.Heatmap(values))
 
@@ -146,9 +266,23 @@ private[dsl] trait ElementFactories:
       case w.NoticeLevel.Warning => theme.warning
       case w.NoticeLevel.Error   => theme.error
 
-  def dialog(title: String, message: String, buttons: Seq[String] = Seq("OK"), selected: Int = 0): WidgetElement =
-    WidgetElement(w.Dialog(title, Text.raw(message), buttons, selected))
+  /** A centered modal box: a title, a message, and a row of buttons with `selected` highlighted.
+    *
+    * A picture of a dialog, not a controller — it has no keys and no callbacks of its own. Drive `selected` from the
+    * app's own state and overlay it with [[layers]] (or push it as a modal [[Screen]]). Colours come from the ambient
+    * [[Theme]]: the frame and text in `primary`, the selected button in `focus`.
+    */
+  def dialog(title: String, message: String, buttons: Seq[String] = Seq("OK"), selected: Int = 0)(using
+      theme: Theme
+  ): WidgetElement =
+    WidgetElement(
+      w.Dialog(title, Text.raw(message), buttons, selected, style = theme.primary, highlightStyle = theme.focus)
+    )
 
+  /** Two sparklines sharing one area — `upper` in the top half, `lower` in the bottom — for comparing a pair of series
+    * such as ingress against egress. Each series is scaled independently, so the shapes are comparable but the heights
+    * are not. See [[w.DualSparkline]].
+    */
   def dualSparkline(upper: Seq[Long], lower: Seq[Long]): WidgetElement =
     WidgetElement(w.DualSparkline(upper, lower))
 
@@ -210,7 +344,6 @@ private[dsl] trait ElementFactories:
       w.ProgressStyle.Line,
       theme.loading.track,
       theme.loading.fill,
-      props = ElementProps(constraint = Some(Constraint.Length(1))),
     )
 
   /** A one-row determinate progress bar: a caption then a filled track.
@@ -226,16 +359,21 @@ private[dsl] trait ElementFactories:
       theme.loading.track,
       theme.loading.fill,
       theme.loading.fillRamp,
-      ElementProps(constraint = Some(Constraint.Length(1))),
     )
 
   /** `progressBar` for counts rather than a fraction: `progressBar(3, 10)` is a 30% bar. */
   def progressBar(current: Int, total: Int)(using Theme): ProgressBarElement =
     progressBar(if total <= 0 then 0.0 else current.toDouble / total)
 
+  /** A text field with a filtered suggestion list under it; `onAccept` fires with the chosen suggestion.
+    *
+    * `suggestions` is the full candidate list — the element filters it against what has been typed, so the caller does
+    * not have to. The [[AutocompleteState]] is caller-owned and must be created once outside `view`; the content-then-
+    * state order is the one every list-like factory here uses (`list(items, state)`, `menu(items, state)`).
+    */
   def autocomplete(
-      state: AutocompleteState,
       suggestions: Seq[String],
+      state: AutocompleteState,
       onAccept: String => Unit = _ => (),
   ): AutocompleteElement =
     AutocompleteElement(state, suggestions, onAccept)
@@ -275,6 +413,10 @@ private[dsl] trait ElementFactories:
   def numberInput(state: w.TextInputState): NumberInputElement =
     NumberInputElement(state)
 
+  /** A text field that renders every character as `mask` (a password box: `maskedInput(state, "•")`). The state still
+    * holds the real text — this hides it on screen, it does not encrypt or protect it. Caller-owned state, created once
+    * outside `view`, as for [[input]].
+    */
   def maskedInput(state: w.TextInputState, mask: String): MaskedInputElement =
     MaskedInputElement(state, mask)
 
@@ -282,41 +424,83 @@ private[dsl] trait ElementFactories:
   def paginator(current: Signal[Int], total: Int)(using ReactiveScope): PaginatorElement =
     PaginatorElement(current.get, total, current.set)
 
-  /** Scrolling ticker text, on the ambient [[AnimationClock]]. */
-  def marquee(content: String)(using scope: ReactiveScope): WidgetElement =
+  /** Scrolling ticker text, on the ambient [[AnimationClock]] — one row, wrapping round with a run of blanks between
+    * repetitions.
+    *
+    * `.speed(n)` sets the reading rate in cells per second (`.period(d)` says the same thing as a lap time) and
+    * `.gap(n)` widens the run of blanks between laps.
+    */
+  def marquee(content: String)(using scope: ReactiveScope): MarqueeElement =
     marqueeAt(content, AnimationClock.elapsed)
 
   /** A marquee on a clock the caller drives. */
-  def marqueeAt(content: String, elapsed: FiniteDuration): WidgetElement =
-    WidgetElement(
-      w.Marquee(content, elapsed),
-      ElementProps(constraint = Some(Constraint.Length(1))),
-    )
+  def marqueeAt(content: String, elapsed: FiniteDuration): MarqueeElement =
+    MarqueeElement(content, elapsed)
 
+  /** A raster image drawn with half-block cells, so one cell shows two vertical pixels. Scaled to the area by
+    * nearest-neighbour sampling — pre-scale the pixels if quality matters. See [[w.Image]] for how to build one.
+    */
   def image(source: w.Image): WidgetElement =
     WidgetElement(source)
 
+  /** A one-row clickable hyperlink (OSC 8): `label` underlined with `url` attached. Terminals without OSC 8 support
+    * show the styled text and nothing is lost.
+    */
   def link(label: String, url: String): WidgetElement =
-    WidgetElement(
-      w.Link(label, url),
-      ElementProps(constraint = Some(Constraint.Length(1))),
-    )
+    WidgetElement(w.Link(label, url), rows = Some(1))
 
-  def markdown(source: String): WidgetElement =
-    WidgetElement(w.Markdown(source))
+  /** Renders a pragmatic Markdown subset — headings, bullets, quotes, fenced (and syntax-highlighted) code, inline
+    * emphasis and links. Prose always wraps at the available width; the node reports its own wrapped height, so it
+    * measures correctly inside a [[scrollView]].
+    *
+    * Styling comes from the ambient [[Theme]]'s `markdown` palette, which is why `Theme.Light` renders a document in
+    * dark-on-white rather than the widget-level defaults' cyan-on-black. See [[w.Markdown]] for exactly which
+    * constructs are supported.
+    */
+  def markdown(source: String)(using theme: Theme): WidgetElement =
+    WidgetElement(w.Markdown(source, theme.markdown))
 
+  /** A sortable, filterable, pageable table: `table` is the data and column definitions, `state` is the view over it.
+    *
+    * The state must be created once outside `view` — it holds the sort, the substring filter, the selection and the
+    * scroll offset, and rebuilding it every frame would reset all four. It is render-thread-only and writing to it does
+    * not by itself schedule a frame: see [[w.DataTableState]].
+    *
+    * Up/Down move the selection while focused, and PageUp/PageDown turn the page once `state.paging` is set. Sorting
+    * and filtering have no built-in keys on purpose — drive `state.sortBy` / `state.setFilter` from the app's own
+    * bindings, so the keys appear in the status bar and the palette.
+    *
+    * This is the one selection element whose highlight the theme does not reach: `table` is a widget value the caller
+    * built, so its `highlightStyle` is the caller's to set and overriding it here would silently discard an explicit
+    * choice. Pass `highlightStyle = theme.focus` when building the [[w.DataTable]] to line it up with `list` and the
+    * rest.
+    */
   def dataTable(
       table: w.DataTable,
       state: w.DataTableState,
   ): DataTableElement =
     DataTableElement(table, state)
 
+  /** A filesystem browser rooted at the state's path, expanding branches on demand.
+    *
+    * Caller-owned state, created once outside `view`, render-thread-only. Note that expanding a branch reads the
+    * directory *on the render thread*: harmless on a local disk, a visible stall on a network mount or a directory with
+    * very many entries — [[w.DirectoryTreeState]] explains how to pre-warm the cache.
+    */
   def directoryTree(state: w.DirectoryTreeState): DirectoryTreeElement =
     DirectoryTreeElement(state)
 
+  /** A multi-line editor over caller-owned [[w.TextAreaState]], with undo (`Ctrl+Z`) and redo (`Ctrl+Y`).
+    *
+    * Create the state once outside `view`, as for [[input]]; it is render-thread-only, and writing to it from outside
+    * an event handler does not by itself schedule a frame.
+    */
   def textArea(state: w.TextAreaState): TextAreaElement =
     TextAreaElement(state)
 
+  /** A focusable button; `action` runs on Enter or Space while focused, or on a click. The body is by-name, so it is
+    * evaluated when the button is pressed rather than when the view is built.
+    */
   def button(label: String)(action: => Unit): ButtonElement =
     ButtonElement(label, () => action)
 
@@ -340,6 +524,15 @@ private[dsl] trait ElementFactories:
   def responsive(build: Size => Element): ResponsiveElement =
     ResponsiveElement(build)
 
+  /** A scrollable viewport over `content`, whose full height you state yourself as `contentHeight` rows.
+    *
+    * Use this overload when the content's height is known but not measurable — a list of `n` rows you generated, a
+    * fixed-height diagram. The other overload measures the content itself. Getting `contentHeight` wrong does not
+    * corrupt anything: too small and the tail is unreachable, too large and the view scrolls past the end into blanks.
+    *
+    * The [[w.ScrollViewState]] holds the offset and is caller-owned: create it once outside `view`. It is
+    * render-thread-only, and writing to it does not by itself schedule a frame.
+    */
   def scrollView(
       content: Element,
       contentHeight: Int,
@@ -378,20 +571,33 @@ private[dsl] trait ElementFactories:
   )(using ReactiveScope): SplitPaneElement =
     SplitPaneElement(first, second, splitPercent.get, splitPercent.set, axis)
 
+  /** An append-only scrolling panel for build output, chat, or a live log, over caller-owned [[w.LogState]].
+    *
+    * The state holds a bounded ring of lines and follows the tail by default; scrolling up detaches, scrolling back to
+    * the bottom re-attaches. Create it once outside `view`. Appending a line to it is a mutation the reactive layer
+    * cannot see, so pair it with a `Signal` write or `requestRedraw()`.
+    *
+    * Up/Down and PageUp/PageDown scroll while focused; the wheel scrolls on hover.
+    */
   def log(state: w.LogState): LogElement =
     LogElement(state)
 
-  def rule(label: String = ""): WidgetElement =
+  /** A one-row horizontal divider, optionally captioned. Drawn in the ambient [[Theme]]'s `border` style, with the
+    * caption in `muted`, so it matches the frames around it.
+    */
+  def rule(label: String = "")(using theme: Theme): WidgetElement =
     WidgetElement(
-      w.Rule(Option(label).filter(_.nonEmpty)),
-      ElementProps(constraint = Some(Constraint.Length(1))),
+      w.Rule(Option(label).filter(_.nonEmpty), style = theme.border, labelStyle = theme.muted),
+      rows = Some(1),
     )
 
+  /** Banner text drawn from a built-in 3x5 block font — the splash-screen and header building block.
+    *
+    * Covers A–Z, 0–9 and common punctuation; lowercase is folded to uppercase and anything unknown renders blank. The
+    * node claims exactly the font's glyph height, so it does not need a `.length(...)`.
+    */
   def bigText(content: String): WidgetElement =
-    WidgetElement(
-      w.BigText(content),
-      ElementProps(constraint = Some(Constraint.Length(w.BigText.GlyphHeight))),
-    )
+    WidgetElement(w.BigText(content), rows = Some(w.BigText.GlyphHeight))
 
   /** A menu / dropdown / context-menu popup over `items`; `onSelect` fires with the index chosen by Enter or a click.
     */
@@ -401,8 +607,8 @@ private[dsl] trait ElementFactories:
   /** A bordered popup of help text sized to its content — overlay it near what it describes (see [[positioned]]). */
   def tooltip(text: String): WidgetElement =
     val tip = w.Tooltip(text)
-    // the constraint is what makes a container hand the tooltip exactly its own rows rather than a share of the area
-    WidgetElement(tip, ElementProps(constraint = tip.heightAt(0).map(Constraint.Length.apply)))
+    // the row claim is what makes a container hand the tooltip exactly its own height rather than a share of the area
+    WidgetElement(tip, rows = tip.heightAt(0))
 
   /** Places `content` at an absolute `(dx, dy)` offset inside its area, sized `width` x `height`. */
   def positioned(dx: Int, dy: Int, width: Int, height: Int)(content: Element): PositionedElement =

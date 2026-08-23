@@ -16,7 +16,7 @@ final class TextEditingElementsSpec extends AnyFunSuite:
     val backend = HeadlessBackend(Size(30, 6))
     val state   = TextAreaState()
     val app     = new TuiApp:
-      def view(using ReactiveScope): Element =
+      def view(using ReactiveScope, Theme): Element =
         column(textArea(state)).onKeyEvent {
           case KeyEvent(KeyCode.Char('q'), m) if m.hasAny(KeyModifiers.Ctrl) =>
             quit()
@@ -38,7 +38,7 @@ final class TextEditingElementsSpec extends AnyFunSuite:
     val editorState = TextAreaState()
     val secondState = TextAreaState()
     val app         = new TuiApp:
-      def view(using ReactiveScope): Element =
+      def view(using ReactiveScope, Theme): Element =
         column(textArea(editorState), textArea(secondState)).onKeyEvent {
           case KeyEvent(KeyCode.Escape, _) =>
             quit()
@@ -58,8 +58,8 @@ final class TextEditingElementsSpec extends AnyFunSuite:
     val inputSt  = io.worxbend.tui.widgets.TextInputState()
     val editorSt = TextAreaState()
     val app      = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = column(input(inputSt), textArea(editorSt))
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = column(input(inputSt), textArea(editorSt))
     val pilot    = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     backend.postEvent(io.worxbend.tui.core.Event.Paste("one\ntwo"))
@@ -77,8 +77,8 @@ final class TextEditingElementsSpec extends AnyFunSuite:
     val inputSt  = io.worxbend.tui.widgets.TextInputState()
     val editorSt = TextAreaState()
     val app      = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = column(input(inputSt), textArea(editorSt))
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = column(input(inputSt), textArea(editorSt))
     val pilot    = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     backend.postEvent(io.worxbend.tui.core.Event.Paste("a\tb" + Escape + "[31mc"))

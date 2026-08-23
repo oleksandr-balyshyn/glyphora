@@ -14,8 +14,8 @@ final class MouseInteractionSpec extends AnyFunSuite:
   private def startAppOn(size: Size)(view0: ReactiveScope ?=> Element): Pilot =
     val backend = HeadlessBackend(size)
     val testApp = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = view0
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = view0
     Pilot.start(backend) { testApp.runWith(backend) }.waitForIdle()
 
   /** Twenty single-row content rows inside a scroll view that is deliberately *not* at the frame origin, so a

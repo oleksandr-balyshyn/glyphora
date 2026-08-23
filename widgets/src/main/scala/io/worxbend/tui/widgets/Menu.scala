@@ -29,6 +29,11 @@ enum MenuEntry:
   * `selected` is `None` when nothing is highlighted, which is the honest state of a menu whose entries are all
   * separators or all disabled — [[Menu.render]] normalizes to it, and the widget then paints no highlight at all. Owned
   * by whoever constructs it and read by the render thread, like every other widget state in this module.
+  *
+  * Render-thread-only, and mutating it does not by itself schedule a frame. This is a plain mutable object, invisible
+  * to the reactive layer: a background result written straight into it stays off screen until something unrelated
+  * happens to repaint. Pair the mutation with a `Signal` write, or call `TuiApp.requestRedraw()` from the same
+  * render-thread callback that made it.
   */
 final class MenuState(var selected: Option[Int] = None, var offset: Int = 0):
 

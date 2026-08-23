@@ -20,8 +20,8 @@ final class LoadingThemeSpec extends AnyFunSuite:
   private def renderWith(chosen: Theme)(view0: Theme ?=> ReactiveScope ?=> Element): Pilot =
     val backend = HeadlessBackend(Size(24, 3))
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = view0(using chosen)
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = view0(using chosen)
     Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
 
   private def close(pilot: Pilot): Unit =
@@ -66,6 +66,18 @@ final class LoadingThemeSpec extends AnyFunSuite:
     assert(pilot.cellAt(0, 0).style.fg != pilot.cellAt(23, 0).style.fg)
     close(pilot)
 
+  /** The two progress meters are the same widget family to a reader of a view, so they have to be the same two colours
+    * on screen. `gauge` used to be the one that skipped [[LoadingTheme]] and drew the widget-level reverse-video
+    * default, which under `Light` put white-on-black next to a blue-on-grey `progressBar`.
+    */
+  test("a gauge takes the same track and fill from the theme as the progress bar beside it"):
+    val pilot = renderWith(Theme.Light)(column(progressBar(0.5).bare, gauge(0.5).bare))
+    assert(pilot.cellAt(0, 0).style.fg == Theme.Light.loading.fill.fg, "the bar's filled half")
+    assert(pilot.cellAt(23, 0).style.fg == Theme.Light.loading.track.fg, "the bar's empty half")
+    assert(pilot.cellAt(0, 1).style.fg == pilot.cellAt(0, 0).style.fg, "the gauge's filled half must match")
+    assert(pilot.cellAt(23, 1).style.fg == pilot.cellAt(23, 0).style.fg, "the gauge's empty half must match")
+    close(pilot)
+
   test("progressBar accepts a fraction or a pair of counts"):
     val pilot = renderWith(Theme.Dark)(column(progressBar(0.3), progressBar(3, 10), progressBar(1, 0)))
     assert(pilot.screenLines.head.startsWith("30%"))
@@ -73,9 +85,10 @@ final class LoadingThemeSpec extends AnyFunSuite:
     assert(pilot.screenLines(2).startsWith("0%"), "a zero total must not produce NaN")
     close(pilot)
 
-  /** Driven from an explicit clock rather than the ambient one. [[AnimationClock]] is process-global and ScalaTest runs
-    * suites in parallel, so a sibling suite pinning the clock would decide which frame this spinner is showing — which
-    * is exactly how this assertion failed in CI while passing locally.
+  /** Driven from an explicit clock rather than the ambient one. These elements are rendered with no runner behind them,
+    * so the ambient [[AnimationClock]] they would read is the one every runner-less caller in this JVM shares: anything
+    * else that pins it decides which frame this spinner is showing — which is exactly how this assertion failed in CI
+    * while passing locally.
     */
   test("the fluent methods swap presets without losing the theme"):
     val pilot = renderWith(Theme.Dark)(

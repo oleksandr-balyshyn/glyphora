@@ -24,8 +24,8 @@ final class FormAccessibleSpec extends AnyFunSuite:
     val state   = newState()
     val backend = HeadlessBackend(Size(40, 12))
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = Form.accessible(state)
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = Form.accessible(state)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
     assert(pilot.screenText.contains("Field 1 of 2: username"))
     assert(pilot.screenText.contains("Field 2 of 2: subscribe (unchecked)"))
@@ -36,9 +36,9 @@ final class FormAccessibleSpec extends AnyFunSuite:
     val state   = newState()
     val backend = HeadlessBackend(Size(40, 12))
     val app     = new TuiApp:
-      override def bindings: KeyBindings     =
+      override def bindings: KeyBindings            =
         KeyBindings(binding("ctrl+s", "submit")(state.submit()), binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = Form.accessible(state)
+      def view(using ReactiveScope, Theme): Element = Form.accessible(state)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
     pilot.pressKey(KeyCode.Char('s'), KeyModifiers.Ctrl).waitForIdle()
     assert(pilot.screenText.contains("Error: required"))

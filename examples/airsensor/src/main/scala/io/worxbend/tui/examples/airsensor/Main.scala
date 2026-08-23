@@ -1,8 +1,6 @@
 package io.worxbend.tui.examples.airsensor
 
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.runtime.RunnerConfig
-import io.worxbend.tui.widgets.Gauge
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
@@ -37,9 +35,6 @@ class AirSensorApp(
 ) extends TuiApp:
 
   override def config: RunnerConfig = RunnerConfig(tickRate = Some(AirSensorApp.TickRate))
-
-  // one ambient theme for every chrome preset and factory in this file; `theme` is TuiApp's own member
-  private given Theme = theme
 
   // ---- state that must outlive `view` ----------------------------------------------------------
   // `view` re-runs on every redraw, so anything constructed inside it is rebuilt from scratch each frame.
@@ -161,7 +156,7 @@ class AirSensorApp(
 
   // ---- view ------------------------------------------------------------------------------------
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     val shell = scaffold(
       topBar = Some(topBar("airsensor", right = headline)),
       statusBar = Some(statusBar(bindings)),
@@ -174,7 +169,7 @@ class AirSensorApp(
       case Some(seconds) => s"$cadence · updated ${seconds}s ago"
       case None          => s"$cadence · no reading yet"
 
-  private def body(using ReactiveScope): Element =
+  private def body(using ReactiveScope, Theme): Element =
     history.get.lastOption match
       case None          => firstLoadPane
       case Some(reading) =>
@@ -184,7 +179,7 @@ class AirSensorApp(
         column((panes ++ Seq(if showHistory.get then historyPane(reading).fill else spacer))*)
 
   /** The only screen with nothing to show, and even it says what it is waiting for. */
-  private def firstLoadPane(using ReactiveScope): Element =
+  private def firstLoadPane(using ReactiveScope, Theme): Element =
     val message = status.get match
       case Status.Failed(problem)        => notice(s"$problem — press r to retry", NoticeLevel.Error)
       case Status.Loading | Status.Ready => spinner("waiting for the first reading...")
@@ -196,13 +191,13 @@ class AirSensorApp(
     * The severity carried here is the *air's*, not the sensor's, so the notice icon agrees with the colour the cards
     * are already wearing.
     */
-  private def banner(using ReactiveScope): Element =
+  private def banner(using ReactiveScope, Theme): Element =
     status.get match
       case Status.Loading         => spinner("reading sensor...")
       case Status.Ready           => notice(s"air quality: ${worstBand.get.label}", worstBand.get.level)
       case Status.Failed(problem) => notice(s"$problem — showing the last good reading", NoticeLevel.Error)
 
-  private def hero(reading: Reading)(using ReactiveScope): Element =
+  private def hero(reading: Reading)(using ReactiveScope, Theme): Element =
     val band  = Metric.Aqi.bandOf(reading)
     val trend = trendOf(Metric.Aqi)
     panel("Air quality index")(
@@ -213,28 +208,23 @@ class AirSensorApp(
         spacer,
         badge(band.level),
       ).length(1),
-      // `Element.gauge` hard-wires its fill style and passes no ramp, so the hero drops to the widget the DSL node
-      // wraps. Dropping a level is the intended escape hatch — the DSL is a convenience over `tui-widgets`, not a
-      // wall around it.
-      widget(
-        Gauge(
-          Metric.Aqi.ratio(reading),
-          ProgressLabel.Text(s"${Metric.Aqi.valueText(reading)} of ${Metric.Aqi.scaleText}"),
-          theme.muted,
-          Style.Default.reverse,
-          fillRamp = Some(ColorRamp.Traffic),
-        )
-      ).length(1),
+      // `ColorRamp.Traffic` walks the fill green -> amber -> red, so the hero bar reads as "how bad is it" at a
+      // glance rather than merely "how far along is it"
+      gauge(Metric.Aqi.ratio(reading))
+        .label(s"${Metric.Aqi.valueText(reading)} of ${Metric.Aqi.scaleText}")
+        .ramp(ColorRamp.Traffic)
+        .styled(_ => theme.muted)
+        .length(1),
       text(s"derived from PM2.5 ${Metric.Pm25.valueText(reading)} ${Metric.Pm25.unit}").dim.length(1),
     ).rounded
 
-  private def cards(reading: Reading)(using ReactiveScope): Element =
+  private def cards(reading: Reading)(using ReactiveScope, Theme): Element =
     row(Metric.Cards.map(metric => card(metric, reading).fill)*).gap(1)
 
   /** Every card is the same six lines; only the [[Metric]] differs. Band shows twice on purpose — as the panel's colour
     * and as a word inside it.
     */
-  private def card(metric: Metric, reading: Reading)(using ReactiveScope): Element =
+  private def card(metric: Metric, reading: Reading)(using ReactiveScope, Theme): Element =
     val band  = metric.bandOf(reading)
     val trend = trendOf(metric)
     panel(metric.label)(
@@ -247,18 +237,19 @@ class AirSensorApp(
       text(s"of ${metric.scaleText}").dim.length(1),
     ).styled(_.patch(band.style))
 
-  private def historyPane(reading: Reading)(using ReactiveScope): Element =
+  private def historyPane(reading: Reading)(using ReactiveScope, Theme): Element =
     val readings = history.get
     panel(s"History · last ${readings.size} readings")(Metric.All.map(sparkRow(_, readings, reading))*)
 
-  private def sparkRow(metric: Metric, readings: Vector[Reading], latest: Reading): Element =
+  private def sparkRow(metric: Metric, readings: Vector[Reading], latest: Reading)(using Theme): Element =
     // Sparkline takes whole numbers, and it autoscales to its own maximum unless given one — which would make a calm
     // series look exactly as dramatic as a spike. Scaling by ten keeps PM2.5's one decimal; pinning `max` to the
     // metric's own ceiling is what makes two frames comparable.
     val samples = readings.map(entry => math.round(metric.read(entry) * 10.0))
     row(
       text(metric.label).dim.length(8),
-      SparklineElement(samples, max = Some(math.round(metric.gaugeMax * 10.0)))
+      sparkline(samples)
+        .max(math.round(metric.gaugeMax * 10.0))
         .styled(_.patch(metric.bandOf(latest).style))
         .fill,
       text(metric.valueText(latest)).length(8),

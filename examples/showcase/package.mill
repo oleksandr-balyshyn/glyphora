@@ -6,7 +6,9 @@ import mill.*
 // test submodule — lives in `TuiExampleModule` in build.mill.
 object `package` extends build.TuiExampleModule {
 
-  def moduleDeps = Seq(build.core, build.terminal, build.runtime, build.widgets, build.dsl)
+  // Transitive: `build.dsl` already depends on core, terminal, widgets, runtime and macros, so naming those
+  // here changed nothing and drifted into lying (two examples omitted `build.widgets` and used it anyway).
+  def moduleDeps = Seq(build.dsl)
 
   def mainClass = Some("io.worxbend.tui.examples.showcase.Main")
 }

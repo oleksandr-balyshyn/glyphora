@@ -18,7 +18,7 @@ final case class ListElement(
     Some(wheelScrolls(() => state.selectPrevious(items.size), () => state.selectNext(items.size)))
   def widget: Widget =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
-    val view = w.ListView(items, style = props.style)
+    val view = w.ListView(items, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => view.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): ListElement               = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =
@@ -35,7 +35,7 @@ final case class TreeElement(
   type Self = TreeElement
   def widget: Widget =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
-    val tree = w.Tree(nodes, style = props.style)
+    val tree = w.Tree(nodes, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => tree.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): TreeElement = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
@@ -103,7 +103,7 @@ final case class SelectionListElement(
       val marker = if selected.contains(index) then "[x] " else "[ ] "
       Line.raw(marker + item)
     }
-    val view     = w.ListView(rendered, style = props.style)
+    val view     = w.ListView(rendered, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => view.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): SelectionListElement  = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
@@ -122,7 +122,7 @@ final case class FilePickerElement(
 ) extends Element:
   type Self = FilePickerElement
   def widget: Widget                                                     =
-    val tree = w.DirectoryTree(style = props.style)
+    val tree = w.DirectoryTree(style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) =>
       val treeArea   = Rect(area.x, area.y, area.width, math.max(0, area.height - 1))
       tree.render(treeArea, buffer, state.tree)
@@ -152,7 +152,7 @@ final case class DirectoryTreeElement(
 ) extends Element:
   type Self = DirectoryTreeElement
   def widget: Widget                                                     =
-    val tree = w.DirectoryTree(style = props.style)
+    val tree = w.DirectoryTree(style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => tree.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): DirectoryTreeElement  = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =

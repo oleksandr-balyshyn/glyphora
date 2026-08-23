@@ -98,5 +98,7 @@ final class GrammarSpec extends AnyFunSuite:
   test("the View alias is a reactive computation producing an Element"):
     val v: View         = text("from a view alias")
     given ReactiveScope = ReactiveScope.generational(() => ())
-    val el: Element     = v // applies the context function with the given scope
-    assert(el.isInstanceOf[TextElement])
+    val el: Element     = v // applies the context function with the given scope and theme
+    el match
+      case TextElement(content, _) => assert(content == "from a view alias")
+      case other                   => fail(s"expected a TextElement, got $other")

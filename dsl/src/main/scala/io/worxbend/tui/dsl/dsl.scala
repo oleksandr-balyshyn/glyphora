@@ -78,7 +78,13 @@ export Element.{
   tree,
   widget,
 }
-// every core type the exported API's own signatures mention, so a view never needs a second import
+// Every core type the exported API's own signatures mention, so a view never needs a second import.
+//
+// The rule this block and the two below are kept to: if a name appears in the *signature* of anything this package
+// exports, it is re-exported here. The regression test is the examples directory — nine of the ten example apps take
+// `io.worxbend.tui.dsl.*` and nothing else from glyphora, and the tenth adds only
+// `io.worxbend.tui.macros.{deriveForm, Field}`, a genuinely separate module a form-less app never touches. An example
+// that needs a second glyphora import means this list is short.
 export io.worxbend.tui.core.{
   Buffer,
   Color,
@@ -110,26 +116,82 @@ export io.worxbend.tui.core.{
   * `KeyModifiers.Ctrl | KeyModifiers.Shift` would not compile for an application that only wrote
   * `import io.worxbend.tui.dsl.*`. The explicit pair keeps `|`, `hasAny`, `hasAll`, `names` and `show` reachable.
   *
-  * Any opaque type re-exported from this package in future (`core.Modifiers`, `widgets.Borders`) has to be spelled the
-  * same way, for the same reason. Plain classes and enums are unaffected, which is why everything else is an `export`.
+  * [[Modifiers]] below is spelled the same way for the same reason. Plain classes and enums are unaffected, which is
+  * why everything else here is an `export`.
   */
 type KeyModifiers = io.worxbend.tui.core.KeyModifiers
 val KeyModifiers: io.worxbend.tui.core.KeyModifiers.type = io.worxbend.tui.core.KeyModifiers
 
-export io.worxbend.tui.runtime.{Async, Cancelable, Computed, Derived, Reactive, ReactiveScope, Signal}
-// the vocabulary types an application names directly: severities, animation and bar presets, badge variants
+/** The text-attribute bitset carried by [[Style]] — bold, dim, italic, underline, reverse, and the rest.
+  *
+  * Named by the exported API's own signatures (`Style.modifiers` returns one, `Style.without(flags: Modifiers)` takes
+  * one), so leaving it out would make those two members unusable from a `dsl`-only import. Written as a type alias plus
+  * a value alias, not an `export`, for the reason given on [[KeyModifiers]]: it is an opaque type, and an exported
+  * opaque type loses its companion's extension methods (`|`, `hasAny`, `hasAll`, `names`, `show`).
+  *
+  * `widgets.Borders` is the third opaque type in the library and is deliberately *not* re-exported: no signature the
+  * DSL exposes names it — per-side borders are a `tui-widgets`-level knob on `Block`, and `panel` exposes border
+  * *style* (`BorderType`) instead. An application that reaches for `Block` directly is already importing
+  * `io.worxbend.tui.widgets` for `Block` itself.
+  */
+type Modifiers = io.worxbend.tui.core.Modifiers
+val Modifiers: io.worxbend.tui.core.Modifiers.type = io.worxbend.tui.core.Modifiers
+
+// `AsyncErrorHandler` and `QueuedTaskFailures` are here for the same reason as everything else in this block: they are
+// named by signatures this package already exports. `Async.run`'s `onError` parameter takes an `AsyncErrorHandler`, and
+// installing a `given` one is the documented way to decide where a background failure is reported;
+// `RunnerError.QueuedTask(failures)` and `RunnerError.Backend(_, queuedTasks)` both carry a `QueuedTaskFailures`, so an
+// app that pattern-matches the error `run()` hands back has to be able to name the payload.
+export io.worxbend.tui.runtime.{
+  Async,
+  AsyncErrorHandler,
+  Cancelable,
+  Computed,
+  Derived,
+  QueuedTaskFailures,
+  Reactive,
+  ReactiveScope,
+  RenderTaskErrorHandler,
+  RenderThread,
+  RunnerConfig,
+  RunnerError,
+  Signal,
+}
+// The terminal vocabulary [[TuiApp]]'s own lifecycle seams are typed in: `runWith` takes a `Backend`, `createBackend`
+// returns `Either[BackendError, Backend]`, and `colorDepth` returns a `ColorDepth`. Overriding either seam — the
+// documented way to draw on something other than JLine's controlling terminal, or to pin a palette — is a supported
+// thing for an application to do, so the names those overrides have to write belong here rather than behind a second
+// import. `JLine3Backend` and `HeadlessBackend` are deliberately left out: neither is named by a signature this
+// package exposes, and the code that constructs one (a `main` wiring a custom terminal, a test wiring `Pilot`) is
+// already reaching into `tui-terminal` or `tui-test` on purpose.
+export io.worxbend.tui.terminal.{Backend, BackendError, ColorDepth}
+// The widget-level vocabulary an application names directly, in two groups:
+//   * the enums and presets a call site passes by name (severities, animation presets, badge variants), and
+//   * every caller-owned `*State` and content value a DSL factory *requires* — `list(items, state)` cannot be called
+//     without naming `ListState`, so omitting it from here would break the one-import promise above outright.
 export io.worxbend.tui.widgets.{
   Alignment,
   BadgeVariant,
+  BlockTitle,
   BorderType,
   ColorRamp,
+  ColumnSort,
+  DataTable,
+  DataTableState,
+  Dataset,
+  DirectoryTreeState,
+  GraphType,
   GridPhase,
+  Image,
   IndeterminateMotion,
   LinearAxis,
   LinearFlow,
   LinearPath,
   LinearTrail,
   Language,
+  ListState,
+  LogState,
+  MarkdownTheme,
   MenuEntry,
   MenuState,
   NoticeLevel,
@@ -137,20 +199,34 @@ export io.worxbend.tui.widgets.{
   OrbitTrail,
   Overflow,
   Padding,
+  Paging,
   ProgressLabel,
   ProgressStyle,
+  ScrollViewState,
+  Shape,
   SliderRange,
+  SortDirection,
   SpinnerPreset,
   SyntaxHighlighter,
   SyntaxTheme,
+  TextAreaState,
   TextEffect,
+  TextInputState,
+  TitlePosition,
+  TreeNode,
+  TreeState,
 }
 
-/** The shape of an app's `view` (and any sub-view helper): a computation, run under a tracking [[ReactiveScope]], that
-  * produces the current [[Element]] tree. Reading a `Signal` inside it subscribes the next redraw. Mirrors terminus's
-  * `type Program[A] = Terminal ?=> A` — one named shape every view has.
+/** The shape of an app's `view` (and any sub-view helper): a computation, run under a tracking [[ReactiveScope]] *and*
+  * the app's [[Theme]], that produces the current [[Element]] tree. Reading a `Signal` inside it subscribes the next
+  * redraw. Mirrors terminus's `type Program[A] = Terminal ?=> A` — one named shape every view has.
+  *
+  * The theme is part of the shape rather than something `TuiApp` installs around the call, because a given installed
+  * around the call is not in scope *inside* the body: an app that overrode `theme` and then wrote `statusBar(bindings)`
+  * in its own `view` used to silently resolve against `Theme.Dark`. Carrying it in the type means the compiler hands
+  * every themed helper the app's own theme, wherever the helper is written.
   */
-type View = ReactiveScope ?=> Element
+type View = (ReactiveScope, Theme) ?=> Element
 
 /** A styled run of text: `"OK".styled(_.withFg(Color.Green))` is the [[Span]] the [[Element.line]] factory takes.
   *

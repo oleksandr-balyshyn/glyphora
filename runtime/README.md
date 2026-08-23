@@ -13,6 +13,11 @@ model, and the reactive state primitives.
   setup), `runOnRenderThread`, `runLater`. `Signal.set` asserts it.
 - **`Runner` / `TerminalRunner` / `Frame` / `RunnerConfig`** — the loop: terminal
   setup/teardown, diff-driven redraws, tick emission, resize handling.
+- **`Async` / `Cancelable`** — background work: `run` / `runCatching` off-thread with
+  the continuation marshalled back to the render loop that armed it, `after` / `every`
+  for one-shot and repeating timers. A failure in `run`'s work goes back to that same
+  loop, so the runner reports it as `RunnerError.QueuedTask` rather than printing a
+  stack trace over the alternate screen.
 - **`Stopwatch` / `Timer` / `TickDriven`** — caller-owned tick clocks. They produce the
   `elapsed` that `tui-core`'s motion values (`Progress`, `Easing`, `Tween`, `Spring`,
   `Effect`) are pure functions of; the curves themselves live in `tui-core` so that

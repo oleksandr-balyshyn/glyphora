@@ -1,7 +1,6 @@
 package io.worxbend.tui.examples.loadtest
 
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.runtime.RunnerConfig
 
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 
@@ -156,8 +155,7 @@ final class LoadTestApp(
 
   // ---- view ----
 
-  def view(using ReactiveScope): Element =
-    given Theme = theme
+  def view(using ReactiveScope, Theme): Element =
     scaffold(
       topBar = Some(topBar("loadtest", right = headline)),
       // `statusBar(bindings)` would render all nine hints and run off an 80-column terminal, so the keys are grouped
@@ -192,7 +190,7 @@ final class LoadTestApp(
     val total   = plan.get.requests
     panel(phaseLabel)(progressBar(current.sent, total).labelled(s"${current.sent} / $total"))
 
-  private def countersPanel(using ReactiveScope): Element =
+  private def countersPanel(using ReactiveScope, Theme): Element =
     val current = stats.get
     val seconds = elapsed.get.toMillis / 1000.0
     val rate    = if seconds <= 0.0 then 0.0 else current.sent / seconds
@@ -208,7 +206,7 @@ final class LoadTestApp(
       text(f"workers  ${runner.workersAlive}%7d").dim,
     )
 
-  private def throughputPanel(using ReactiveScope): Element =
+  private def throughputPanel(using ReactiveScope, Theme): Element =
     val window = throughput.get
     val peak   = peakThroughput.get
     panel(s"Throughput (peak $peak per ${LoadTestApp.TickRate.toMillis}ms)")(
@@ -216,7 +214,7 @@ final class LoadTestApp(
       // `sparkline(data)` autoscales to the window's own maximum on every frame, so a live trace rescales under the
       // reader and a flat line looks identical to a spiky one. Pinning `max` to the peak seen this run fixes the
       // scale. The DSL factory does not expose `max`; the node behind it does.
-      else SparklineElement(window, max = Some(peak)).fg(Color.Cyan).fill
+      else sparkline(window).max(peak).fg(Color.Cyan).fill
     )
 
   private def histogramPanel(using ReactiveScope, Theme): Element =
@@ -237,7 +235,7 @@ final class LoadTestApp(
       text(f"${bucket.count}%5d").length(6),
     ).length(1)
 
-  private def latencyPanel(using ReactiveScope): Element =
+  private def latencyPanel(using ReactiveScope, Theme): Element =
     val summary                                           = latency.get
     // Neither `Table` nor `DataTable` can right-align a column, so the numbers are padded to a fixed width here.
     def statRow(label: String, micros: Long): Seq[String] = Seq(label, f"${LoadTestApp.ms(micros)}%9.2f")
@@ -259,7 +257,6 @@ final class LoadTestApp(
   // ---- the end-of-run summary, as a modal screen ----
 
   private def showSummary(): Unit =
-    given Theme = theme
     summaryOpen.set(true)
     pushScreen(Screen { summaryView })
 

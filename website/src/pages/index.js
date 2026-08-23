@@ -9,26 +9,25 @@ import styles from './index.module.css';
 
 const quickStart = `import io.worxbend.tui.dsl.*
 
-object Counter extends TuiApp:
+class CounterApp extends TuiApp:
   private val count = Signal(0)
 
-  override def bindings = KeyBindings(
+  override def bindings: KeyBindings = KeyBindings(
     binding("+", "increment")(count.update(_ + 1)),
     binding("q", "quit")(quit()),
   )
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     scaffold(statusBar = Some(statusBar(bindings))) {
       centered(34, 7) {
         panel("Counter")(
-          text(s"count: \${count.get}").bold.color(Color.Cyan),
+          text(s"count: \${count.get}").bold.fg(Color.Cyan),
           text("press + to increment").dim,
         ).rounded
       }
     }
 
-  def main(args: Array[String]): Unit =
-    run().foreach(_ => ())`;
+object Counter extends CounterApp`;
 
 const proof = [
   ['40+', 'widgets'],

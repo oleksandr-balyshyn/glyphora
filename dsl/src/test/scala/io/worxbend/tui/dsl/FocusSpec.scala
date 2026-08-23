@@ -14,10 +14,10 @@ final class FocusSpec extends AnyFunSuite:
 
   /** Two inputs and a checkbox; whichever is focused receives typed characters. */
   private final class FormApp extends TuiApp:
-    val first                              = TextInputState()
-    val second                             = TextInputState()
-    val agreed                             = Signal(false)
-    def view(using ReactiveScope): Element =
+    val first                                     = TextInputState()
+    val second                                    = TextInputState()
+    val agreed                                    = Signal(false)
+    def view(using ReactiveScope, Theme): Element =
       column(
         input(first, placeholder = "first"),
         input(second, placeholder = "second"),
@@ -101,7 +101,7 @@ final class FocusSpec extends AnyFunSuite:
     var rootSawChar = false
     val field       = TextInputState()
     val app         = new TuiApp:
-      def view(using ReactiveScope): Element =
+      def view(using ReactiveScope, Theme): Element =
         column(input(field)).onKeyEvent {
           case KeyEvent(KeyCode.Char('x'), _) =>
             rootSawChar = true
@@ -129,11 +129,11 @@ final class FocusSpec extends AnyFunSuite:
     val second  = TextInputState()
     val showTop = io.worxbend.tui.runtime.Signal(false)
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(
+      override def bindings: KeyBindings            = KeyBindings(
         binding("ctrl+o", "insert element above")(showTop.set(true)),
         binding("ctrl+q", "quit")(quit()),
       )
-      def view(using ReactiveScope): Element =
+      def view(using ReactiveScope, Theme): Element =
         val top = if showTop.get then Seq(input(first).key("first")) else Seq.empty
         column((top :+ input(second).key("second"))*)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
@@ -152,8 +152,8 @@ final class FocusSpec extends AnyFunSuite:
     val first   = TextInputState()
     val second  = TextInputState()
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element =
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element =
         column(input(first).key("first"), input(second).key("second"))
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
@@ -169,8 +169,8 @@ final class FocusSpec extends AnyFunSuite:
     val first   = TextInputState()
     val second  = TextInputState()
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element =
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element =
         column(input(first).key("first"), input(second).key("second"))
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
@@ -185,9 +185,9 @@ final class FocusSpec extends AnyFunSuite:
     val backend = HeadlessBackend(Size(20, 3))
     val agreed  = io.worxbend.tui.runtime.Signal(false)
     val app     = new TuiApp:
-      override def theme: Theme              = Theme.HighContrast
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = checkbox("agree", agreed)
+      override def theme: Theme                     = Theme.HighContrast
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = checkbox("agree", agreed)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     val cell    = pilot.backend.lastDrawn.map(_.get(0, 0)).getOrElse(fail("no frame"))
@@ -236,11 +236,11 @@ final class FocusSpec extends AnyFunSuite:
     val baseKeys  = scala.collection.mutable.Buffer[String]()
     val modalKeys = scala.collection.mutable.Buffer[String]()
     val app       = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(
+      override def bindings: KeyBindings            = KeyBindings(
         binding("ctrl+o", "open dialog")(openDialog()),
         binding("ctrl+q", "quit")(quit()),
       )
-      def view(using ReactiveScope): Element =
+      def view(using ReactiveScope, Theme): Element =
         column(text("base screen")).onKeyEvent {
           case KeyEvent(KeyCode.Char(c), m) if !m.hasAny(KeyModifiers.Ctrl) =>
             baseKeys += Character.toString(c)
@@ -248,7 +248,7 @@ final class FocusSpec extends AnyFunSuite:
           case _                                                            => false
         }
       // panel/text only: nothing in the dialog is focusable, so the whole tree has no focus path
-      private def openDialog(): Unit         = pushScreen(Screen {
+      private def openDialog(): Unit                = pushScreen(Screen {
         centered(30, 5)(panel("Delete?")(text("d = confirm, esc = cancel"))).onKeyEvent {
           case KeyEvent(KeyCode.Escape, _)                                  =>
             popScreen()
@@ -280,16 +280,16 @@ final class FocusSpec extends AnyFunSuite:
     var baseClicks  = 0
     var modalClicks = 0
     val app         = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(
+      override def bindings: KeyBindings            = KeyBindings(
         binding("ctrl+o", "open dialog")(openDialog()),
         binding("ctrl+q", "quit")(quit()),
       )
-      def view(using ReactiveScope): Element =
+      def view(using ReactiveScope, Theme): Element =
         column(text("base screen")).onMouseEvent { _ =>
           baseClicks += 1
           true
         }
-      private def openDialog(): Unit         = pushScreen(Screen {
+      private def openDialog(): Unit                = pushScreen(Screen {
         centered(30, 5)(panel("Delete?")(text("confirm?"))).onMouseEvent { _ =>
           modalClicks += 1
           true
@@ -320,12 +320,12 @@ final class FocusSpec extends AnyFunSuite:
     val backend   = HeadlessBackend(Size(40, 8))
     val baseField = TextInputState()
     val app       = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(
+      override def bindings: KeyBindings            = KeyBindings(
         binding("ctrl+o", "open dialog")(openDialog()),
         binding("ctrl+q", "quit")(quit()),
       )
-      def view(using ReactiveScope): Element = responsive(_ => column(input(baseField)))
-      private def openDialog(): Unit         = pushScreen(Screen(centered(30, 5)(panel("Delete?")(text("confirm?")))))
+      def view(using ReactiveScope, Theme): Element = responsive(_ => column(input(baseField)))
+      private def openDialog(): Unit = pushScreen(Screen(centered(30, 5)(panel("Delete?")(text("confirm?")))))
     val pilot     = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("a").waitForIdle()

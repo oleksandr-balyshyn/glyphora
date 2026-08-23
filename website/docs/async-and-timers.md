@@ -29,7 +29,7 @@ private val users = Signal[LoadState[Vector[User]]](LoadState.Idle)
 Render each state in one place:
 
 ```scala
-def usersView(using ReactiveScope): Element = users.get match
+def usersView(using ReactiveScope, Theme): Element = users.get match
   case LoadState.Idle            => text("Press r to load users.").dim
   case LoadState.Loading         => spinner("loading…")
   case LoadState.Ready(values)   => list(values.map(_.name), userList)
@@ -61,6 +61,21 @@ Async.run(api.fetchReport()) { result =>
 }
 ```
 
+If the work itself throws, `Async.run` hands the throwable back to the render loop
+that armed the call. The runner absorbs it the way it absorbs any failing queued
+body — the app keeps running — and reports it when the app exits, as
+`RunnerError.QueuedTask` carrying the count and the stack traces. Take reporting over
+by putting an `AsyncErrorHandler` in scope:
+
+```scala
+given AsyncErrorHandler = AsyncErrorHandler.onRenderThread(error => failure.set(Some(error.getMessage)))
+```
+
+`AsyncErrorHandler.rethrow` throws on the worker thread instead. Avoid it in a
+terminal app: the JVM prints the stack trace to standard error, which is the tty the
+UI is drawn on, so the trace lands on top of the alternate screen and the frame diff
+never repaints over it.
+
 ## Schedule one-shot and repeating work
 
 ```scala
@@ -88,7 +103,6 @@ Set `RunnerConfig.tickRate` when the whole application benefits from a regular
 heartbeat:
 
 ```scala
-import io.worxbend.tui.runtime.RunnerConfig
 import scala.concurrent.duration.*
 
 override def config = RunnerConfig(tickRate = Some(100.millis))
@@ -108,7 +122,7 @@ change; keep expensive work out of `onTick` itself.
 `Stopwatch` and `Timer` are caller-owned utilities advanced by the tick loop:
 
 ```scala
-import io.worxbend.tui.runtime.{RunnerConfig, Timer}
+import io.worxbend.tui.runtime.Timer
 import scala.concurrent.duration.*
 
 private val timer = Timer(30.seconds)
@@ -130,8 +144,6 @@ not repeat on every later tick.
 If a library owns its worker thread, marshal the callback manually:
 
 ```scala
-import io.worxbend.tui.runtime.RenderThread
-
 client.onMessage { message =>
   RenderThread.runOnRenderThread {
     messages.update(_ :+ message)
@@ -163,8 +175,6 @@ entirely yours, and `run` returns `Right` unless the backend itself failed. Keep
 handler total: a handler that throws is not isolated, and takes the loop down with it.
 
 ```scala
-import io.worxbend.tui.runtime.{RenderTaskErrorHandler, RunnerConfig}
-
 override def config: RunnerConfig =
   RunnerConfig(onTaskError = Some(error => lastError.set(Some(error.getMessage))))
 ```

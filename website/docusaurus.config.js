@@ -17,6 +17,7 @@ const config = {
   staticDirectories: ['static', '../docs/assets'],
 
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
   markdown: {
     mermaid: true,
     hooks: {

@@ -7,7 +7,7 @@ final case class RadioGroup(
     options: Seq[String],
     selected: Int,
     style: Style = Style.Default,
-    selectedStyle: Style = Style.Default.bold,
+    highlightStyle: Style = Style.Default.bold,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -15,6 +15,6 @@ final case class RadioGroup(
       options.take(area.height).zipWithIndex.foreach { (label, index) =>
         val isSelected = index == selected
         val marker     = if isSelected then "(•) " else "( ) "
-        val rowStyle   = if isSelected then selectedStyle else style
+        val rowStyle   = if isSelected then highlightStyle else style
         buffer.setString(area.x, area.y + index, CharWidth.substringByWidth(marker + label, area.width), rowStyle)
       }

@@ -30,13 +30,12 @@ columns.
 
 ## Fix a sparkline's ceiling
 
-The `sparkline(...)` factory hides the `max` parameter, so a live series rescales to
-its own maximum on every frame. A flat trace and a spiky one then look identical, and
-a value that halves can make the line go *up*. Construct the element directly to pin
-the ceiling:
+By default a live series rescales to its own maximum on every frame. A flat trace and
+a spiky one then look identical, and a value that halves can make the line go *up*.
+`.max(n)` pins the ceiling:
 
 ```scala
-SparklineElement(samples, max = Some(math.round(metric.gaugeMax * 10.0)))
+sparkline(samples).max(math.round(metric.gaugeMax * 10.0))
   .styled(_.patch(metric.bandOf(latest).style))
   .fill
 ```
@@ -116,9 +115,8 @@ way down a tier, and the element layer is a convenience over exactly this.
 
 ## Colour a bar by value
 
-`progressBar(...).ramp(...)` plumbs a `ColorRamp` through to the fill. `gauge(...)`
-does not: it hard-wires `filledStyle = props.style.reverse`, so a gauge takes one
-colour and keeps it. If the colour has to move with the value, use a progress bar:
+`progressBar(...).ramp(...)` and `gauge(...).ramp(...)` both plumb a `ColorRamp`
+through to the fill, so either meter can move its colour with its value:
 
 ```scala
 progressBar(metric.ratio(reading)).bare.ramp(ColorRamp.Traffic).length(1)

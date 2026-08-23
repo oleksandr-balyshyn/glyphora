@@ -30,6 +30,11 @@ final case class Paging(size: Int, page: Int)
   *
   * Selection indexes into the *view* (the filtered, sorted rows) — use [[DataTable.visibleRows]] to map it back to
   * data.
+  *
+  * Render-thread-only, and mutating it does not by itself schedule a frame. This is a plain mutable object, invisible
+  * to the reactive layer: a background result written straight into it stays off screen until something unrelated
+  * happens to repaint. Pair the mutation with a `Signal` write, or call `TuiApp.requestRedraw()` from the same
+  * render-thread callback that made it.
   */
 final class DataTableState:
   var sort: Option[ColumnSort] = None

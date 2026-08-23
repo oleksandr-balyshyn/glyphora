@@ -7,7 +7,7 @@ final case class Paginator(
     current: Int,
     total: Int,
     style: Style = Style.Default,
-    activeStyle: Style = Style.Default.bold,
+    highlightStyle: Style = Style.Default.bold,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -16,7 +16,7 @@ final case class Paginator(
       if total <= 10 && total * 2 - 1 <= area.width then
         var x = area.x
         (0 until total).foreach { page =>
-          val (symbol, pageStyle) = if page == clamped then ("●", activeStyle) else ("○", style)
+          val (symbol, pageStyle) = if page == clamped then ("●", highlightStyle) else ("○", style)
           buffer.set(x, area.y, Cell(symbol, pageStyle))
           x += 2
         }

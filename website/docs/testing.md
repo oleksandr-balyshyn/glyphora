@@ -256,10 +256,13 @@ AnimationClock.freezeAt(SpinnerPreset.Dots.frameDuration)
 `freezeAt` marshals onto the render thread, so it is safe to call from a test thread
 even while other suites run beside it.
 
-It is still a **global** act, though: one clock serves the whole process, so a suite
-that pins it and then asserts on a particular frame can be overruled by a sibling suite
-pinning it a millisecond later. That failure only shows up under parallel execution —
-it passes on a developer's machine and fails in CI, which is the worst way to find out.
+It is still a **global** act, though. A running app has a clock of its own — one per
+render loop — but a pin taken from a test thread lands on the clock every caller
+*without* a runner shares, and it also becomes the value any app started afterwards
+begins at. So a suite that pins the clock and then asserts on a particular frame can
+be overruled by a sibling suite pinning it a millisecond later. That failure only shows
+up under parallel execution — it passes on a developer's machine and fails in CI, which
+is the worst way to find out.
 
 So prefer the `…At(elapsed)` factories — `spinnerAt`, `orbitSpinnerAt`,
 `animatedTextAt`, `indeterminateBarAt` — whenever the animation is a detail of the

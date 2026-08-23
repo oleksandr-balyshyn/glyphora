@@ -44,7 +44,7 @@ final class AppLifecycleSpec extends AnyFunSuite:
       label = value
       requestRedraw()
 
-    def view(using ReactiveScope): Element = text(label)
+    def view(using ReactiveScope, Theme): Element = text(label)
 
   test("onStart runs once, on the render thread, before the first frame"):
     val backend = HeadlessBackend(Size(20, 3))

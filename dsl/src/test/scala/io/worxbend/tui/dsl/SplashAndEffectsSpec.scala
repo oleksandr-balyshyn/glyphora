@@ -11,15 +11,15 @@ import scala.concurrent.duration.DurationInt
 final class SplashAndEffectsSpec extends AnyFunSuite:
 
   private final class SplashApp extends TuiApp:
-    override def splash: Option[SplashScreen] = Some(
+    override def splash: Option[SplashScreen]     = Some(
       SplashScreen(
         centered(20, 1)(text("LOADING")),
         effect = Effect.fadeIn(100.millis),
         minimumDuration = 300.millis,
       )
     )
-    override def bindings: KeyBindings        = KeyBindings(binding("q", "quit")(quit()))
-    def view(using ReactiveScope): Element    = text("main view")
+    override def bindings: KeyBindings            = KeyBindings(binding("q", "quit")(quit()))
+    def view(using ReactiveScope, Theme): Element = text("main view")
 
   test("a player with no splash declared is never active"):
     assert(!SplashPlayer(None, () => 0L).isActive)
@@ -63,11 +63,11 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
   test("any key skips the splash"):
     val backend = HeadlessBackend(Size(30, 5))
     val app     = new TuiApp:
-      override def splash: Option[SplashScreen] = Some(
+      override def splash: Option[SplashScreen]     = Some(
         SplashScreen(text("INTRO"), Effect.fadeIn(50.millis), minimumDuration = 60.seconds)
       )
-      override def bindings: KeyBindings        = KeyBindings(binding("q", "quit")(quit()))
-      def view(using ReactiveScope): Element    = text("main view")
+      override def bindings: KeyBindings            = KeyBindings(binding("q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = text("main view")
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("INTRO"))
@@ -79,12 +79,12 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
   test("runEffect animates over the rendered view and completes"):
     val backend         = HeadlessBackend(Size(20, 3))
     val app             = new TuiApp:
-      override def config                    = io.worxbend.tui.runtime.RunnerConfig(tickRate = Some(20.millis))
-      override def bindings: KeyBindings     = KeyBindings(
+      override def config                           = io.worxbend.tui.runtime.RunnerConfig(tickRate = Some(20.millis))
+      override def bindings: KeyBindings            = KeyBindings(
         binding("e", "run effect")(runEffect(Effect.dissolve(150.millis))),
         binding("q", "quit")(quit()),
       )
-      def view(using ReactiveScope): Element = text("solid content here")
+      def view(using ReactiveScope, Theme): Element = text("solid content here")
     val pilot           = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("solid content here"))

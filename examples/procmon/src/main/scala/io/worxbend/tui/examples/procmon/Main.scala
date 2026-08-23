@@ -1,8 +1,6 @@
 package io.worxbend.tui.examples.procmon
 
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.runtime.RunnerConfig
-import io.worxbend.tui.widgets.{ColumnSort, DataTable, DataTableState, SortDirection, TextInputState}
 
 import java.util.Locale
 import scala.concurrent.duration.DurationInt
@@ -179,8 +177,7 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
 
   // ---- view ----
 
-  def view(using ReactiveScope): Element =
-    given Theme = theme
+  def view(using ReactiveScope, Theme): Element =
     val table   = buildTable(processes.get)
     syncFilter()
     val visible = table.visibleRows(tableState)

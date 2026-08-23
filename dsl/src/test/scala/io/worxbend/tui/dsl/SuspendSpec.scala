@@ -12,11 +12,11 @@ final class SuspendSpec extends AnyFunSuite:
     val backend          = HeadlessBackend(Size(20, 4))
     var screenDuringBody = true
     val app              = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(
+      override def bindings: KeyBindings            = KeyBindings(
         binding("e", "edit")(suspend { screenDuringBody = backend.isAlternateScreen }),
         binding("ctrl+q", "quit")(quit()),
       )
-      def view(using ReactiveScope): Element = text("editor host")
+      def view(using ReactiveScope, Theme): Element = text("editor host")
     val pilot            = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
     assert(backend.isAlternateScreen) // the app runs on the alternate screen
     pilot.typeText("e").waitForIdle()
@@ -29,11 +29,11 @@ final class SuspendSpec extends AnyFunSuite:
   test("printAbove records durable lines above the app"):
     val backend = HeadlessBackend(Size(20, 4))
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(
+      override def bindings: KeyBindings            = KeyBindings(
         binding("l", "log")(printAbove("build ok", "deployed ✓")),
         binding("ctrl+q", "quit")(quit()),
       )
-      def view(using ReactiveScope): Element = text("app")
+      def view(using ReactiveScope, Theme): Element = text("app")
     val pilot   = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
     pilot.typeText("l").waitForIdle()
     assert(backend.printedAbove == Seq("build ok", "deployed ✓"))

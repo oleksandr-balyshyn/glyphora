@@ -7,7 +7,7 @@ day-to-day.
 import io.worxbend.tui.dsl.*
 
 object HelloWorld extends TuiApp:
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("Hello")(
       text("Welcome!").bold.fg(Color.Cyan),
       spacer,

@@ -9,6 +9,11 @@ import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, StatefulWidget, Styl
   * Control characters are dropped on the way in — by the constructor as well as by [[insert]], because a field is just
   * as often seeded from a file or an HTTP response as it is typed into. A control is zero columns wide but still fills
   * a whole `Cell`, so storing one desynchronises the backend's cursor model from the terminal's.
+  *
+  * Render-thread-only, and mutating it does not by itself schedule a frame. This is a plain mutable object, invisible
+  * to the reactive layer: a background result written straight into it stays off screen until something unrelated
+  * happens to repaint. Pair the mutation with a `Signal` write, or call `TuiApp.requestRedraw()` from the same
+  * render-thread callback that made it.
   */
 final class TextInputState(initial: String = ""):
 

@@ -17,7 +17,7 @@ final case class Calendar(
     selected: Option[Int] = None,
     style: Style = Style.Default,
     headerStyle: Style = Style.Default.bold,
-    selectedStyle: Style = Style.Default.reverse,
+    highlightStyle: Style = Style.Default.reverse,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -48,7 +48,7 @@ final case class Calendar(
       val slot     = firstColumn + day - 1
       val x        = area.x + (slot % 7) * 3
       val y        = area.y + 2 + slot / 7
-      val dayStyle = if selected.contains(day) then style.patch(selectedStyle) else style
+      val dayStyle = if selected.contains(day) then style.patch(highlightStyle) else style
       // a grid cell is two columns wide: drop the ones the area cannot hold rather than write past its edges
       if x + 2 <= area.right && y < area.bottom then buffer.setString(x, y, f"$day%2d", dayStyle)
     }

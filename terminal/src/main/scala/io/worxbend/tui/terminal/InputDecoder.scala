@@ -277,18 +277,9 @@ private[terminal] final class InputDecoder(
       case KeyCode.Char(codePoint) if modifiers.hasAny(KeyModifiers.Shift) =>
         val upper = Character.toUpperCase(codePoint)
         if upper == codePoint then KeyEvent(code, modifiers)
-        else if modifiers.hasAny(KeyModifiers.Ctrl) then KeyEvent(code, withoutShift(modifiers))
-        else KeyEvent(KeyCode.Char(upper), withoutShift(modifiers))
+        else if modifiers.hasAny(KeyModifiers.Ctrl) then KeyEvent(code, modifiers.without(KeyModifiers.Shift))
+        else KeyEvent(KeyCode.Char(upper), modifiers.without(KeyModifiers.Shift))
       case _                                                               => KeyEvent(code, modifiers)
-
-  /** `modifiers` with the Shift bit removed. Rebuilt rather than masked because [[KeyModifiers]] is an opaque bitset
-    * that exposes `|` and `hasAny` but no clear operation.
-    */
-  private def withoutShift(modifiers: KeyModifiers): KeyModifiers =
-    var kept = KeyModifiers.None
-    if modifiers.hasAny(KeyModifiers.Ctrl) then kept = kept | KeyModifiers.Ctrl
-    if modifiers.hasAny(KeyModifiers.Alt) then kept = kept | KeyModifiers.Alt
-    kept
 
   /** Bracketed paste: everything between `CSI 200~` and `CSI 201~` is one paste payload.
     *

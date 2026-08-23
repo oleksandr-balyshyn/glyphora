@@ -18,9 +18,9 @@ final class ShapeSpinnerSpec extends AnyFunSuite:
   private def renderWith(chosen: Theme, size: Size = Size(24, 8))(view0: Theme ?=> ReactiveScope ?=> Element): Pilot =
     val backend = HeadlessBackend(size)
     val app     = new TuiApp:
-      override def config: RunnerConfig      = RunnerConfig(tickRate = Some(20.millis))
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = view0(using chosen)
+      override def config: RunnerConfig             = RunnerConfig(tickRate = Some(20.millis))
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = view0(using chosen)
     Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
 
   private def close(pilot: Pilot): Unit =
@@ -90,9 +90,9 @@ final class ShapeSpinnerSpec extends AnyFunSuite:
     AnimationClockLock.frozenAt(0.millis):
       val backend = HeadlessBackend(Size(24, 8))
       val app     = new TuiApp:
-        override def config: RunnerConfig      = RunnerConfig(tickRate = Some(10.millis))
-        override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-        def view(using ReactiveScope): Element = orbitSpinner().radius(3)
+        override def config: RunnerConfig             = RunnerConfig(tickRate = Some(10.millis))
+        override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+        def view(using ReactiveScope, Theme): Element = orbitSpinner().radius(3)
       val pilot   = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
       val before  = backend.drawCount
       val until   = System.nanoTime() + 400_000_000L

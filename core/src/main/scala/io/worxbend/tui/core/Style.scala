@@ -68,11 +68,19 @@ final case class Style(
   def notHidden: Style     = without(Modifiers.Hidden)
   def notCrossedOut: Style = without(Modifiers.CrossedOut)
 
-  /** Drops the foreground color, restoring the terminal default. */
-  def withoutFg: Style = copy(fg = None)
+  /** Sets the foreground to [[Color.Reset]] — the terminal's default — and, exactly like [[without]] does for text
+    * attributes, makes that choice survive [[patch]].
+    *
+    * Leaving `fg` at `None` would not do: a style that merely *lacks* a foreground says nothing about it, so the color
+    * of whatever it is layered onto comes straight back. Recording the clear as an explicit `Some(Color.Reset)` is what
+    * turns "silent about the foreground" into "no foreground, and I mean it".
+    */
+  def withoutFg: Style = copy(fg = Some(Color.Reset))
 
-  /** Drops the background color, restoring the terminal default. */
-  def withoutBg: Style = copy(bg = None)
+  /** Sets the background to [[Color.Reset]] — the terminal's default — and, exactly like [[without]] does for text
+    * attributes, makes that choice survive [[patch]]. See [[withoutFg]] for why `None` is not the same thing.
+    */
+  def withoutBg: Style = copy(bg = Some(Color.Reset))
 
   /** Colors the underline separately from the glyph (SGR 58) — terminals without support draw a default-colored line.
     */
@@ -96,6 +104,10 @@ final case class Style(
     * The result carries both sets forward, so layering is associative: `a.patch(b).patch(c)` and `a.patch(b.patch(c))`
     * agree. A flag `other` clears is dropped from the union *and* stays recorded as cleared, unless this style sets it
     * again — which is how a theme → element → span chain lets any level have the final say on a flag.
+    *
+    * Colors need no second field to say the same thing, because they already have a spelling for "the terminal
+    * default": [[Color.Reset]]. `Some(Color.Reset)` is an explicit choice and wins here like any other color, while
+    * `None` is the silent case that defers. [[withoutFg]] and [[withoutBg]] are the builders that pick the former.
     */
   def patch(other: Style): Style =
     Style(

@@ -10,8 +10,8 @@ final class TuiAppSpec extends AnyFunSuite:
 
   /** A miniature counter app exercising the full reactive path: Signal → view → key handler → redraw. */
   private final class CounterApp extends TuiApp:
-    val count                              = Signal(0)
-    def view(using ReactiveScope): Element =
+    val count                                     = Signal(0)
+    def view(using ReactiveScope, Theme): Element =
       panel("Counter")(
         text(s"count: ${count.get}")
       ).onKeyEvent {
@@ -36,7 +36,7 @@ final class TuiAppSpec extends AnyFunSuite:
       binding("q", "quit")(quit()),
     )
 
-    def view(using ReactiveScope): Element =
+    def view(using ReactiveScope, Theme): Element =
       scaffold(statusBar = Some(statusBar(bindings))) {
         centered(34, 7) {
           panel("Counter")(

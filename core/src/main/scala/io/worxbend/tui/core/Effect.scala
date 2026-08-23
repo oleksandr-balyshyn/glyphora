@@ -181,13 +181,25 @@ object Effect:
         x += 1
       y += 1
 
+  /** Replaces every non-blank cell's style in `area` with `transform` of it.
+    *
+    * `transform` must be a pure function of the style: consecutive cells almost always share one, so the last input and
+    * its result are remembered and re-derived only when the style actually changes. Without that, a whole-frame fade
+    * built a fresh `Color` and `Style` for each of a frame's ten thousand cells to arrive at the same answer.
+    */
   private def mapCells(buffer: Buffer, area: Rect)(transform: Style => Style): Unit =
-    var y = area.y
+    var lastIn: Style  = Style.Default
+    var lastOut: Style = transform(Style.Default)
+    var y              = area.y
     while y < area.bottom do
       var x = area.x
       while x < area.right do
         val cell = buffer.get(x, y)
-        if !cell.isBlank then buffer.set(x, y, cell.copy(style = transform(cell.style)))
+        if !cell.isBlank then
+          if !((cell.style eq lastIn) || cell.style == lastIn) then
+            lastIn = cell.style
+            lastOut = transform(cell.style)
+          buffer.set(x, y, cell.copy(style = lastOut))
         x += 1
       y += 1
 

@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{CharWidth, Constraint, Line, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{CharWidth, Color, Constraint, Line, Span, Style, Text, Widget}
 import io.worxbend.tui.widgets as w
 
 import java.time.LocalTime
@@ -36,15 +36,20 @@ final case class LineElement(spans: Seq[Span], props: ElementProps = ElementProp
 /** A one-row filled bar with a caption over it; the caption defaults to the percentage.
   *
   * `.label`/`.labelled`/`.bare` are the same trio [[ProgressBarElement]] carries, so the two progress meters are
-  * captioned the same way whichever one a view reaches for.
+  * captioned the same way whichever one a view reaches for. `trackStyle` and `fillStyle` come from the same
+  * [[LoadingTheme]] the whole progress-and-spinner family draws from, so a gauge and a `progressBar` side by side are
+  * the same two colours.
   */
 final case class GaugeElement(
     ratio: Double,
-    label: w.ProgressLabel = w.ProgressLabel.Percentage,
+    label: w.ProgressLabel,
+    trackStyle: Style,
+    fillStyle: Style,
+    fillRamp: Option[w.ColorRamp],
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = GaugeElement
-  def widget: Widget = w.Gauge(ratio, label, props.style, filledStyle = props.style.reverse)
+  def widget: Widget = w.Gauge(ratio, label, trackStyle.patch(props.style), fillStyle.patch(props.style), fillRamp)
 
   /** Replaces the percentage caption with fixed text. */
   def label(text: String): GaugeElement = copy(label = w.ProgressLabel.Text(text))
@@ -54,6 +59,17 @@ final case class GaugeElement(
 
   /** Drops the caption entirely, leaving the bar uninterrupted. */
   def bare: GaugeElement = copy(label = w.ProgressLabel.Hidden)
+
+  /** Colors the fill by how far along it is: `ColorRamp.Traffic` walks green through amber to red, which is what an
+    * "how bad is it" meter (disk usage, an air-quality index) wants and a download bar does not.
+    *
+    * The same builder [[ProgressBarElement.ramp]] carries, so the two meters are colored the same way whichever one a
+    * view reaches for — this used to be the one knob that forced a call site down to `widget(w.Gauge(...))`.
+    */
+  def ramp(chosen: w.ColorRamp): GaugeElement = copy(fillRamp = Some(chosen))
+
+  /** A two-color ramp built inline, for the many cases with no named preset. */
+  def ramp(from: Color, to: Color): GaugeElement = copy(fillRamp = Some(w.ColorRamp(from, to)))
 
   private[dsl] def withProps(props: ElementProps): GaugeElement = copy(props = props)
   private[dsl] override def claim: SizeClaim                    = SizeClaim.OneRow
@@ -122,7 +138,16 @@ final case class SparklineElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = SparklineElement
-  def widget: Widget                                                = w.Sparkline(data, max, props.style)
+  def widget: Widget = w.Sparkline(data, max, props.style)
+
+  /** Pins the top of the scale instead of letting it float to the largest value present.
+    *
+    * Without this a sparkline always uses the full row height, which is what makes two of them *not* comparable: a
+    * series peaking at 5 and one peaking at 5000 draw the same shape. Pin both to the same ceiling and the heights mean
+    * the same thing.
+    */
+  def max(ceiling: Long): SparklineElement = copy(max = Some(ceiling))
+
   private[dsl] def withProps(props: ElementProps): SparklineElement = copy(props = props)
   private[dsl] override def claim: SizeClaim                        = SizeClaim.OneRow
 
@@ -145,19 +170,48 @@ final case class TableElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = TableElement
-  def widget: Widget                                            =
+  def widget: Widget =
     w.Table.ofStrings(rows, widths, header, style = props.style)
+
+  /** Adds a bold caption row above the data — one label per column, in the same order as `widths`.
+    *
+    * The header costs one row of the area and does not scroll away with the rows, because a static table does not
+    * scroll at all. Pass a computed sequence with `.header(labels*)`.
+    */
+  def header(labels: String*): TableElement = copy(header = Some(labels))
+
   private[dsl] def withProps(props: ElementProps): TableElement = copy(props = props)
 
 /** Escape hatch: any core [[Widget]] as a leaf element (its rendering ignores the element style).
   *
   * Width-dependent content — wrapped markdown, a paragraph, an image — reports its own height to the measurement pass
   * by implementing [[io.worxbend.tui.core.Measured]] on the widget; this node needs no measurement wiring of its own.
+  *
+  * That measurement is *not* a layout claim, though: the two passes ask different questions and only the measurement
+  * pass (scroll views, auto-sized containers) consults `Measured`. By default a wrapped widget takes every cell its
+  * siblings left over, because a bare `Widget` has no axis-independent size to derive one from — `heightAt` needs a
+  * width the layout solver has not decided yet, so guessing would mis-size wrapped prose rather than fix anything.
+  *
+  * `rows` is how the call site says otherwise: `Some(n)` means "exactly `n` rows tall, and whatever width the container
+  * has", which is the shape every fixed-height widget actually wants. Use it rather than `.length(n)` — that extension
+  * sets one constraint that the container applies along *whichever* axis it runs, so a `.length(1)` widget is one row
+  * tall in a `column` and one *column wide* in a `row`.
   */
 final case class WidgetElement(
     wrapped: Widget,
+    rows: Option[Int] = None,
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = WidgetElement
-  def widget: Widget                                             = wrapped
+  def widget: Widget = wrapped
+
+  /** This widget rebuilt to claim exactly `count` rows of height, taking the container's full width.
+    *
+    * The height a fixed-height widget wants is a fact about the widget, not about the container it happens to sit in,
+    * so it belongs here rather than in a `.length(count)` at the call site: `row(widget(divider).rows(1), …)` keeps its
+    * full width, where `row(widget(divider).length(1), …)` would be a single column.
+    */
+  def rows(count: Int): WidgetElement = copy(rows = Some(math.max(0, count)))
+
   private[dsl] def withProps(props: ElementProps): WidgetElement = copy(props = props)
+  private[dsl] override def claim: SizeClaim                     = rows.fold(SizeClaim.Fill)(SizeClaim.rows)

@@ -36,9 +36,8 @@ final class AsyncSpec extends AnyFunSuite:
     pumpUntil(2000)(bad.peek.isDefined)
     assert(bad.peek.exists(_.isLeft))
 
-  /** The failure path of `run` is the one an app hits in production — a fetch times out, a file is missing — and it is
-    * the only path whose default (`AsyncErrorHandler.rethrow`) throws on the *worker* thread, where nothing but the
-    * JVM's uncaught-exception handler is listening. These three pin what each handler actually does with it.
+  /** The failure path of `run` is the one an app hits in production — a fetch times out, a file is missing — so its
+    * default has to reach somewhere an app can see. These pin what each handler actually does with it.
     */
   test("a failing run reports to the ambient handler and never delivers a result"):
     val failure             = AtomicReference[Option[Throwable]](None)
@@ -50,6 +49,27 @@ final class AsyncSpec extends AnyFunSuite:
 
     assert(failure.get().exists(_.getMessage == "boom"))
     assert(delivered.get() == 0)
+
+  /** The default, and the reason it is not `rethrow`: rethrowing happens on the worker thread, where the only listener
+    * is the JVM's uncaught-exception handler printing to standard error — which for a terminal app is the very tty the
+    * UI is drawn on, so the stack trace lands on top of the alternate screen and the frame diff never repaints over it.
+    * Handing the throwable back to the render loop that armed the call puts it where the runner already collects
+    * queued-task failures and reports them as `RunnerError.QueuedTask`.
+    */
+  test("a failing run with no ambient handler reports through the render loop that armed it"):
+    val seen      = scala.collection.mutable.ArrayBuffer.empty[Throwable]
+    val delivered = new AtomicInteger(0)
+    val loop      = RenderThread.register(Thread.currentThread(), () => (), error => { val _ = seen.append(error) })
+    try
+      Async.run[Int](throw new IllegalStateException("boom"))(_ => delivered.incrementAndGet())
+      val end = System.currentTimeMillis() + 2000
+      while seen.isEmpty && System.currentTimeMillis() < end do
+        RenderThread.drainPending(loop)
+        Thread.sleep(2)
+      RenderThread.drainPending(loop)
+      assert(seen.map(_.getMessage).toList == List("boom"), "the failure never reached the render loop")
+      assert(delivered.get() == 0, "a failure must not also deliver a result")
+    finally RenderThread.unregister()
 
   test("AsyncErrorHandler.ignore swallows the failure and the queue keeps working"):
     given AsyncErrorHandler = AsyncErrorHandler.ignore

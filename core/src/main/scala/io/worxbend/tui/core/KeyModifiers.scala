@@ -22,6 +22,14 @@ object KeyModifiers:
 
     def isEmpty: Boolean = (m: Int) == 0
 
+    /** This set with every modifier in `flags` cleared — the mirror of [[Modifiers.without]] on the other bitset.
+      *
+      * A decoder that has just folded Shift into an upper-case character still has to hand on the Ctrl and Alt that
+      * came with it; without this it had to rebuild the set flag by flag, which silently drops any modifier added to
+      * this enum afterwards.
+      */
+    def without(flags: KeyModifiers): KeyModifiers = (m: Int) & ~(flags: Int)
+
     /** The names of the held modifiers, in declaration order; empty when none are held. */
     def names: Seq[String] = Named.collect { case (flag, name) if m.hasAny(flag) => name }
 

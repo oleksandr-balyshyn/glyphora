@@ -91,8 +91,10 @@
 
 > [!NOTE]
 > **Not on Maven Central yet.** `v0.12.0` is tagged but unreleased, so the coordinates below
-> will not resolve. Until the first release lands, use `./mill __.publishLocal` and depend on
-> `0.12.0` from your local Ivy cache — see [Build from source](#-build-from-source).
+> will not resolve. Until the first release lands, clone the repo and run `./mill __.publishLocal`
+> — that puts `tui-core`, `tui-terminal`, `tui-widgets`, `tui-runtime`, `tui-macros`, `tui-dsl`
+> and `tui-test` at `0.12.0` into `~/.ivy2/local`. Mill reads that cache by default; sbt needs
+> `resolvers += Resolver.defaultLocal`. See [Build from source](#-build-from-source).
 
 ```scala
 // build.mill
@@ -109,7 +111,7 @@ Then return an ordinary Scala `Element` tree:
 ```scala
 import io.worxbend.tui.dsl.*
 
-object Counter extends TuiApp:
+class CounterApp extends TuiApp:
   private val count = Signal(0)
 
   override def bindings: KeyBindings = KeyBindings(
@@ -118,7 +120,7 @@ object Counter extends TuiApp:
     binding("q", "quit")(quit()),
   )
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     scaffold(statusBar = Some(statusBar(bindings))) {
       centered(34, 7) {
         panel("Counter")(
@@ -128,11 +130,18 @@ object Counter extends TuiApp:
         ).rounded
       }
     }
+
+object Counter extends CounterApp
 ```
 
-`TuiApp` supplies `main`, so `object Counter extends TuiApp` *is* the program — the
+`TuiApp` supplies `main`, so `object Counter extends CounterApp` *is* the program — the
 launcher runs it, and a run that fails to take the terminal reports on standard error
 and exits non-zero.
+
+The app is a **class** with a one-line `object` on the end so that tests can build a
+fresh one per scenario: `TuiApp` keeps its state on the instance and never resets it
+between runs, so re-running a single `object` starts holding whatever the last run left
+behind. The launcher gets `object Counter`; a test writes `Pilot(CounterApp())`.
 
 Three ideas carry through the entire toolkit:
 
@@ -300,14 +309,19 @@ is canonical.
 ## 🤝 Contributing
 
 Contributions are welcome across runtime behavior, widgets, examples, tests, documentation, and
-design. CI enforces the constraints that protect the design: **no runtime reflection**, **no
-`String.substring` for layout math outside `CharWidth`**, warnings-as-errors, Scalafmt, and a
-native-image build of every example under `examples/`.
+design. Six gates protect the design and every one of them fails the build: **no runtime
+reflection**, **no `String.substring` for layout math outside `CharWidth`**, Scalafmt, Scalafix
+(main *and* test sources), warnings-as-errors, and a `--no-fallback` native-image build of every
+example under `examples/`. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the exact commands to run
+before you push; the [full guide](website/docs/contributing.md) has the widget checklist and the
+architecture rules.
 
 <div align="center">
 
-**[🤝 Contributing guide](website/docs/contributing.md)** ·
-**[🐛 Report an issue](https://github.com/oleksandr-balyshyn/glyphora/issues)** ·
+**[🤝 Contributing](CONTRIBUTING.md)** ·
+**[📖 Full guide](website/docs/contributing.md)** ·
+**[🐛 Report an issue](https://github.com/oleksandr-balyshyn/glyphora/issues/new/choose)** ·
+**[📜 Code of conduct](CODE_OF_CONDUCT.md)** ·
 **[📚 Wiki](https://github.com/oleksandr-balyshyn/glyphora/wiki)**
 
 </div>

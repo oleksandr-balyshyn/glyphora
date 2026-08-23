@@ -19,7 +19,7 @@ inside `view`.
 
 ```scala
 object Hello extends TuiApp:
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     centered(36, 7) {
       panel("Hello")(
         text("Welcome to glyphora").bold.fg(Color.Cyan),
@@ -66,7 +66,7 @@ private val query = TextInputState()
 private val selection = ListState()
 private val projects = Signal(Vector("atlas", "borealis", "glyphora"))
 
-def projectPicker(using ReactiveScope): Element =
+def projectPicker(using ReactiveScope, Theme): Element =
   val needle = query.value.trim.toLowerCase
   val visible = projects.get.filter(_.toLowerCase.contains(needle))
 
@@ -93,7 +93,7 @@ override def bindings = KeyBindings(
   binding("esc", "quit")(quit()),
 )
 
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   scaffold(statusBar = Some(statusBar(bindings)))(content)
 ```
 
@@ -140,7 +140,7 @@ private def reload(): Unit =
     case Left(error)  => rows.set(LoadState.Failed(error.getMessage))
   }
 
-def rowsView(using ReactiveScope): Element = rows.get match
+def rowsView(using ReactiveScope, Theme): Element = rows.get match
   case LoadState.Idle            => text("Press r to load.").dim
   case LoadState.Loading         => spinner("loading…")
   case LoadState.Ready(value)    => renderRows(value)
@@ -282,19 +282,19 @@ override def bindings = KeyBindings(
   }
 )
 
-def view(using ReactiveScope): Element =
-  given Theme = theme
+def view(using ReactiveScope, Theme): Element =
   val _ = themeIndex.get
   scaffold(statusBar = Some(statusBar(bindings)))(content)
 ```
 
 The explicit tracked read invalidates the tree; semantic theme roles repaint the
-chrome.
+chrome. There is no `given Theme` to declare — `view` receives the app's own theme as
+a `using` parameter and passes it on to every themed helper it calls.
 
 ## Add a countdown
 
 ```scala
-import io.worxbend.tui.runtime.{RunnerConfig, Timer}
+import io.worxbend.tui.runtime.Timer
 import scala.concurrent.duration.*
 
 private val timer = Timer(30.seconds)
@@ -339,7 +339,7 @@ import io.worxbend.tui.widgets.Paragraph
 
 val raw = Paragraph(Text.raw("custom renderer"), overflow = Overflow.Wrap)
 
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   panel("Embedded")(widget(raw).fill).rounded
 ```
 

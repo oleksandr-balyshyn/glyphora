@@ -15,7 +15,7 @@ calls.
 ```scala
 private val count = Signal(0)
 
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   text(s"Count: ${count.get}")
 
 // key/mouse/tick handler
@@ -75,7 +75,7 @@ private val visibleJobs = Computed {
   else jobs.get.filter(_.name.toLowerCase.contains(needle))
 }
 
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   column(
     text(s"Filter: ${query.get}").dim,
     text(s"${visibleJobs.get.size} matching jobs"),
@@ -101,7 +101,7 @@ view to the underlying signal, not to a per-frame intermediate, so a `Derived` i
 safe to create inline and there is nothing to dispose:
 
 ```scala
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   text(count.map(n => s"$n items").get)
 ```
 
@@ -132,7 +132,7 @@ added. There is no dependency list to maintain.
 
 ```scala
 // Good: read state and compose elements.
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   report.get match
     case Some(value) => reportPanel(value)
     case None        => text("No report loaded").dim
@@ -161,8 +161,6 @@ Already safe:
 Callbacks owned by another thread must hop back:
 
 ```scala
-import io.worxbend.tui.runtime.RenderThread
-
 socket.onMessage { payload =>
   RenderThread.runOnRenderThread {
     messages.update(_ :+ payload)
@@ -190,14 +188,25 @@ override def bindings = KeyBindings(
   }
 )
 
-def view(using ReactiveScope): Element =
-  given Theme = theme
+def view(using ReactiveScope, Theme): Element =
   val _ = themeIndex.get // tracked read requests a new themed tree
   scaffold(statusBar = Some(statusBar(bindings)))(content)
 ```
 
-`theme` itself uses `.peek` because the explicit tracked read in `view` owns
-invalidation. The complete implementation is in the `showcase` example.
+There is no `given Theme` to declare. `view` receives the app's own `theme` as a
+`using` parameter, and every themed helper it calls — `statusBar`, `topBar`, `panel`,
+`markdown` — takes it from there, including helpers written as separate methods, as
+long as those carry `(using Theme)` too.
+
+`theme` itself uses `.peek`, and the tracked `themeIndex.get` in `view` is what owns
+invalidation. That split matters: `TuiApp.theme` is read once per frame *outside* the
+tracking scope, so changing what it returns does not by itself schedule a frame. If the
+theme switch is not on a key binding — a binding that consumes the key already earns a
+repaint — the tracked read is the only thing that makes the new palette appear.
+
+The complete implementation is in the `showcase` example, which switches on `Ctrl+T` and
+therefore leaves the tracked read out — keep it in your own app unless every path that
+changes the theme is a key binding.
 
 ## A practical state checklist
 

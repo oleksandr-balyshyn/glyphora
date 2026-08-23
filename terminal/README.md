@@ -6,8 +6,11 @@ Everything above (`tui-runtime`, widgets, DSL) talks to `Backend` only.
 - **`Backend`** — raw mode, alternate screen, cursor visibility, mouse capture,
   diff-based `draw(buffer)`, `readEvent(timeout)`, `copyToClipboard(text)` (OSC 52).
   All fallible operations return `Either[BackendError, A]`.
-- **`JLine3Backend`** — the production implementation over `org.jline:jline` 3.30.x
-  (pinned; JLine 4.x is too new to be a safe default). Keeps a snapshot of the last
+- **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`
+  and `org.jline:jline-terminal-jni` 3.30.x (pinned; JLine 4.x is too new to be a
+  safe default). Those two focused artifacts rather than the `org.jline:jline`
+  bundle, which also ships a line reader, an SSH server and a telnet server that
+  nothing here calls: glyphora uses four JLine types in total. Keeps a snapshot of the last
   flushed frame and writes only changed cells, batched into one ANSI string per
   frame, with OSC 8 hyperlink transitions. `create(colorDepth)` takes an optional
   color-depth override; the default honors `NO_COLOR`/`CLICOLOR_FORCE`.

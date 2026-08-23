@@ -141,7 +141,65 @@ but it cannot install fonts or change an emulator's width policy.
 
 When a glyph is decorative, include a text fallback. When exact alignment is
 mission-critical, prefer stable box-drawing and text symbols over very new emoji.
-Test at least one 16-color environment and one true-color terminal before release.
+
+## Color depth: what is detected, and how to test it
+
+You never pick colors twice. Write the color you mean — including 24-bit
+`Color.Rgb(...)` — and the backend reduces it to whatever the terminal can show.
+
+### What is detected
+
+`ColorDepth.detect()` reads four environment variables, in this order:
+
+1. **`NO_COLOR`** — set to any non-empty value, color is off entirely
+   ([no-color.org](https://no-color.org)). Text attributes still work: bold,
+   dim, italic, underline and reverse are emitted, only the color codes are dropped.
+2. **`CLICOLOR_FORCE`** — set to anything other than empty or `0`, color is forced
+   back on, overriding `NO_COLOR` and overriding "output is not a TTY".
+3. **`COLORTERM`** — containing `truecolor` or `24bit` means the full 24-bit palette.
+4. **`TERM`** — containing `256` means the xterm-256 palette. Anything else falls back
+   to the classic sixteen named colors.
+
+The resolved value is one of `ColorDepth.TrueColor`, `Ansi256`, `Ansi16` or `NoColor`.
+
+### How a color degrades
+
+| Target | What happens to `Color.Rgb(r, g, b)` |
+|---|---|
+| `TrueColor` | emitted as-is |
+| `Ansi256` | nearest entry of the xterm-256 palette — the 24-step grayscale ramp for near-gray values, otherwise the 6×6×6 color cube |
+| `Ansi16` | nearest of the sixteen named colors (and a `Color.Indexed(n)` with `n >= 16` is approximated to RGB first, then reduced the same way) |
+| `NoColor` | dropped; the cell keeps its attributes |
+
+Two RGB shades that are close together can therefore land on the *same* cell color at
+`Ansi16`. That is the mechanical reason for [Never use color
+alone](#never-use-color-alone): a state distinguished only by hue can disappear
+entirely, while one distinguished by a glyph, a label or `bold` survives every step
+of this table.
+
+### Running your app in sixteen colors
+
+You do not need to find a sixteen-color terminal. Pin the depth on the app:
+
+```scala
+class MyApp extends TuiApp:
+  override protected def colorDepth: ColorDepth = ColorDepth.Ansi16
+```
+
+`TuiApp.colorDepth` is what `createBackend()` hands to the JLine backend, read once
+per `run()`. Pinning it to `Ansi16` makes every RGB style in the app go through the
+reduction above, so the run you are looking at is the run a user on a plain `xterm`
+gets. `ColorDepth.NoColor` does the same for the `NO_COLOR` audience.
+
+From a shell, the same two checks without touching the code:
+
+```bash
+NO_COLOR=1 ./mill examples.showcase.run       # attributes only, no color at all
+TERM=xterm COLORTERM= ./mill examples.showcase.run   # sixteen colors
+```
+
+Test at least one sixteen-color environment and one true-color terminal before
+release.
 
 Continue with [Mouse & focus](./mouse) for event routing or [Testing](./testing) for
 headless interaction checks.

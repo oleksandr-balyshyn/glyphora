@@ -53,12 +53,12 @@ private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker
 
 /** Wraps the content of a [[ScrollViewElement]] during the focus pass so the areas recorded inside it are screen areas.
   *
-  * `w.ScrollView` renders its content into an offscreen buffer anchored at (0, 0) and blits the visible window into
-  * place, so every rect the content subtree is handed is in content coordinates. This node publishes the
-  * content-to-screen mapping to the [[FocusTracker]] for exactly the duration of the content render — pushed from
-  * inside that render, so the paths where `ScrollView` draws no content push nothing, and popped in a `finally`.
-  * Transparent otherwise: it renders, measures and routes straight to `inner`, and carries neutral props of its own so
-  * it never doubles up the wrapped element's handlers or focus state.
+  * `w.ScrollView` hands its content a rect anchored at (0, 0), draws it into an offscreen buffer covering the
+  * scrolled-to window and blits that window into place, so every rect the content subtree is handed is in content
+  * coordinates. This node publishes the content-to-screen mapping to the [[FocusTracker]] for exactly the duration of
+  * the content render — pushed from inside that render, so the paths where `ScrollView` draws no content push nothing,
+  * and popped in a `finally`. Transparent otherwise: it renders, measures and routes straight to `inner`, and carries
+  * neutral props of its own so it never doubles up the wrapped element's handlers or focus state.
   *
   * Owned by the [[FocusPass]] that built it and touched only on the render thread, like the tracker it writes to. A
   * focusable only partly inside the viewport records the clipped rect; width is never clipped (the offscreen buffer is

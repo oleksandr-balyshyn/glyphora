@@ -16,7 +16,7 @@ final case class Dialog(
     selectedButton: Int = 0,
     style: Style = Style.Default,
     borderType: BorderType = BorderType.Double,
-    selectedStyle: Style = Style.Default.reverse,
+    highlightStyle: Style = Style.Default.reverse,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -46,7 +46,7 @@ final case class Dialog(
     var x          = Alignment.Center.originAt(inner.x, inner.width, totalWidth)
     val y          = inner.bottom - 1
     labels.zipWithIndex.foreach { (label, index) =>
-      val buttonStyle = if index == selectedButton then style.patch(selectedStyle) else style
+      val buttonStyle = if index == selectedButton then style.patch(highlightStyle) else style
       val width       = CharWidth.of(label)
       // more buttons than the box is wide: drop the ones that do not fit rather than paint over the app behind it
       if x + width <= inner.right then buffer.setString(x, y, label, buttonStyle)

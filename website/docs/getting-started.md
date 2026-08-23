@@ -13,6 +13,29 @@ and make two changes that exercise state, layout, styling, and keyboard commands
 
 ## 1. Add glyphora
 
+:::caution Not on Maven Central yet
+
+`0.12.0` is tagged but has not been published, so the coordinates below will not
+resolve from a public repository. Until the first release lands, build the artifacts
+locally:
+
+```bash
+git clone https://github.com/oleksandr-balyshyn/glyphora.git
+cd glyphora
+./mill __.publishLocal
+```
+
+That publishes `tui-core`, `tui-terminal`, `tui-widgets`, `tui-runtime`,
+`tui-macros`, `tui-dsl` and `tui-test` at version `0.12.0` into your local Ivy cache
+(`~/.ivy2/local`). Mill reads that cache by default. **sbt does not**, so an sbt build
+also needs
+
+```scala title="build.sbt"
+resolvers += Resolver.defaultLocal
+```
+
+:::
+
 The normal application dependency is `tui-dsl`. It brings in the core types,
 widgets, terminal backend, and runtime transitively.
 
@@ -60,7 +83,7 @@ configuration: it carries the `Pilot` driver that runs a whole app without a TTY
 ```scala title="Counter.scala"
 import io.worxbend.tui.dsl.*
 
-object Counter extends TuiApp:
+class CounterApp extends TuiApp:
   private val count = Signal(0)
 
   override def bindings: KeyBindings = KeyBindings(
@@ -69,7 +92,7 @@ object Counter extends TuiApp:
     binding("q", "quit")(quit()),
   )
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     scaffold(statusBar = Some(statusBar(bindings))) {
       centered(34, 7) {
         panel("Counter")(
@@ -79,13 +102,23 @@ object Counter extends TuiApp:
         ).rounded
       }
     }
+
+object Counter extends CounterApp
 ```
 
 There is no hand-written `def main`. `TuiApp` supplies one, so `object Counter extends
-TuiApp` is already a runnable program: the launcher starts it, and if the app cannot take
-over the terminal at all it prints the reason on standard error and exits non-zero.
+CounterApp` is already a runnable program: the launcher starts it, and if the app cannot
+take over the terminal at all it prints the reason on standard error and exits non-zero.
 (Standard *output* is where the UI itself is drawn, so a failure message printed there
 would land in the middle of the screen the app just gave back.)
+
+Why the class plus a one-line object, rather than a single `object Counter extends
+TuiApp`? Because a test needs a *fresh* app for each scenario. `TuiApp` keeps its state
+— the signals, the screen stack, any running effect — on the instance and never resets
+it between runs, so running the same object twice starts the second run holding
+whatever the first left behind. Splitting it lets [Testing](./testing) write
+`Pilot(CounterApp())` per test while the launcher still has its `object Counter`. The
+runnable twin of this app is [`examples/counter`](./examples).
 
 Run it in a terminal:
 
@@ -108,7 +141,7 @@ finishes.
 | `extends TuiApp` | owns the event/render lifecycle and terminal-safe cleanup |
 | `Signal(0)` | stores mutable state and invalidates views that read it |
 | `bindings` | declares global commands once for dispatch, help, palette, and status hints |
-| `view(using ReactiveScope)` | tracks signal reads while returning an element tree |
+| `view(using ReactiveScope, Theme)` | tracks signal reads while returning an element tree |
 | `scaffold(...)` | composes optional top bar, sidebar, content, and status bar |
 | `centered(34, 7)` | gives the panel a fixed area centered in available space |
 | `.rounded`, `.bold`, `.fg(...)` | type-safe element decoration and style extensions |
@@ -161,23 +194,43 @@ Local handlers run before global bindings. A low-level `.onKeyEvent` handler ret
 
 ## 5. Know the first two traps
 
-### “UnsupportedTerminal” at startup
+### “terminal not supported” at startup
 
-The process does not have a controlling TTY. Run it from a normal terminal window;
+The app prints `glyphora: terminal not supported: dumb terminal (no TTY attached)` and
+exits 1, because the process has no controlling TTY (the error is
+`BackendError.UnsupportedTerminal` in the API). Run it from a normal terminal window;
 for CI or unit tests, inject `HeadlessBackend` instead. See [Testing](./testing).
 
 ### Signal write rejected off the render thread
 
 Key handlers, mouse handlers, `onStart`, `onStop` and `onTick` already run on the
-render thread.
-Callbacks from `Future`, an HTTP client, or another executor must hop back before
-changing a signal:
+render thread, so a signal write in any of them is fine. Blocking work — an HTTP call,
+a database query, reading a large file — must *not* run there, because the loop that
+runs it is the same loop that draws frames.
+
+`Async` is the answer to both halves at once. It moves the work off the render thread
+and delivers the result *back* on it, so the signal write in the callback is an
+ordinary signal write:
 
 ```scala
-Future(loadData()).foreach { result =>
-  RenderThread.runOnRenderThread {
-    data.set(result)
-  }
+import io.worxbend.tui.dsl.*
+
+Async.runCatching(loadData()) {
+  case Right(value) => data.set(value)
+  case Left(error)  => message.set(s"could not load: ${error.getMessage}")
+}
+```
+
+Handle the `Left`. `runCatching` delivers a thrown exception rather than dropping it,
+and a UI that ignores it sits on its loading spinner for ever.
+
+You need `RenderThread.runOnRenderThread { … }` only in one situation: a third-party
+library that owns its own callback thread and hands you a value there, with no
+opportunity to route the call through `Async`. Wrap just the state write:
+
+```scala
+someLibrary.onMessage { payload =>          // library's thread, not ours
+  RenderThread.runOnRenderThread { data.set(payload) }
 }
 ```
 
@@ -191,4 +244,4 @@ The complete pattern is in [Async work & timers](./async-and-timers).
   render-thread rules.
 - [Widget catalog](./widgets) — choose the right building blocks.
 - [The app shell](./app-shell) — themes, sidebars, screens, toasts, and the palette.
-- [Examples](./examples) — run seven complete applications from the repository.
+- [Examples](./examples) — run ten complete applications from the repository.

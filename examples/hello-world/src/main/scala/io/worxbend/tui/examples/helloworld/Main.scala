@@ -5,7 +5,7 @@ import io.worxbend.tui.dsl.*
 /** hello-world, DSL edition: a static paragraph in a bordered panel. */
 class HelloWorld extends TuiApp:
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("Hello")(
       text("Welcome to glyphora!").bold.fg(Color.Cyan),
       spacer,

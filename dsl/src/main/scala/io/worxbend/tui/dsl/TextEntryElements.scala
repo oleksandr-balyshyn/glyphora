@@ -70,7 +70,7 @@ final case class AutocompleteElement(
     (area, buffer) =>
       input.render(Rect(area.x, area.y, area.width, 1), buffer, state.input)
       visible.zipWithIndex.foreach { (candidate, index) =>
-        val rowStyle = if index == highlight && props.focused then props.style.reverse else props.style.dim
+        val rowStyle = if index == highlight && props.focused then focusStyled(props) else props.style.dim
         buffer.setString(area.x + 2, area.y + 1 + index, candidate, rowStyle)
       }
   private[dsl] def withProps(props: ElementProps): AutocompleteElement   = copy(props = props)

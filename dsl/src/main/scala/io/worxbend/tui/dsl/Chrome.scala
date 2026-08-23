@@ -43,6 +43,10 @@ def statusBar(bindings: KeyBindings)(using Theme): Element =
 enum Side:
   case Left, Right
 
+/** Vertical placement of a block inside the area it is drawn in — the down-the-screen counterpart of [[Alignment]]. */
+enum VerticalAlignment:
+  case Top, Middle, Bottom
+
 /** Sidebar configuration for [[scaffold]]. */
 final case class Sidebar(content: Element, width: Int = 24, side: Side = Side.Left)
 
@@ -106,34 +110,36 @@ def centered(width: Int, height: Int)(content: Element): Element =
   place(width, height)(content)
 
 /** Positions `content` (sized `width` x `height`) inside whatever area it is given, aligned `horizontal` x `vertical`
-  * (both `Center` by default — the [[centered]] case). Pass `backdrop` to paint the surrounding whitespace with a style
-  * (Lip Gloss `Place`-style), e.g. a dimmed area behind a dialog.
+  * (centered on both axes by default — the [[centered]] case). Pass `backdrop` to paint the surrounding whitespace with
+  * a style (Lip Gloss `Place`-style), e.g. a dimmed area behind a dialog.
   *
   * The parameter is `backdrop`, not `fill`, because `Element.fill` already means something else in every snippet this
   * appears in: there it is the layout extension that claims a row's or column's leftover space.
   *
-  * Both axes are described with [[Alignment]] — the same three-case enum `Block` titles and `Paragraph` text use. There
-  * used to be a second enum here, `Align(Start, Center, End)`, which meant exactly the same thing and landed one
-  * keystroke away from `Alignment` in every application's scope. On the vertical axis read `Left` as *top* and `Right`
-  * as *bottom*; the horizontal names win because titles and paragraphs, where the horizontal reading is the natural
-  * one, are the overwhelming majority of uses.
+  * Each axis is named in its own vocabulary: `horizontal` takes [[Alignment]] (`Left`/`Center`/`Right`, the same enum
+  * `Block` titles and `Paragraph` text use) and `vertical` takes [[VerticalAlignment]] (`Top`/`Middle`/`Bottom`).
   */
 def place(
     width: Int,
     height: Int,
     horizontal: Alignment = Alignment.Center,
-    vertical: Alignment = Alignment.Center,
+    vertical: VerticalAlignment = VerticalAlignment.Middle,
     backdrop: Option[Style] = None,
 )(content: Element): Element =
-  // `Left` is the near edge of the axis and `Right` the far one: left/right across, top/bottom down
-  def bracket(align: Alignment, block: Element): Seq[Element] =
+  // a `spacer` before the block pushes it off the near edge, one after it off the far edge, and both together centre it
+  def bracketAcross(align: Alignment, block: Element): Seq[Element]       =
     align match
       case Alignment.Left   => Seq(block, Element.spacer)
       case Alignment.Center => Seq(Element.spacer, block, Element.spacer)
       case Alignment.Right  => Seq(Element.spacer, block)
+  def bracketDown(align: VerticalAlignment, block: Element): Seq[Element] =
+    align match
+      case VerticalAlignment.Top    => Seq(block, Element.spacer)
+      case VerticalAlignment.Middle => Seq(Element.spacer, block, Element.spacer)
+      case VerticalAlignment.Bottom => Seq(Element.spacer, block)
   val sized = content.withProps(content.props.copy(constraint = Some(Constraint.Length(width))))
-  val row                                                     = Element.row(bracket(horizontal, sized)*).length(height)
-  val placed                                                  = Element.column(bracket(vertical, row)*)
+  val row    = Element.row(bracketAcross(horizontal, sized)*).length(height)
+  val placed = Element.column(bracketDown(vertical, row)*)
   backdrop match
     case Some(style) => FilledElement(placed, style)
     case None        => placed

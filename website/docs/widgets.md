@@ -32,7 +32,6 @@ retain it across renders, and pass it into the element factory:
 
 ```scala
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.widgets.TextInputState
 
 private val name = TextInputState()
 private val notifications = Signal(true)
@@ -54,6 +53,23 @@ Signals add tracked reactivity where another part of the tree also needs the val
 > Construct widget state **outside** `view`. Creating `TextInputState()`,
 > `ListState()`, or `DataTableState()` inside `view` would reset editing, selection,
 > and scrolling on every redraw.
+
+## One name for the chosen thing
+
+Every widget that draws one of its items differently because it is the chosen one
+calls that parameter `highlightStyle` — `ListView`, `Tree`, `Menu`, `DataTable`,
+`DirectoryTree`, `Tabs`, `Calendar`, `Dialog`, `RadioGroup` and `Paginator` alike.
+Learn it once and it transfers.
+
+The DSL fills it in for you from the app theme's `focus` style, so a `list` and a
+`menu` in the same app highlight identically and switching to `Theme.HighContrast`
+moves every one of them at once. You only pass it by hand when you build the widget
+value yourself — `DataTable` is the common case, because its sort, filter and paging
+options mean you construct it rather than let a factory do it:
+
+```scala
+DataTable(rows, columns, highlightStyle = theme.focus)
+```
 
 ## Layout and chrome
 
@@ -82,7 +98,7 @@ import io.worxbend.tui.core.Direction
 import io.worxbend.tui.widgets.Scrollbar
 
 // 200 rows of content, currently showing from row 40
-widget(Scrollbar(contentLength = 200, position = 40)).length(1)
+widget(Scrollbar(contentLength = 200, position = 40)).rows(1)
 
 // along the bottom edge instead
 Scrollbar(200, 40, orientation = Direction.Horizontal)
@@ -184,7 +200,7 @@ import io.worxbend.tui.widgets.ListState
 private val selected = ListState()
 private val services = Signal(Vector("api", "worker", "scheduler"))
 
-def serviceList(using ReactiveScope): Element =
+def serviceList(using ReactiveScope, Theme): Element =
   list(services.get, selected).onKey(Key.char('d')) {
     selected.selected.foreach { index =>
       services.update(_.patch(index, Nil, 1))
@@ -222,6 +238,14 @@ table(
   Constraint.Fill(1),
   Constraint.Length(6),
 )
+```
+
+`.header(...)` adds a bold caption row above the data — one label per column, in the
+same order as the widths. It costs one row of the area:
+
+```scala
+table(rows, Constraint.Length(18), Constraint.Fill(1), Constraint.Length(6))
+  .header("Service", "Status", "Replicas")
 ```
 
 Use `DataTable` when users need sorting, filtering, selection, scrolling, or paging:
@@ -314,15 +338,13 @@ values rather than signals, for use outside the DSL.
 A tick-driven dashboard can remain compact:
 
 ```scala
-import io.worxbend.tui.runtime.RunnerConfig
-import io.worxbend.tui.widgets.{Dataset, GraphType}
 import scala.concurrent.duration.*
 
 override def config = RunnerConfig(tickRate = Some(100.millis))
 private val tick = Signal(0)
 override def onTick(): Unit = tick.update(_ + 1)
 
-def dashboard(using ReactiveScope): Element =
+def dashboard(using ReactiveScope, Theme): Element =
   val t = tick.get
   val load = (math.sin(t * 0.1) + 1) / 2
   val samples = Vector.tabulate(40)(i =>
@@ -347,6 +369,18 @@ def dashboard(using ReactiveScope): Element =
   )
 ```
 
+A `sparkline` scales to the largest value it was handed, so it always uses the full row
+height — which also means two of them side by side are *not* comparable. `.max(n)` pins
+the top of the scale, and two sparklines pinned to the same ceiling can be read against
+each other:
+
+```scala
+row(
+  panel("Ingress")(sparkline(inbound).max(1000L)).fill,
+  panel("Egress")(sparkline(outbound).max(1000L)).fill,
+)
+```
+
 For custom plots, `canvas(xBounds, yBounds)(shapes*)` provides points, segments,
 polylines, rectangles, and circles. Charts can use braille or half-block resolution
 depending on density.
@@ -358,7 +392,7 @@ Animations need one thing from you — a tick rate — and nothing else:
 ```scala
 override def config: RunnerConfig = RunnerConfig(tickRate = Some(80.millis))
 
-def view(using ReactiveScope): Element = spinner("deploying")
+def view(using ReactiveScope, Theme): Element = spinner("deploying")
 ```
 
 There is no counter to declare, advance, or thread through. The animated elements
@@ -369,7 +403,10 @@ forever instead, whether anything is moving or not.
 
 - `spinner(label)` and `animatedText(content)` animate on the ambient clock;
 - `skeleton()`, `indeterminateBar()`, and `marquee(content)` show work without known
-  progress;
+  progress — a ticker sets its reading rate with `marquee(headline).speed(6.0)` in cells
+  per second, the blanks between repetitions with `.gap(8)`, and `.period(10.seconds)`
+  says the rate as a lap time instead, so two tickers of different lengths can be put in
+  step;
 - `progressBar(ratio)`, `progressBar(done, total)` and `gauge(ratio)` show bounded
   progress;
 - toasts, splash screens, and post-render effects live in the app/runtime layer.
@@ -460,13 +497,15 @@ A bar's caption is a `ProgressLabel`, not a nullable string:
 
 `gauge` carries the same trio — `gauge(r)`, `gauge(r).label("syncing")`,
 `gauge(r).labelled("syncing")`, `gauge(r).bare` — so the two progress meters are
-captioned the same way whichever one a view reaches for.
+captioned the same way whichever one a view reaches for. They also draw the same two
+colours: both read `track` and `fill` from the theme's `loading` palette, so a gauge
+next to a progress bar cannot come out in a different scheme.
 
 ### Theming the animations
 
 Colors come from the ambient `Theme`'s `loading` palette, resolved where the element
-is written, so re-theming an app re-themes its spinners and bars with no call-site
-change:
+is written, so re-theming an app re-themes its spinners, gauges and bars with no
+call-site change:
 
 ```scala
 final case class LoadingTheme(
@@ -648,6 +687,26 @@ the width it wraps at, `widthAt(height)` for content sized the other way. Return
 a size. `widget(...)` needs no measurement wiring of its own: a wrapped `Paragraph`,
 `Markdown`, `Notice`, `Badge`, `Spinner`, `BigText`, `AnimatedText` or `Tooltip` already
 answers, so a `scrollView` over one scrolls the full content.
+
+Measuring is not the same as claiming, though, and only the measurement pass consults
+`Measured`. In a `row` or a `column` a wrapped widget claims everything its siblings
+leave over, because the layout solver has not picked a width yet and so cannot ask
+`heightAt`. Say the height with `.rows(n)`:
+
+```scala
+column(
+  text("above"),
+  widget(myOneRowWidget).rows(1), // without this it takes every leftover row
+  text("below"),
+)
+```
+
+Prefer `.rows(n)` over `.length(n)` here. `.rows(n)` says "n rows tall, whatever width
+the container has", which is a fact about the widget and holds wherever you put it.
+`.length(n)` sets a single constraint that the container applies along **whichever axis
+it runs** — so `widget(divider).length(1)` is one row tall inside a `column` and one
+*column wide* inside a `row`. Reach for `.length(n)` only when the number really is the
+container's decision.
 
 Or use widgets without the DSL at all:
 

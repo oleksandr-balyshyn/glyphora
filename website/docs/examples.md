@@ -27,7 +27,7 @@ cd glyphora
 | `todo-list` | `./mill examples.todo-list.run` | text entry, list state, focus switching, delete action |
 | `dashboard` | `./mill examples.dashboard.run` | tick-driven gauges, sparklines, chart layout |
 | `form-demo` | `./mill examples.form-demo.run` | compile-time form derivation and validation |
-| `weather` | `./mill examples.weather.run` | real HTTP, loading/error states, render-thread handoff |
+| `weather` | `./mill examples.weather.run` | real HTTP through `Async.runCatching`, loading/error states |
 | `showcase` | `./mill examples.showcase.run` | scaffold, themes, palette, screens, toasts, splash |
 | `procmon` | `./mill examples.procmon.run` | a sortable table over refreshing rows, selection that survives a refresh — [guide](./build-a-process-monitor) |
 | `airsensor` | `./mill examples.airsensor.run` | polling, threshold bands, trend arrows, loading/ready/error — [guide](./build-a-sensor-dashboard) |
@@ -36,11 +36,24 @@ cd glyphora
 Every app exits with `q` or `Esc`; the source comment above each app lists its full
 keyboard vocabulary.
 
+### Which idiom should you copy?
+
+The examples deliberately show two levels of key handling, and they are not
+alternatives of equal standing:
+
+| Level | Looks like | Use it for |
+|---|---|---|
+| **App bindings** (`counter` and every larger example) | `override def bindings = KeyBindings(binding("q", "quit")(quit()))` | anything global. One declaration also produces the status-bar hint, the help-overlay row, and the command-palette entry, and an undeliverable spec is rejected where you wrote it. |
+| **Local element handlers** (`hello-world`) | `panel(...).onKey(Key.char('q')) { quit() }` / `.onKeyEvent { … }` | a key that belongs to one element and appears nowhere in the app's vocabulary — Enter inside a text field, `d` on the focused list row. |
+
+`hello-world` is the smallest possible program, so it uses the raw `onKeyEvent`
+escape hatch to keep the file to one idea. Start from `counter` for anything real.
+
 ## hello-world: the smallest useful tree
 
 ```scala
 object HelloWorld extends TuiApp:
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("Hello")(
       text("Welcome to glyphora!").bold.fg(Color.Cyan),
       spacer,
@@ -58,25 +71,42 @@ handle an event near the UI it controls.
 
 [Read hello-world source](https://github.com/oleksandr-balyshyn/glyphora/blob/main/examples/hello-world/src/main/scala/io/worxbend/tui/examples/helloworld/Main.scala)
 
-## counter: tracked reactive redraws
+## counter: declared bindings and tracked redraws
 
 ```scala
-final class CounterApp extends TuiApp:
+class CounterApp extends TuiApp:
   val count: Signal[Int] = Signal(0)
 
-  def view(using ReactiveScope): Element =
-    panel("Counter")(
-      text(s"Count: ${count.get}").bold.fg(Color.Green),
-      spacer,
-      text("'+' increment · '-' decrement · 'q' quit").dim,
-    ).rounded
-      .onKey(Key.char('+')) { count.update(_ + 1) }
-      .onKey(Key.char('-')) { count.update(_ - 1) }
-      .onKey(Key.char('q')) { quit() }
+  override def bindings: KeyBindings = KeyBindings(
+    binding("+", "increment")(count.update(_ + 1)),
+    binding("-", "decrement")(count.update(_ - 1)),
+    binding("r", "reset")(count.set(0)),
+    binding("q", "quit")(quit()),
+  )
+
+  def view(using ReactiveScope, Theme): Element =
+    scaffold(statusBar = Some(statusBar(bindings))) {
+      centered(34, 7) {
+        panel("Counter")(
+          text(s"Count: ${count.get}").bold.fg(Color.Green),
+          spacer,
+          text("Change state; the view follows.").dim,
+        ).rounded
+      }
+    }
+
+object Main extends CounterApp
 ```
 
-Notice that multiple `.onKey` calls compose. Only a matching handler consumes the
-event, and reading `count.get` makes redraw automatic.
+Two things to take from this file. First, the key list exists once: `statusBar(bindings)`
+renders the hints from the same values that dispatch the keys, and `Ctrl+P` opens a
+fuzzy palette over them, so the on-screen help cannot drift away from the behaviour.
+Second, reading `count.get` inside `view` is what makes the redraw automatic — nothing
+in this app calls "refresh".
+
+It is a `class` with a one-line `object Main extends CounterApp` on the end, because
+`TuiApp` keeps its state on the instance and never resets it between runs; the test
+builds a fresh `CounterApp()` per scenario. See [Testing](./testing).
 
 [Read counter source](https://github.com/oleksandr-balyshyn/glyphora/blob/main/examples/counter/src/main/scala/io/worxbend/tui/examples/counter/Main.scala)
 
@@ -87,7 +117,7 @@ val items = Signal(Vector.empty[String])
 val inputState = TextInputState()
 val listState = ListState()
 
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   panel("Todo")(
     input(inputState, placeholder = "what needs doing?").onKeyEvent {
       case KeyEvent(KeyCode.Enter, _) => addItem(); true
@@ -114,7 +144,7 @@ val tick = Signal(0)
 
 override def onTick(): Unit = tick.update(_ + 1)
 
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   val t = tick.get
   val load = (math.sin(t * 0.1) + 1) / 2
   val samples = Vector.tabulate(60)(i =>
@@ -159,19 +189,21 @@ private def search(): Unit =
   val city = cityInput.value.trim
   if city.nonEmpty then
     status.set(Status.Loading(city))
-    Future(client.fetch(city)).foreach { result =>
-      RenderThread.runOnRenderThread {
-        status.set(result.fold(
-          error => Status.Failed(city, WeatherError.describe(error)),
-          Status.Loaded.apply,
-        ))
-      }
+    Async.runCatching(client.fetch(city)) {
+      case Right(Right(report))  => status.set(Status.Loaded(report))
+      case Right(Left(failure))  => status.set(Status.Failed(city, WeatherError.describe(failure)))
+      case Left(thrown)          => status.set(Status.Failed(city, thrown.getMessage))
     }
 ```
 
-The example performs two live Open-Meteo requests on a worker thread, then returns
-to the render thread before changing `Signal` state. Its client is injected, so the
-headless test uses a deterministic fake.
+`Async.runCatching` does both halves of the job: it runs the two live Open-Meteo
+requests on a worker thread, and it delivers the answer *back on the render thread*, so
+`status.set` in the callback is an ordinary signal write with no explicit
+`RenderThread.runOnRenderThread` hop. The three cases are the three real outcomes — a
+report, a `Left` the client produced for a bad response, and an exception the client
+threw. Handling that last one is what keeps a hard failure from leaving the UI on
+`Status.Loading` for ever. The client is injected, so the headless test uses a
+deterministic fake.
 
 [Read weather source](https://github.com/oleksandr-balyshyn/glyphora/blob/main/examples/weather/src/main/scala/io/worxbend/tui/examples/weather/Main.scala)
 

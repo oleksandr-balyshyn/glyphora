@@ -18,7 +18,6 @@ its own. Unless a snippet shows additional imports, assume:
 
 ```scala
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.widgets.{DataTable, DataTableState}
 ```
 
 ## Choose Table or DataTable
@@ -56,7 +55,7 @@ private def buildTable(rows: Seq[ProcessInfo]): DataTable =
     ),
   )
 
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   dataTable(buildTable(processes.get), tableState).fill
 ```
 
@@ -66,6 +65,17 @@ it inside `view` resets the sort column, filter, selection and scroll offset on
 every redraw, so the table sits at row zero for ever. That is the general rule
 applied to one widget: [The state ownership
 rule](./widgets#the-state-ownership-rule).
+
+One thing `dataTable` cannot do for you is theme the selected row. `list`, `tree`,
+`menu`, `selectionList`, `filePicker` and `directoryTree` all draw their highlight in
+the app theme's `focus` style, but `DataTable` is a widget value *you* built, so its
+`highlightStyle` is yours to set — `dataTable` overriding it would throw away a
+deliberate choice. Pass it explicitly to line the table up with everything else:
+
+```scala
+private def buildTable(rows: Seq[ProcessInfo])(using theme: Theme): DataTable =
+  DataTable(..., highlightStyle = theme.focus)
+```
 
 ## Invalidate on every refresh
 
@@ -167,7 +177,7 @@ private def syncFilter(): Unit =
     tableState.setFilter(filterInput.value)
     restoreSelection()
 
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   val table = buildTable(processes.get)
   syncFilter()
   column((filterRow :+ dataTable(table, tableState).fill)*)

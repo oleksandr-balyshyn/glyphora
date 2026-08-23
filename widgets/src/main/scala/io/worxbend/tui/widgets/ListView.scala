@@ -5,6 +5,11 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, Rect, StatefulWidget, Styl
 /** Caller-owned list state: the selection and the scroll offset. Mutable on purpose — the widget adjusts the offset
   * during render to keep the selection visible, and the app mutates the selection from key handlers (the
   * `StatefulWidget` contract).
+  *
+  * Render-thread-only, and mutating it does not by itself schedule a frame. This is a plain mutable object, invisible
+  * to the reactive layer: a background result written straight into it stays off screen until something unrelated
+  * happens to repaint. Pair the mutation with a `Signal` write, or call `TuiApp.requestRedraw()` from the same
+  * render-thread callback that made it.
   */
 final class ListState(var selected: Option[Int] = None, var offset: Int = 0):
 
@@ -21,8 +26,10 @@ final class ListState(var selected: Option[Int] = None, var offset: Int = 0):
   *
   * An item is either a plain `String` or a multi-style [[Line]], and the two may be mixed in one list. The union type
   * saves every caller with plain text the `items.map(Line.raw)` ceremony without closing the door on a styled row; it
-  * follows the shape `Layout.apply` already uses for its `Int | Double | Constraint` constraints. The normalisation
-  * happens once, in [[lines]], rather than on every render.
+  * follows the shape `Layout.apply` already uses for its `Int | Double | Constraint` constraints. Normalising a plain
+  * `String` into a [[Line]] happens per drawn row, in [[lineOf]], and only for the rows the viewport actually shows:
+  * the DSL builds a fresh `ListView` value every frame, so converting the whole `items` sequence up front would put the
+  * cost of the entire list — 50 000 items is 3 MiB of `Line`s — on every repaint to draw at most a screenful.
   */
 final case class ListView(
     items: Seq[String | Line],
@@ -31,19 +38,19 @@ final case class ListView(
     highlightSymbol: String = "> ",
 ) extends StatefulWidget[ListState]:
 
-  private val lines: Seq[Line] = items.map {
-    case content: String => Line.raw(content)
-    case line: Line      => line
-  }
+  private def lineOf(item: String | Line): Line =
+    item match
+      case content: String => Line.raw(content)
+      case line: Line      => line
 
   def render(area: Rect, buffer: Buffer, state: ListState): Unit =
-    if !area.isEmpty && lines.nonEmpty then
-      val selected    = state.selected.map(index => math.max(0, math.min(index, lines.size - 1)))
+    if !area.isEmpty && items.nonEmpty then
+      val selected    = state.selected.map(index => math.max(0, math.min(index, items.size - 1)))
       state.selected = selected
-      state.offset = ScrollWindow.offsetFor(state.offset, selected, lines.size, area.height)
+      state.offset = ScrollWindow.offsetFor(state.offset, selected, items.size, area.height)
       val symbolWidth = CharWidth.of(highlightSymbol)
       val padding     = " ".repeat(symbolWidth)
-      lines.slice(state.offset, state.offset + area.height).zipWithIndex.foreach { (line, row) =>
+      items.slice(state.offset, state.offset + area.height).map(lineOf).zipWithIndex.foreach { (line, row) =>
         val index      = state.offset + row
         val isSelected = selected.contains(index)
         val rowStyle   = if isSelected then style.patch(highlightStyle) else style

@@ -20,7 +20,13 @@ final class DslFaithfulnessSpec extends AnyFunSuite:
 
   private val handBuilt: Widget =
     (area, buffer) =>
-      val block = Block(Seq(BlockTitle.top(Line.styled("Hello", Style.Default))), BorderType.Rounded)
+      // the styles are the ambient theme's, not `Style.Default`: `panel` reads `Theme.border` for the frame and
+      // `Theme.primary` for the caption, so a faithful hand-built twin has to name the same two tokens
+      val block = Block(
+        Seq(BlockTitle.top(Line.styled("Hello", Theme.Dark.primary))),
+        BorderType.Rounded,
+        borderStyle = Theme.Dark.border,
+      )
       block.render(area, buffer)
       Column(
         Seq(

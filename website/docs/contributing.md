@@ -9,6 +9,16 @@ Contributions are welcome across runtime behavior, widgets, examples, tests,
 documentation, and design. The project favors small typed layers, visible ownership,
 and tests that exercise the same buffers users see.
 
+:::tip In a hurry?
+
+[`CONTRIBUTING.md`](https://github.com/oleksandr-balyshyn/glyphora/blob/main/CONTRIBUTING.md)
+at the repository root is the short version: the exact command block to run before
+pushing, and the six checks that gate a merge. This page is the long version — the
+architecture rules a change has to respect, how to add a widget end to end, and how to
+write the pull request.
+
+:::
+
 ## Set up the repository
 
 ```bash
@@ -67,13 +77,17 @@ Useful development commands:
 
 CI enforces constraints that protect the design:
 
-- no `java.lang.reflect` or `Class.forName` in main Scala sources;
-- no `String.substring` for layout math outside `CharWidth`;
+- no `java.lang.reflect` or `Class.forName` in main Scala sources — the examples' sources
+  included, since those are what people copy from;
+- no `String.substring` for layout math outside `CharWidth` (the weather example's JSON
+  parser is excluded by name: it indexes offsets in an ASCII wire format, which is not
+  layout math);
 - warnings are errors (`-deprecation -feature -unchecked -Wunused:all -Werror`);
 - Scalafmt owns formatting;
 - all tests run headlessly on Linux, which is the only platform CI covers;
-- every example compiles with GraalVM `--no-fallback` and starts safely without a TTY —
-  the CI list is derived from `examples/*/package.mill`, so adding a module is enough.
+- every example compiles with GraalVM `--no-fallback`, and every binary is then run with
+  no TTY and has to exit `1` printing `terminal not supported` — the CI list is derived
+  from `examples/*/package.mill`, so adding a module is enough.
 
 For general Scala conventions, read
 [`SCALA_CODE_STYLE.md`](https://github.com/oleksandr-balyshyn/glyphora/blob/main/SCALA_CODE_STYLE.md).
@@ -152,7 +166,7 @@ Before pushing:
 
 ```bash
 ./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources
-./mill __.fix --check
+./mill __.fix --check          # main *and* test sources
 ./mill __.compile
 ./mill core.test
 ./mill terminal.test

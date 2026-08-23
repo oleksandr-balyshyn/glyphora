@@ -50,7 +50,7 @@ import mill.*
 // test submodule — lives in `TuiExampleModule` in build.mill.
 object `package` extends build.TuiExampleModule {
 
-  def moduleDeps = Seq(build.core, build.terminal, build.runtime, build.widgets, build.dsl)
+  def moduleDeps = Seq(build.dsl)
 
   def mainClass = Some("io.worxbend.tui.examples.loadtest.Main")
 }
@@ -68,7 +68,7 @@ package io.worxbend.tui.examples.loadtest
 import io.worxbend.tui.dsl.*
 
 final class LoadTestApp extends TuiApp:
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("loadtest")(text("nothing to do yet · q to quit").dim).rounded
       .onKey(Key.char('q')) { quit() }
 
@@ -387,7 +387,6 @@ queue — and the app drains that queue once per render tick.
 package io.worxbend.tui.examples.loadtest
 
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.runtime.RunnerConfig
 
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 
@@ -458,7 +457,7 @@ final class LoadTestApp(
 Add the view and the two companions to the end of the same file:
 
 ```scala title="examples/loadtest/src/main/scala/io/worxbend/tui/examples/loadtest/Main.scala"
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     val current = stats.get
     panel(phaseLabel)(
       text(f"sent ${current.sent}%6d   ok ${current.ok}%6d   failed ${current.failed}%6d"),
@@ -509,8 +508,7 @@ Give the app its chrome and its two headline panels. Replace `view` and add thre
 methods:
 
 ```scala title="examples/loadtest/src/main/scala/io/worxbend/tui/examples/loadtest/Main.scala"
-  def view(using ReactiveScope): Element =
-    given Theme = theme
+  def view(using ReactiveScope, Theme): Element =
     scaffold(
       topBar = Some(topBar("loadtest", right = headline)),
       statusBar = Some(
@@ -532,7 +530,7 @@ methods:
     val total   = plan.get.requests
     panel(phaseLabel)(progressBar(current.sent, total).labelled(s"${current.sent} / $total"))
 
-  private def countersPanel(using ReactiveScope): Element =
+  private def countersPanel(using ReactiveScope, Theme): Element =
     val current = stats.get
     val seconds = elapsed.get.toMillis / 1000.0
     val rate    = if seconds <= 0.0 then 0.0 else current.sent / seconds
@@ -592,12 +590,12 @@ tick. Keep a rolling window of them.
     throughput.update(window => (window :+ batch.size.toLong).takeRight(LoadTestApp.ThroughputWindow))
     peakThroughput.update(peak => math.max(peak, batch.size.toLong))
 
-  private def throughputPanel(using ReactiveScope): Element =
+  private def throughputPanel(using ReactiveScope, Theme): Element =
     val window = throughput.get
     val peak   = peakThroughput.get
     panel(s"Throughput (peak $peak per ${LoadTestApp.TickRate.toMillis}ms)")(
       if window.isEmpty then text("no samples yet").dim.fill
-      else SparklineElement(window, max = Some(peak)).fg(Color.Cyan).fill
+      else sparkline(window).max(peak).fg(Color.Cyan).fill
     )
 
   private def body(using ReactiveScope, Theme): Element =
@@ -723,7 +721,7 @@ object LatencySummary:
   private val latency: Computed[LatencySummary] =
     Computed(LatencySummary.of(stats.get.latencies))
 
-  private def latencyPanel(using ReactiveScope): Element =
+  private def latencyPanel(using ReactiveScope, Theme): Element =
     val summary                                           = latency.get
     def statRow(label: String, micros: Long): Seq[String] = Seq(label, f"${LoadTestApp.ms(micros)}%9.2f")
     panel("Latency (ms)")(
@@ -827,7 +825,6 @@ The run's continuation arrives on the render thread, and it needs a guard.
   override def onStop(): Unit = runner.stop()
 
   private def showSummary(): Unit =
-    given Theme = theme
     summaryOpen.set(true)
     pushScreen(Screen { summaryView })
 
@@ -1067,7 +1064,8 @@ nothing further to configure:
 The binary starts in milliseconds and needs no JVM on the machine that runs it.
 Nothing in this app reflects, so no `reflect-config.json` is generated — see
 [Native binaries](./native-image). Run the binary with no TTY and it prints
-`UnsupportedTerminal` and exits cleanly, which is what CI asserts for every example.
+`glyphora: terminal not supported: dumb terminal (no TTY attached)` and exits 1, which is
+what CI asserts for every example.
 
 ## What you learned
 

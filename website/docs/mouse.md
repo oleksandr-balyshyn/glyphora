@@ -19,7 +19,8 @@ interactive elements opt in automatically.
 - `Tab` moves to the next focusable element;
 - `Shift+Tab` moves to the previous one;
 - clicking an interactive element focuses it first;
-- the active theme's `focus` style decorates the focused element;
+- the active theme's `focus` style decorates the focused element — and is also the
+  selection highlight every list-like element draws with, whether or not it has focus;
 - opening a modal removes everything below it from the tab order and from key and mouse routing.
 
 Make any custom element focusable with `.focusable`:

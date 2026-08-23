@@ -1,5 +1,6 @@
 package io.worxbend.tui.runtime
 
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import scala.util.control.NonFatal
 
@@ -17,10 +18,24 @@ object RenderThread:
   /** One runner's queue of work waiting to run on its render thread.
     *
     * `onError` is supplied by the runner that owns this loop and receives throwables escaping queued bodies.
+    *
+    * `limit`, when set, caps how many bodies may wait here: past the cap the *oldest* is dropped, and [[dropCount]]
+    * counts how many were. A runner's own loop is unlimited — its bodies are owed to a thread that is draining them
+    * every iteration, and dropping one would lose a continuation the app is waiting for. The shared `detached` queue
+    * sets a limit because it has no such thread: see [[RenderThread.detached]].
     */
-  final class RenderLoop private[runtime] (wake: () => Unit, private[runtime] val onError: RenderTaskErrorHandler):
+  final class RenderLoop private[runtime] (
+      wake: () => Unit,
+      private[runtime] val onError: RenderTaskErrorHandler,
+      limit: Option[Int] = None,
+  ):
 
     private val pending = ConcurrentLinkedQueue[() => Unit]()
+
+    // `ConcurrentLinkedQueue.size` walks the whole queue, so the depth is counted alongside it instead: `enqueue` is on
+    // the hot path of every Async continuation and timer tick
+    private val queued  = AtomicInteger(0)
+    private val dropped = AtomicLong(0)
 
     // read by every thread that queues work, written by the runner thread that owned this loop
     @volatile private var closed = false
@@ -28,12 +43,33 @@ object RenderThread:
     /** Queues `body` and nudges the runner, so it is picked up on the next iteration rather than at the next poll.
       *
       * A body queued after [[close]] is **dropped**: its runner has exited and nothing will ever drain this queue
-      * again, so keeping it would only grow memory. See [[Async]] for what that means for scheduled work.
+      * again, so keeping it would only grow memory. So is the oldest body still waiting, once a `limit` is set and
+      * reached. See [[Async]] for what that means for scheduled work.
       */
     private[runtime] def enqueue(body: () => Unit): Unit =
       if !closed then
         val _ = pending.add(body)
+        val _ = queued.incrementAndGet()
+        limit.foreach(trimTo)
         wake()
+
+    /** Drops the oldest waiting bodies until at most `cap` are left.
+      *
+      * The oldest rather than the newest, because this queue's bodies are continuations of work that has already
+      * happened: if only some of them can be kept, the ones describing the most recent state are the ones worth
+      * keeping. Stops early when the queue turns out to be empty — `queued` is incremented just after the body lands
+      * and decremented just after one is taken, so it can momentarily exceed what is actually in the queue, and this
+      * loop must not spin waiting for a body that a concurrent drain already took.
+      */
+    private def trimTo(cap: Int): Unit =
+      var trimming = queued.get() > cap
+      while trimming do
+        val evicted = pending.poll()
+        if evicted == null then trimming = false // scalafix:ok DisableSyntax; java.util.concurrent interop
+        else
+          val _ = queued.decrementAndGet()
+          val _ = dropped.incrementAndGet()
+          trimming = queued.get() > cap
 
     /** Retires this loop: whatever is still pending is discarded and nothing new is accepted.
       *
@@ -45,6 +81,10 @@ object RenderThread:
     private[runtime] def close(): Unit =
       closed = true
       pending.clear()
+      queued.set(0)
+
+    /** How many bodies this loop dropped because its `limit` was reached. Always `0` for an unlimited loop. */
+    private[runtime] def dropCount: Long = dropped.get()
 
     /** Runs everything queued, in FIFO order, isolating each body: a `NonFatal` throwable from one task goes to
       * `handler` and the drain continues with the next task, so one failing continuation can neither stop the runner
@@ -53,11 +93,17 @@ object RenderThread:
       * Runs on the render thread that owns this loop.
       */
     private[runtime] def drain(handler: RenderTaskErrorHandler = onError): Unit =
-      var task = pending.poll()
+      var task = take()
       while task != null do // scalafix:ok DisableSyntax; java.util.concurrent interop
         try task()
         catch case NonFatal(error) => handler.handle(error)
-        task = pending.poll()
+        task = take()
+
+    /** Takes the next waiting body, or `null` when there is none, keeping the depth count in step. */
+    private def take(): () => Unit =
+      val task = pending.poll()
+      val _    = if task != null then queued.decrementAndGet() else 0 // scalafix:ok DisableSyntax; queue interop
+      task
 
     private[runtime] def isEmpty: Boolean = pending.isEmpty
 
@@ -66,10 +112,32 @@ object RenderThread:
   // instead of deregistering the thread outright.
   private val loops = ConcurrentHashMap[Thread, List[RenderLoop]]()
 
+  /** How many bodies may wait on the unattributed queue before the oldest start being dropped.
+    *
+    * A frame is 16 ms, so this is roughly four seconds of a 60 Hz timer firing into a queue nobody drains: past that,
+    * work armed for a runner that never started is not a backlog anyone is owed. Declared before `detached` because it
+    * is read while that field is initialised.
+    */
+  private[runtime] val DetachedQueueLimit: Int = 256
+
   /** Work queued when the caller belongs to no runner and more than one is running — genuinely ambiguous, so it is
     * drained by whichever render thread gets there first. With zero or one runner the routing is exact.
+    *
+    * This is the one loop nobody owns: it is never closed, and nothing is guaranteed ever to drain it. An
+    * `Async.every(16.millis)` armed before any runner starts lands here and, unbounded, would append sixty closures a
+    * second for the life of the JVM — the same leak [[RenderLoop.close]] exists to prevent for an owned loop — and then
+    * run every one of them at once the moment some runner drained it. Hence [[DetachedQueueLimit]]: enough depth that a
+    * burst of continuations arriving just before a runner starts is delivered intact, and a ceiling past which the
+    * oldest are dropped rather than accumulated. [[detachedDrops]] makes that observable.
     */
-  private val detached = RenderLoop(() => (), RenderTaskErrorHandler.rethrow)
+  private val detached = RenderLoop(() => (), RenderTaskErrorHandler.rethrow, Some(DetachedQueueLimit))
+
+  /** How many unattributed bodies have been dropped for exceeding [[DetachedQueueLimit]] since the process started.
+    *
+    * Package-private, for the test that pins the bound: a queue that silently drops work needs one number that says it
+    * did.
+    */
+  private[runtime] def detachedDrops: Long = detached.dropCount
 
   /** Whether the calling thread may mutate UI state.
     *
@@ -82,11 +150,17 @@ object RenderThread:
 
   /** Defect-detection assertion: throws `IllegalStateException` when called off the render thread while one is
     * registered. A programming error, not a recoverable condition — hence throw, not `Either`.
+    *
+    * The message names the remedy as well as the fault, because "wrong thread" on its own leaves the reader to guess
+    * which of the two fixes applies: almost always the write belongs in an `Async` continuation (which already resumes
+    * here), and only work owned by a third-party library's own callback thread needs the explicit hop.
     */
   def checkRenderThread(): Unit =
     if !isRenderThread then
       throw IllegalStateException(
-        s"UI state must be mutated on the render thread, not '${Thread.currentThread().getName}'"
+        s"UI state must be mutated on the render thread, not '${Thread.currentThread().getName}'. " +
+          "Set it from an Async.run/runCatching callback (which already resumes on the render thread), " +
+          "or wrap the write in RenderThread.runOnRenderThread { ... }."
       )
 
   /** Runs `body` inline when already on the render thread, otherwise queues it for the next loop iteration. */

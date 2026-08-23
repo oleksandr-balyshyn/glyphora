@@ -13,8 +13,8 @@ final class FormControlsSpec extends AnyFunSuite:
   private def startApp(view0: ReactiveScope ?=> Element): Pilot =
     val backend = HeadlessBackend(Size(40, 8))
     val testApp = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
-      def view(using ReactiveScope): Element = view0
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = view0
     Pilot.start(backend) { testApp.runWith(backend) }.waitForIdle()
 
   private def quitApp(pilot: Pilot): Unit =

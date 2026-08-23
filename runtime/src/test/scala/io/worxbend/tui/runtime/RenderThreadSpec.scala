@@ -24,7 +24,7 @@ final class RenderThreadSpec extends AnyFunSuite:
       }
       foreign.start()
       foreign.join()
-      assert(thrown.exists(_.isInstanceOf[IllegalStateException]))
+      assert(thrown.exists { case _: IllegalStateException => true; case _ => false })
     finally RenderThread.unregister()
 
   test("Signal.set from a foreign thread is a defect while a render thread is registered"):
@@ -40,6 +40,12 @@ final class RenderThreadSpec extends AnyFunSuite:
       foreign.join()
       assert(thrown.nonEmpty)
       assert(signal.peek == 1)
+      // the exception message is the only guidance the author of the offending line gets, so it has to name both
+      // remedies, not just the fault
+      val message                   = thrown.flatMap(error => Option(error.getMessage)).getOrElse("")
+      assert(message.contains("not '"), s"the offending thread is not named: $message")
+      assert(message.contains("Async.run"), s"the usual remedy is not named: $message")
+      assert(message.contains("RenderThread.runOnRenderThread"), s"the explicit hop is not named: $message")
     finally RenderThread.unregister()
 
   test("runOnRenderThread runs inline when already on the render thread"):
@@ -109,6 +115,24 @@ final class RenderThreadSpec extends AnyFunSuite:
       assert(ran)
     finally RenderThread.unregister()
 
+  test("the unattributed queue is bounded, keeping the newest work and counting what it dropped"):
+    // the one queue nobody owns: an `Async.every` armed before any runner starts fills it, and nothing is guaranteed
+    // ever to drain it. Unbounded, that is a leak for the life of the JVM and then a flood the moment a runner arrives
+    RenderThread.drainPending() // start from an empty queue whatever ran before this test
+    val cap         = RenderThread.DetachedQueueLimit
+    val queued      = cap * 2
+    val dropsBefore = RenderThread.detachedDrops
+    val ran         = scala.collection.mutable.ArrayBuffer.empty[Int]
+    (1 to queued).foreach(i => RenderThread.runLater { val _ = ran.append(i) })
+
+    assert(RenderThread.detachedDrops - dropsBefore == queued - cap, "the queue grew past its cap")
+    RenderThread.drainPending()
+    assert(ran.size == cap, s"${ran.size} bodies survived a cap of $cap")
+    // the oldest went, not the newest: these are continuations of work that has already happened, so the ones
+    // describing the most recent state are the ones worth keeping
+    assert(ran.head == queued - cap + 1)
+    assert(ran.last == queued)
+
   test("the guard admits any registered render thread, so one runner can still mutate another's signals"):
     // documents a known limitation: registration is per-process, not per-signal, so ownership is not enforced
     val signal = Signal(1)
@@ -152,8 +176,9 @@ final class RenderThreadSpec extends AnyFunSuite:
       RenderThread.runLater(throw IllegalStateException("queued"))
       RenderThread.drainPending(loop)
       assert(seen.size == 1)
-      assert(seen.head.isInstanceOf[IllegalStateException])
-      assert(seen.head.getMessage == "queued")
+      seen.head match
+        case error: IllegalStateException => assert(error.getMessage == "queued")
+        case other                        => fail(s"expected the original IllegalStateException, got $other")
     finally RenderThread.unregister()
 
   test("a fatal error from a queued body still propagates past the drain"):

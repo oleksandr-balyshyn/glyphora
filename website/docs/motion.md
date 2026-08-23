@@ -17,7 +17,6 @@ to delay every interaction.
 Motion needs the runtime to produce frames while time passes:
 
 ```scala
-import io.worxbend.tui.runtime.RunnerConfig
 import scala.concurrent.duration.*
 
 override def config = RunnerConfig(tickRate = Some(50.millis))
@@ -53,7 +52,7 @@ is a complete animated app:
 ```scala
 override def config = RunnerConfig(tickRate = Some(50.millis))
 
-def view(using ReactiveScope): Element = spinner("deploying")
+def view(using ReactiveScope, Theme): Element = spinner("deploying")
 ```
 
 The read is **tracked**, which is what makes this more than a shorthand: a view only
@@ -154,7 +153,7 @@ import scala.concurrent.duration.*
 
 private val progress = Tween(0.0, 1.0, 800.millis, Easing.CubicOut)
 
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   gauge(progress.at(AnimationClock.elapsed))
 ```
 

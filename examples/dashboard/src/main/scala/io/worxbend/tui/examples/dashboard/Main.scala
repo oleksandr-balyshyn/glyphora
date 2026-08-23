@@ -1,8 +1,6 @@
 package io.worxbend.tui.examples.dashboard
 
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.runtime.RunnerConfig
-import io.worxbend.tui.widgets.{Dataset, GraphType}
 
 import scala.concurrent.duration.DurationInt
 
@@ -17,7 +15,7 @@ class DashboardApp extends TuiApp:
 
   override def onTick(): Unit = tick.update(_ + 1)
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     val t       = tick.get
     val load    = (math.sin(t * 0.1) + 1) / 2
     val samples = Vector.tabulate(60)(i => (math.sin((t + i) * 0.25) * 40 + 50).toLong)

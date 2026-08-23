@@ -22,7 +22,7 @@ final class DocumentedKeySpecSpec extends AnyFunSuite:
   private lazy val repoRoot: Option[Path] =
     Iterator
       .iterate(Paths.get("").toAbsolutePath)(_.getParent)
-      .takeWhile(_ != null)
+      .takeWhile(_ != null) // scalafix:ok DisableSyntax; `Path.getParent` returns null at the filesystem root
       .find(candidate => Files.isRegularFile(candidate.resolve("build.mill")))
 
   private def markdownSources(root: Path): Seq[Path] =

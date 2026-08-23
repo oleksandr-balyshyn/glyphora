@@ -217,6 +217,12 @@ final case class OrbitSpinner(
 
   /** The cells an explicit `radius` occupies — exact, not a bound. `None` when the figure is fitted to its area, which
     * is what stops the DSL element claiming a size it will not honour.
+    *
+    * Deliberately *not* the [[io.worxbend.tui.core.Measured]] mixin every other self-sizing widget uses, and the one
+    * exception to it: `Measured` splits the question into two independently-answerable halves (`widthAt`, `heightAt`),
+    * and here the two axes are one answer. A round figure's width and height are both derived from the same `radius` at
+    * the same `resolution`, so a caller that got one without the other would be holding half of a box — and
+    * `SizeClaim.box`, the only caller, needs both together or neither.
     */
   def preferredSize: Option[Size] = radius.map(OrbitSpinner.sizeFor(_, resolution))
 

@@ -6,6 +6,7 @@ import io.worxbend.tui.runtime.{
   Frame,
   GenerationalScope,
   ReactiveScope,
+  RenderThread,
   RunnerConfig,
   RunnerError,
   RunnerHandle,
@@ -34,6 +35,11 @@ private final class RunState(val splash: SplashPlayer):
   var lastTree: Option[Element] = None
   val tracker: FocusTracker     = FocusTracker()
 
+  /** This run's render loop, captured in `onStart` while it is still registered, so the exit path can hand the
+    * [[AnimationClock]] entry back. `None` until then, and for a run whose `onStart` never happened.
+    */
+  var renderLoop: Option[RenderThread.RenderLoop] = None
+
 /** The application entry point for the declarative DSL.
   *
   * `view` is re-evaluated under a tracking [[ReactiveScope]]: any `Signal` read during the last evaluation schedules a
@@ -58,11 +64,32 @@ private final class RunState(val splash: SplashPlayer):
   */
 trait TuiApp:
 
-  def view(using ReactiveScope): Element
+  /** The whole UI, as a function of current state. Re-evaluated whenever a `Signal` it read changes.
+    *
+    * Both contexts are supplied by the framework on every frame. The [[ReactiveScope]] is what makes a `Signal` read
+    * inside the body subscribe the next redraw. The [[Theme]] is this app's own [[theme]], handed in so that a themed
+    * helper called from here — `statusBar(bindings)`, `topBar(...)`, `panel(...)` — picks up the override rather than
+    * the library default.
+    */
+  def view(using ReactiveScope, Theme): Element
 
   def config: RunnerConfig = RunnerConfig()
 
-  /** The theme the built-in overlays (toasts, palette) and chrome presets render with. */
+  /** The theme the built-in overlays (toasts, palette), the chrome presets and the themed element factories render
+    * with. Overriding it re-themes all of them, because it is handed to [[view]] as a `using` parameter.
+    *
+    * Read once per frame, on the render thread, *outside* the tracking scope — so this is a constant for the lifetime
+    * of a run unless something else asks for a repaint. An app that switches theme at runtime should back it with a
+    * `Signal[Theme]` and read that signal inside `view`:
+    *
+    * {{{
+    * private val palette = Signal(Theme.Dark)
+    * override def theme: Theme = palette.peek
+    * def view(using ReactiveScope, Theme): Element =
+    *   given Theme = palette.get // tracked: flipping the signal repaints, and shadows the handed-in theme
+    *   scaffold(statusBar = Some(statusBar(bindings)))(body)
+    * }}}
+    */
   def theme: Theme = Theme.Dark
 
   /** Called once on the render thread, after the terminal is ready and before the first frame is composed.
@@ -112,7 +139,7 @@ trait TuiApp:
   /** The terminal's current size, as a reactive read: a `view` that branches on it re-evaluates on every resize.
     *
     * {{{
-    * def view(using ReactiveScope): Element =
+    * def view(using ReactiveScope, Theme): Element =
     *   if terminalSize.width < 80 then column(header, tabbedContent(pages, active))
     *   else row(sidebar.percent(25), detail.fill)
     * }}}
@@ -281,6 +308,9 @@ trait TuiApp:
       TerminalRunner(backend, effectiveConfig, redrawRequested = () => run.invalidated).run(
         handle =>
           activeHandle.set(Some(handle))
+          // on the render thread, and while this run is still registered on it: the clock this app's animations read
+          // is the one belonging to this loop, and the exit path below can no longer resolve it for itself
+          run.renderLoop = Some(AnimationClock.attachToCurrentLoop())
           onStart()
         ,
         handleEvent(_, run, _),
@@ -291,6 +321,8 @@ trait TuiApp:
       // than talking to a backend the runner has already closed
       activeHandle.set(None)
       onStop()
+      // after `onStop`, so an app cancelling timers there still animates whatever its last frames show
+      run.renderLoop.foreach(AnimationClock.releaseLoop)
 
   // ---- the loop ----
 
@@ -399,7 +431,12 @@ trait TuiApp:
     val consumed   = run.lastTree.exists(EventRouter.dispatchMouse(_, mouse, target))
     consumed || focusMoved
 
-  /** The composed view: base -> screens -> palette -> toasts. */
+  /** The composed view: base -> screens -> palette -> toasts.
+    *
+    * The theme is resolved once here and passed *into* `view` and every screen's `view` as a `using` argument, not
+    * merely installed as a given around the call — a given installed here is lexically scoped to this method and would
+    * not be in scope inside an app's own `view` body.
+    */
   private def effectiveView(using scope: ReactiveScope): Element =
     given Theme     = theme
     val withScreens = screenStack.get.reverse.foldLeft(view) { (below, screen) =>

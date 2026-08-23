@@ -21,7 +21,7 @@ components*, not smaller ones.
 the view to resizes, so a branch on it re-evaluates automatically:
 
 ```scala
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   if terminalSize.width < 80 then
     column(
       topBar("deployctl").length(1),
@@ -64,7 +64,7 @@ one reactively:
 | `Large` | 120 and up | a maximized window |
 
 ```scala
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   breakpoint match
     case Breakpoint.XSmall => column(summary)
     case Breakpoint.Small  => column(summary, recentEvents)

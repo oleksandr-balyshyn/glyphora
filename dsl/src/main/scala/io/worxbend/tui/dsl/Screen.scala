@@ -18,21 +18,25 @@ enum Presentation:
   * `TuiApp.pushScreen`/`popScreen`.
   */
 trait Screen:
-  def view(using ReactiveScope): Element
+
+  /** This screen's element tree. Carries the same two contexts as `TuiApp.view` — see [[View]] — so a screen written as
+    * its own class still gets the running app's [[Theme]] rather than the library default.
+    */
+  def view(using ReactiveScope, Theme): Element
   def presentation: Presentation = Presentation.Modal
 
 object Screen:
 
   /** A modal screen from a view function (`Screen { dialogElement }`). */
-  def apply(element: ReactiveScope ?=> Element): Screen =
+  def apply(element: View): Screen =
     new Screen:
-      def view(using ReactiveScope): Element = element
+      def view(using ReactiveScope, Theme): Element = element
 
   /** A screen that fully replaces the view beneath it. */
-  def full(element: ReactiveScope ?=> Element): Screen =
+  def full(element: View): Screen =
     new Screen:
-      def view(using ReactiveScope): Element  = element
-      override def presentation: Presentation = Presentation.Full
+      def view(using ReactiveScope, Theme): Element = element
+      override def presentation: Presentation       = Presentation.Full
 
 /** An intro shown before the first view render: `content` (typically a `bigText` logo composition) plays `effect` and
   * holds for at least `minimumDuration`; any key skips it. Wire via `TuiApp.splash`.

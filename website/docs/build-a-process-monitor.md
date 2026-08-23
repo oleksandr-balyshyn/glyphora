@@ -33,16 +33,20 @@ import mill.*
 // test submodule — lives in `TuiExampleModule` in build.mill.
 object `package` extends build.TuiExampleModule {
 
-  def moduleDeps = Seq(build.core, build.terminal, build.runtime, build.widgets, build.dsl)
+  def moduleDeps = Seq(build.dsl)
 
   def mainClass = Some("io.worxbend.tui.examples.procmon.Main")
 }
 ```
 
-Examples depend on the modules directly rather than on the published `tui-dsl`
-artifact, so a change to `core` breaks them in the same build. Outside this
-repository you would take the single dependency from
-[Getting started](./getting-started#1-add-glyphora); everything below is identical.
+Examples depend on the module in this repository rather than on the published `tui-dsl`
+artifact, so a change to `core` breaks them in the same build. One entry is enough:
+Mill's `moduleDeps` are transitive, and `build.dsl` already depends on `build.core`,
+`build.terminal`, `build.widgets`, `build.runtime` and `build.macros`. Listing those
+again would not add anything to the build — it would only invite the list to fall out of
+date with what the example actually imports. Outside this repository you would take the
+single dependency from [Getting started](./getting-started#1-add-glyphora); everything
+below is identical.
 
 ```scala title="examples/procmon/src/main/scala/io/worxbend/tui/examples/procmon/Main.scala"
 package io.worxbend.tui.examples.procmon
@@ -55,7 +59,7 @@ final class ProcmonApp extends TuiApp:
     binding("q", "quit")(quit()),
   )
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("procmon")(text("no processes yet").dim).rounded
 
 // `TuiApp` supplies `main`, so the launcher only needs an object that *is* the app.
@@ -177,7 +181,7 @@ final class ProcmonApp(val source: ProcessSource = SyntheticProcessSource()) ext
     binding("q", "quit")(quit()),
   )
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("procmon")(text(s"${processes.get.size} processes").dim).rounded
 ```
 
@@ -242,7 +246,7 @@ final class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) exten
 
   val processes: Signal[Vector[ProcessInfo]] = Signal(source.sample().toVector)
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("procmon")(text(s"${processes.get.size} processes · source ${source.name}").dim).rounded
 ```
 
@@ -281,10 +285,10 @@ Add `java.util.Locale` and `io.worxbend.tui.widgets.{ColumnSort, DataTable, Data
       process.command,
     )
 
-  private def header(using ReactiveScope): Element =
+  private def header(using ReactiveScope, Theme): Element =
     panel("procmon")(text(s"${processes.get.size} processes · source ${source.name}").dim).rounded.length(3)
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     column(
       header,
       dataTable(buildTable(processes.get), tableState).fill,
@@ -330,8 +334,8 @@ A busiest-first table, the way `top` opens:
 
 ## 5. Refresh on a timer
 
-The snapshot is frozen. Add `io.worxbend.tui.runtime.RunnerConfig` and
-`scala.concurrent.duration.DurationInt` to the imports, then replace the eager
+The snapshot is frozen. Add `scala.concurrent.duration.DurationInt` to the imports
+(`RunnerConfig` already comes in with `io.worxbend.tui.dsl.*`), then replace the eager
 sample with a tick-driven one.
 
 ```scala title="Main.scala"
@@ -570,7 +574,7 @@ Add `binding("/", "filter rows")(filterOpen.set(true))`, then rebuild `view` so 
 filter row sits between the header and the table:
 
 ```scala title="Main.scala"
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     val table = buildTable(processes.get)
     syncFilter()
     column(
@@ -618,9 +622,10 @@ on the app as fields, not inside `view`.
 
 Put `Summary` — `private final case class Summary(count: Int, cpuPercent: Double,
 memPercent: Double)` — in the companion, then call `summaryPanel` from `view` with
-`table.visibleRows(tableState).size`, under a `given Theme = theme` on the method's
-first line. **Delete** `header`: a private method nothing calls is a build failure
-here.
+`table.visibleRows(tableState).size`. Give `summaryPanel` a `(using Theme)` parameter
+so the panel it builds is themed by the app: `view` receives the theme and hands it
+down, but only to helpers that ask for it. **Delete** `header`: a private method
+nothing calls is a build failure here.
 
 A `Computed` built inside `view` would re-subscribe on every redraw and never be
 released — that is what `Computed.dispose` exists to clean up after. These are sums
@@ -644,9 +649,8 @@ In `object ProcmonApp`:
 ```
 
 ```scala title="Main.scala"
-  def view(using ReactiveScope): Element =
-    given Theme = theme
-    val table   = buildTable(processes.get)
+  def view(using ReactiveScope, Theme): Element =
+    val table = buildTable(processes.get)
     syncFilter()
     val visible = table.visibleRows(tableState)
     column(
@@ -700,7 +704,7 @@ offline and repeatable.
 ```scala title="examples/procmon/src/test/scala/io/worxbend/tui/examples/procmon/ProcmonAppSpec.scala"
 package io.worxbend.tui.examples.procmon
 
-import io.worxbend.tui.core.{KeyCode, Size}
+import io.worxbend.tui.core.Size
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 

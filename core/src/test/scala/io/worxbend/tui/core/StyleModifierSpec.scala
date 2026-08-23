@@ -15,11 +15,17 @@ final class StyleModifierSpec extends AnyFunSuite:
     val both = Modifiers.Bold | Modifiers.Underline
     assert(both.without(Modifiers.Bold) == Modifiers.Underline)
 
-  test("withoutFg / withoutBg restore the terminal default color"):
+  test("withoutFg / withoutBg select the terminal default color explicitly"):
     val style = Style.Default.withFg(Color.Red).withBg(Color.Blue)
-    assert(style.withoutFg.fg.isEmpty)
-    assert(style.withoutBg.bg.isEmpty)
+    assert(style.withoutFg.fg.contains(Color.Reset))
+    assert(style.withoutBg.bg.contains(Color.Reset))
     assert(style.withoutFg.bg.contains(Color.Blue))
+
+  test("a cleared color survives being layered onto a colored style"):
+    // the reason `withoutFg` records `Color.Reset` instead of `None`: `None` is "silent about the foreground", which
+    // `patch` resolves by falling back to the layer underneath, so the color the caller dropped would come back
+    assert(Style.Default.withFg(Color.Red).patch(Style.Default.withoutFg).fg.contains(Color.Reset))
+    assert(Style.Default.withBg(Color.Blue).patch(Style.Default.withoutBg).bg.contains(Color.Reset))
 
   test("clearing a modifier a style lacks changes nothing it renders, but is still recorded"):
     // the rendered attributes are untouched; what the call adds is the record that makes the clear survive `patch`,

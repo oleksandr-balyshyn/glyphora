@@ -1,11 +1,7 @@
 package io.worxbend.tui.examples.weather
 
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.runtime.{RenderThread, RunnerConfig}
-import io.worxbend.tui.widgets.TextInputState
 
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 
 private enum Status:
@@ -15,8 +11,8 @@ private enum Status:
   case Failed(city: String, message: String)
 
 /** weather: fetches live conditions from the free Open-Meteo API — a real HTTP round trip kicked off from a key
-  * handler, run on a background thread, and reflected back into the UI via `RenderThread.runOnRenderThread` once the
-  * response lands. Shows how to bridge async I/O into the render-thread-only `Signal` model.
+  * handler, run on a background thread by `Async.runCatching`, and resumed on the render thread once the response
+  * lands. Shows how to bridge blocking I/O into the render-thread-only `Signal` model without hand-rolling a hop.
   *
   * Keys: type a city + `Enter` to search · `Esc` to quit.
   */
@@ -28,7 +24,7 @@ class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
   private val status: Signal[Status]          = Signal(Status.Idle)
   private val history: Signal[Vector[String]] = Signal(Vector.empty)
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     column(
       panel("City")(
         input(cityInput, placeholder = "e.g. Kyiv, Lisbon, Tokyo...").onKeyEvent {
@@ -48,7 +44,7 @@ class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
       case _                           => false
     }
 
-  private def currentConditionsView(using ReactiveScope): Element =
+  private def currentConditionsView(using ReactiveScope, Theme): Element =
     status.get match
       case Status.Idle                  => text("Type a city name and press Enter.").dim
       case Status.Loading(city)         =>
@@ -74,10 +70,16 @@ class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
       cityInput.clear()
       status.set(Status.Loading(city))
       history.update(existing => (city +: existing.filterNot(_.equalsIgnoreCase(city))).take(5))
-      Future(client.fetch(city)).foreach { result =>
-        RenderThread.runOnRenderThread {
-          status.set(result.fold(error => Status.Failed(city, WeatherError.describe(error)), Status.Loaded.apply))
-        }
+      // `Async.runCatching` does the two things this needs and `Future(...).foreach` did neither of: it runs the
+      // blocking HTTP call on a worker thread and *resumes on the render thread*, so the `status.set` below is an
+      // ordinary signal write with no `RenderThread.runOnRenderThread` hop; and it delivers a thrown exception as a
+      // `Left` instead of dropping it, so a `client.fetch` that blows up shows an error rather than leaving the UI
+      // spinning on `Status.Loading` for ever.
+      Async.runCatching(client.fetch(city)) {
+        case Right(Right(report)) => status.set(Status.Loaded(report))
+        case Right(Left(failure)) => status.set(Status.Failed(city, WeatherError.describe(failure)))
+        case Left(thrown)         =>
+          status.set(Status.Failed(city, Option(thrown.getMessage).getOrElse(thrown.getClass.getSimpleName)))
       }
 
 object Main extends WeatherApp()

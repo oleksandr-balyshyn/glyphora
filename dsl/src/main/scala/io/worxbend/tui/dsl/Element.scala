@@ -21,7 +21,7 @@ private[dsl] type BuiltinPasteHandler = String => Boolean
   * The node types themselves live one family per file (`LayoutElements`, `DisplayElements`, …). What closes the
   * hierarchy to outside implementors is the `private[dsl]` on [[withProps]]: no class outside this package can
   * implement a package-private member, so no class outside this package can extend `Element`. That is why the trait is
-  * deliberately *not* `sealed` — sealing would add nothing but a rule that all 49 node types share one file.
+  * deliberately *not* `sealed` — sealing would add nothing but a rule that all 53 node types share one file.
   */
 trait Element:
 

@@ -22,7 +22,7 @@ class FormDemoApp extends TuiApp:
       .mapValidated(age => if age >= 18 then Right(age) else Left("must be 18 or older")),
   )
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("Signup")(
       Form(formState),
       spacer,

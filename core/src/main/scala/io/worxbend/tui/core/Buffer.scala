@@ -103,9 +103,15 @@ final class Buffer(val area: Rect):
     * A wide (two-column) cluster occupies its cell plus a continuation cell to the right, which [[set]] reserves; a
     * wide cluster that would only half-fit at the right edge is dropped entirely. Grapheme clusters that begin with a
     * combining mark (no base character before them in `text`) are skipped.
+    *
+    * A row outside `area` returns at once. That is the same clipping [[set]] already applies cell by cell, moved ahead
+    * of the work: without it a line drawn above or below the buffer still split itself into grapheme clusters and built
+    * one [[Cell]] per character, only for every one of them to be rejected. Scrolled content, where most rows are
+    * off-window by design, is what makes that the common case rather than a corner one.
     */
   def setString(x: Int, y: Int, text: String, style: Style): Unit =
-    if CharWidth.isPrintableAscii(text) then setAsciiString(x, y, text, style)
+    if y < area.y || y >= area.bottom then ()
+    else if CharWidth.isPrintableAscii(text) then setAsciiString(x, y, text, style)
     else
       var column   = x
       // set by the branch below, so that "dropped a half-fitting cluster" is a distinct exit from "ran out of columns"

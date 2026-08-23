@@ -47,8 +47,8 @@ final class ContainerElementsSpec extends AnyFunSuite:
     val state   = ScrollViewState()
     val content = column((0 until 8).map(n => text(s"row $n").fill)*)
     val app     = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("q", "quit")(quit()))
-      def view(using ReactiveScope): Element = scrollView(content, contentHeight = 8, state)
+      override def bindings: KeyBindings            = KeyBindings(binding("q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = scrollView(content, contentHeight = 8, state)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenLines.head.startsWith("row 0"))
@@ -64,7 +64,7 @@ final class ContainerElementsSpec extends AnyFunSuite:
     val selected = Signal(0)
     val app      = new TuiApp:
       override def bindings: KeyBindings = KeyBindings(binding("q", "quit")(quit()))
-      def view(using ReactiveScope): Element =
+      def view(using ReactiveScope, Theme): Element =
         // no explicit `selected.get`: the factory reads the signal tracked, so switching pages re-renders on its own
         tabbedContent("One" -> text("page one"), "Two" -> text("page two"))(selected)
     val pilot    = Pilot.start(backend) { app.runWith(backend) }

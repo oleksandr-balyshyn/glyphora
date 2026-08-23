@@ -16,6 +16,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mill
+
+      # The tag decides nothing about what gets published — `SonatypeCentralPublishModule`
+      # uploads whatever `TuiPublishModule.publishVersion` in build.mill says. So a `v0.13.0`
+      # tag pushed while build.mill still reads "0.12.0" would quietly publish 0.12.0 a second
+      # time, and Maven Central coordinates are immutable: there is no way to take that back.
+      # Comparing the two here turns a permanent mistake into a red job you fix with one commit.
+      - name: Tag matches the version in build.mill
+        run: |
+          expected="${GITHUB_REF_NAME#v}"
+          actual=$(./mill show core.publishVersion | tr -d '"')
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::tag $GITHUB_REF_NAME wants version '$expected' but TuiPublishModule.publishVersion in build.mill is '$actual' — bump build.mill and re-tag" >&2
+            exit 1
+          fi
+          echo "publishing version $actual"
+
       - name: Publish to Maven Central
         env:
           MILL_SONATYPE_USERNAME: ${{ secrets.MILL_SONATYPE_USERNAME }}

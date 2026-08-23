@@ -86,7 +86,7 @@ Field.bool("subscribe").mapValidated { accepted =>
 ## Render and submit
 
 ```scala
-def view(using ReactiveScope): Element =
+def view(using ReactiveScope, Theme): Element =
   panel("Create account")(
     Form(signup),
     spacer(1),

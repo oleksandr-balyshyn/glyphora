@@ -1,13 +1,13 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Color, Constraint, Style, Widget}
+import io.worxbend.tui.core.{CharWidth, Color, Constraint, Style, Widget}
 import io.worxbend.tui.widgets as w
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 /** A spinner whose colors were resolved from the ambient [[Theme]] at construction.
   *
-  * The theme supplies the glyph and label styles; anything the call site sets with `.color`/`.bold`/`.style` layers on
+  * The theme supplies the glyph and label styles; anything the call site sets with `.fg`/`.bold`/`.styled` layers on
   * top of the glyph style, so `spinner(tick).fg(Color.Red)` recolors the moving part and leaves the label alone.
   */
 final case class SpinnerElement(
@@ -127,10 +127,47 @@ final case class AnimatedTextElement(
 
   private[dsl] def withProps(props: ElementProps): AnimatedTextElement = copy(props = props)
 
+/** Scrolling ticker text: one row, travelling leftwards, wrapping round with a run of blanks between repetitions.
+  *
+  * The speed is a *reading rate* — cells per second — not a step per tick, so the same ticker reads at the same pace
+  * whatever the app's `tickRate` happens to be. Around eight cells per second is comfortable. [[period]] says the same
+  * thing from the other end, as the time one full lap takes, which is the vocabulary the rest of this file's animated
+  * nodes ([[SkeletonElement]], [[LinearSpinnerElement]], [[IndeterminateElement]]) already use.
+  */
+final case class MarqueeElement(
+    content: String,
+    elapsed: FiniteDuration,
+    cellsPerSecond: Double = 8.0,
+    gap: Int = 4,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  type Self = MarqueeElement
+  def widget: Widget = w.Marquee(content, elapsed, props.style, gap, cellsPerSecond)
+
+  /** Sets the reading rate in cells per second. */
+  def speed(cells: Double): MarqueeElement = copy(cellsPerSecond = cells)
+
+  /** Sets how many blank cells separate the end of the text from the start of its next repetition. */
+  def gap(cells: Int): MarqueeElement = copy(gap = cells)
+
+  /** Sets how long one full lap takes, converted into the reading rate the widget actually animates on.
+    *
+    * A lap is the text plus the gap, so this is the knob for putting two tickers of different lengths in step — say one
+    * lap every ten seconds each, whatever they happen to say. A non-positive duration, or empty content with no gap,
+    * leaves the rate alone rather than dividing by zero.
+    */
+  def period(duration: FiniteDuration): MarqueeElement =
+    val lap     = CharWidth.graphemeClusters(content).size + gap
+    val seconds = duration.toNanos / 1e9
+    if lap <= 0 || seconds <= 0.0 then this else copy(cellsPerSecond = lap / seconds)
+
+  private[dsl] def withProps(props: ElementProps): MarqueeElement = copy(props = props)
+  private[dsl] override def claim: SizeClaim                      = SizeClaim.OneRow
+
 /** An orbit spinner whose colors were resolved from the ambient [[Theme]] at construction.
   *
   * The [[LoadingTheme]] supplies both: the resting path takes `track`, the arc takes `spinner`. Anything the call site
-  * sets with `.color`/`.bold`/`.style` layers onto the arc only, so `orbitSpinner().fg(Color.Red)` recolors the moving
+  * sets with `.fg`/`.bold`/`.styled` layers onto the arc only, so `orbitSpinner().fg(Color.Red)` recolors the moving
   * part and leaves the path themed — the rule [[SpinnerElement]] follows for its glyph and label.
   */
 final case class OrbitSpinnerElement(

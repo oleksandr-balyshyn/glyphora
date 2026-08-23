@@ -56,5 +56,8 @@ final class CharWidthFastPathSpec extends AnyFunSuite, ScalaCheckPropertyChecks:
     assert(CharWidth.asciiSymbol('a') == "a")
     assert(CharWidth.asciiSymbol(' ') == " ")
     assert(CharWidth.asciiSymbol('~') == "~")
-    assert(CharWidth.asciiSymbol(27.toChar) == null)
-    assert(CharWidth.asciiSymbol('漢') == null)
+    // `asciiSymbol` returns a null sentinel outside printable ASCII by design — its Scaladoc explains why an `Option`
+    // was rejected there. This is the test that pins that contract, so it is the one place that has to name it.
+    def isSentinel(symbol: String): Boolean = symbol == null // scalafix:ok DisableSyntax; the documented sentinel
+    assert(isSentinel(CharWidth.asciiSymbol(27.toChar)))
+    assert(isSentinel(CharWidth.asciiSymbol('漢')))

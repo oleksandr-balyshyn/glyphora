@@ -1,7 +1,6 @@
 package io.worxbend.tui.examples.todolist
 
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.widgets.{ListState, TextInputState}
 
 /** todo-list: a `list` + `input` with focus switching — multi-widget focus management and list-selection state, end to
   * end.
@@ -14,7 +13,7 @@ class TodoApp extends TuiApp:
   val inputState: TextInputState    = TextInputState()
   val listState: ListState          = ListState()
 
-  def view(using ReactiveScope): Element =
+  def view(using ReactiveScope, Theme): Element =
     panel("Todo")(
       input(inputState, placeholder = "what needs doing?").onKeyEvent {
         case KeyEvent(KeyCode.Enter, _) =>

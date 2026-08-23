@@ -12,6 +12,22 @@ enum Json:
   case JBool(value: Boolean)
   case JNull
 
+/** The parser. Threads an index through the input rather than slicing it, so no intermediate strings are allocated.
+  *
+  * ==Why this file is exempt from the `String.substring` ban==
+  *
+  * CI rejects `.substring(` everywhere in main sources except `core/CharWidth.scala`, because in a terminal UI a
+  * character index is almost never the index you want: an emoji, a CJK ideograph or a combining mark occupies a
+  * different number of *columns* than it does `Char`s, so cutting a string by `Char` index tears glyphs in half and
+  * misaligns every border to its right. `CharWidth` exists so that all display-width and truncation arithmetic goes
+  * through one grapheme-aware implementation.
+  *
+  * None of that applies here. The three `substring` calls below index a JSON wire format, whose structural syntax —
+  * `{`, `[`, `"`, digits, `true`/`false`/`null`, and the four hex digits of a `\uXXXX` escape — is ASCII by
+  * specification, one `Char` per character, and is never drawn on screen. They are byte-offset arithmetic on a
+  * protocol, not display-width arithmetic on text. The workflow lists this file by name alongside `CharWidth.scala` for
+  * exactly that reason; any *new* `substring` in this file needs the same justification or it does not belong.
+  */
 object Json:
   import scala.annotation.tailrec
 
@@ -118,6 +134,8 @@ object Json:
                     if pos + 6 > s.length then Left("truncated unicode escape")
                     else
                       val codePoint =
+                        // Offset arithmetic on ASCII, not display width — see the note on `object Json`. A `\u`
+                        // escape is exactly four hex digits, so `pos + 2` to `pos + 6` is a fixed-size ASCII window.
                         try Some(Integer.parseInt(s.substring(pos + 2, pos + 6), 16))
                         catch case _: NumberFormatException => None
                       codePoint match
@@ -129,6 +147,8 @@ object Json:
 
   private def parseNumber(s: String, start: Int): Either[String, (Json, Int)] =
     val end = numberEnd(s, start)
+    // Offset arithmetic on ASCII, not display width — see the note on `object Json`. `numberEnd` stops at the first
+    // character outside `-+.eE0-9`, all of which are one `Char` wide.
     s.substring(start, end).toDoubleOption match
       case Some(value) => Right((JNumber(value), end))
       case None        => Left(s"invalid number at offset $start")
@@ -141,6 +161,8 @@ object Json:
 
   private def parseLiteral(s: String, start: Int, literal: String, value: Json): Either[String, (Json, Int)] =
     val end = start + literal.length
+    // Offset arithmetic on ASCII, not display width — see the note on `object Json`. `literal` is only ever
+    // `"true"`, `"false"` or `"null"`.
     if end <= s.length && s.substring(start, end) == literal then Right((value, end))
     else Left(s"expected '$literal' at offset $start")
 

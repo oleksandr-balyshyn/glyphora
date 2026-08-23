@@ -9,11 +9,18 @@ Start here when an app does not render, input is missing, or native behavior dif
 from the JVM. Work from the first relevant symptom; most problems come from TTY
 availability, state lifetime, tracked reads, or event consumption.
 
-## UnsupportedTerminal at startup
+## terminal not supported at startup
 
-glyphora needs a controlling TTY. An IDE output panel, redirected pipe, or headless
-CI process intentionally returns `UnsupportedTerminal` instead of entering raw mode.
-Run the app in a terminal:
+The app exits immediately with status 1 and one line on standard error:
+
+```text
+glyphora: terminal not supported: dumb terminal (no TTY attached)
+```
+
+glyphora needs a controlling TTY. An IDE output panel, a redirected pipe, or a headless
+CI process has none, so the backend deliberately returns `BackendError.UnsupportedTerminal`
+rather than entering raw mode on something that cannot leave it — a half-configured
+terminal is far harder to recover from than a refusal. Run the app in a terminal:
 
 ```bash
 ./mill examples.showcase.run
@@ -30,11 +37,17 @@ Check these in order:
 3. A signal only notifies when the new value is not equal (`!=`) to the old one.
 4. Replace immutable collections instead of mutating one in place.
 5. Third-party callbacks must write on the render thread.
+6. Caller-owned widget state — `ListState`, `TextInputState`, `TextAreaState`,
+   `TreeState`, `DataTableState`, `DirectoryTreeState`, `ScrollViewState`, `LogState`,
+   `MenuState` — is a plain mutable object the reactive layer cannot see. Writing to
+   one changes the next frame but does not ask for one. Pair the mutation with a
+   `Signal` write, or call `requestRedraw()` — see [A background result updates nothing
+   on screen](#a-background-result-updates-nothing-on-screen).
 
 ```scala
 private val rows = Signal(Vector.empty[Row])
 
-def view(using ReactiveScope) = renderRows(rows.get)
+def view(using ReactiveScope, Theme) = renderRows(rows.get)
 def append(row: Row) = rows.update(_ :+ row)
 ```
 
@@ -46,7 +59,7 @@ must be created once on the app or owning screen:
 ```scala
 private val inputState = TextInputState()
 
-def view(using ReactiveScope) = input(inputState)
+def view(using ReactiveScope, Theme) = input(inputState)
 ```
 
 Creating `TextInputState()` in `view` replaces it with an empty editor on the next
@@ -89,7 +102,6 @@ unique among focusable elements in the current tree.
 Both advance on ticks. Configure a cadence:
 
 ```scala
-import io.worxbend.tui.runtime.RunnerConfig
 import scala.concurrent.duration.*
 
 override def config = RunnerConfig(tickRate = Some(100.millis))

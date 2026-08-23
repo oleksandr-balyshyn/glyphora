@@ -1,17 +1,6 @@
 package io.worxbend.tui.examples.showcase
 
 import io.worxbend.tui.dsl.*
-import io.worxbend.tui.runtime.RunnerConfig
-import io.worxbend.tui.widgets.{
-  IndeterminateMotion,
-  ListState,
-  LogState,
-  OrbitPath,
-  ScrollViewState,
-  ProgressStyle,
-  SpinnerPreset,
-  TextInputState,
-}
 
 import scala.concurrent.duration.DurationInt
 
@@ -74,8 +63,7 @@ class ShowcaseApp extends TuiApp:
     }
   })
 
-  def view(using ReactiveScope): Element =
-    given Theme = theme
+  def view(using ReactiveScope, Theme): Element =
     scaffold(
       topBar =
         Some(topBar("glyphora", tabs = Seq("Widgets", "Loading", "Log", "About"), selectedTab = selectedTab.get)),
@@ -83,12 +71,12 @@ class ShowcaseApp extends TuiApp:
       statusBar = Some(statusBar(bindings)),
     )(mainPane)
 
-  private def sidebarPane: Element =
+  private def sidebarPane(using Theme): Element =
     panel("Menu")(
       list(Seq("dashboard", "deployments", "services", "settings"), sidebarList)
     )
 
-  private def mainPane(using ReactiveScope): Element =
+  private def mainPane(using ReactiveScope, Theme): Element =
     tabbedContent(
       "Widgets" -> widgetsPage,
       "Loading" -> loadingPage,
@@ -99,11 +87,11 @@ class ShowcaseApp extends TuiApp:
   /** A live gallery of every loading preset, animating against the app's own tick counter — the quickest way to pick
     * one, and a standing check that no preset renders as a hole.
     */
-  private def loadingPage(using ReactiveScope): Element =
+  private def loadingPage(using ReactiveScope, Theme): Element =
     // the gallery is taller than most terminals, so it scrolls rather than hiding its tail below the fold
     scrollView(loadingGallery, loadingScroll)
 
-  private def loadingGallery(using ReactiveScope): Element =
+  private def loadingGallery(using ReactiveScope, Theme): Element =
     val progress = ((ticks.get % 50) + 1) / 50.0
     column(
       rule("spinners"),
@@ -142,7 +130,7 @@ class ShowcaseApp extends TuiApp:
       ).fill,
     )
 
-  private def widgetsPage(using ReactiveScope): Element =
+  private def widgetsPage(using ReactiveScope, Theme): Element =
     val t = ticks.get
     column(
       spacer(1),
