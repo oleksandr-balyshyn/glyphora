@@ -139,7 +139,7 @@ an ordinary assertion:
 
 ```scala
 val backend = HeadlessBackend(Size(100, 20))
-val pilot   = Pilot.start(backend) { val _ = DashboardApp().runWith(backend) }
+val pilot   = Pilot.start(backend) { DashboardApp().runWith(backend) }
 pilot.waitForIdle()
 assert(pilot.screenText.contains("Services"))
 

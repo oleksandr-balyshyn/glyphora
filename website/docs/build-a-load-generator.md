@@ -45,27 +45,20 @@ you can diff your file against it after every step.
 package build.examples.loadtest
 
 import mill.*
-import mill.javalib.NativeImageModule
 
-object `package` extends build.TuiModule with NativeImageModule {
+// Everything an example has in common — the GraalVM pin, `--no-fallback`, and a Pilot-capable
+// test submodule — lives in `TuiExampleModule` in build.mill.
+object `package` extends build.TuiExampleModule {
 
   def moduleDeps = Seq(build.core, build.terminal, build.runtime, build.widgets, build.dsl)
 
   def mainClass = Some("io.worxbend.tui.examples.loadtest.Main")
-
-  def jvmVersion = "graalvm-community:23.0.1"
-
-  def nativeImageOptions = Seq("--no-fallback")
-
-  object test extends TuiTests {
-    def moduleDeps = super.moduleDeps ++ Seq(build.`test-support`)
-  }
 }
 ```
 
 Mill discovers the module from the file's path, so there is nothing to register
-elsewhere. The `test` object is declared now rather than at step 12 because adding
-it later would mean editing the build in the middle of a tutorial about
+elsewhere. `TuiExampleModule` already carries the `test` submodule the tests at step 12
+need, so the build never has to be edited in the middle of a tutorial about
 concurrency. Outside this repository the same module is one `ScalaModule` with
 `mvnDeps` on `tui-dsl` — see [Getting started](./getting-started).
 
@@ -79,9 +72,8 @@ final class LoadTestApp extends TuiApp:
     panel("loadtest")(text("nothing to do yet · q to quit").dim).rounded
       .onKey(Key.char('q')) { quit() }
 
-object Main:
-  def main(args: Array[String]): Unit =
-    LoadTestApp().run().left.foreach(error => println(s"failed to run: $error"))
+// `TuiApp` supplies `main`, so the launcher only needs an object that *is* the app.
+object Main extends LoadTestApp()
 ```
 
 ```bash
@@ -424,8 +416,11 @@ final class LoadTestApp(
     binding("s", "start the run")(start()),
     binding("x", "stop the run")(stop()),
     binding("r", "reset counters")(reset()),
-    binding("q", "quit")(quitCleanly()),
+    binding("q", "quit")(quit()),
   )
+
+  /** Stops the workers on the way out, whatever ended the run. */
+  override def onStop(): Unit = runner.stop()
 
   override def onTick(): Unit =
     if phase.peek == Phase.Running then
@@ -458,10 +453,6 @@ final class LoadTestApp(
   private def clearCounters(): Unit =
     stats.set(RunStats.empty)
     elapsed.set(0.millis)
-
-  private def quitCleanly(): Unit =
-    runner.stop()
-    quit()
 ```
 
 Add the view and the two companions to the end of the same file:
@@ -483,9 +474,7 @@ Add the view and the two companions to the end of the same file:
       case Phase.Finished(RunOutcome.Stopped)         => "Stopped"
       case Phase.Finished(RunOutcome.Crashed(reason)) => s"Crashed: $reason"
 
-object Main:
-  def main(args: Array[String]): Unit =
-    LoadTestApp().run().left.foreach(error => println(s"failed to run: $error"))
+object Main extends LoadTestApp()
 
 object LoadTestApp:
   private[loadtest] val TickRate: FiniteDuration = 100.millis
@@ -549,10 +538,10 @@ methods:
     val rate    = if seconds <= 0.0 then 0.0 else current.sent / seconds
     panel("Counters")(
       text(f"sent     ${current.sent}%7d"),
-      text(f"ok       ${current.ok}%7d").color(Color.Green),
-      if current.failed > 0 then text(f"failed   ${current.failed}%7d").color(Color.Red)
+      text(f"ok       ${current.ok}%7d").fg(Color.Green),
+      if current.failed > 0 then text(f"failed   ${current.failed}%7d").fg(Color.Red)
       else text(f"failed   ${current.failed}%7d").dim,
-      text(f"req/s    $rate%7.1f").color(Color.Cyan),
+      text(f"req/s    $rate%7.1f").fg(Color.Cyan),
       text(f"elapsed  $seconds%6.1fs"),
       text(f"workers  ${runner.workersAlive}%7d").dim,
     )
@@ -608,7 +597,7 @@ tick. Keep a rolling window of them.
     val peak   = peakThroughput.get
     panel(s"Throughput (peak $peak per ${LoadTestApp.TickRate.toMillis}ms)")(
       if window.isEmpty then text("no samples yet").dim.fill
-      else SparklineElement(window, max = Some(peak)).color(Color.Cyan).fill
+      else SparklineElement(window, max = Some(peak)).fg(Color.Cyan).fill
     )
 
   private def body(using ReactiveScope, Theme): Element =
@@ -832,10 +821,10 @@ The run's continuation arrives on the render thread, and it needs a guard.
       phase.set(Phase.Finished(outcome))
       showSummary()
 
-  /** Ctrl+C should not race the workers on the way out. `false` lets teardown proceed. */
-  override def onInterrupt(): Boolean =
-    runner.stop()
-    false
+  /** Stops the workers on the way out, whatever ended the run — `q`, Ctrl+C, a
+    * backend failure. `onStop` is the one hook every exit path passes through.
+    */
+  override def onStop(): Unit = runner.stop()
 
   private def showSummary(): Unit =
     given Theme = theme
@@ -850,10 +839,11 @@ The run's continuation arrives on the render thread, and it needs a guard.
 
 A run that was reset or restarted while in flight still delivers its callback — the
 work was submitted and nothing can un-submit it. Comparing `runId` drops the stale
-one instead of letting it declare the *current* run finished. `quitCleanly` from step
-5 already stops the workers before leaving the loop: `Async`'s threads are daemons,
-so the JVM would exit regardless, but a headless test outlives the runner and “no
-thread survives quit” is a property worth actually having.
+one instead of letting it declare the *current* run finished. `onStop` from step 5
+already stops the workers on the way out — every exit path passes through it, `q` and
+Ctrl+C alike: `Async`'s threads are daemons, so the JVM would exit regardless, but a
+headless test outlives the runner and “no thread survives quit” is a property worth
+actually having.
 
 ```scala title="examples/loadtest/src/main/scala/io/worxbend/tui/examples/loadtest/Main.scala"
   private def summaryView(using ReactiveScope, Theme): Element =
@@ -868,18 +858,18 @@ thread survives quit” is a property worth actually having.
       Seq(
         text(phaseLabel).bold,
         text(f"requests    ${current.sent}%d in $seconds%.2f s"),
-        text(f"success     $success%.2f %%").color(successColor),
+        text(f"success     $success%.2f %%").fg(successColor),
         text(f"throughput  ${current.sent / seconds}%.1f req/s"),
-        text(f"fastest     ${LoadTestApp.ms(summary.min)}%.2f ms").color(Color.Green),
-        text(f"slowest     ${LoadTestApp.ms(summary.max)}%.2f ms").color(Color.Yellow),
+        text(f"fastest     ${LoadTestApp.ms(summary.min)}%.2f ms").fg(Color.Green),
+        text(f"slowest     ${LoadTestApp.ms(summary.max)}%.2f ms").fg(Color.Yellow),
         text(
           f"p50/p90/p99 ${LoadTestApp.ms(summary.p50)}%.2f / ${LoadTestApp.ms(summary.p90)}%.2f" +
             f" / ${LoadTestApp.ms(summary.p99)}%.2f ms"
-        ).color(Color.Cyan),
+        ).fg(Color.Cyan),
         spacer(1),
       ) ++ (
         if worstErrors.isEmpty then Seq(text("no errors").dim)
-        else worstErrors.map((reason, count) => text(s"[$count] $reason").color(Color.Red))
+        else worstErrors.map((reason, count) => text(s"[$count] $reason").fg(Color.Red))
       ) ++ Seq(spacer, text("Enter dismiss  ·  r reset  ·  q quit").dim)
     centered(56, 17)(FilledElement(panel("Run summary")(body*).rounded, summon[Theme].primary))
 ```
@@ -931,12 +921,20 @@ override def bindings: KeyBindings = KeyBindings(
   binding("]", "double the request count")(scaleRequests(double = true)),
   binding("[", "halve the request count")(scaleRequests(double = false)),
   binding("enter", "dismiss the summary")(dismissSummary()),
-  binding("q", "quit")(quitCleanly()),
+  binding("q", "quit")(quit()),
 )
 ```
 
-Then change `Main` to `LoadTestApp.fromArgs(args).run()`. Unknown flags are ignored on
-purpose: an example that dies on a typo teaches nothing. The plan is editable only
+This is the one app in the tutorials that cannot simply be `object Main extends
+LoadTestApp()`: it has to read the command line before the app exists. Build the app
+from the arguments and hand them on to the `main` `TuiApp` already gave it:
+
+```scala title="Main.scala"
+object Main:
+  def main(args: Array[String]): Unit = LoadTestApp.fromArgs(args).main(args)
+```
+
+Unknown flags are ignored on purpose: an example that dies on a typo teaches nothing. The plan is editable only
 while idle, so the headline cannot change under a run in flight.
 
 ```bash
@@ -972,7 +970,7 @@ terminal would.
 ```scala title="examples/loadtest/src/test/scala/io/worxbend/tui/examples/loadtest/LoadTestAppSpec.scala"
 package io.worxbend.tui.examples.loadtest
 
-import io.worxbend.tui.core.{KeyCode, Size}
+import io.worxbend.tui.core.Size
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 
@@ -986,7 +984,7 @@ final class LoadTestAppSpec extends AnyFunSuite:
   private def startedApp(target: Target, plan: Plan): (LoadTestApp, Pilot) =
     val backend = HeadlessBackend(Size(88, 30))
     val app     = LoadTestApp(target, plan)
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     (app, pilot)
 
@@ -1002,9 +1000,10 @@ final class LoadTestAppSpec extends AnyFunSuite:
       .map(_.getName)
 ```
 
-`val _ = app.runWith(backend)` is not noise: `runWith` returns an `Either`, and this
-repository compiles with `-Wunused:all -Werror`, so a discarded result is a build
-failure. `waitForIdle` proves the posted key events were consumed; it says nothing
+Passing `app.runWith(backend)` straight through is not noise: `runWith` returns an
+`Either[RunnerError, Unit]`, and `Pilot.start` takes that result so a run that failed
+— an unrestorable terminal, a handler that threw — fails the test rather than reading
+as a clean exit. `waitForIdle` proves the posted key events were consumed; it says nothing
 about a background run finishing, whose results only reach the UI on a later render
 tick — under parallel test load that tick can be starved for a while, which is why
 every assertion about a run waits on a condition with a generous deadline rather
@@ -1013,7 +1012,7 @@ than sleeping.
 ```scala title="examples/loadtest/src/test/scala/io/worxbend/tui/examples/loadtest/LoadTestAppSpec.scala"
   test("a completed run accounts for every request and raises the summary screen"):
     val (app, pilot) = startedApp(FakeTarget(failureRate = 0.0), Plan(requests = 60, concurrency = 6))
-    pilot.pressKey(KeyCode.Char('s'))
+    pilot.press("s")
 
     assert(waitUntil()(app.phase.peek == Phase.Finished(RunOutcome.Completed)))
     val finished = app.stats.peek
@@ -1023,17 +1022,17 @@ than sleeping.
     assert(waitUntil()(pilot.screenText.contains("Run summary")))
     assert(pilot.screenText.contains("no errors"))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination(5.seconds))
 
   test("quitting mid-run leaves no worker thread behind"):
     val (app, pilot) =
       startedApp(FakeTarget(failureRate = 0.0, pace = 2.millis), Plan(requests = 5000, concurrency = 8))
-    pilot.pressKey(KeyCode.Char('s'))
+    pilot.press("s")
     assert(waitUntil()(app.stats.peek.sent > 0))
     assert(liveThreadsNamed(app.workerThreadPrefix).nonEmpty, "the pool should be busy before we quit")
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination(5.seconds))
 
     assert(waitUntil()(app.workersAlive == 0))

@@ -10,12 +10,17 @@ implementation. `HeadlessBackend` records the same rendered buffers and accepts 
 same event ADT, so tests can exercise real input and redraw cycles without opening a
 PTY or comparing image pixels.
 
-There are two useful levels: render one widget into a buffer, or drive a complete
-`TuiApp`.
+There are three useful levels: render one widget into a buffer, snapshot a whole
+frame, or drive a complete `TuiApp`.
+
+Everything on this page ships in the **`tui-test`** artifact
+(`io.worxbend::tui-test`), alongside `tui-core`, `tui-terminal`, `tui-widgets`,
+`tui-runtime`, `tui-macros` and `tui-dsl`. Add it as a test-only dependency; the Scala
+package is `io.worxbend.tui.testsupport`.
 
 ## Test a widget buffer
 
-Inside this repository, `BufferAssertions` turns buffers into readable strings:
+`BufferAssertions` turns buffers into readable strings:
 
 ```scala
 import io.worxbend.tui.core.Text
@@ -53,53 +58,101 @@ assert(cell.style.fg.contains(Color.Cyan))
 Keep style assertions focused on meaningful semantics; asserting every empty cell
 makes harmless renderer changes noisy.
 
+## Snapshot a whole frame
+
+Asserting on individual rows stops scaling once a screen has a border, a header, and
+three panes. `GoldenFrames` compares the entire rendered frame against a checked-in
+text file — a *golden frame* — so a layout regression shows up as a diff of the
+picture rather than as one failed row assertion.
+
+```scala
+import io.worxbend.tui.testsupport.GoldenFrames
+
+GoldenFrames.assertMatches("dashboard-first-render", buffer)
+```
+
+The name identifies a fixture on the test classpath at
+`golden/dashboard-first-render.txt` — that is, `src/test/resources/golden/` in the
+module being tested. On a mismatch the failure prints the expected and the actual
+frame in full, one after the other. A fixture that does not exist yet fails with an
+assertion telling you to record it.
+
+### Regenerate a golden frame
+
+You never write these files by hand. Run the tests with `GLYPHORA_GOLDEN_UPDATE`
+pointing at the resources directory to write, and every `assertMatches` call writes
+its *actual* frame instead of comparing:
+
+```bash
+GLYPHORA_GOLDEN_UPDATE=widgets/src/test/resources ./mill widgets.test
+```
+
+Nothing is compared during such a run — every `assertMatches` records and returns —
+so each one also prints a line on stderr saying so, which is how a job that
+accidentally inherited the variable is told apart from a real test run.
+
+Then read the diff before committing it. A golden frame is only as good as the review
+of the change to it: regenerating without looking turns a regression into a
+checked-in expectation.
+
+### Trailing blank rows do not count
+
+Comparison normalises both sides first: trailing whitespace is stripped from each row
+(that is `BufferAssertions.text`), then trailing line terminators are stripped from
+the frame as a whole. A widget that leaves the bottom two rows of its area untouched
+therefore matches a golden file that ends after the last row with content, and an
+editor that adds or removes a final newline cannot break a test. Blank rows *between*
+content are significant and are compared like any other row.
+
 ## Drive a full app with Pilot
 
 `Pilot` starts the app on a daemon thread, posts input into a `HeadlessBackend`, and
 waits until the event queue is idle:
 
 ```scala
-import io.worxbend.tui.core.{KeyCode, Size}
+import io.worxbend.tui.core.Size
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 
 val backend = HeadlessBackend(Size(44, 8))
 val app = CounterApp()
 val pilot = Pilot.start(backend) {
-  val _ = app.runWith(backend)
+  app.runWith(backend)
 }
 
 pilot.waitForIdle()
 assert(pilot.screenText.contains("Count: 0"))
 
-pilot
-  .pressKey(KeyCode.Char('+'))
-  .pressKey(KeyCode.Char('+'))
-  .waitForIdle()
+pilot.press("+", "+").waitForIdle()
 
 assert(pilot.screenText.contains("Count: 2"))
 
-pilot.pressKey(KeyCode.Char('q'))
+pilot.press("q")
 assert(pilot.awaitTermination())
 ```
+
+`press` takes **the same key specs `binding` takes** — `"q"`, `"ctrl+s"`,
+`"shift+tab"`, `"esc"`, `"f2"`, `"up"`, `"+"`. Both go through the one parser in
+`tui-core`, so a test presses the string the application was written against instead
+of a hand-translated `KeyEvent` that can drift away from it. Pass several specs to
+post several key events in order. A spec that does not parse throws
+`IllegalArgumentException` naming the spec and what is wrong with it, exactly as a
+malformed `binding` does.
+
+`pressKey(code, modifiers)` remains for the occasional test that wants to build the
+`KeyCode`/`KeyModifiers` value directly — for a key with no spec spelling, say — but
+`press` is the form to reach for.
 
 `waitForIdle` waits for posted events to be consumed and for the backend to complete
 an idle read. It is stronger and less flaky than sleeping for an arbitrary number of
 milliseconds.
-
-> **0.12.0 packaging note:** `Pilot` and `BufferAssertions` currently live in this
-> repository's internal `test-support` module and are not published to Maven Central.
-> They document and test the intended public test API; downstream projects can drive
-> `HeadlessBackend` directly until that artifact is published.
 
 ## Test focus and text entry
 
 ```scala
 pilot
   .typeText("buy milk")
-  .pressKey(KeyCode.Enter)
-  .pressKey(KeyCode.Tab)
-  .pressKey(KeyCode.Down)
+  .press("enter", "tab", "down")
   .waitForIdle()
 
 assert(app.items.peek.contains("buy milk"))
@@ -129,15 +182,24 @@ pilot.resize(80, 24).waitForIdle()
 assert(pilot.screenLines.size == 24)
 ```
 
-Post specific kinds through the backend when you need scroll or drag:
+Scroll and drag have their own methods, so no test has to hand-build a `MouseEvent`:
 
 ```scala
-import io.worxbend.tui.core.*
+pilot.scrollDown(20, 4).waitForIdle()          // one wheel notch; `times` posts several
+pilot.drag(20, 4, 20, 9).waitForIdle()         // press, move, release
+pilot.mouseDown(20, 4).mouseMove(20, 9).mouseUp(20, 9).waitForIdle()
+```
 
-backend.postEvent(Event.Mouse(
-  MouseEvent(20, 4, MouseEventKind.Drag, KeyModifiers.None)
-))
-pilot.waitForIdle()
+`click` is exactly `mouseDown` followed by `mouseUp`. Each one takes an optional
+`modifiers` argument for a Ctrl- or Shift-click.
+
+When an assertion has to wait for something other than the queue going quiet, use
+`waitUntil` rather than a sleep — it re-checks the condition, re-raises any failure the
+app threw, and fails with the description you gave it if the timeout runs out:
+
+```scala
+pilot.waitUntil("the first sample arrives")(app.samples.peek.nonEmpty)
+pilot.waitForDraws(3)   // the app repainted at least three times
 ```
 
 Keep coordinates tied to a deliberate test layout and size. A test that clicks a
@@ -151,12 +213,26 @@ focus ring, a progress bar's fill colour — reach for the frame itself:
 
 ```scala
 assert(pilot.cellAt(0, 0).style.fg == theme.loading.spinner.fg)
-assert(pilot.cellAt(2, 0).style.modifiers.has(Modifiers.Bold))
+assert(pilot.cellAt(2, 0).style.modifiers.hasAny(Modifiers.Bold))
 ```
 
 `pilot.lastFrame` is the whole `Buffer` for a sweep across rows; `cellAt(x, y)` is the
 single cell. Both fail the test if nothing has been drawn yet, rather than returning
 an empty frame that an assertion would pass against for the wrong reason.
+
+The block hands back whatever the runner returned — `runWith` already returns
+`Either[RunnerError, Unit]`, so nothing has to be written to discard it. The pilot
+watches both ways a run can be wrong:
+
+- a **throwable** escaping the block kills the app thread;
+- a **`Left(RunnerError)`** is an orderly exit that still failed — the terminal could
+  not be restored, an event handler threw, a queued continuation blew up.
+
+Either one is reported on the *test* thread by the next `waitForIdle`, `screenLines`,
+`lastFrame`, `isRunning` or `awaitTermination` call, as an `AssertionError` naming the
+cause. Without that, a failed run read as a clean exit and an assertion about the last
+frame passed against whatever happened to be on screen. A fixture with nothing to
+return — one that blocks on a latch, say — ends its block with `Right(())`.
 
 This matters more than it looks for the animated widgets. An `orbitSpinner` OR-s its
 dot masks so the ring never erodes, which means its **glyphs are identical at every
@@ -223,7 +299,7 @@ val client = new WeatherClient:
 val app = WeatherApp(client)
 val pilot = start(app)
 
-pilot.typeText("Kyiv").pressKey(KeyCode.Enter).waitForIdle()
+pilot.typeText("Kyiv").press("enter").waitForIdle()
 assert(pilot.screenText.contains("24.0°C"))
 ```
 
@@ -254,13 +330,26 @@ Use fixed seeds for `coalesce` and `dissolve`.
 
 ```bash
 ./mill __.compile
-./mill __.test
+
+# tests, one module at a time — the sequence CI runs
+./mill core.test
+./mill terminal.test
+./mill widgets.test
+./mill runtime.test
+./mill macros.test
+./mill dsl.test
+./mill test-support.test
+
 ./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources
 
 # Manual app and render-loop check
 ./mill examples.showcase.run
 ./mill widgets.test.runMain io.worxbend.tui.widgets.RenderLoopBench
 ```
+
+One command per module rather than `./mill __.test`, because a single combined step
+reports only "still running": a module that hangs cannot be told apart from one that
+is slow. CI runs exactly this sequence, each step with its own timeout.
 
 GitHub Actions runs the same commands in granular jobs: discipline greps that need no
 JDK, a formatting check, one compile of the library, then the library tests, one job per

@@ -70,7 +70,7 @@ rule](./widgets#the-state-ownership-rule).
 ## Invalidate on every refresh
 
 `DataTable` memoises its filtered, sorted view on the state, keyed on
-`(sortColumn, sortAscending, filter, rowCount)` — re-sorting ten thousand rows on
+`(sort, filter, rowCount)` — re-sorting ten thousand rows on
 every frame is what pushes a redraw past the tick budget. Drop the cache
 yourself whenever the data changes:
 
@@ -113,14 +113,14 @@ private def cellsOf(process: ProcessInfo): Seq[String] =
 ```
 
 The alternative is to sort the domain objects yourself and hand the widget rows
-that are already in order, leaving `tableState.sortColumn = None`:
+that are already in order, leaving `tableState.sort = None`:
 
 ```scala
 val ordered = processes.get.sortBy(-_.cpuPercent)
 dataTable(buildTable(ordered), tableState).fill
 ```
 
-That costs the header's `▲`/`▼` indicator, which is drawn from `sortColumn` — you
+That costs the header's `▲`/`▼` indicator, which is drawn from `sort` — you
 own signalling the sort in the column title. What cannot work is a unit suffix
 inside the cell: it silently drops the column back to text ordering, and text
 ordering of `"9.5"` against `"11.0"` is wrong in a way nobody reports as a bug.
@@ -128,7 +128,7 @@ ordering of `"9.5"` against `"11.0"` is wrong in a way nobody reports as a bug.
 ## Bind sort keys, and mind the case
 
 `DataTable` ships no sort or filter keys. Up/Down move the selection while
-focused, PageUp/PageDown turn the page once a `pageSize` is set, and everything
+focused, PageUp/PageDown turn the page once `paging` is set, and everything
 else is yours to declare:
 
 ```scala
@@ -221,11 +221,15 @@ and refresh.
 
 ## Page without arithmetic bugs
 
-Paging is opt-in: without a `pageSize` the body scrolls, PageUp/PageDown are left
-unconsumed and keep bubbling to your bindings.
+Paging is opt-in: with `paging` unset the body scrolls, PageUp/PageDown are left
+unconsumed and keep bubbling to your bindings. A page size and a page number are
+one value, `Paging`, because neither means anything without the other — a page
+number with no page size describes nothing the widget can draw.
 
 ```scala
-tableState.pageSize = Some(20)
+import io.worxbend.tui.widgets.Paging
+
+tableState.paging = Some(Paging(size = 20, page = 0))
 
 tableState.nextPage(table.filteredRows(tableState).size)
 tableState.previousPage()
@@ -237,9 +241,9 @@ the end into blank rows. Both calls clear the selection and the offset
 deliberately, because a highlight inherited from the previous page reads as a
 choice the reader did not make. And with a page size set, `selected` indexes the
 *page* rather than the whole filtered set, so the identity search above must run
-over the page. `pageSize = Some(area.height - 2)` is the tempting idiom and
-yields `Some(0)` on a two-row terminal; the widget floors the page at one row
-rather than showing nothing on every page for ever.
+over the page. `Paging(size = area.height - 2, page = 0)` is the tempting idiom
+and yields a size of zero on a two-row terminal; the widget floors the page at
+one row rather than showing nothing on every page for ever.
 
 ## Scroll with the wheel
 
@@ -248,8 +252,6 @@ uncustomised table does nothing at all, which reads as a hung application. Add
 one handler, and turn mouse reporting on with `RunnerConfig(mouseCapture = true)`:
 
 ```scala
-import io.worxbend.tui.core.MouseEventKind
-
 dataTable(table, tableState)
   .onMouseEvent { event =>
     event.kind match

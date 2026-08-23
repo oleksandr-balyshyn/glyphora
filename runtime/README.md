@@ -13,13 +13,18 @@ model, and the reactive state primitives.
   setup), `runOnRenderThread`, `runLater`. `Signal.set` asserts it.
 - **`Runner` / `TerminalRunner` / `Frame` / `RunnerConfig`** — the loop: terminal
   setup/teardown, diff-driven redraws, tick emission, resize handling.
+- **`Stopwatch` / `Timer` / `TickDriven`** — caller-owned tick clocks. They produce the
+  `elapsed` that `tui-core`'s motion values (`Progress`, `Easing`, `Tween`, `Spring`,
+  `Effect`) are pure functions of; the curves themselves live in `tui-core` so that
+  `tui-widgets` can reach them too.
 
 ```scala
 TerminalRunner(backend, RunnerConfig(tickRate = Some(250.millis))).run(
-  handleEvent = (event, handle) => ...,   // Boolean: should redraw
+  onStart = handle => ...,                // render thread, before the first frame
+  handleEvent = (event, handle) => ...,   // EventOutcome.Redraw / EventOutcome.Ignored
   render = frame => frame.renderWidget(widget, frame.area),
 )
 ```
 
 Testing: pair with `HeadlessBackend` (in `tui-terminal`) and the `Pilot` driver (in
-`test-support/`) to drive full event/render cycles without a TTY.
+`tui-test`) to drive full event/render cycles without a TTY.

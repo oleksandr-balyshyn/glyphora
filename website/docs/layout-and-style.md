@@ -80,10 +80,18 @@ For independent horizontal and vertical alignment, use `place`:
 place(
   width = 36,
   height = 5,
-  horizontal = Align.End,
-  vertical = Align.Start,
+  horizontal = Alignment.Right, // far edge across
+  vertical = Alignment.Left,    // near edge down: the top
 )(toastPreview)
 ```
+
+Both axes use `Alignment`, the same `Left`/`Center`/`Right` enum that positions a `Block`
+title and a `Paragraph`'s text. On the vertical axis read `Left` as *top* and `Right` as
+*bottom*: it is the near edge of the axis and the far one. (There used to be a second
+enum, `Align(Start, Center, End)`, meaning exactly this and landing one keystroke from
+`Alignment` in every application's scope. It is gone.) `Flex` — `Start`, `End`, `Center`,
+`SpaceBetween`, … — is a different question and stays: it says how leftover space is
+shared out among *many* children, not where *one* block sits.
 
 App-oriented presets cover frequent shapes:
 
@@ -91,6 +99,28 @@ App-oriented presets cover frequent shapes:
 sidebarLayout(navigation, content, sideWidth = 26)
 masterDetail(projectList, projectDetails, masterWidth = 32)
 ```
+
+## Pad inside a border
+
+A `panel` reserves blank cells between its border and its children:
+
+```scala
+panel("Summary")(summaryLines).padding(1)                        // the usual case
+panel("Summary")(summaryLines).padded(Padding.horizontal(2))     // columns only
+panel("Summary")(summaryLines)
+  .padded(Padding(left = 4, right = 1, top = 0, bottom = 0))     // each side named
+```
+
+`.padding(n)` is deliberately *not* `n` cells on all four sides. A terminal cell is about
+twice as tall as it is wide, so one blank row eats about twice the screen one blank
+column does, and a 24-row terminal cannot spare a row top and bottom as cheaply as an
+80-column one can spare a column. `.padding(n)` therefore reserves `n` rows above and
+below and `2 * n` columns either side — `Padding.proportional(n)` — which is what reads
+as an even margin. `Padding.zero`, `.uniform`, `.horizontal`, `.vertical` and
+`.symmetric(x, y)` name the other shapes.
+
+Padding is charged to the panel's measured height too, so a padded panel inside a
+`scrollView` still reports the rows it really occupies.
 
 ## Distribute leftover space
 
@@ -105,8 +135,13 @@ row(
 ```
 
 Available modes are `.center`, `.spaceBetween`, `.spaceAround`, `.spaceEvenly`, and
-`.flexEnd`. They matter only when space remains; a `.fill` child intentionally
-consumes that space first.
+`.flexEnd`, plus `.flex(mode)` and `.gap(cells)`. They matter only when space
+remains; a `.fill` child intentionally consumes that space first.
+
+These helpers exist only on `row` and `column` — the two containers that lay children
+out along an axis. Writing `text("x").center` is a compile error rather than a call
+that quietly does nothing. `.rounded` and `.doubleBorder` are typed the same way: they
+exist only on `panel`.
 
 ## Style elements fluently
 
@@ -116,16 +151,38 @@ shared widget:
 ```scala
 text("production")
   .bold
-  .color(Color.White)
-  .background(Color.Red)
+  .fg(Color.White)
+  .bg(Color.Red)
 
 panel("Audit log")(logView).rounded
-panel("Danger zone")(dangerView).doubleBorder.color(Color.Red)
+panel("Danger zone")(dangerView).doubleBorder.fg(Color.Red)
 ```
 
 The built-in modifiers are `.bold`, `.dim`, `.italic`, `.underline`, `.reverse`,
-`.color(...)`, and `.background(...)`. Use `.styled` when you need a complete
+`.fg(...)`, and `.bg(...)`. Use `.styled` when you need a complete
 `Style` transformation.
+
+`.fg`/`.bg` name the same two things `Style.withFg`/`withBg` do, and the same two things
+every other terminal toolkit calls them. On a `Style` the builders keep the `with`
+prefix, because `Style` is a case class whose fields are already called `fg` and `bg` and
+a field and a method cannot share a name.
+
+A `Style` also remembers what it was asked to turn *off*. `Style.Default.notBold` is
+not the same value as `Style.Default`: it carries "bold is cleared", so layering it
+over a bold base removes the bold instead of being ignored. That is what makes one
+element opt out of an inherited style:
+
+```scala
+withStyle(_.bold) {
+  column(
+    text("headline"),                  // bold, inherited
+    text("footnote").styled(_.notBold), // opts out
+  )
+}
+```
+
+The `not*` builders and the plain ones are last-call-wins in both directions:
+`.notBold.bold` is bold, `.bold.notBold` is not.
 
 Apply a base style to a whole subtree with `withStyle`:
 

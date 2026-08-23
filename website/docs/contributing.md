@@ -16,12 +16,32 @@ git clone git@github.com:oleksandr-balyshyn/glyphora.git
 cd glyphora
 
 ./mill __.compile
-./mill __.test
+
+# tests, one module at a time — the sequence CI runs
+./mill core.test
+./mill terminal.test
+./mill widgets.test
+./mill runtime.test
+./mill macros.test
+./mill dsl.test
+./mill test-support.test
 ```
+
+Every `examples/<name>` module has a suite too (`./mill examples.showcase.test`, and so
+on); CI runs one job per example, discovered from the `examples/` directory.
+
+Run the tests per module rather than as `./mill __.test`. That is what CI does, and
+for a reason worth knowing: a single combined step only ever reports "still running",
+so a module that hangs cannot be told apart from a module that is merely slow. One
+command per module names the culprit immediately.
 
 The build uses Mill. Every Scala module has a `package.mill`; shared Scala version,
 strict compiler flags, ScalaTest wiring, and publication metadata live in
-`build.mill`.
+`build.mill`. Two shared traits carry the repetition: `TuiPilotTests` is a test
+submodule that can also drive a whole app through `Pilot`, and `TuiExampleModule` is
+everything an `examples/<name>` module needs — the GraalVM pin, `--no-fallback`, and
+that test submodule — so an example's own `package.mill` declares only its
+`moduleDeps` and its `mainClass`.
 
 Useful development commands:
 
@@ -62,16 +82,24 @@ For general Scala conventions, read
 
 1. **Choose state ownership.** A stateless widget implements `Widget`; an interactive
    or scrollable renderer uses `StatefulWidget[S]`, with state owned by the caller.
-2. **Implement in `widgets/`.** Depend only on `tui-core`. Render inside the supplied
-   `Rect`, clip safely, and route all visible-width logic through `CharWidth`.
-3. **Test the buffer.** Cover empty and tiny areas, normal content, truncation,
+2. **Order the constructor parameters the same way every other widget does:** required
+   data first, then `style`, then any specialised styles, then glyph/symbol overrides.
+   A reader can then tell content from appearance at the call site without opening the
+   widget.
+3. **Implement in `widgets/`, in its own file named after the widget.** Depend only on
+   `tui-core`. Render inside the supplied `Rect`, clip safely, and route all
+   visible-width logic through `CharWidth`. A render rule two widgets share belongs in a
+   `private[widgets]` object named for the concept, not copied into both.
+4. **Test the buffer.** Cover empty and tiny areas, normal content, truncation,
    Unicode, selection/focus style, and state boundaries with `BufferAssertions`.
-4. **Add the DSL element.** Put its retained data and built-in key/mouse behavior in
-   `dsl/Element.scala`; add a factory in `object Element` and export it from
-   `dsl.scala`.
-5. **Test interaction.** Use `Pilot` for focus, keys, mouse behavior, resize, and
+5. **Add the DSL element.** Put its retained data and built-in key/mouse behavior in the
+   node-family file it belongs to (`LayoutElements.scala`, `ChoiceElements.scala`, and so
+   on — `Element.scala` holds only the `Element` trait). Declare `type Self` as the node's
+   own type so the fluent builders keep giving it back. Add a factory in
+   `ElementFactories.scala` and export it from `dsl.scala`.
+6. **Test interaction.** Use `Pilot` for focus, keys, mouse behavior, resize, and
    redraw when the widget is interactive.
-6. **Document it.** Add it to [Widget catalog](./widgets), provide a short realistic
+7. **Document it.** Add it to [Widget catalog](./widgets), provide a short realistic
    snippet, and use it in an example when it introduces a new pattern.
 
 Keep user handlers ahead of built-in behavior and return `false` when an event should
@@ -124,8 +152,15 @@ Before pushing:
 
 ```bash
 ./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources
+./mill __.fix --check
 ./mill __.compile
-./mill __.test
+./mill core.test
+./mill terminal.test
+./mill widgets.test
+./mill runtime.test
+./mill macros.test
+./mill dsl.test
+./mill test-support.test
 (cd website && npm run build)
 node scripts/export-wiki.mjs --output build/wiki
 ```

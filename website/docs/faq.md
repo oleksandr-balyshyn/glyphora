@@ -80,9 +80,9 @@ Yes. Widgets render into a `Buffer`; string helpers expose normalized lines and
 text. `Pilot` covers full event/render loops and produces deterministic text screens
 for ordinary ScalaTest assertions.
 
-`Pilot` and `BufferAssertions` currently live in the repository's internal
-`test-support` module rather than a published Maven artifact. `HeadlessBackend` is
-part of the terminal module and can be driven directly downstream.
+`Pilot`, `BufferAssertions` and `GoldenFrames` ship as `io.worxbend::tui-test`, so add
+it in the test configuration only. `HeadlessBackend` is part of the terminal module and
+can be driven directly downstream.
 
 ## Why are Signal writes restricted to the render thread?
 

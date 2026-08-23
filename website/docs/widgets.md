@@ -17,13 +17,13 @@ Use this page to choose a widget and understand its state model. The
 | Job | Start with | Add when needed |
 |---|---|---|
 | Arrange a screen | `row`, `column`, `panel`, `spacer`, `rule` | `scrollView`, `splitPane`, `layers` |
-| Show prose or records | `text`, `list`, `table`, `tabs` | `markdown`, `log`, `dataTable`, `directoryTree` |
-| Collect input | `input`, `checkbox`, `toggle`, `select`, `button` | `textArea`, `autocomplete`, `filePicker`, `selectionList`, `Form` |
+| Show prose or records | `text`, `list`, `table`, `tabs` | `markdown`, `SyntaxHighlighter`, `log`, `dataTable`, `directoryTree` |
+| Collect input | `input`, `checkbox`, `toggle`, `select`, `button` | `radioGroup`, `slider`, `textArea`, `autocomplete`, `filePicker`, `selectionList`, `Form` |
 | Show a metric | `gauge`, `sparkline` | `lineGauge`, `dualSparkline`, `barChart` |
 | Plot data | `chart`, `pieChart`, `heatmap` | `stackedBarChart`, `canvas`, `calendar` |
 | Communicate progress | `spinner`, `progressBar`, `orbitSpinner`, `skeleton`, `indeterminateBar` | `marquee`, `animatedText`, effects, toasts |
 | Report an outcome | `notice`, `badge` | toasts, dialogs |
-| Structure an app | `scaffold`, `topBar`, `sidebar`, `statusBar` | screens, menus, command palette, dialogs |
+| Structure an app | `scaffold`, `topBar`, `sidebar`, `statusBar` | screens, menus, command palette, dialogs, `paginator` |
 
 ## The state ownership rule
 
@@ -62,6 +62,7 @@ Core structural elements:
 - `panel(title)(children*)` / `panel(children*)` — bordered vertical container;
 - `row(children*)` / `column(children*)` — constrained layout containers;
 - `spacer` / `spacer(cells)` — flexible or fixed blank space;
+- `line(spans*)` — one row carrying several styles (see [Text, documents, and logs](#text-documents-and-logs));
 - `rule(label)` — horizontal divider;
 - `scrollView(content, state)` — measured vertical viewport with wheel/key scrolling;
 - `tabbedContent("Name" -> page, ...)(selected)` — tabs plus the selected page;
@@ -70,6 +71,52 @@ Core structural elements:
 - `layers(base, overlays*)` — paint later elements over earlier ones;
 - `menu`, `tooltip`, and `dialog` — transient interaction surfaces.
 
+`scrollView` draws its own scrollbar. For the rarer case of a scroll indicator beside
+something the DSL is not scrolling — a custom render loop, a pane whose offset your own
+code owns — reach past the DSL for the raw `Scrollbar` widget. It has no DSL element and
+owns no state: where the thumb sits is a pure function of the two numbers you pass, so
+the offset stays wherever you already keep it.
+
+```scala
+import io.worxbend.tui.core.Direction
+import io.worxbend.tui.widgets.Scrollbar
+
+// 200 rows of content, currently showing from row 40
+widget(Scrollbar(contentLength = 200, position = 40)).length(1)
+
+// along the bottom edge instead
+Scrollbar(200, 40, orientation = Direction.Horizontal)
+```
+
+The thumb's length is proportional to how much of the content the track covers, and a
+`position` past the end pins it to the end rather than drawing it off the track. When the
+content fits, only the track is drawn.
+
+### Panel padding and captions
+
+A panel reserves blank cells between its border and its children with `.padding(cells)`
+or `.padded(Padding(...))`, and can carry a caption on each border:
+
+```scala
+panel("Errors")(errorList)
+  .padding(1)                       // 1 row top and bottom, 2 columns each side
+  .titleBottom(s"${errors.size} total")
+  .titleStyle(_.withFg(Color.Red))  // the caption reddens; the frame keeps its own style
+```
+
+`.padding(1)` is *not* one cell on all four sides. A terminal cell is roughly twice as
+tall as it is wide, so one blank row costs about twice as much of the screen as one blank
+column; `.padding(n)` therefore reserves `n` rows above and below and `2 * n` columns
+either side, which is what reads as an even margin. When you want the exact counts,
+`.padded(Padding(left = 4, right = 1, top = 0, bottom = 0))` sets each side on its own,
+and `Padding.uniform`, `Padding.horizontal`, `Padding.vertical` and `Padding.symmetric`
+name the common shapes.
+
+`titleBottom` writes into the bottom border at the right, `title` into the top border at
+the left. Neither costs a content row: they overwrite border cells that were being drawn
+anyway. Below the DSL, `Block` takes a `Seq[BlockTitle]` and any number of them can share
+a border — `BlockTitle.top(line, Alignment.Center)`, `BlockTitle.bottom(line)`, and so on.
+
 See [Layout & style](./layout-and-style) for constraints and [The app shell](./app-shell)
 for application-level composition.
 
@@ -77,19 +124,57 @@ for application-level composition.
 
 ```scala
 column(
-  text("Deployment complete").bold.color(Color.Green),
+  text("Deployment complete").bold.fg(Color.Green),
   text("8 services updated · 0 failed").dim,
   rule("release notes"),
   markdown(releaseNotes),
 )
 ```
 
-- `text` uses a grapheme-aware paragraph renderer.
+- `text` uses a grapheme-aware paragraph renderer, in one style for the whole block.
+- `line(spans*)` is the mixed-style row: each part carries its own style.
 - `markdown` supports headings, lists, quotes, fenced code, inline styles, and OSC 8
   links. Its DSL element reports width-dependent height to scroll containers.
 - `log(LogState)` supports append-heavy output and follow-tail behavior.
 - `link(label, url)` emits a clickable OSC 8 hyperlink when the terminal supports it.
 - `bigText` renders banners; `image` renders raster data with half-block cells.
+
+### One row, several styles
+
+`text(...)` paints its whole block in a single style, so it cannot say `Status:` in the
+default colour and `OK` in green. `line(...)` can:
+
+```scala
+line("Status: ".styled(identity), "OK".styled(_.withFg(Color.Green)))
+```
+
+`"...".styled(transform)` builds a `Span` — a run of text with its own style — and
+`identity` leaves that run alone. The element's own style is the base each span layers
+onto, so `line(...).dim` dims the whole row and a span that set its own colour keeps it.
+
+The alternative before `line` existed was a `row` of `text` elements with hand-counted
+widths: `row(text("Status: ").length(8), text("OK").fg(Color.Green))`. Do not do that.
+The `8` is a display width written by hand, and it is wrong the moment the label is
+translated, and wrong today for any CJK or emoji text, where one character occupies two
+terminal columns. `line` measures its parts through `CharWidth`, so the row stays correct.
+
+`SyntaxHighlighter` turns source code into styled `Text`, which any text-taking widget
+or element can then render. It is a pure function, not a widget, so it owns no state:
+
+```scala
+import io.worxbend.tui.widgets.{Language, SyntaxHighlighter, SyntaxTheme}
+
+text(SyntaxHighlighter.highlight(snippet, Language.Scala))
+
+// `Language.of` resolves a Markdown fence's info-string; unknown names fall back to Generic
+text(SyntaxHighlighter.highlight(snippet, Language.of("sh"), SyntaxTheme(comment = Style.Default.dim)))
+```
+
+Highlighting is line-oriented and dependency-free: it recognises line comments,
+single-line strings, numbers, per-language keywords, `name(` call sites and shell
+`$variables`. Block comments and triple-quoted strings that span lines fall back to plain
+text — the right trade-off for snippets in help screens, READMEs and Markdown fences
+rather than for a full editor. `markdown` already highlights its fenced code this way.
 
 ## Lists and navigation
 
@@ -166,13 +251,63 @@ unsorted data. Use that method when opening the selected record.
 |---|---|---|
 | `input` | `TextInputState` | one line, horizontal scrolling, paste folds newlines |
 | `textArea` | `TextAreaState` | multiple lines, 2D cursor, scrolling, bounded undo/redo |
-| `numberInput` | `TextInputState` | numeric key filtering; optional decimals |
+| `numberInput` | `TextInputState` | whole numbers only; add `.decimal` to accept one decimal point |
 | `maskedInput` | `TextInputState` | shows a mask rather than raw content |
-| `autocomplete` | `AutocompleteState` | input plus selectable suggestions and accept callback |
+| `autocomplete` | `AutocompleteState` | input plus selectable suggestions and accept callback; `.maxSuggestions(n)` caps the list |
 | `filePicker` | `FilePickerState` | navigable file selection |
 
 All editing and cursor movement is grapheme-cluster-aware. A Backspace removes one
-visible cluster instead of one UTF-16 code unit.
+visible cluster instead of one UTF-16 code unit. Internally both fields measure, scroll,
+and draw a row through one shared rule (`ClusterRow`, package-private to `tui-widgets`):
+every cluster occupies at least one cell, a cluster that would only half-fit at the right
+edge is dropped rather than split, and a zero-width cluster is drawn as a blank. That is
+why a wide (CJK) or emoji cluster never drifts the cursor a column further off-screen with
+each keystroke — the arithmetic the scroll solver counts in is the same arithmetic the
+draw loop advances by, because it is the same code.
+
+## Choices, values, and paging
+
+Three small controls that all keep their value where you already keep it — in a `Signal`
+you own — rather than in a state object of their own:
+
+```scala
+import io.worxbend.tui.dsl.*
+
+private val environment = Signal(0)
+private val volume      = Signal(40)
+private val page        = Signal(0)
+
+def controls(using ReactiveScope): Element =
+  column(
+    radioGroup(Seq("development", "staging", "production"), environment),
+    slider(volume, SliderRange.of(min = 0, max = 100, step = 5)),
+    paginator(page, total = 12),
+  ).gap(1)
+```
+
+| Element | Draws | Keys |
+|---|---|---|
+| `radioGroup(options, selected)` | one row per option, `(•)` beside the chosen one and `( )` beside the rest | Up/Down move the selection, which *is* the choice — there is no separate confirm step |
+| `slider(value, range)` | `├───●──────┤` sized to its area | Left/Right move by `range.step`, Home/End jump to the ends; clicking or dragging the track jumps to that position |
+| `paginator(current, total)` | dots (`● ○ ○`) while they fit, `page/total` otherwise | Left/Right change page |
+
+Each element writes the `Signal` back when the user changes it, so anything else reading
+that signal repaints. Values outside the range are clamped rather than drawn off the
+control: a slider at `500` on a `0..100` range sits at the right-hand end, and a paginator
+asked for page 99 of 3 marks the last dot. A slider's bounds and its step travel together
+in a `SliderRange` — `SliderRange.Percent` is the default, and `SliderRange.of(min, max,
+step)` builds any other. `of` orders the bounds either way round and rejects a step below
+1, because a slider consumes Left/Right whether or not it can move: a zero step would
+swallow both arrows, do nothing, and stop them reaching your own bindings. `paginator` displays pages 1-based while
+`current` counts from 0, so page 1 of 12 renders as `1/12`.
+
+A slider needs at least three columns (two brackets and one track cell) and draws nothing
+below that; at exactly three, every value sits on the single track column. `paginator`
+falls back to the `page/total` counter as soon as the dots would not fit, which for
+`total` pages needs `total * 2 - 1` columns, and always uses the counter above ten pages.
+
+Underneath, the raw `w.Slider`, `w.RadioGroup` and `w.Paginator` widgets take plain
+values rather than signals, for use outside the DSL.
 
 ## Data visualization
 
@@ -323,6 +458,10 @@ A bar's caption is a `ProgressLabel`, not a nullable string:
 | `progressBar(r).labelled("syncing")` | `syncing 42%` |
 | `progressBar(r).bare` | nothing; the bar takes the whole row |
 
+`gauge` carries the same trio — `gauge(r)`, `gauge(r).label("syncing")`,
+`gauge(r).labelled("syncing")`, `gauge(r).bare` — so the two progress meters are
+captioned the same way whichever one a view reaches for.
+
 ### Theming the animations
 
 Colors come from the ambient `Theme`'s `loading` palette, resolved where the element
@@ -353,7 +492,7 @@ Anything set at the call site layers on top of the theme, and the glyph and the 
 style independently:
 
 ```scala
-spinner("syncing").color(Color.Magenta)              // recolors the glyph, not the label
+spinner("syncing").fg(Color.Magenta)              // recolors the glyph, not the label
 progressBar(used, total).ramp(ColorRamp.Traffic)     // green → amber → red as it fills
 ```
 
@@ -450,8 +589,8 @@ animatedText("LOADING").effect(TextEffect.Bounce(trail = 2)).length(4)
 
 Each effect carries its own knobs rather than `AnimatedText` carrying the union of all
 of them, so you cannot set a typewriter's cursor on a shimmer and have it quietly
-ignored. `preferredHeight` reports the rows an effect needs — only `Bounce` asks for
-more than one.
+ignored. `heightAt` reports the rows an effect needs — only `Bounce` asks for more than
+one.
 
 ## Notices and badges
 
@@ -483,12 +622,12 @@ volumes:
 ```scala
 row(text("api"), badge(NoticeLevel.Error).outline)   // api [FAIL]
 row(text("worker"), badge("3 pending").dot)
-badge("BETA").color(Color.Magenta)
+badge("BETA").fg(Color.Magenta)
 ```
 
 `badge(level)` uses the level's own tag and color; `badge(label)` takes the theme's
-accent and accepts any `.color(...)`. Both report a `preferredWidth`, so a caller can
-size a column for them rather than guessing.
+accent and accepts any `.fg(...)`. Both report a `widthAt`, so a caller can size a
+column for them rather than guessing.
 
 ## Drop to a raw Widget
 
@@ -498,9 +637,17 @@ The DSL is not a separate renderer. Any core `Widget` can become a leaf:
 import io.worxbend.tui.core.*
 import io.worxbend.tui.widgets.Paragraph
 
-val raw = Paragraph(Text.raw("Rendered directly"), wrap = true)
+val raw = Paragraph(Text.raw("Rendered directly"), overflow = Overflow.Wrap)
 val element = widget(raw).fill
 ```
+
+A widget that knows how much room its content needs says so by implementing
+`io.worxbend.tui.core.Measured` — `heightAt(width)` for content whose height depends on
+the width it wraps at, `widthAt(height)` for content sized the other way. Returning
+`None` means "I cannot say", and callers must treat that as unmeasurable rather than as
+a size. `widget(...)` needs no measurement wiring of its own: a wrapped `Paragraph`,
+`Markdown`, `Notice`, `Badge`, `Spinner`, `BigText`, `AnimatedText` or `Tooltip` already
+answers, so a `scrollView` over one scrolls the full content.
 
 Or use widgets without the DSL at all:
 
@@ -516,12 +663,16 @@ tests. See [Architecture](./architecture) and [Testing](./testing).
 
 The internal tiers document dependency order, not quality:
 
-1. **Foundation** — block, row/column, paragraph, list, table, tabs, gauge,
-   sparkline, text input, checkbox, toggle, select, tree.
-2. **Visualization** — canvas, chart, bar chart, calendar.
-3. **Rich content** — spinner, wave text, dialog, markdown, dual sparkline.
-4. **Application-scale state** — data table, directory tree, text area, loading
-   widgets, advanced inputs, scroll views, image, links, and menus.
+1. **Foundation** — block, row/column, spacer, rule, paragraph, list view, table,
+   tabs, gauge, line gauge, sparkline, scrollbar, button, checkbox, toggle, select,
+   radio group, slider, text input, tree.
+2. **Visualization** — canvas, chart, bar chart, column chart, stacked bar chart,
+   pie chart, heatmap, dual sparkline, calendar.
+3. **Rich content** — spinner and its presets, spinner grid, orbit spinner, linear
+   spinner, animated text, marquee, skeleton, indeterminate bar, big text, notice,
+   badge, tooltip, dialog, markdown, syntax highlighter.
+4. **Application-scale state** — data table, directory tree, text area, log, menu,
+   paginator, scroll view, image, and links.
 
 Every built-in has render-to-`Buffer` tests. Interactive DSL wrappers additionally
 have focus and event-routing tests.

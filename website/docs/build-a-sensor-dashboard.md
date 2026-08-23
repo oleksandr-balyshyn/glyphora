@@ -33,26 +33,19 @@ registration. Create `examples/airsensor/` and put this in it:
 package build.examples.airsensor
 
 import mill.*
-import mill.javalib.NativeImageModule
 
-object `package` extends build.TuiModule with NativeImageModule {
+// Everything an example has in common — the GraalVM pin, `--no-fallback`, and a Pilot-capable
+// test submodule — lives in `TuiExampleModule` in build.mill.
+object `package` extends build.TuiExampleModule {
 
   def moduleDeps = Seq(build.core, build.terminal, build.runtime, build.widgets, build.dsl)
 
   def mainClass = Some("io.worxbend.tui.examples.airsensor.Main")
-
-  def jvmVersion = "graalvm-community:23.0.1"
-
-  def nativeImageOptions = Seq("--no-fallback")
-
-  object test extends TuiTests {
-    def moduleDeps = super.moduleDeps ++ Seq(build.`test-support`)
-  }
 }
 ```
 
-Why the module lists all five published modules, and why the nested test object
-needs its own `moduleDeps`, is argued in
+Why the module lists all five published modules, and what `TuiExampleModule` supplies
+on top of them, is argued in
 [Build a process monitor](./build-a-process-monitor#1-create-the-module). Outside
 this repository the same app is one `mvn"io.worxbend::tui-dsl:0.12.0"` dependency;
 see [Getting started](./getting-started#1-add-glyphora).
@@ -81,9 +74,9 @@ final class AirSensorApp extends TuiApp:
       statusBar = Some(statusBar(bindings)),
     )(centered(52, 3)(panel("airsensor")(text("no reading yet").dim).rounded))
 
-object Main:
-  def main(args: Array[String]): Unit =
-    AirSensorApp().run().left.foreach(error => println(s"failed to run: $error"))
+// `TuiApp` supplies `main`, so the launcher only needs an object that *is* the app.
+// The class stays a class so tests can build a fresh instance per case.
+object Main extends AirSensorApp()
 ```
 
 ```bash
@@ -277,15 +270,14 @@ final class AirSensorApp(
   private var poller: Option[Cancelable]       = None
   private var lastUpdatedNanos: Option[Long]   = None
 
-  override def onTick(): Unit =
-    if poller.isEmpty then
-      refresh()
-      startPolling()
-    ageSeconds.set(lastUpdatedNanos.map(at => (System.nanoTime() - at) / 1_000_000_000L))
+  override def onStart(): Unit =
+    refresh()
+    startPolling()
 
-  override def onInterrupt(): Boolean =
-    stopPolling() // Ctrl+C: stop the poller before the runner tears down
-    false
+  override def onStop(): Unit = stopPolling()
+
+  override def onTick(): Unit =
+    ageSeconds.set(lastUpdatedNanos.map(at => (System.nanoTime() - at) / 1_000_000_000L))
 
   private def startPolling(): Unit =
     poller = Some(Async.every(interval.peek)(refresh()))
@@ -294,10 +286,6 @@ final class AirSensorApp(
     poller.foreach(_.cancel())
     poller = None
 
-  private def stopAndQuit(): Unit =
-    stopPolling()
-    quit()
-
   private def accept(reading: Reading): Unit =
     history.update(readings => (readings :+ reading).takeRight(AirSensorApp.HistoryLength))
     lastUpdatedNanos = Some(System.nanoTime())
@@ -305,28 +293,29 @@ final class AirSensorApp(
     status.set(Status.Ready)
 ```
 
-> **Where this goes wrong:** the poller starts on the first tick, not in the
-> constructor. `Async.every` captures its target render loop from the *calling*
-> thread, and the constructor runs before any runner is registered — a poller started
-> there attaches to the detached loop and hands your readings to whichever app drains
-> it first. There is no `onStart` hook, so `onTick` is the seam. See
-> [Live data & background work](./live-data#start-the-poller-on-the-first-tick).
+> **Where this goes wrong:** the poller starts in `onStart`, not in the constructor.
+> `Async.every` captures its target render loop from the *calling* thread, and the
+> constructor runs before any runner is registered — a poller started there attaches
+> to no loop at all and its readings are discarded forever. `onStart` runs on the
+> render thread, before the first frame, which is the earliest correct moment. See
+> [Live data & background work](./live-data#start-the-poller-in-onstart).
 
 The `refresh()` beside `startPolling()` is not redundant. `Async.every` fires first
 *after* a full interval, so without a separate initial load the screen sits on
 `Loading` for five seconds. And nothing cancels a repeating task for you, which is
-why `q` runs `stopAndQuit`: the timer thread is a daemon so the JVM still exits, but
-under a headless test the runner ends while the poller keeps firing into a loop
-nobody drains.
+what `onStop` is for: it runs on every exit path — `q`, `Esc`, `Ctrl+C`, a backend
+failure — so the poller cannot outlive the run. The timer thread is a daemon so the
+JVM still exits either way, but under a headless test an uncancelled poller keeps
+firing into a loop nobody drains.
 
 ```scala title="Main.scala"
   override def bindings: KeyBindings = KeyBindings(
     binding("r", "refresh")(refresh()),
     binding("+", "slower")(rescale(_ * 2L)),
     binding("-", "faster")(rescale(_ / 2L)),
-    binding("q", "quit")(stopAndQuit()),
+    binding("q", "quit")(quit()),
     // the same action on a second key, hidden so the hint line does not say "quit" twice
-    binding("esc", "quit")(stopAndQuit()).copy(showInHints = false),
+    binding("esc", "quit")(quit()).copy(showInHints = false),
   )
 
   private def rescale(adjust: FiniteDuration => FiniteDuration): Unit =
@@ -338,7 +327,7 @@ nobody drains.
       if poller.nonEmpty then
         stopPolling()
         startPolling()
-      notify(s"polling every ${describe(next)}", NoticeLevel.Info, ttlTicks = AirSensorApp.ToastTicks)
+      notify(s"polling every ${describe(next)}", NoticeLevel.Info)
 
   private def clamp(duration: FiniteDuration): FiniteDuration =
     if duration < AirSensorApp.MinInterval then AirSensorApp.MinInterval
@@ -356,7 +345,6 @@ nobody drains.
 
 object AirSensorApp:
   val TickRate: FiniteDuration    = 250.millis
-  val ToastTicks: Int             = (3.seconds / TickRate).toInt
   val HistoryLength: Int          = 240
   val MinInterval: FiniteDuration = 100.millis
   val MaxInterval: FiniteDuration = 60.seconds
@@ -585,7 +573,7 @@ with the colour the cards are already wearing. Add the widget import
       widget(
         Gauge(
           Metric.Aqi.ratio(reading),
-          Some(s"${Metric.Aqi.valueText(reading)} of ${Metric.Aqi.scaleText}"),
+          ProgressLabel.Text(s"${Metric.Aqi.valueText(reading)} of ${Metric.Aqi.scaleText}"),
           theme.muted,
           Style.Default.reverse,
           fillRamp = Some(ColorRamp.Traffic),
@@ -804,10 +792,7 @@ fail as a message on screen rather than as a poller frozen forever. Point the ap
 it and run with no such device present:
 
 ```scala title="Main.scala"
-object Main:
-  def main(args: Array[String]): Unit =
-    AirSensorApp(AirGradientClient("http://airgradient.local")).run()
-      .left.foreach(error => println(s"failed to run: $error"))
+object Main extends AirSensorApp(AirGradientClient("http://airgradient.local"))
 ```
 
 The first-load pane reports the connection failure and offers `r`. Once a reading has
@@ -825,7 +810,7 @@ posts real events into it, so the whole dashboard is testable without a PTY.
 ```scala title="AirSensorAppSpec.scala"
 package io.worxbend.tui.examples.airsensor
 
-import io.worxbend.tui.core.{KeyCode, Size}
+import io.worxbend.tui.core.Size
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 
@@ -850,7 +835,7 @@ final class AirSensorAppSpec extends AnyFunSuite:
     val app     = AirSensorApp(FakeSensor(script), interval)
     // `runWith` takes the headless backend; `run()` would open the real TTY. The
     // `val _` discards its Either, which `-Wunused:all -Werror` insists on.
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     (app, pilot, backend)
 
@@ -870,7 +855,7 @@ guessed number of milliseconds.
     val (app, pilot, _) = startedApp(Vector(Right(clean), Left("sensor offline")))
     waitFor()(pilot.screenText.contains("640 ppm"))
 
-    pilot.pressKey(KeyCode.Char('r'))
+    pilot.press("r")
     waitFor()(pilot.screenText.contains("sensor offline"))
 
     val screen = pilot.screenText
@@ -879,7 +864,7 @@ guessed number of milliseconds.
     assert(app.status.peek == Status.Failed("sensor offline"))
     assert(app.history.peek == Vector(clean))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("readings arrive on the poll timer with no key presses"):
@@ -890,7 +875,7 @@ guessed number of milliseconds.
     assert(backend.drawCount > drawsBefore) // the timer alone drove repaints
     assert(pilot.screenText.contains("History · last"))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("AQI interpolates between the EPA's PM2.5 breakpoints"):
@@ -925,7 +910,7 @@ Nothing in the app reflects, so this builds with `--no-fallback` and no
 
 | What you built | Where the reasoning goes deeper |
 |---|---|
-| the poller, its lifecycle, and the separate initial fetch | [Live data & background work](./live-data#start-the-poller-on-the-first-tick) |
+| the poller, its lifecycle, and the separate initial fetch | [Live data & background work](./live-data#start-the-poller-in-onstart) |
 | `Async.runCatching` and the bounded rolling history | [Live data & background work](./live-data#keep-a-rolling-history) |
 | bands, trends, and bars coloured by value | [Charts, gauges & status](./charts-and-status#classify-a-reading-into-a-band) |
 | the sparkline's pinned ceiling | [Charts, gauges & status](./charts-and-status#fix-a-sparklines-ceiling) |

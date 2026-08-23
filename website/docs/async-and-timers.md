@@ -33,7 +33,7 @@ def usersView(using ReactiveScope): Element = users.get match
   case LoadState.Idle            => text("Press r to load users.").dim
   case LoadState.Loading         => spinner("loading…")
   case LoadState.Ready(values)   => list(values.map(_.name), userList)
-  case LoadState.Failed(message) => text(s"Load failed: $message").color(Color.Red)
+  case LoadState.Failed(message) => text(s"Load failed: $message").fg(Color.Red)
 ```
 
 ## Run blocking work safely
@@ -99,9 +99,9 @@ override def onTick(): Unit =
   frame.update(_ + 1)
 ```
 
-Key, mouse, and tick handlers already execute on the render thread. A tick that
-changes no signal causes no dependent computation to change; keep expensive work
-out of `onTick` itself.
+Key, mouse, and tick handlers already execute on the render thread, as do `onStart`
+and `onStop`. A tick that changes no signal causes no dependent computation to
+change; keep expensive work out of `onTick` itself.
 
 ## Stopwatches and countdowns
 

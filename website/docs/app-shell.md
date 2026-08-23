@@ -59,13 +59,14 @@ scaffold(
     selectedTab = selectedTab.get,
     right = "connected",
   )),
-  sidebar = Some(sidebar(sidebarView, width = 24, onRight = false)),
+  sidebar = Some(sidebar(sidebarView, width = 24, side = Side.Left)),
   statusBar = Some(statusBar(bindings)),
 )(mainView)
 ```
 
 - `topBar` renders a title, optional tabs, and optional right-aligned status.
-- `sidebar` describes content, width, and side; `scaffold` handles placement.
+- `sidebar` describes content, width, and `side` (`Side.Left` or `Side.Right`);
+  `scaffold` handles placement.
 - `statusBar(bindings)` derives readable key hints from the same command registry
   that handles input.
 
@@ -91,8 +92,10 @@ One `KeyBinding` supplies:
 - searchable commands in the built-in `Ctrl+P` palette.
 
 Descriptions should be short verbs: “open project” is easier to scan than “project
-opening functionality.” `KeyBindings.parseKey` accepts printable keys, named keys,
-and modifiers such as `ctrl+s`, `alt+enter`, and `shift+tab`.
+opening functionality.” `KeyEvent.parse` — the one parser in `tui-core` that reads
+these strings — accepts printable keys, named keys, and modifiers such as `ctrl+s`,
+`alt+enter`, and `shift+tab`. `Pilot.press` in a test takes the same strings, so a
+test presses what the app declared rather than a hand-translated `KeyEvent`.
 
 Two characters are both syntax and keys, and the parser resolves each in favour of the
 key:
@@ -108,10 +111,44 @@ Shift+G arrives as `KeyCode.Char('G')`, so bind `"G"`, not `"shift+g"`. Ctrl is 
 exception — a terminal cannot tell Ctrl+S from Ctrl+Shift+S, so `"ctrl+S"` folds to
 `"ctrl+s"` rather than declaring a binding that could never fire.
 
+Five Ctrl combinations are rejected outright rather than parsed, because a terminal
+without the kitty keyboard protocol has no way to send them — the control code they
+would produce is already spoken for:
+
+| Rejected spec | What the terminal actually sends | Bind this instead |
+|---|---|---|
+| `"ctrl+i"` | Tab | `"tab"` |
+| `"ctrl+m"` | Enter | `"enter"` |
+| `"ctrl+j"` | Enter | `"enter"` |
+| `"ctrl+h"` | Backspace | `"backspace"` |
+| `"ctrl+["` | Escape | `"esc"` |
+
+Before, those specs parsed happily and then never fired, which is a bug that looks like
+a broken key. Now they fail loudly at declaration time and the message names the
+replacement.
+
 Function keys run `"f1"` through `"f35"`, matching the range the input decoder emits.
 
 A spec that names no key (`"ctrl+"`) or no known key (`"banana"`) is a programmer error
 and throws from `binding` at declaration time.
+
+## One command, several keys
+
+When a command answers to more than one key — a vim-flavoured app where `j` and the
+down arrow both mean “next” — declare it once with a sequence of specs instead of
+twice:
+
+```scala
+override def bindings = KeyBindings(
+  binding(Seq("down", "j"), "next item")(selectNext()),
+  binding(Seq("up", "k"), "previous item")(selectPrevious()),
+)
+```
+
+Any of the listed keys fires the action, and the **first** spec is the label, so the
+status bar shows one `down next item` hint, the help overlay lists one row, and the
+palette offers one command. Two separate `binding(…)` declarations would fire
+correctly but advertise the same command twice everywhere it is listed.
 
 Focused/local handlers run before global bindings. Use local `.onKey(...)` for
 behavior owned by one element, and app bindings for commands meaningful everywhere.
@@ -145,17 +182,29 @@ pushScreen(Screen.full(settingsPage))
 Call `popScreen()` from the active screen to return. Focus stays inside a modal by
 construction, so you do not need a separate focus trap.
 
+Which of the two a screen is, is its `presentation`: `Presentation.Modal` (the default)
+or `Presentation.Full`. A hand-written `Screen` overrides it directly:
+
+```scala
+val settings = new Screen:
+  def view(using ReactiveScope): Element  = settingsPage
+  override def presentation: Presentation = Presentation.Full
+```
+
 ## Notify without interrupting flow
 
 ```scala
 notify("Deployment queued", NoticeLevel.Success)
-notify("Authentication expired", NoticeLevel.Error, ttlTicks = 60)
+notify("Authentication expired", NoticeLevel.Error, duration = 10.seconds)
 dismissToasts()
 ```
 
-Toasts stack in the top-right corner and age on application ticks. Each one renders
-through the same `Notice` widget the rest of the toolkit uses, so it carries that
-severity's icon and theme colour. Set a tick rate when you use them:
+Toasts stack in the top-right corner and expire after a wall-clock `duration`
+(three seconds when you do not say). Each one renders through the same `Notice` widget
+the rest of the toolkit uses, so it carries that severity's icon and theme colour.
+
+Ticks are what *notices* that a toast has expired, so an app that uses them needs a
+tick rate — but the tick rate no longer decides how long "three seconds" is:
 
 ```scala
 import io.worxbend.tui.runtime.RunnerConfig
@@ -202,7 +251,7 @@ import scala.concurrent.duration.*
 
 override def splash = Some(
   SplashScreen(
-    content = centered(38, 5)(bigText("GLYPHORA").color(Color.Cyan)),
+    content = centered(38, 5)(bigText("GLYPHORA").fg(Color.Cyan)),
     effect = Effect.coalesce(700.millis),
     minimumDuration = 1.second,
   )
@@ -246,18 +295,90 @@ printAbove("deployment finished", s"id: ${deployment.id}")
 - `printAbove` writes durable lines into scrollback above the live interface.
 
 These are no-ops or unavailable before a runner is active, so invoke them from event
-handlers rather than constructors.
+handlers or from `onStart()` — never from a constructor.
+
+## Choose the terminal to draw on
+
+`run()` opens a terminal through `createBackend()`, which by default is JLine on the
+process's controlling terminal. Two overrides change that without giving up `main`:
+
+```scala
+import io.worxbend.tui.terminal.ColorDepth
+
+object MyApp extends TuiApp:
+  // force a palette instead of sniffing NO_COLOR / COLORTERM / TERM — the way to
+  // check that a theme still reads on a sixteen-color terminal without finding one
+  override protected def colorDepth: ColorDepth = ColorDepth.Ansi16
+
+  def view(using ReactiveScope): Element = ...
+```
+
+Override `createBackend()` itself to substitute a different `Backend` entirely — a
+recording backend, a remote one — and everything else about the app is unchanged,
+because the loop lives in `runWith(backend)` and runs over whatever it is handed.
+That is the same seam headless tests use; see [Testing](./testing).
 
 ## Lifecycle hooks
 
 | Hook | When to use it |
 |---|---|
 | `config` | tick cadence and backend behavior |
+| `colorDepth` | force a palette instead of detecting one from the environment |
+| `createBackend()` | draw on something other than JLine's controlling terminal |
 | `theme` | active semantic theme |
 | `bindings` | app-wide commands |
 | `splash` | optional launch composition |
+| `onStart()` | the run has begun and this is the render thread — start pollers and timers here |
+| `onStop()` | the run is over, whatever ended it — cancel what `onStart` began |
 | `onTick()` | advance frame-oriented state; never block |
+| `onResize(size)` | react to a new terminal size (clamp a scroll offset, re-fetch a page) |
 | `onTerminalFocus(focused)` | pause/resume activity when mode-1004 focus events arrive |
+| `onInterrupt()` | intercept `Ctrl+C`; return `true` to keep running |
+
+### Start and stop
+
+`onStart()` runs on the render thread after the terminal is ready and before the first
+frame. That matters for background work: `Async` captures the render loop of the
+thread that calls it, and your app object is constructed long before any loop
+exists — so `Async.every(...)` in a field initialiser attaches to no loop at all and
+its results are discarded forever. Calling `quit()` from `onStart()` exits before
+anything is drawn, which is how a start-up check declines to run.
+
+`onStop()` runs on the way out of every exit path: `quit()`, an unconsumed `Ctrl+C`, a
+backend failure, an event handler that threw. Nothing cancels a repeating `Async.every`
+for you, so this is where it is cancelled.
+
+```scala
+private var poller: Option[Cancelable] = None
+
+override def onStart(): Unit = poller = Some(Async.every(5.seconds)(refresh()))
+override def onStop(): Unit  = poller.foreach(_.cancel())
+```
+
+By the time `onStop()` runs the terminal has already been handed back, so `quit()`,
+`suspend`, `printAbove` and `copyToClipboard` are no-ops there — it is for your own
+resources, not for the screen.
+
+### Ask for a frame
+
+A `Signal` write schedules its own redraw, and an event handler that returns `true`
+already asks for one. Neither covers state the reactive layer cannot see: the
+caller-owned widget states (`ListState`, `TextInputState`, `DataTableState`, `LogState`)
+are plain mutable objects, so
+
+```scala
+Async.run(fetchRows())(rows => tableState.rows = rows)
+```
+
+updates the table correctly and still leaves the previous frame on screen until the
+user happens to press a key. `requestRedraw()` asks for the frame that mutation earned:
+
+```scala
+Async.run(fetchRows()) { rows =>
+  tableState.rows = rows
+  requestRedraw()
+}
+```
 
 The full shell in action is
 [`examples/showcase`](https://github.com/oleksandr-balyshyn/glyphora/tree/main/examples/showcase).

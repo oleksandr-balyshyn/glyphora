@@ -16,11 +16,13 @@ and the terminal never knows about signals.
 ```mermaid
 flowchart LR
   DSL["tui-dsl<br/>elements · focus · chrome"] --> Widgets["tui-widgets<br/>render · layout · input"]
-  Widgets --> Core["tui-core<br/>buffer · cells · style"]
-  Core --> Terminal["tui-terminal<br/>diff → ANSI"]
-  Runtime["tui-runtime<br/>signals · loop · effects"] --> Core
-  DSL --> Runtime
-  Macros["tui-macros<br/>compile-time derivation"] -. generated calls .-> DSL
+  DSL --> Runtime["tui-runtime<br/>signals · loop"]
+  DSL --> Terminal["tui-terminal<br/>diff → ANSI"]
+  Widgets --> Core["tui-core<br/>buffer · cells · style · motion"]
+  Runtime --> Core
+  Runtime --> Terminal
+  Terminal --> Core
+  Macros["tui-macros<br/>compile-time derivation, no module deps"] -. generated calls .-> DSL
 ```
 
 Each arrow in the module graph is a real Mill dependency — nothing above `tui-core` reaches back
@@ -29,13 +31,13 @@ example, `tui-widgets` with a backend of your own, skipping the DSL entirely).
 
 | Module | What it owns | API reference |
 |---|---|---|
-| `tui-core` | `Buffer`/`Cell`, `Style`, `Layout` solver, `Widget` traits, event ADT, `CharWidth` (UCD-generated width table) | [tui-core](pathname:///api/core/) |
+| `tui-core` | `Buffer`/`Cell`, `Style`, `Layout` solver, `Widget` traits, event ADT, `CharWidth` (UCD-generated width table), the motion values `Progress`/`Easing`/`Tween`/`Spring`/`Effect` | [tui-core](pathname:///api/core/) |
 | `tui-terminal` | `Backend` trait, JLine 3 impl (diff flush, input decoding), `HeadlessBackend` | [tui-terminal](pathname:///api/terminal/) |
 | `tui-widgets` | every built-in widget — backend-agnostic, render-to-`Buffer` tested | [tui-widgets](pathname:///api/widgets/) |
-| `tui-runtime` | `Signal`/`Computed`, render thread, runner loop, `Effect` engine | [tui-runtime](pathname:///api/runtime/) |
+| `tui-runtime` | `Signal`/`Computed`, render thread, runner loop, tick clocks (`Stopwatch`/`Timer`) | [tui-runtime](pathname:///api/runtime/) |
 | `tui-dsl` | `TuiApp`, `Element` tree, focus/mouse routing, chrome presets, screens/toasts/palette | [tui-dsl](pathname:///api/dsl/) |
 | `tui-macros` | `deriveForm`/`bindAction` — compile-time only, keeps native-image reflect-config-free | [tui-macros](pathname:///api/macros/) |
-| `test-support` | `Pilot` driver + buffer assertions (not published; test-only) | — |
+| `tui-test` | `Pilot` driver, buffer assertions, golden frames — a test-only dependency (Scala package `io.worxbend.tui.testsupport`, repository directory `test-support/`) | — |
 
 ## tui-core
 
@@ -52,17 +54,31 @@ maximum-stability tier everything else builds on:
   sequences, flags, variation selectors) — generated from the Unicode Character
   Database by `tools/generate-width-table.py`.
 - **Layout**: `Constraint` (`Length`/`Percentage`/`Ratio`/`Min`/`Max`/`Fill`) and the
-  `Layout.split` solver.
+  `Layout.split` solver, plus `split2`…`split5`, which hand back a tuple so a
+  statically known arity is destructured instead of indexed.
 - **Widget traits**: `Widget`, `StatefulWidget[S]` — SAM-convertible.
+- **`Measured`**: the single contract for how much space a widget's content needs,
+  `heightAt(width)` / `widthAt(height)`. Both return an `Option`: `None` means *this
+  widget cannot say*, and a caller must treat that as unmeasurable rather than as a
+  size. The DSL's measurement pass asks through this, so a widget that can measure
+  itself needs no per-element wiring.
 - **Input events**: `Event` / `KeyEvent` / `MouseEvent` ADT, defined here (not in
   `tui-terminal`) so widgets stay backend-agnostic.
+- **Motion**: `Progress` (the one answer to *where is this animation at `elapsed`* —
+  a one-shot fraction, or a whole position in a repeating cycle), `Easing`, `Tween`,
+  `Spring`, and `Effect`, the post-render frame transform. All pure functions of a
+  time they are handed: they hold no clock, own no thread, and touch no terminal,
+  which is why they live down here where `tui-widgets` and `tui-runtime` can both
+  reach them. See [Motion](./motion).
 
 ```scala
 import io.worxbend.tui.core.*
 
 val buffer = Buffer(Rect(0, 0, 20, 3))
-val areas = Layout.vertical(1, Constraint.fill).split(buffer.area)
-buffer.setString(areas(0).x, areas(0).y, "Title", Style.Default.bold.withFg(Color.Cyan))
+// split2/split3/split4/split5 destructure a known arity into a tuple; `split` returns a Seq
+val (titleArea, body) = Layout.vertical(1, Constraint.fill).split2(buffer.area)
+buffer.setString(titleArea.x, titleArea.y, "Title", Style.Default.bold.withFg(Color.Cyan))
+buffer.setString(body.x, body.y, "Body", Style.Default)
 ```
 
 ## tui-terminal
@@ -113,7 +129,8 @@ The mid-level framework tier:
   `runOnRenderThread`, `runLater`. `Signal.set` asserts it.
 - **`Runner` / `TerminalRunner` / `Frame` / `RunnerConfig`** — the event/render loop:
   terminal setup/teardown, diff-driven redraws, tick emission, resize handling.
-- **`Effect`** — the post-render motion engine. See [Motion](./motion).
+- **`Stopwatch` / `Timer` / `TickDriven`** — caller-owned tick clocks, the thing
+  that supplies the `elapsed` `tui-core`'s motion values are pure functions of.
 
 `tui-dsl` adds `AnimationClock` on top of these: a signal of elapsed time republished
 each tick, which the animated elements read. Because that read is tracked, a view

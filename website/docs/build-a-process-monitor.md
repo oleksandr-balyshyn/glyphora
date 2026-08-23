@@ -28,21 +28,14 @@ anywhere and still have a working program.
 package build.examples.procmon
 
 import mill.*
-import mill.javalib.NativeImageModule
 
-object `package` extends build.TuiModule with NativeImageModule {
+// Everything an example has in common — the GraalVM pin, `--no-fallback`, and a Pilot-capable
+// test submodule — lives in `TuiExampleModule` in build.mill.
+object `package` extends build.TuiExampleModule {
 
   def moduleDeps = Seq(build.core, build.terminal, build.runtime, build.widgets, build.dsl)
 
   def mainClass = Some("io.worxbend.tui.examples.procmon.Main")
-
-  def jvmVersion = "graalvm-community:23.0.1"
-
-  def nativeImageOptions = Seq("--no-fallback")
-
-  object test extends TuiTests {
-    def moduleDeps = super.moduleDeps ++ Seq(build.`test-support`)
-  }
 }
 ```
 
@@ -65,9 +58,9 @@ final class ProcmonApp extends TuiApp:
   def view(using ReactiveScope): Element =
     panel("procmon")(text("no processes yet").dim).rounded
 
-object Main:
-  def main(args: Array[String]): Unit =
-    ProcmonApp().run().left.foreach(error => println(s"failed to run: $error"))
+// `TuiApp` supplies `main`, so the launcher only needs an object that *is* the app.
+// The class stays a class so tests can build a fresh instance per case.
+object Main extends ProcmonApp()
 ```
 
 ```bash
@@ -87,9 +80,9 @@ with `-Wunused:all -Werror`, so an unused import or an unused private field is a
 **build failure**, not a warning. That is why each constant below arrives in the step
 that first uses it rather than all at once — paste them early and the build stops.
 
-(`val _ = app.runWith(backend)` in step 13 is a different thing: a house convention
-that says "this result is deliberately ignored". The compiler does not require it here,
-since `-Wvalue-discard` is not enabled.)
+(`Pilot.start(backend) { app.runWith(backend) }` in step 13 hands the runner's own
+`Either[RunnerError, Unit]` to the pilot rather than discarding it, so a run that
+failed is reported as a test failure instead of reading as a clean exit.)
 
 ## 2. Model a process, not a row
 
@@ -258,14 +251,13 @@ Run it: the count is your machine's, and the header reads `source ps` — or
 
 ## 4. Put the snapshot on screen
 
-Add `java.util.Locale` and `io.worxbend.tui.widgets.{DataTable, DataTableState}` to
+Add `java.util.Locale` and `io.worxbend.tui.widgets.{ColumnSort, DataTable, DataTableState, SortDirection}` to
 `Main.scala`'s imports, plus `import ProcmonApp.*` at the top of the class body.
 
 ```scala title="Main.scala"
   val tableState: DataTableState = DataTableState()
 
-  tableState.sortColumn = Some(CpuColumn)
-  tableState.sortAscending = false
+  tableState.sort = Some(ColumnSort(CpuColumn, SortDirection.Descending))
 
   private def buildTable(rows: Seq[ProcessInfo]): DataTable =
     DataTable(
@@ -365,7 +357,7 @@ sample with a tick-driven one.
         processes.set(sampled.toVector)
         sampleCount.update(_ + 1)
       case Left(error)    =>
-        notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning, ttlTicks = 3 * TicksPerSecond)
+        notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning, duration = 3.seconds)
     }
 
   override def bindings: KeyBindings = KeyBindings(
@@ -410,7 +402,7 @@ Leave it running for ten seconds and watch the CPU column. The numbers change; t
         sampleCount.update(_ + 1)
         tableState.invalidate()
       case Left(error)    =>
-        notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning, ttlTicks = 3 * TicksPerSecond)
+        notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning, duration = 3.seconds)
     }
 ```
 
@@ -665,8 +657,8 @@ In `object ProcmonApp`:
 `Hints` is a curated subset rather than `statusBar(bindings)`: every binding is
 already reachable through the built-in `Ctrl+P` palette, so only the ones worth a
 permanent reminder earn a place on a one-row bar. The failure toast from step 5 ages
-in **ticks, not seconds**, which is why its lifetime reads `3 * TicksPerSecond` and
-changes meaning if you change `TickRate`. See
+on wall-clock time, not on ticks: `duration = 3.seconds` means three seconds whatever
+`TickRate` is, and leaving the argument off gives the three-second default. See
 [The app shell](./app-shell#declare-commands-once) for the rest of the command
 surface.
 
@@ -674,10 +666,9 @@ Run it and press `Ctrl+P`: every binding, fuzzy-searchable, with no extra code.
 
 ## 12. Scroll with the wheel
 
-`DataTableElement` has no built-in wheel behaviour, unlike `list`. Add
-`io.worxbend.tui.core.MouseEventKind` to the imports — it is one of the few core
-types `io.worxbend.tui.dsl.*` does not re-export — then turn capture on and chain the
-handler onto `tableElement`'s `dataTable(...)` between `.onKeyEvent` and `.fill`.
+`DataTableElement` has no built-in wheel behaviour, unlike `list`. Turn capture on
+and chain the handler onto `tableElement`'s `dataTable(...)` between `.onKeyEvent`
+and `.fill`.
 
 ```scala title="Main.scala"
   override def config: RunnerConfig = RunnerConfig(tickRate = Some(TickRate), mouseCapture = true)
@@ -726,7 +717,7 @@ final class ProcmonAppSpec extends AnyFunSuite:
   private def startedApp(): (ProcmonApp, Pilot) =
     val backend = HeadlessBackend(Size(96, 24))
     val app     = ProcmonApp(SyntheticProcessSource())
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     waitUntil()(app.sampleCount.peek > 0)
     pilot.waitForIdle()
@@ -734,23 +725,23 @@ final class ProcmonAppSpec extends AnyFunSuite:
 
   test("the selection follows its process across a re-sort and across a refresh"):
     val (app, pilot) = startedApp()
-    pilot.pressKey(KeyCode.Down).pressKey(KeyCode.Down).pressKey(KeyCode.Down).waitForIdle()
+    pilot.press("down", "down", "down").waitForIdle()
 
     val pinned = app.selectedProcessId
     assert(app.tableState.selected.contains(2))
 
-    pilot.pressKey(KeyCode.Char('p')).waitForIdle()
+    pilot.press("p").waitForIdle()
     assert(app.selectedProcessId == pinned)
     assert(app.visibleProcessIds(app.tableState.selected.get) == pinned.get)
 
     val samplesBefore = app.sampleCount.peek
-    pilot.pressKey(KeyCode.Char('r'))
+    pilot.press("r")
     waitUntil()(app.sampleCount.peek > samplesBefore)
     pilot.waitForIdle()
     assert(app.selectedProcessId == pinned)
     assert(app.visibleProcessIds(app.tableState.selected.get) == pinned.get)
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 ```
 
@@ -789,7 +780,7 @@ both a new sample and a repaint (`pilot.backend.drawCount > drawsBefore`).
 | 13 — driving a whole app headlessly | [Testing](./testing#drive-a-full-app-with-pilot) |
 
 Three things to try next in this app: a `k` binding that kills the selected pid,
-which is the payoff for `selectedProcessId` existing; `pageSize` on `DataTableState`
+which is the payoff for `selectedProcessId` existing; `paging` on `DataTableState`
 so `PgUp`/`PgDn` move a screen at a time; and a per-process CPU history behind a
 sparkline, which needs a rolling `Vector` rather than a single snapshot.
 

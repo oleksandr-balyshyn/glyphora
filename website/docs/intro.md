@@ -31,17 +31,15 @@ object Counter extends TuiApp:
 
   def view(using ReactiveScope): Element =
     panel("Counter")(
-      text(s"Count: ${count.get}").bold.color(Color.Cyan),
+      text(s"Count: ${count.get}").bold.fg(Color.Cyan),
       text("+ increment · q quit").dim,
     ).rounded
       .onKey(Key.char('+')) { count.update(_ + 1) }
       .onKey(Key.char('q')) { quit() }
-
-  def main(args: Array[String]): Unit =
-    run().left.foreach(error => println(s"failed to run: $error"))
 ```
 
-There is no separate template language. The view is ordinary typed Scala; state
+`object Counter extends TuiApp` is already a runnable program — `TuiApp` supplies the
+`main` method, so there is nothing else to write. There is no separate template language. The view is ordinary typed Scala; state
 reads are tracked while it runs, and key handlers update the same values directly on
 the render thread.
 

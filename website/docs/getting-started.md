@@ -49,6 +49,10 @@ factories, style and layout extensions, reactive state, widgets, terminal events
 and runtime effects. Lower-level module dependencies are useful only when you are
 embedding glyphora or writing a widget library; see [Architecture](./architecture).
 
+The one artifact worth adding on purpose is `io.worxbend::tui-test`, in the **test**
+configuration: it carries the `Pilot` driver that runs a whole app without a TTY. See
+[Testing](./testing).
+
 </details>
 
 ## 2. Create the app
@@ -69,16 +73,19 @@ object Counter extends TuiApp:
     scaffold(statusBar = Some(statusBar(bindings))) {
       centered(34, 7) {
         panel("Counter")(
-          text(s"Count: ${count.get}").bold.color(Color.Cyan),
+          text(s"Count: ${count.get}").bold.fg(Color.Cyan),
           spacer,
           text("Change state; the view follows.").dim,
         ).rounded
       }
     }
-
-  def main(args: Array[String]): Unit =
-    run().left.foreach(error => println(s"failed to run: $error"))
 ```
+
+There is no hand-written `def main`. `TuiApp` supplies one, so `object Counter extends
+TuiApp` is already a runnable program: the launcher starts it, and if the app cannot take
+over the terminal at all it prints the reason on standard error and exits non-zero.
+(Standard *output* is where the UI itself is drawn, so a failure message printed there
+would land in the middle of the screen the app just gave back.)
 
 Run it in a terminal:
 
@@ -104,7 +111,7 @@ finishes.
 | `view(using ReactiveScope)` | tracks signal reads while returning an element tree |
 | `scaffold(...)` | composes optional top bar, sidebar, content, and status bar |
 | `centered(34, 7)` | gives the panel a fixed area centered in available space |
-| `.rounded`, `.bold`, `.color(...)` | type-safe element decoration and style extensions |
+| `.rounded`, `.bold`, `.fg(...)` | type-safe element decoration and style extensions |
 | `run()` | opens the backend and blocks until `quit()` or an unconsumed `Ctrl+C` |
 
 The key detail is `count.get`. That tracked read connects this view to `count`.
@@ -161,7 +168,8 @@ for CI or unit tests, inject `HeadlessBackend` instead. See [Testing](./testing)
 
 ### Signal write rejected off the render thread
 
-Key handlers, mouse handlers, and `onTick` already run on the render thread.
+Key handlers, mouse handlers, `onStart`, `onStop` and `onTick` already run on the
+render thread.
 Callbacks from `Future`, an HTTP client, or another executor must hop back before
 changing a signal:
 

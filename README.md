@@ -122,16 +122,17 @@ object Counter extends TuiApp:
     scaffold(statusBar = Some(statusBar(bindings))) {
       centered(34, 7) {
         panel("Counter")(
-          text(s"Count: ${count.get}").bold.color(Color.Cyan),
+          text(s"Count: ${count.get}").bold.fg(Color.Cyan),
           spacer,
           text("Change state; the view follows.").dim,
         ).rounded
       }
     }
-
-  def main(args: Array[String]): Unit =
-    run().left.foreach(error => println(s"failed to run: $error"))
 ```
+
+`TuiApp` supplies `main`, so `object Counter extends TuiApp` *is* the program — the
+launcher runs it, and a run that fails to take the terminal reports on standard error
+and exits non-zero.
 
 Three ideas carry through the entire toolkit:
 
@@ -149,12 +150,13 @@ Three ideas carry through the entire toolkit:
 
 | Module | Owns |
 |---|---|
-| 🧱 [`tui-core`](core/README.md) | cells, buffer, geometry, style, layout, events, Unicode display width |
+| 🧱 [`tui-core`](core/README.md) | cells, buffer, geometry, style, layout, events, Unicode display width, motion values |
 | 🖥️ [`tui-terminal`](terminal/README.md) | backend contract, JLine 3, ANSI diffing, input decoder, headless backend |
 | 🧩 [`tui-widgets`](widgets/README.md) | backend-independent content, controls, data, visualization, and feedback widgets |
-| ⚡ [`tui-runtime`](runtime/README.md) | signals, render thread, loop, async work, timers, easing, effects |
+| ⚡ [`tui-runtime`](runtime/README.md) | signals, render thread, loop, async work, timers |
 | 🎨 [`tui-dsl`](dsl/README.md) | element tree, `TuiApp`, focus/mouse routing, themes, shell, screens, toasts, palette |
 | 🪄 [`tui-macros`](macros/README.md) | reflection-free form and action derivation at compile time |
+| 🧪 [`tui-test`](test-support/README.md) | `Pilot` app driver, buffer assertions, golden-frame snapshots — a test-only dependency |
 
 Use the complete `tui-dsl` stack for applications, or stop at a lower layer for a custom
 backend, renderer, or widget library. **No widget depends on a terminal and no terminal
@@ -213,13 +215,13 @@ width calculation goes through grapheme-aware `CharWidth`.
 val backend = HeadlessBackend(Size(50, 10))
 val app = TodoApp()
 val pilot = Pilot.start(backend) {
-  val _ = app.runWith(backend)
+  app.runWith(backend)
 }
 
 pilot
   .waitForIdle()
   .typeText("ship docs")
-  .pressKey(KeyCode.Enter)
+  .press("enter")
   .waitForIdle()
 
 assert(pilot.screenText.contains("· ship docs"))
@@ -229,8 +231,8 @@ assert(pilot.screenText.contains("· ship docs"))
 text. Buffer helpers skip wide-character continuation cells, so assertions match what users see.
 
 > [!TIP]
-> `Pilot` and `BufferAssertions` live in the repository's internal `test-support` module; the
-> public `HeadlessBackend` can be driven directly by downstream projects.
+> `Pilot`, `BufferAssertions` and `GoldenFrames` ship as `io.worxbend::tui-test`, so add it as a
+> test-only dependency (`mvn"io.worxbend::tui-test:0.12.0"`) rather than copying the harness.
 
 🧪 **[Testing guide →](website/docs/testing.md)**
 
@@ -240,9 +242,9 @@ text. Buffer helpers skip wide-character continuation cells, so assertions match
 ./mill examples.showcase.nativeImage
 ```
 
-CI compiles `hello-world`, `counter`, `todo-list`, `dashboard`, `form-demo`, and `showcase`
-with GraalVM `--no-fallback`, then launches each without a TTY to verify a safe exit.
-Reflection and dynamic class loading are rejected in main Scala sources.
+CI compiles every example under `examples/` with GraalVM `--no-fallback`, then launches each
+without a TTY to verify a safe exit. The list is derived from the directory, so adding an example
+adds a native-image build. Reflection and dynamic class loading are rejected in main Scala sources.
 
 📦 **[Native-image guide →](website/docs/native-image.md)**
 
@@ -299,8 +301,8 @@ is canonical.
 
 Contributions are welcome across runtime behavior, widgets, examples, tests, documentation, and
 design. CI enforces the constraints that protect the design: **no runtime reflection**, **no
-`String.substring` for layout math outside `CharWidth`**, warnings-as-errors, Scalafmt, and six
-native-image example builds.
+`String.substring` for layout math outside `CharWidth`**, warnings-as-errors, Scalafmt, and a
+native-image build of every example under `examples/`.
 
 <div align="center">
 

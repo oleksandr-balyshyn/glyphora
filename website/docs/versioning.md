@@ -27,7 +27,8 @@ libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.12.0"
 ```
 
 Applications normally need only `tui-dsl`. Lower-tier artifacts are `tui-core`,
-`tui-terminal`, `tui-widgets`, `tui-runtime`, and `tui-macros`.
+`tui-terminal`, `tui-widgets`, `tui-runtime`, and `tui-macros`; `tui-test` carries the
+headless test harness and belongs in the test configuration only.
 
 Check [Maven Central](https://search.maven.org/search?q=g:io.worxbend) and
 [release tags](https://github.com/oleksandr-balyshyn/glyphora/tags) before choosing a

@@ -54,6 +54,26 @@ invisible at runtime, so the form would submit completely unvalidated data and l
 like it had passed. Two validators for the same field are rejected for the same
 reason, instead of silently last-wins.
 
+**Building a validator from the wrong factory is a construction error too.** Each
+`Field.*` factory stamps the kind of input it parses into its spec, so a `Field.text`
+aimed at an `Int` field is caught where the form is declared:
+
+```scala
+FormState.of(deriveForm[Signup], Field.text("age"))
+// java.lang.IllegalArgumentException: field 'age' is declared as IntField but its
+// validator produces TextField; use Field.int("age")
+```
+
+Until this check existed, that validator bound as though it fitted and then handed a
+`String` into the `Int` position of the case class's constructor. The failure arrived
+as a `ClassCastException` from deep inside `Mirror.fromProduct`, on the render thread,
+at the moment the user pressed submit — a whole application away from the line that
+caused it.
+
+One case slips past: `.map` keeps the spec it was called on, so
+`Field.int("age").map(_.toString)` still claims to be an `IntField` while producing a
+`String`. Use `.map` to normalise a value, not to change what it is.
+
 Boolean fields are validated like any other — a `Field.bool` validator sees the
 checkbox's own value:
 
@@ -71,7 +91,7 @@ def view(using ReactiveScope): Element =
     Form(signup),
     spacer(1),
     signup.result.get match
-      case Some(value) => text(s"Welcome, ${value.username}!").color(Color.Green)
+      case Some(value) => text(s"Welcome, ${value.username}!").fg(Color.Green)
       case None        => text("Tab next · Space toggle · Ctrl+S submit").dim,
   ).rounded.onKey(Key.CtrlS) {
     signup.submit()
@@ -108,7 +128,9 @@ val slug = Field
 ```
 
 Use `.map` for an infallible transformation and `.mapValidated` when the transform
-can return a user-facing error.
+can return a user-facing error. Neither may change the *type* of a field validating a
+derived form: the assembled values go to the case class's constructor unchecked, and
+the declaration-time guard above sees the factory, not the transformed type.
 
 ## Accessible form output
 

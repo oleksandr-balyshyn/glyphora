@@ -18,7 +18,7 @@ with no network — read them beside this page.
 | You have | Start with | Add when needed |
 |---|---|---|
 | one bounded value | `progressBar(ratio)` | `.ramp(...)` to colour it by value |
-| one value, whole row | `gauge(ratio)` | a centred label inside the bar |
+| one value, whole row | `gauge(ratio)` | a centred `ProgressLabel` inside the bar |
 | a series over time | `sparkline(samples)` | a pinned `max` so frames compare |
 | a distribution | a column of `progressBar(...).bare` rows | bucket labels beside each row |
 | x/y data | `chart(datasets, xBounds, yBounds)` | braille resolution for density |

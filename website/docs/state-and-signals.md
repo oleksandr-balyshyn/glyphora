@@ -141,8 +141,8 @@ def view(using ReactiveScope): Element =
 // mutating signals, or constructing long-lived resources.
 ```
 
-Start side effects from a key/mouse handler, `onTick`, an app service, or an
-`Async` callback. See [Async work & timers](./async-and-timers).
+Start side effects from `onStart`, a key/mouse handler, `onTick`, an app service, or
+an `Async` callback. See [Async work & timers](./async-and-timers).
 
 ## The render-thread rule
 
@@ -155,7 +155,7 @@ Already safe:
 - `.onKey` / `.onKeyEvent` handlers;
 - `.onMouseEvent` handlers;
 - `KeyBindings` actions;
-- `onTick()`;
+- `onStart()`, `onTick()`, `onResize(size)`, `onStop()`;
 - completion handlers passed to `Async.run` and `Async.runCatching`.
 
 Callbacks owned by another thread must hop back:

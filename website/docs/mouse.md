@@ -91,15 +91,15 @@ This lets an input consume normal text and editing keys while a parent still han
 
 ## Handle custom mouse behavior
 
-`MouseEvent` carries absolute terminal coordinates, a `MouseEventKind`, and keyboard
-modifiers:
+`MouseEvent` carries a `Position` (the absolute terminal cell the pointer was over), a
+`MouseEventKind`, and keyboard modifiers:
 
 ```scala
 panel("Canvas")(canvasView).onMouseEvent {
-  case MouseEvent(x, y, MouseEventKind.Down, _) =>
+  case MouseEvent(Position(x, y), MouseEventKind.Down, _) =>
     selectedCell.set((x, y))
     true
-  case MouseEvent(_, _, MouseEventKind.ScrollDown, _) =>
+  case MouseEvent(_, MouseEventKind.ScrollDown, _) =>
     zoom.update(value => math.max(1, value - 1))
     true
   case _ =>
@@ -107,9 +107,11 @@ panel("Canvas")(canvasView).onMouseEvent {
 }
 ```
 
-Kinds are `Down`, `Up`, `Drag`, `Moved`, `ScrollUp`, and `ScrollDown`. Coordinates
-are absolute screen cells; custom widgets should compare them with the element's
-known model or use built-in interactive elements when possible.
+Kinds are `Down`, `Up`, `Drag`, `Moved`, `ScrollUp`, and `ScrollDown`. The position is
+in absolute screen cells and zero-based, the same coordinate space a `Rect` uses — so a
+handler that wants coordinates relative to its own area subtracts that area's origin
+(`event.position.x - area.x`). Custom widgets should compare the position with the
+element's known model, or use built-in interactive elements when possible.
 
 ## Built-in mouse behavior
 

@@ -96,16 +96,18 @@ shows anything. `inFlight` is what stops a source slower than the interval from
 queueing reads behind each other: `Async.runCatching` hands back no cancellation
 handle, so the only defence is not starting the next read.
 
-## Start the poller on the first tick
+## Start the poller in onStart
 
-Not in the constructor. The first `onTick` is the earliest moment the app is
-certainly on its own render thread:
+Not in the constructor. `onStart` runs on the render thread, once, after the
+terminal is ready and before the first frame — the earliest moment the app is
+certainly on its own render loop:
 
 ```scala
+override def onStart(): Unit =
+  refresh()
+  startPolling()
+
 override def onTick(): Unit =
-  if poller.isEmpty then
-    refresh()
-    startPolling()
   ageSeconds.set(lastUpdatedNanos.map(at => (System.nanoTime() - at) / 1_000_000_000L))
 ```
 
@@ -113,34 +115,41 @@ override def onTick(): Unit =
 its body to whatever loop that returns. A constructor runs before any runner is
 registered, so the capture falls back to the detached loop — and with two runners
 live in one JVM, which a parallel test suite is exactly, another app's render
-thread drains your readings. There is no `onStart` hook, so this is the seam; it
-requires `RunnerConfig(tickRate = Some(...))`, since without a tick rate `onTick`
-never runs.
+thread drains your readings. Unlike `onTick`, `onStart` needs no tick rate to fire.
 
 ## Cancel it on the way out
 
-Nothing cancels a repeating task for you. Cancel it on quit and on interrupt, and
-keep the handle in a plain `var` — nothing renders from it:
+Nothing cancels a repeating task for you. `onStop` runs on every exit path —
+`quit()`, an unconsumed `Ctrl+C`, a backend failure, an event handler that threw —
+so that is where the handle is released. Keep the handle in a plain `var`; nothing
+renders from it:
 
 ```scala
-override def onInterrupt(): Boolean =
-  stopPolling()
-  false
+override def onStop(): Unit = stopPolling()
 
 private def stopPolling(): Unit =
   poller.foreach(_.cancel())
   poller = None
-
-private def stopAndQuit(): Unit =
-  stopPolling()
-  quit()
 ```
 
 The timer thread is a daemon, so a leaked poller still lets the JVM exit — which is
 why this survives casual testing. Under a headless test the runner ends while the
-poller keeps firing into a loop nobody drains. `onInterrupt` returning `false` lets
-the normal teardown proceed after the stop. `Async.every` has no operation to
+poller keeps firing into a loop nobody drains. `Async.every` has no operation to
 change an interval either, so a new cadence means cancel and re-arm.
+
+## Ask for a frame the reactive layer did not see
+
+A continuation that writes a `Signal` schedules its own redraw. A continuation that
+mutates **caller-owned widget state** does not: `ListState`, `TextInputState`,
+`DataTableState` and `LogState` are plain mutable objects with nothing subscribed to
+them, so the screen keeps the previous frame until the next keystroke. Say so:
+
+```scala
+Async.run(loadRows()) { rows =>
+  tableState.rows = rows
+  requestRedraw()
+}
+```
 
 ## Give every timed action a key
 
@@ -153,7 +162,7 @@ override def bindings: KeyBindings = KeyBindings(
   binding("r", "refresh")(refresh()),
   binding("+", "slower")(rescale(_ * 2L)),
   binding("-", "faster")(rescale(_ / 2L)),
-  binding("q", "quit")(stopAndQuit()),
+  binding("q", "quit")(quit()),
 )
 ```
 

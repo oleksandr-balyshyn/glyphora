@@ -42,7 +42,7 @@ keyboard vocabulary.
 object HelloWorld extends TuiApp:
   def view(using ReactiveScope): Element =
     panel("Hello")(
-      text("Welcome to glyphora!").bold.color(Color.Cyan),
+      text("Welcome to glyphora!").bold.fg(Color.Cyan),
       spacer,
       text("Press 'q' to quit").dim,
     ).rounded.onKeyEvent {
@@ -66,7 +66,7 @@ final class CounterApp extends TuiApp:
 
   def view(using ReactiveScope): Element =
     panel("Counter")(
-      text(s"Count: ${count.get}").bold.color(Color.Green),
+      text(s"Count: ${count.get}").bold.fg(Color.Green),
       spacer,
       text("'+' increment · '-' decrement · 'q' quit").dim,
     ).rounded

@@ -13,7 +13,7 @@ the [examples](../examples/README.md) are complete runnable versions of these pa
 ```scala
 object Hello extends TuiApp:
   def view(using ReactiveScope): Element =
-    panel("Hello")(text("Welcome!").bold.color(Color.Cyan)).rounded
+    panel("Hello")(text("Welcome!").bold.fg(Color.Cyan)).rounded
   override def bindings = KeyBindings(binding("q", "quit")(quit()))
 ```
 
@@ -66,7 +66,7 @@ notify("Saved", NoticeLevel.Success)                           // needs config.t
 
 ```scala
 override def splash = Some(SplashScreen(
-  centered(36, 5)(bigText("MYAPP").color(Color.Cyan)),
+  centered(36, 5)(bigText("MYAPP").fg(Color.Cyan)),
   effect = Effect.coalesce(800.millis),
 ))
 runEffect(Effect.parallel(Effect.fadeIn(300.millis), Effect.sweepIn(300.millis)))
@@ -91,7 +91,7 @@ val form = FormState.of(
 ```scala
 val backend = HeadlessBackend(Size(60, 16))
 val pilot = Pilot.start(backend) { app.runWith(backend) }
-pilot.typeText("hi").pressKey(KeyCode.Enter).waitForIdle()
+pilot.typeText("hi").press("enter").waitForIdle()
 assert(pilot.screenText.contains("hi"))
 ```
 

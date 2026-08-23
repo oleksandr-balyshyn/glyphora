@@ -52,6 +52,21 @@ def view(using ReactiveScope) = input(inputState)
 Creating `TextInputState()` in `view` replaces it with an empty editor on the next
 redraw.
 
+## A background result updates nothing on screen
+
+A `Signal` write schedules its own redraw. Caller-owned widget state — `ListState`,
+`TextInputState`, `DataTableState`, `LogState` — is a plain mutable object that
+nothing subscribes to, so mutating it outside an event handler changes the *next*
+frame without asking for one, and the screen sits on the old contents until a key is
+pressed. Call `requestRedraw()` after the mutation:
+
+```scala
+Async.run(fetchRows()) { rows =>
+  tableState.rows = rows
+  requestRedraw()
+}
+```
+
 ## Input or mouse events do not arrive
 
 - Confirm the element is focusable and press `Tab` to move focus.
@@ -161,7 +176,8 @@ Measured on a real PTY with `examples/hello-world`:
 
 `Ctrl+C` arrives as `Event.Interrupt` and quits through the same teardown as any other
 exit; override `TuiApp.onInterrupt()` and return `true` to intercept it (to confirm, or
-to cancel in-flight work) instead. Signal-terminated exits additionally go through a
+to cancel in-flight work) instead. `TuiApp.onStop()` runs on this path too — and on
+every other exit path — so teardown does not have to be hung off `onInterrupt`. Signal-terminated exits additionally go through a
 JVM shutdown hook that writes the mode-reset sequences straight to the stdout
 descriptor, so restoration does not depend on the backend still being intact.
 

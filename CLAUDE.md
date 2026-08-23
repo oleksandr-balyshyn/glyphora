@@ -4,14 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-glyphora is a Scala 3 terminal-UI toolkit published as six `io.worxbend::tui-*` artifacts. Build tool is Mill (`.mill-version` pins 1.1.7, use the checked-in `./mill` wrapper); Scala 3.7.1; JDK 21 for CI, GraalVM `graalvm-community:23.0.1` for native images.
+glyphora is a Scala 3 terminal-UI toolkit published as seven `io.worxbend::tui-*` artifacts. Build tool is Mill (`.mill-version` pins 1.1.7, use the checked-in `./mill` wrapper); Scala 3.7.1; JDK 21 for CI, GraalVM `graalvm-community:23.0.1` for native images.
 
 ## Commands
 
 ```bash
 ./mill __.compile                 # everything
-./mill __.test                    # everything
-./mill widgets.test               # one module's suite
+
+# tests: one module at a time, the way CI runs them. `./mill __.test` is a single step
+# that only ever reports "still running", so a hang is indistinguishable from a slow module.
+./mill core.test
+./mill terminal.test
+./mill widgets.test
+./mill runtime.test
+./mill macros.test
+./mill dsl.test
+./mill test-support.test
+
 ./mill core.test.testOnly io.worxbend.tui.core.RectSpec            # one suite
 ./mill core.test.testOnly io.worxbend.tui.core.RectSpec -- -z inset # one test (ScalaTest -z)
 
@@ -41,26 +50,28 @@ Golden-frame fixtures: run tests with `GLYPHORA_GOLDEN_UPDATE=<module>/src/test/
 - **No `String.substring` in main sources outside `core/CharWidth.scala`.** All display-width, truncation, and layout arithmetic goes through `CharWidth` (grapheme clusters, CJK, emoji ZWJ, combining marks).
 - **Warnings are errors**: `-deprecation -feature -unchecked -Wunused:all -Werror` (set in `build.mill`).
 - Scalafmt (`.scalafmt.conf`, 120 cols, Scala 3 dialect, `align.preset = more`) and Scalafix (`.scalafix.conf`) are checked by CI. On a pull request from this repository an `autofix` job applies both and pushes the result, so `lint` is the gate for `main` and for forks.
-- **Every** example must build with `--no-fallback` and exit cleanly with no TTY; the CI native-image job lists them by name, so adding an example means editing that list. `java.net.http` needs no extra native configuration on this toolchain — `weather`, `airsensor` and `loadtest` all use it and all build clean.
+- **Every** example must build with `--no-fallback` and exit cleanly with no TTY. The CI example list is *derived*, not hardcoded: `ci.yml` runs `find examples -mindepth 2 -maxdepth 2 -name package.mill` and a discipline step asserts the derivation is non-empty, so adding `examples/<name>/package.mill` is the only step needed to get that example compiled, tested and built as a native binary. `java.net.http` needs no extra native configuration on this toolchain — `weather`, `airsensor` and `loadtest` all use it and all build clean.
 
 ## Architecture
 
-Six published modules plus a test-only one. Dependency edges are real Mill `moduleDeps` and only point downward — **nothing above `tui-core` may be referenced by a lower tier**:
+Seven published modules. Dependency edges are real Mill `moduleDeps`, they only point downward — **nothing above `tui-core` may be referenced by a lower tier** — and each module declares exactly the modules it names, no more: a `moduleDeps` entry a module does not actually import is a dependency every consumer of its POM is made to resolve for nothing.
 
 | Module | `moduleDeps` | Owns |
 |---|---|---|
-| `core` | — | `Buffer`/`Cell`, `Rect`/`Size`/`Position`, `Style`/`Color`/`Modifiers`, `Text`/`Line`/`Span`, `Layout` + `Constraint` solver, `Widget`/`StatefulWidget`, the `Event`/`KeyEvent`/`MouseEvent` ADT, `CharWidth` |
+| `core` | — | `Buffer`/`Cell`, `Rect`/`Size`/`Position`, `Style`/`Color`/`Modifiers`, `Text`/`Line`/`Span`, `Layout` + `Constraint` solver, `Widget`/`StatefulWidget`/`Measured`, the `Event`/`KeyEvent`/`MouseEvent` ADT, `CharWidth`, and the pure time/curve values `Progress`/`Easing`/`Tween`/`Spring`/`Effect` |
 | `terminal` | core | `Backend` trait, `JLine3Backend` (pinned `org.jline:jline:3.30.x`), `InputDecoder`, `HeadlessBackend` |
 | `widgets` | core | all 40+ built-in widgets, backend-agnostic |
-| `runtime` | core, terminal | `Signal`/`Computed`/`ReactiveScope`, `RenderThread`, `Runner`/`TerminalRunner`/`Frame`, `Async`, `Timers`, `Effect`/`Easing` |
-| `macros` | core | `deriveForm` / `bindAction`, inline + `Mirror` only |
-| `dsl` | core, widgets, runtime, macros | `Element` tree, `TuiApp`, `EventRouter`, `Focus`, `Chrome`, `Theme`, `Screen`, `Form` |
-| `test-support` | core, terminal, runtime | `Pilot`, `BufferAssertions`, `GoldenFrames` — **not published**, test-only |
+| `runtime` | core, terminal | `Signal`/`Computed`/`ReactiveScope`, `RenderThread`, `Runner`/`TerminalRunner`/`Frame`, `Async`, `Timers`, the caller-owned tick clocks `Stopwatch`/`Timer`/`TickDriven` |
+| `macros` | — | `deriveForm` / `bindAction`, inline + `Mirror` only (it derives over the caller's own types and names nothing from `tui-core`) |
+| `dsl` | core, terminal, widgets, runtime, macros | `Element` tree, `TuiApp`, `EventRouter`, `Focus`, `Chrome`, `Theme`, `Screen`, `Form` |
+| `test-support` | core, terminal | `Pilot`, `BufferAssertions`, `GoldenFrames` — published as `tui-test`; the Scala package stays `io.worxbend.tui.testsupport` |
 
 The design invariants worth knowing before editing:
 
 - **The event ADT lives in `core`, not `terminal`**, so widgets stay backend-agnostic. Everything above `terminal` talks to the `Backend` trait, which imports no JLine types; fallible backend ops return `Either[BackendError, A]`.
+- **Time-to-position arithmetic lives in `core.Progress`.** One owner for "where is this animation at `elapsed`": `normalized` is the one-shot fraction `Tween` and the timed `Effect`s ease, `stepped`/`steppedAtRate` are the looping whole positions the animated widgets use (`widgets.Animation` is just the widget-side name for them). Because these are pure values with no clock and no runner, they sit in `core` where `tui-widgets` can reach them — a widget and an effect can never disagree about where a moment falls in a cycle.
 - **Widgets render into a `Buffer` and nothing else.** `Widget` is a SAM (`(Rect, Buffer) => Unit`); interactive/scrollable renderers use `StatefulWidget[S]` where `S` is owned by the *caller*, keeping the widget value immutable and reusable.
+- **Content measurement has one contract, `core.Measured`.** A widget that knows how much room its content needs mixes it in and answers `heightAt(width)` / `widthAt(height)`; `None` means "cannot say" and callers must treat it as unmeasurable, never as zero. `Element.intrinsicHeight` consults an explicit `.length(n)` first, then the widget through `Measured`, then the node's `SizeClaim` — so a leaf whose widget can measure itself needs no measurement override at all.
 - **`Element` is a declarative layer over `tui-widgets`, never a parallel render path** — every node exposes a `widget`. The tree is plain sealed data, so styling extensions rebuild nodes instead of mutating, and construction tests can pattern-match it.
 - **Event ordering in the DSL**: the user's `onKeyEvent`/`onMouseEvent` handler runs first; only if it returns `false` does the element's `builtinKeyHandler`/`builtinMouseHandler` fire; unconsumed keys bubble to ancestors, then to `TuiApp.bindings`. Return `false` to let an event keep bubbling.
 - **Single render thread.** `Signal.set` calls `RenderThread.checkRenderThread()`, which throws off-thread but is a deliberate no-op when no runner is registered — so plain unit tests need no runtime. Each `Runner` owns its own work queue (multiple runners can coexist in one JVM); background work must call `RenderThread.capture()` *before* going async so its continuation returns to the right loop.
@@ -71,15 +82,23 @@ Every module is `<module>/src/{main,test}/scala/io/worxbend/tui/<module>/`. Exam
 
 ## Build-file conventions
 
-`build.mill` holds the two shared traits: `TuiModule` (Scala version, strict flags, `TuiTests` ScalaTest wiring) and `TuiPublishModule` (POM metadata + the single synchronized `publishVersion`, currently `0.12.0` — bump it in one place). Each module has a small `package.mill`. Test-only dependencies go through `def extraTestDeps`, not by overriding `mvnDeps`, because Mill cannot resolve a second `super.mvnDeps` chain in nested test objects.
+`build.mill` holds four shared traits, and every `package.mill` should be small enough to fit on a screen:
+
+- `TuiModule` — Scala version, strict flags, and the nested `TuiTests` ScalaTest wiring. `TuiTests` forks **one JVM per test class** (`testForkGrouping`), because `AnimationClock` and the `RenderThread` registry are process-global and Mill's default work-stealing grouping is not stable between runs — sharing a worker made suites decide each other's frames, which is what used to make `./mill __.test` flaky.
+- `TuiPilotTests extends TuiTests` — adds `test-support` to `moduleDeps`, for any module whose tests drive a whole app through `Pilot`.
+- `TuiExampleModule extends TuiModule with NativeImageModule` — the GraalVM pin (`graalvm-community:23.0.1`, one place, not ten), `nativeImageOptions = Seq("--no-fallback")`, and a nested `object test extends TuiPilotTests`. An example's `package.mill` then declares only `moduleDeps` and `mainClass`.
+- `TuiPublishModule extends TuiModule with PublishModule` — POM metadata plus the single synchronized `publishVersion`, currently `0.12.0`; bump it in one place.
+
+Test-only dependencies go through `def extraTestDeps`, not by overriding `mvnDeps`, because Mill cannot resolve a second `super.mvnDeps` chain in nested test objects.
 
 ## Adding a widget
 
-1. Implement in `widgets/` in its **own file named after the widget** — no grab-bag files — depending only on `tui-core`; render inside the given `Rect`, clip safely, all width math via `CharWidth`. Stateless → `Widget`; interactive → `StatefulWidget[S]` with caller-owned state. Shared render helpers go in a `private[widgets]` object named for the concept (`Fraction`, `BlockLadder`), not copied per widget.
-2. Test the buffer with `BufferAssertions`: empty/tiny areas, truncation, Unicode, focus/selection styling, state boundaries.
-3. Add the DSL node and its built-in key/mouse behavior in `dsl/Element.scala`, a factory in `object Element`, and an export in `dsl.scala`.
-4. Drive interaction through `Pilot` (focus, keys, mouse, resize, redraw).
-5. Document it in `website/docs/widgets.md`; new pages must also be registered in `website/docs-navigation.mjs`, which drives both the Docusaurus sidebar and the generated Wiki.
+1. Constructor parameters go in one fixed order: **required data, then `style`, then specialised styles, then glyph/symbol overrides.** Every widget reads the same way at the call site, and a reader can tell at a glance which arguments are content and which are appearance.
+2. Implement in `widgets/` in its **own file named after the widget** — no grab-bag files — depending only on `tui-core`; render inside the given `Rect`, clip safely, all width math via `CharWidth`. Stateless → `Widget`; interactive → `StatefulWidget[S]` with caller-owned state; if the widget knows how much space its content needs, also mix in `Measured` rather than inventing a `heightOf`/`preferredWidth` of its own. Shared render helpers go in a `private[widgets]` object named for the concept (`Fraction`, `BlockLadder`), not copied per widget.
+3. Test the buffer with `BufferAssertions`: empty/tiny areas, truncation, Unicode, focus/selection styling, state boundaries.
+4. Add the DSL node to the node-family file it belongs to (`LayoutElements`, `DisplayElements`, `LoadingElements`, `TextEntryElements`, `ChoiceElements`, `CollectionElements`, `NavigationElements`, `ElementDecorators`) — `Element.scala` holds only the `Element` trait itself. Each node declares `type Self = ThatNodeType` so the fluent builders stay type-preserving. Built-in key/mouse behavior is composed from `ElementBuiltins`; the factory goes in `ElementFactories` (which `object Element` extends) and is re-exported from `dsl.scala`.
+5. Drive interaction through `Pilot` (focus, keys, mouse, resize, redraw).
+6. Document it in `website/docs/widgets.md`; new pages must also be registered in `website/docs-navigation.mjs`, which drives both the Docusaurus sidebar and the generated Wiki.
 
 ## Style docs
 

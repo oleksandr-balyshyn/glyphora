@@ -22,14 +22,13 @@ object Hello extends TuiApp:
   def view(using ReactiveScope): Element =
     centered(36, 7) {
       panel("Hello")(
-        text("Welcome to glyphora").bold.color(Color.Cyan),
+        text("Welcome to glyphora").bold.fg(Color.Cyan),
         text("q quit").dim,
       ).rounded.onKey(Key.char('q')) { quit() }
     }
-
-  def main(args: Array[String]): Unit =
-    run().left.foreach(error => println(s"failed to run: $error"))
 ```
+
+`TuiApp` supplies `main`, so `object Hello extends TuiApp` is the whole program.
 
 Use `.onKey` for exact key/action pairs; use `.onKeyEvent` only when the handler must
 inspect modifiers or decide whether to consume.
@@ -109,7 +108,7 @@ private def confirmDelete(name: String): Unit =
     centered(44, 8) {
       panel("Delete deployment?")(
         text(name).bold,
-        text("This cannot be undone.").color(Color.Red),
+        text("This cannot be undone.").fg(Color.Red),
         text("Enter confirm · Esc cancel").dim,
       ).rounded
         .onKey(Key.Enter) {
@@ -145,7 +144,7 @@ def rowsView(using ReactiveScope): Element = rows.get match
   case LoadState.Idle            => text("Press r to load.").dim
   case LoadState.Loading         => spinner("loading…")
   case LoadState.Ready(value)    => renderRows(value)
-  case LoadState.Failed(message) => text(s"Error: $message").color(Color.Red)
+  case LoadState.Failed(message) => text(s"Error: $message").fg(Color.Red)
 ```
 
 `Async.runCatching` performs work on a daemon worker and delivers the `Either` on the
@@ -237,8 +236,12 @@ def releaseNotes: Element =
   ).rounded
 ```
 
-`markdown` reports its height for the current width, so the two-argument
-`scrollView` can measure it automatically and show a scrollbar only when needed.
+The `Markdown` widget implements `tui-core`'s `Measured`, so it reports its wrapped
+height for the current width and the two-argument `scrollView` measures it automatically,
+showing a scrollbar only when needed. The same holds for any raw widget you drop in with
+`widget(...)`: implement `Measured` on it and the scroll view finds its full height. A
+widget that cannot report a height measures as exactly one viewport, which means it will
+not scroll at all — give that content an explicit `.length(n)` or pass `contentHeight`.
 
 ## Create and validate a case-class form
 
@@ -313,13 +316,13 @@ Call `timer.start()`, `stop()`, `toggle()`, or `reset()` from handlers.
 val backend = HeadlessBackend(Size(50, 10))
 val app = TodoApp()
 val pilot = Pilot.start(backend) {
-  val _ = app.runWith(backend)
+  app.runWith(backend)
 }
 
 pilot
   .waitForIdle()
   .typeText("ship docs")
-  .pressKey(KeyCode.Enter)
+  .press("enter")
   .waitForIdle()
 
 assert(pilot.screenText.contains("· ship docs"))
@@ -334,7 +337,7 @@ directly over the public `HeadlessBackend`. See [Testing](./testing).
 import io.worxbend.tui.core.*
 import io.worxbend.tui.widgets.Paragraph
 
-val raw = Paragraph(Text.raw("custom renderer"), wrap = true)
+val raw = Paragraph(Text.raw("custom renderer"), overflow = Overflow.Wrap)
 
 def view(using ReactiveScope): Element =
   panel("Embedded")(widget(raw).fill).rounded

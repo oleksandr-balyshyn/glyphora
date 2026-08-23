@@ -85,9 +85,9 @@ Pair tone with a symbol and clear language:
 
 ```scala
 def statusLine(state: State): Element = state match
-  case State.Ready  => text("✓ Ready").color(Color.Green)
-  case State.Syncing => text("… Synchronizing").color(Color.Yellow)
-  case State.Failed(message) => text(s"Error: $message").color(Color.Red)
+  case State.Ready  => text("✓ Ready").fg(Color.Green)
+  case State.Syncing => text("… Synchronizing").fg(Color.Yellow)
+  case State.Failed(message) => text(s"Error: $message").fg(Color.Red)
 ```
 
 `notice` and `badge` do this for you: `NoticeLevel` pairs each severity with a glyph
