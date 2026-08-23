@@ -1,4 +1,4 @@
-package io.worxbend.tui.runtime
+package io.worxbend.tui.core
 
 import scala.concurrent.duration.FiniteDuration
 

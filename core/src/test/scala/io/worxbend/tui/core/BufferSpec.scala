@@ -92,6 +92,24 @@ final class BufferSpec extends AnyFunSuite:
     assert(buf.get(0, 0) == Cell.Empty)
     assert(buf.get(1, 0) == Cell.Empty)
 
+  test("set blanks a wide grapheme aimed at the last column of a row"):
+    // there is no column left to reserve as its continuation, so storing the glyph itself would make the terminal
+    // draw two columns where the buffer owns one: the row wraps, and the next frame's diff — believing the column
+    // already holds the glyph — never repairs it. The style survives so a background fill reaches the edge.
+    val buf = buffer(3, 1)
+    buf.set(2, 0, Cell("好", Style.Default.withBg(Color.Blue)))
+    assert(buf.get(2, 0) == Cell(" ", Style.Default.withBg(Color.Blue)))
+
+  test("blit lands a wide grapheme at the destination's right edge as a blank"):
+    // the guard belongs to the write, not to any one caller: `blit` goes through `set` like everything else
+    val source = buffer(2, 1)
+    source.setString(0, 0, "好", Style.Default)
+    val target = buffer(3, 1)
+    target.blit(source, Position(2, 0))
+    assert(target.get(2, 0) == Cell.Empty)
+    // and so nothing reaches a backend that would draw across a column this buffer does not own
+    assert(buffer(3, 1).diff(target).isEmpty)
+
   test("blit copies a source buffer at an offset with clipping"):
     val source = buffer(3, 1)
     source.setString(0, 0, "abc", Style.Default)

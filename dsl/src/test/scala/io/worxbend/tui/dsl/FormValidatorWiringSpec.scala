@@ -35,6 +35,32 @@ final class FormValidatorWiringSpec extends AnyFunSuite:
       )
     assert(thrown.getMessage.contains("email"))
 
+  /** A validator built from the wrong factory used to bind as though it fitted, and then handed a `String` into the
+    * `Int` position of the case class's constructor. The failure surfaced as a `ClassCastException` out of
+    * `Mirror.fromProduct` on the render thread, at the moment the user pressed submit — a whole application away from
+    * the line that caused it. `FieldSpec.input` records which factory made a field, so the mismatch is now a
+    * declaration-time error.
+    */
+  test("a validator built from the wrong factory for the field's type is rejected at construction"):
+    val thrown = intercept[IllegalArgumentException](FormState.of(spec, Field.text("age")))
+    assert(thrown.getMessage.contains("age"), s"the message should name the field: ${thrown.getMessage}")
+    assert(thrown.getMessage.contains("IntField"), "it should say what the form declares")
+    assert(thrown.getMessage.contains("TextField"), "and what the validator produces")
+    assert(thrown.getMessage.contains("""Field.int("age")"""), "and what to write instead")
+
+  test("a text validator on a boolean field, and a boolean one on a text field, are both rejected"):
+    assert(intercept[IllegalArgumentException](FormState.of(spec, Field.text("terms"))).getMessage.contains("terms"))
+    assert(intercept[IllegalArgumentException](FormState.of(spec, Field.bool("email"))).getMessage.contains("email"))
+
+  /** The one case the guard cannot see: `map` keeps the spec it was called on, so this still claims to be an `IntField`
+    * while producing a `String`. Asserting on the `ClassCastException` it eventually raises would pin
+    * `Mirror.fromProduct`'s wording rather than anything this library promises, so it is left untested on purpose —
+    * `Field.map`'s Scaladoc is where the caveat lives.
+    */
+  test("a validator that changes the value type without changing the factory still builds"):
+    val state = FormState.of(spec, Field.int("age").map(_.toString))
+    assert(state.bindings.sizeIs == 3)
+
   test("a correctly named validator still runs"):
     val state =
       FormState.of(spec, Field.text("email").mapValidated(v => if v.contains("@") then Right(v) else Left("no @")))

@@ -20,8 +20,39 @@ object Modifiers:
 
   extension (m: Modifiers)
     def |(other: Modifiers): Modifiers = (m: Int) | (other: Int)
-    def has(flag: Modifiers): Boolean  = ((m: Int) & (flag: Int)) != 0
-    def isEmpty: Boolean               = (m: Int) == 0
+
+    /** Whether *any* flag of `flag` is set. With a single flag — the overwhelmingly common call — that reads exactly as
+      * it looks; with several ORed together it is an any-of test, so `(Bold | Italic).hasAny(Bold | Underline)` is
+      * true. Use [[hasAll]] when every flag must be present.
+      */
+    def hasAny(flag: Modifiers): Boolean = ((m: Int) & (flag: Int)) != 0
+
+    /** Whether *every* flag of `flags` is set. `hasAll(Modifiers.None)` is true — no flag is required. */
+    def hasAll(flags: Modifiers): Boolean = ((m: Int) & (flags: Int)) == (flags: Int)
+
+    def isEmpty: Boolean = (m: Int) == 0
 
     /** This bitset with every flag in `flags` cleared (ratatui's `sub_modifier`). */
     def without(flags: Modifiers): Modifiers = (m: Int) & ~(flags: Int)
+
+    /** The names of the set flags, in declaration order; empty when nothing is set. */
+    def names: Seq[String] = Named.collect { case (flag, name) if m.hasAny(flag) => name }
+
+    /** The set flags as `"Bold|Italic"`, or `"None"` when nothing is set — what every `toString` that holds a
+      * `Modifiers` should print instead of the raw `Int` the opaque type erases to.
+      */
+    def show: String = if m.isEmpty then "None" else names.mkString("|")
+
+  /** Every flag paired with its name, in bit order. The single table both [[names]] and [[show]] read, so a new flag is
+    * added in one place rather than in one place per rendering.
+    */
+  private val Named: Seq[(Modifiers, String)] = Seq(
+    Bold       -> "Bold",
+    Dim        -> "Dim",
+    Italic     -> "Italic",
+    Underline  -> "Underline",
+    Blink      -> "Blink",
+    Reverse    -> "Reverse",
+    Hidden     -> "Hidden",
+    CrossedOut -> "CrossedOut",
+  )

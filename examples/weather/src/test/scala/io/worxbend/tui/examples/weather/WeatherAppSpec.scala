@@ -38,7 +38,7 @@ final class WeatherAppSpec extends AnyFunSuite:
     val client  = FakeWeatherClient(Right(sampleReport))
     val backend = HeadlessBackend(Size(60, 16))
     val app     = WeatherApp(client)
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("Lisbon").pressKey(KeyCode.Enter)
     waitUntil(pilot)(_.contains("Lisbon, Portugal"))
@@ -53,7 +53,7 @@ final class WeatherAppSpec extends AnyFunSuite:
     val client  = FakeWeatherClient(Left(WeatherError.CityNotFound("Nowhereville")))
     val backend = HeadlessBackend(Size(60, 16))
     val app     = WeatherApp(client)
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("Nowhereville").pressKey(KeyCode.Enter)
     waitUntil(pilot)(_.contains("Couldn't fetch Nowhereville"))

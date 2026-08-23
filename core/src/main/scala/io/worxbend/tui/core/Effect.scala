@@ -1,6 +1,4 @@
-package io.worxbend.tui.runtime
-
-import io.worxbend.tui.core.{Buffer, Cell, Color, Rect, Style}
+package io.worxbend.tui.core
 
 import scala.concurrent.duration.{Duration, DurationInt, DurationLong, FiniteDuration}
 
@@ -9,11 +7,11 @@ import scala.concurrent.duration.{Duration, DurationInt, DurationLong, FiniteDur
   *
   * An effect holds no clock of its own — it is a pure function of the `elapsed` it is handed, which is what keeps the
   * combinators ([[Effect.sequence]], [[Effect.repeat]], …) composable and replayable. The flip side is that **the
-  * caller owns the clock**: whoever calls [[process]], directly or through [[Frame.applyEffect]], must remember when
-  * this particular effect started and pass the time since then. `TuiApp.runEffect` in `tui-dsl` keeps that timestamp
-  * per active effect, so a DSL app gets it for free; an app driving a bare [[Runner]] has to keep it itself. Passing
-  * time since the frame, or since the application started, compiles and type-checks but leaves the effect pinned at
-  * progress 1.0 or oscillating out of phase.
+  * caller owns the clock**: whoever calls [[process]], directly or through `Frame.applyEffect` in `tui-runtime`, must
+  * remember when this particular effect started and pass the time since then. `TuiApp.runEffect` in `tui-dsl` keeps
+  * that timestamp per active effect, so a DSL app gets it for free; an app driving a bare `Runner` has to keep it
+  * itself. Passing time since the frame, or since the application started, compiles and type-checks but leaves the
+  * effect pinned at progress 1.0 or oscillating out of phase.
   */
 trait Effect:
 

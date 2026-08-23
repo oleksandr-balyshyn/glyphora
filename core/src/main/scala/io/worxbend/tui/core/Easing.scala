@@ -1,4 +1,4 @@
-package io.worxbend.tui.runtime
+package io.worxbend.tui.core
 
 /** Progress curves for effects and tweens: map linear time `t ∈ [0, 1]` to eased progress.
   *

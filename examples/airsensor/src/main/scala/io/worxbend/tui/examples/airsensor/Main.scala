@@ -31,7 +31,7 @@ enum Status:
   *
   * Keys: `r` refresh now · `+` slower · `-` faster · `h` toggle history · `?` help · `q`/`Esc` quit.
   */
-final class AirSensorApp(
+class AirSensorApp(
     client: SensorClient = FakeSensor(),
     initialInterval: FiniteDuration = 5.seconds,
 ) extends TuiApp:
@@ -80,29 +80,34 @@ final class AirSensorApp(
     binding("-", "faster")(rescale(_ / 2L)),
     binding("h", "history")(showHistory.update(!_)),
     binding("?", "help")(showHelp.update(!_)),
-    binding("q", "quit")(stopAndQuit()),
+    binding("q", "quit")(quit()),
     // the same action on a second key, hidden from the status bar so the hint line does not say "quit" twice
-    binding("esc", "quit")(stopAndQuit()).copy(showInHints = false),
+    binding("esc", "quit")(quit()).copy(showInHints = false),
   )
 
   // ---- lifecycle -------------------------------------------------------------------------------
 
+  /** Runs on the render thread before the first frame — the earliest point at which arming the poller is correct.
+    *
+    * `Async.every` captures its target render loop from the *calling* thread, and this app is constructed before any
+    * runner exists, so a poller started in a field initialiser would attach to no loop and its readings would be
+    * discarded forever.
+    */
+  override def onStart(): Unit =
+    refresh()
+    startPolling()
+
+  /** Runs on every exit path — `q`, `Esc`, Ctrl+C, a backend failure.
+    *
+    * Nothing cancels a repeating task for you. Its thread is a daemon so the JVM still exits, but under a headless test
+    * the runner ends while the poller keeps firing into a loop nobody drains.
+    */
+  override def onStop(): Unit = stopPolling()
+
   override def onTick(): Unit =
-    // The first tick is the earliest moment we are certainly on the render thread. `Async.every` captures its target
-    // loop from the *calling* thread, and the constructor runs before any runner is registered — starting the poller
-    // there would attach it to the detached loop and hand our readings to whichever app drained that loop first.
-    // There is no `onStart` hook, so this is the seam.
-    if poller.isEmpty then
-      refresh()
-      startPolling()
     // Setting an equal value notifies nobody, so this repaints the header once a second even though it runs four
     // times a second. Recomputing the age here rather than in `view` is what keeps "12s ago" honest between polls.
     ageSeconds.set(lastUpdatedNanos.map(at => (System.nanoTime() - at) / 1_000_000_000L))
-
-  /** Ctrl+C: stop the poller before the runner tears down, then let the normal quit path run. */
-  override def onInterrupt(): Boolean =
-    stopPolling()
-    false
 
   private def startPolling(): Unit =
     poller = Some(Async.every(interval.peek)(refresh()))
@@ -110,12 +115,6 @@ final class AirSensorApp(
   private def stopPolling(): Unit =
     poller.foreach(_.cancel())
     poller = None
-
-  private def stopAndQuit(): Unit =
-    // Nothing cancels a repeating task for you. Its thread is a daemon so the JVM still exits, but under a headless
-    // test the runner ends while the poller keeps firing into a loop nobody drains.
-    stopPolling()
-    quit()
 
   private def rescale(adjust: FiniteDuration => FiniteDuration): Unit =
     val next = clamp(adjust(interval.peek))
@@ -125,7 +124,7 @@ final class AirSensorApp(
       if poller.nonEmpty then
         stopPolling()
         startPolling()
-      notify(s"polling every ${describe(next)}", NoticeLevel.Info, ttlTicks = AirSensorApp.ToastTicks)
+      notify(s"polling every ${describe(next)}", NoticeLevel.Info)
 
   private def clamp(duration: FiniteDuration): FiniteDuration =
     if duration < AirSensorApp.MinInterval then AirSensorApp.MinInterval
@@ -220,7 +219,7 @@ final class AirSensorApp(
       widget(
         Gauge(
           Metric.Aqi.ratio(reading),
-          Some(s"${Metric.Aqi.valueText(reading)} of ${Metric.Aqi.scaleText}"),
+          ProgressLabel.Text(s"${Metric.Aqi.valueText(reading)} of ${Metric.Aqi.scaleText}"),
           theme.muted,
           Style.Default.reverse,
           fillRamp = Some(ColorRamp.Traffic),
@@ -276,15 +275,10 @@ object AirSensorApp:
   /** Fast enough for a smooth spinner on the first load; the poll cadence is a separate, much slower clock. */
   val TickRate: FiniteDuration = 250.millis
 
-  /** Toasts age in ticks, not wall time, so "three seconds" has to be spelled in ticks. */
-  val ToastTicks: Int = (3.seconds / TickRate).toInt
-
   /** Enough samples to fill a sparkline on a wide terminal, and a hard ceiling so a long run cannot grow the heap. */
   val HistoryLength: Int = 240
 
   val MinInterval: FiniteDuration = 100.millis
   val MaxInterval: FiniteDuration = 60.seconds
 
-object Main:
-  def main(args: Array[String]): Unit =
-    AirSensorApp().run().left.foreach(error => println(s"failed to run: $error"))
+object Main extends AirSensorApp()

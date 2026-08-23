@@ -89,8 +89,8 @@ final class DirectoryTreeState(val root: Path):
       finally entries.close()
     catch case NonFatal(_) => Vector.empty // unreadable directory: show as empty rather than crash the UI
 
-/** A filesystem browser (the Tier 5 filesystem-aware [[Tree]]): lazy-loaded directory listings with expand/collapse
-  * markers, `/`-suffixed directory names, selection highlight, and scroll-to-selection.
+/** A filesystem browser — [[Tree]] with the filesystem as its node source: lazy-loaded directory listings with
+  * expand/collapse markers, `/`-suffixed directory names, selection highlight, and scroll-to-selection.
   */
 final case class DirectoryTree(
     style: Style = Style.Default,

@@ -31,7 +31,45 @@ object `package` extends Module {
       def extraTestDeps: Seq[Dep] = Seq.empty
 
       def mvnDeps = super.mvnDeps() ++ Seq(mvn"org.scalatest::scalatest:3.2.19") ++ extraTestDeps
+
+      /** One forked JVM per test class, instead of Mill's default of one group work-stolen across N workers.
+        *
+        * Two pieces of state are process-global and would otherwise be shared by whichever suites happened to land in
+        * the same worker: `AnimationClock` is a single `Signal` for the whole JVM, and `RenderThread`'s registry
+        * decides where a `Signal` write is routed. Because the default grouping is not stable between runs, a suite
+        * that pins the clock and a suite whose runners tick it would decide each other's frames on some runs and not
+        * others — which is exactly the "`./mill __.test` is flaky" symptom.
+        *
+        * Parallelism is unaffected: the classes still run concurrently, just in JVMs that cannot see each other.
+        */
+      def testForkGrouping: T[Seq[Seq[String]]] = Task { discoveredTestClasses().map(Seq(_)) }
     }
+
+    /** Test module for anything that drives a whole app through `Pilot`: `TuiTests` plus the test-support module.
+      *
+      * Its own `object test` cannot live here — a trait cannot both be the test module and contain it — so modules
+      * declare `object test extends TuiPilotTests` themselves.
+      */
+    trait TuiPilotTests extends TuiTests {
+      def moduleDeps = super.moduleDeps ++ Seq(build.`test-support`)
+    }
+  }
+
+  /** Every `examples/<name>` module: the library conventions, a native image, the GraalVM pin, and a Pilot-capable
+    * test submodule. An example's own `package.mill` then declares only what actually differs — its `moduleDeps` and
+    * its `mainClass`.
+    *
+    * The GraalVM version lives here rather than in ten files, so bumping it is one edit that cannot be half-applied.
+    */
+  trait TuiExampleModule extends TuiModule with NativeImageModule {
+
+    /** GraalVM distribution pinned for every example's native image; Mill downloads it automatically. */
+    def jvmVersion = "graalvm-community:23.0.1"
+
+    /** CI requires every example to build with no fallback image, which is what proves the no-reflection rule holds. */
+    def nativeImageOptions = Seq("--no-fallback")
+
+    object test extends TuiPilotTests
   }
 
   /** Published `tui-*` modules: shared POM metadata and the single synchronized version. */

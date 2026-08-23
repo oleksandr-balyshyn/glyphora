@@ -20,7 +20,7 @@ private enum Status:
   *
   * Keys: type a city + `Enter` to search · `Esc` to quit.
   */
-final class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
+class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
 
   override def config: RunnerConfig = RunnerConfig(tickRate = Some(120.millis))
 
@@ -41,7 +41,7 @@ final class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp
       panel("Current Conditions")(currentConditionsView).fill,
       recentSearchesView,
       text("Enter: search · Esc: quit").dim,
-    ).rounded.onKeyEvent {
+    ).onKeyEvent {
       case KeyEvent(KeyCode.Escape, _) =>
         quit()
         true
@@ -53,7 +53,7 @@ final class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp
       case Status.Idle                  => text("Type a city name and press Enter.").dim
       case Status.Loading(city)         =>
         spinner(s"fetching weather for $city...")
-      case Status.Failed(city, message) => text(s"Couldn't fetch $city: $message").color(Color.Red)
+      case Status.Failed(city, message) => text(s"Couldn't fetch $city: $message").fg(Color.Red)
       case Status.Loaded(report)        =>
         column(
           text(s"${report.city}${if report.country.isEmpty then "" else s", ${report.country}"}").bold,
@@ -80,6 +80,4 @@ final class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp
         }
       }
 
-object Main:
-  def main(args: Array[String]): Unit =
-    WeatherApp().run().left.foreach(error => println(s"failed to run: $error"))
+object Main extends WeatherApp()

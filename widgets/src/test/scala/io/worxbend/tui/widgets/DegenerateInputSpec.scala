@@ -1,7 +1,7 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Color, Constraint, Line, Rect, Style, Text, Widget}
-import io.worxbend.tui.testsupport.BufferAssertions.trimmedLines
+import io.worxbend.tui.core.{Buffer, Cell, Color, Constraint, Line, Modifiers, Rect, Style, Text, Widget}
+import io.worxbend.tui.testsupport.BufferAssertions.{line, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -17,9 +17,6 @@ import scala.concurrent.duration.DurationInt
 final class DegenerateInputSpec extends AnyFunSuite:
 
   private def buffer(width: Int, height: Int): Buffer = Buffer(Rect(0, 0, width, height))
-
-  private def rowText(buf: Buffer, y: Int, width: Int): String =
-    (0 until width).map(x => buf.get(x, y).symbol).mkString
 
   // ---------------------------------------------------------------- TextInput / TextArea scroll offsets
 
@@ -37,7 +34,7 @@ final class DegenerateInputSpec extends AnyFunSuite:
     assert(state.value == "the q")
     val buf   = buffer(12, 1)
     input.render(Rect(0, 0, 12, 1), buf, state)
-    assert(rowText(buf, 0, 12).startsWith("the q"), s"rendered '${rowText(buf, 0, 12)}'")
+    assert(line(buf, 0).startsWith("the q"), s"rendered '${line(buf, 0)}'")
 
   test("a text input re-flows when the viewport grows"):
     val state  = TextInputState()
@@ -49,7 +46,7 @@ final class DegenerateInputSpec extends AnyFunSuite:
     val buf    = buffer(40, 1)
     input.render(Rect(0, 0, 40, 1), buf, state)
     assert(state.scrollCluster == 0, "the whole value fits at width 40, so nothing should be scrolled away")
-    assert(rowText(buf, 0, 40).startsWith("hello world"))
+    assert(line(buf, 0).startsWith("hello world"))
 
   test("a text area re-flows both axes when the viewport grows"):
     val state = TextAreaState((1 to 8).map(n => s"line$n").mkString("\n"))
@@ -59,7 +56,7 @@ final class DegenerateInputSpec extends AnyFunSuite:
     val buf   = buffer(20, 8)
     area.render(Rect(0, 0, 20, 8), buf, state)
     assert(state.scrollRow == 0, "all 8 lines fit in 8 rows, so nothing should be scrolled away")
-    assert(rowText(buf, 0, 20).startsWith("line1"))
+    assert(line(buf, 0).startsWith("line1"))
 
   // ---------------------------------------------------------------- writes outside the given Rect
 
@@ -71,22 +68,33 @@ final class DegenerateInputSpec extends AnyFunSuite:
     (0 until 10).foreach(x => buf.set(x, 0, Cell("#", Style.Default)))
     ListView(Seq(Line.raw("a")), highlightSymbol = "==> ")
       .render(Rect(0, 0, 2, 1), buf, ListState(selected = Some(0)))
-    assert(rowText(buf, 0, 10).drop(2) == "########", s"row 0 is '${rowText(buf, 0, 10)}'")
+    assert(line(buf, 0).drop(2) == "########", s"row 0 is '${line(buf, 0)}'")
 
   test("a bar chart with a negative gap stays inside its rect"):
     val buf = buffer(20, 4)
     (0 until 10).foreach(x => buf.set(x, 1, Cell("#", Style.Default)))
     BarChart(Seq("" -> 5L, "" -> 5L, "" -> 5L), barWidth = 3, barGap = -5).render(Rect(10, 0, 10, 4), buf)
-    assert(rowText(buf, 1, 10) == "##########", s"columns left of the area were overwritten: '${rowText(buf, 1, 10)}'")
+    // only the ten columns to the *left* of the chart's rect are under test; the chart owns everything from 10 on
+    assert(line(buf, 1).take(10) == "##########", s"columns left of the area were overwritten: '${line(buf, 1)}'")
 
   // ---------------------------------------------------------------- exceptions out of render
 
-  /** `selected = -1` is the natural "nothing highlighted" encoding, and `normalize` leaves it there when no entry is
-    * selectable at all. It used to reach `items(-1)`.
+  /** A menu whose entries are all disabled has nothing to highlight, and `MenuState.selected` says so with `None`.
+    *
+    * While the selection was a bare `Int`, "nothing" was spelled `-1` — a value the widget's own API could never
+    * produce, because `MenuState()` opened on index 0 and `step` never assigned it. Every menu an application actually
+    * built therefore painted `highlightStyle` over its first disabled entry, and this assertion could not be written at
+    * all: the only way to reach the documented behaviour was to hand-seed the sentinel from a test.
     */
-  test("a menu with nothing selectable renders instead of throwing"):
-    val menu = Menu(Seq(MenuItem("cut", enabled = false), MenuItem("copy", enabled = false)))
-    menu.render(Rect(0, 0, 10, 4), buffer(10, 4), MenuState(selected = -1))
+  test("a menu with nothing selectable highlights nothing"):
+    val menu   = Menu(Seq(MenuEntry.Item("cut", enabled = false), MenuEntry.Item("copy", enabled = false)))
+    val state  = MenuState()
+    val target = buffer(10, 4)
+    menu.render(Rect(0, 0, 10, 4), target, state)
+    assert(state.selected.isEmpty)
+    // row 1 is the first entry, inside the border; dimmed as disabled rather than reversed as highlighted
+    assert(target.get(1, 1).style.modifiers.hasAny(Modifiers.Dim))
+    assert(!target.get(1, 1).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("a calendar clips an out-of-range month instead of throwing"):
     Calendar(2026, 13).render(Rect(0, 0, 20, 10), buffer(20, 10))
@@ -111,19 +119,19 @@ final class DegenerateInputSpec extends AnyFunSuite:
     val rows   = (0 until 8).flatMap(_ => cells).map(Seq(_))
     val table  = DataTable(Seq("value"), rows, Seq(Constraint.Fill(1)))
     val state  = DataTableState()
-    state.sortColumn = Some(0)
+    state.sort = Some(ColumnSort(0, SortDirection.Ascending))
     val sorted = table.filteredRows(state)
     assert(sorted.size == rows.size)
 
   test("an all-numeric column still sorts numerically"):
     val table = DataTable(Seq("value"), Seq(Seq("9"), Seq("10"), Seq("2")), Seq(Constraint.Fill(1)))
     val state = DataTableState()
-    state.sortColumn = Some(0)
+    state.sort = Some(ColumnSort(0, SortDirection.Ascending))
     assert(table.filteredRows(state).map(_.head) == Seq("2", "9", "10"))
 
   // ---------------------------------------------------------------- measurement that disagrees with rendering
 
-  /** `Paragraph.heightOf` counts the rows `wrapLine` returns, so the two have to agree. A cluster wider than the column
+  /** `Paragraph.heightAt` counts the rows `wrapLine` returns, so the two have to agree. A cluster wider than the column
     * budget used to be deleted from the document instead of clipped: `ScrollView` then reserved rows nothing rendered
     * into, sized its scrollbar thumb wrong, and every following line moved up one row.
     */
@@ -132,7 +140,7 @@ final class DegenerateInputSpec extends AnyFunSuite:
     assert(Paragraph.wrapLine(Line.raw("ab日cd"), 1).size == 5)
     assert(Paragraph.wrapLine(Line.raw("ab👍cd"), 1).map(_.spans.map(_.content).mkString).mkString == "ab👍cd")
 
-  test("heightOf agrees with the rows a paragraph renders"):
+  test("heightAt agrees with the rows a paragraph renders"):
     val cases = Seq(
       Text.raw("日本語テキスト")     -> 1,
       Text.raw("你好\nok")      -> 1,
@@ -140,21 +148,21 @@ final class DegenerateInputSpec extends AnyFunSuite:
       Text.raw("")            -> 3,
     )
     cases.foreach: (text, width) =>
-      val measured = Paragraph.heightOf(text, width)
+      val measured = Paragraph(text, overflow = Overflow.Wrap).heightAt(width).getOrElse(0)
       val rendered = text.lines.flatMap(line => Paragraph.wrapLine(line, width)).size
-      assert(measured == rendered, s"heightOf said $measured, wrapping produced $rendered for width $width")
+      assert(measured == rendered, s"heightAt said $measured, wrapping produced $rendered for width $width")
 
   // ---------------------------------------------------------------- degenerate counts
 
-  /** `pageSize = Some(area.height - 2)` is the obvious idiom and yields `Some(0)` on a two-row terminal. Paging by zero
-    * showed no rows at all, on every page, forever.
+  /** `Paging(area.height - 2, 0)` is the obvious idiom and yields a page size of zero on a two-row terminal. Paging by
+    * zero showed no rows at all, on every page, forever.
     */
   test("a page size of zero still shows rows"):
     val table = DataTable(Seq("value"), (1 to 5).map(n => Seq(n.toString)), Seq(Constraint.Fill(1)))
     val state = DataTableState()
-    state.pageSize = Some(0)
+    state.paging = Some(Paging(size = 0, page = 0))
     assert(table.visibleRows(state).nonEmpty)
-    state.pageSize = Some(-3)
+    state.paging = Some(Paging(size = -3, page = 0))
     assert(table.visibleRows(state).nonEmpty)
 
   /** `LogState.offset` is a public var and the viewport can grow between frames; an offset past the last useful row

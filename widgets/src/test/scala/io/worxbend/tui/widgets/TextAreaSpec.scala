@@ -1,16 +1,13 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Modifiers, Rect}
-import io.worxbend.tui.testsupport.BufferAssertions.trimmedLines
+import io.worxbend.tui.core.Modifiers
+import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
 
 final class TextAreaSpec extends AnyFunSuite:
 
-  private def renderedWith(state: TextAreaState, width: Int = 10, height: Int = 4): Buffer =
-    val buffer = Buffer(Rect(0, 0, width, height))
-    TextArea().render(buffer.area, buffer, state)
-    buffer
+  private val area = TextArea()
 
   test("inserting text with newlines splits into lines"):
     val state = TextAreaState()
@@ -86,21 +83,21 @@ final class TextAreaSpec extends AnyFunSuite:
   test("renders lines with the cursor highlighted on its cell"):
     val state = TextAreaState("ab\ncd")
     state.moveUp() // cursor to (0, 2): end of first line
-    val buffer = renderedWith(state)
+    val buffer = rendered(area, state, 10, 4)
     assert(trimmedLines(buffer).take(2) == Seq("ab", "cd"))
-    assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(2, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("vertical scroll follows the cursor"):
     val state  = TextAreaState("1\n2\n3\n4\n5\n6")
-    val buffer = renderedWith(state, height = 3) // cursor on line 5 (index 5)
+    val buffer = rendered(area, state, 10, 3) // cursor on line 5 (index 5)
     assert(state.scrollRow == 3)
     assert(trimmedLines(buffer).head == "4")
 
   test("horizontal scroll follows the cursor on long lines"):
     val state  = TextAreaState("abcdefghij")
-    val buffer = renderedWith(state, width = 5, height = 1)
+    val buffer = rendered(area, state, 5, 1)
     assert(state.scrollColumn > 0)
-    assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(4, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("redo re-applies undone edits and a fresh edit clears the redo history"):
     val state = TextAreaState("a")
@@ -134,7 +131,7 @@ final class TextAreaSpec extends AnyFunSuite:
     assert(!state.value.exists(c => c != '\n' && Character.isISOControl(c)))
 
   test("no control character reaches a cell"):
-    val buffer  = renderedWith(TextAreaState("a\tb"))
+    val buffer  = rendered(area, TextAreaState("a\tb"), 10, 4)
     val symbols = for y <- 0 until 4; x <- 0 until 10 yield buffer.get(x, y).symbol
     assert(symbols.forall(symbol => !symbol.exists(c => Character.isISOControl(c))))
     assert(trimmedLines(buffer).head == "ab")
@@ -142,30 +139,30 @@ final class TextAreaSpec extends AnyFunSuite:
   test("a zero-width cluster is drawn as a blank cell"):
     val state  = TextAreaState(CombiningAcute + "a")
     state.moveHome()
-    val buffer = renderedWith(state)
+    val buffer = rendered(area, state, 10, 4)
     assert(buffer.get(0, 0).symbol == " ")
     assert(buffer.get(1, 0).symbol == "a")
 
   test("the cursor on a wide grapheme stays visible at an odd inner width"):
     val state = TextAreaState("你好")
     state.moveLeft() // cursor at (0, 1), on the second cluster
-    val buffer = renderedWith(state, width = 3, height = 1)
+    val buffer = rendered(area, state, 3, 1)
     assert(state.scrollColumn == 1)
     assert(buffer.get(0, 0).symbol == "好")
-    assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("a wide-grapheme cursor renders unscrolled when the line fits"):
     val state  = TextAreaState("你好")
     state.moveLeft()
-    val buffer = renderedWith(state, width = 4, height = 1)
+    val buffer = rendered(area, state, 4, 1)
     assert(state.scrollColumn == 0)
     assert(trimmedLines(buffer).head == "你好")
-    assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(2, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("a cluster wider than the whole area terminates the horizontal solver"):
     val state  = TextAreaState("你")
     state.moveHome()
-    val buffer = renderedWith(state, width = 1, height = 1)
+    val buffer = rendered(area, state, 1, 1)
     assert(state.scrollColumn == 0)
     assert(buffer.get(0, 0).symbol == " ")
 

@@ -169,7 +169,11 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   private def blockingRead(timeout: Duration): Either[BackendError, Option[Event]] =
     pollingThread.set(Some(Thread.currentThread()))
-    try Right(decoder.decode(JLine3Backend.readTimeoutMillis(timeout)))
+    // Re-checked *after* registering, closing the window this registration opens: a wake that landed between
+    // `readEvent`'s check and this registration found nobody to interrupt, so without this second look the render
+    // thread parks for the whole timeout — up to a tick interval, or 100 ms with no tick rate — before draining the
+    // work that wake was announcing. That is exactly the latency `wake()` exists to remove.
+    try if woken.getAndSet(false) then Right(None) else Right(decoder.decode(JLine3Backend.readTimeoutMillis(timeout)))
     catch
       case _: InterruptedIOException => Right(None) // woken deliberately by `wake()`
       case NonFatal(error)           => Left(BackendError.Io(error))
@@ -194,7 +198,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     attempt {
       val released = releaseTerminal()
       try body
-      finally reacquireTerminal(released)
+      finally reacquireTerminal(released.state)
     }
 
   override def printAbove(lines: Seq[String]): Either[BackendError, Unit] =
@@ -208,10 +212,16 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       terminal.writer().flush()
     }
 
-  def close(): Unit =
-    val _ = releaseTerminal()
-    try terminal.close()
-    catch case NonFatal(_) => ()
+  /** Restores the terminal and releases the JLine handle, reporting the first step that failed.
+    *
+    * Every step is attempted whatever the earlier ones did — stopping at the first failure would leave the terminal
+    * half-dressed, which is worse than the failure itself — so the JLine handle is closed even when undressing failed,
+    * and the undressing failure is what gets reported because it is the one the user can see.
+    */
+  def close(): Either[BackendError, Unit] =
+    val released = releaseTerminal()
+    val closed   = attempt(terminal.close())
+    released.failure.toLeft(()).flatMap(_ => closed)
 
   /** Last-resort restore, for a shutdown hook that may be racing JLine's own terminal closer.
     *
@@ -229,7 +239,13 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       out.flush()
     catch case NonFatal(_) => ()
 
-  /** Hands the terminal back to the shell, returning what was active so [[reacquireTerminal]] can restore it.
+  /** Hands the terminal back to the shell, returning what was active so [[reacquireTerminal]] can restore it, together
+    * with the first undress step that failed.
+    *
+    * Every step is attempted even after one fails: an undress that stops halfway leaves the shell on the alternate
+    * screen *and* in raw mode instead of just one of the two. The first failure is kept so `close()` can report it — it
+    * used to be logged and dropped, which made "your terminal is now unusable" the one failure this library could not
+    * tell anyone about.
     *
     * Called from two threads with no lock between them: the render thread (via [[suspend]], [[printAbove]] and
     * `close()`) and JLine's signal-dispatch thread (via the SIGTSTP handler). The mode flags above are volatile per
@@ -238,15 +254,26 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * reset written to the terminal, so the worst outcome is a mode disabled or re-enabled twice, and the final
     * [[reacquireTerminal]] to run leaves the terminal dressed as its snapshot describes.
     */
-  private def releaseTerminal(): TerminalState =
-    val state = TerminalState(isRawMode, alternateScreenActive, cursorHidden, mouseCaptureActive)
-    if state.mouse then bestEffort(disableMouseCapture())
-    if state.cursorHidden then bestEffort(showCursor())
-    if state.alternateScreen then bestEffort(leaveAlternateScreen())
-    if state.raw then bestEffort(disableRawMode())
+  private def releaseTerminal(): TerminalRelease =
+    val state    = TerminalState(isRawMode, alternateScreenActive, cursorHidden, mouseCaptureActive)
+    val failures = Seq.newBuilder[BackendError]
+
+    def undress(active: Boolean, step: => Either[BackendError, Unit]): Unit =
+      if active then
+        step.left.foreach { error =>
+          JLine3Backend.logTeardownFailure(error)
+          failures += error
+        }
+
+    undress(state.mouse, disableMouseCapture())
+    undress(state.cursorHidden, showCursor())
+    undress(state.alternateScreen, leaveAlternateScreen())
+    undress(state.raw, disableRawMode())
+    // each step above already flushed its own sequence; this is belt-and-braces and stays silent, so that closing an
+    // already-closed terminal (the shutdown hook racing the normal teardown) reports nothing rather than a scare
     try terminal.writer().flush()
     catch case NonFatal(_) => ()
-    state
+    TerminalRelease(state, failures.result().headOption)
 
   /** Whether raw mode is currently on, which is exactly "we are holding someone's cooked attributes to put back". */
   private def isRawMode: Boolean = cookedAttributes.nonEmpty
@@ -269,7 +296,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   /** SIGTSTP: undress the terminal, then stop for real by re-raising with the default disposition. */
   private def onStop(): Unit =
-    suspendedState = releaseTerminal()
+    suspendedState = releaseTerminal().state
     JLine3Backend.stopSelf()
 
   /** SIGCONT: take the terminal back and force a full repaint at whatever size it is now. */
@@ -282,8 +309,15 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     val jlineSize = terminal.getSize
     Size(jlineSize.getColumns, jlineSize.getRows)
 
+  /** Runs a re-dressing step, reporting a failure rather than propagating it.
+    *
+    * Only [[reacquireTerminal]] uses this. Taking the terminal back has no caller that could act on a failure — it
+    * happens on JLine's signal-dispatch thread after SIGCONT, or inside a `finally` — and abandoning the remaining
+    * steps would leave the app running against a terminal dressed in neither shape. Undressing is the direction that
+    * *does* report, through [[releaseTerminal]].
+    */
   private def bestEffort(step: Either[BackendError, Unit]): Unit =
-    step.left.foreach(JLine3Backend.logTeardownFailure)
+    step.left.foreach(error => System.err.println(s"glyphora: could not reclaim the terminal: ${error.message}"))
 
   private def write(sequence: String): Unit =
     terminal.writer().write(sequence)
@@ -304,6 +338,11 @@ private[terminal] final case class TerminalState(
 private[terminal] object TerminalState:
   /** Nothing was dressed up: cooked mode, primary screen, visible cursor, no mouse capture. */
   val Undressed: TerminalState = TerminalState(false, false, false, false)
+
+/** The outcome of handing the terminal back: the modes that were undressed (so they can be re-dressed) and the first
+  * step that failed while doing it, if any.
+  */
+private[terminal] final case class TerminalRelease(state: TerminalState, failure: Option[BackendError])
 
 object JLine3Backend:
 
@@ -373,10 +412,15 @@ object JLine3Backend:
   private[terminal] def readTimeoutMillis(timeout: Duration): Long =
     if timeout.isFinite then timeout.toMillis else 0L
 
-  /** Teardown steps are best-effort, but a silent failure is how a corrupted terminal goes unnoticed for months. */
+  /** Reports a teardown step that failed, always, on `System.err`.
+    *
+    * This used to be gated behind a `GLYPHORA_DEBUG` environment variable, which meant the single most user-visible
+    * failure the library has — the terminal handed back raw, on the alternate screen, or with the cursor hidden — was
+    * silent by default. By the time this fires the app is exiting and the alternate screen is already gone, so there is
+    * no UI left for the line to corrupt.
+    */
   private[terminal] def logTeardownFailure(error: BackendError): Unit =
-    if System.getenv("GLYPHORA_DEBUG") != null then // scalafix:ok DisableSyntax; getenv returns null when unset
-      System.err.println(s"glyphora: terminal teardown step failed: $error")
+    System.err.println(s"glyphora: could not restore the terminal: ${error.message}")
 
 /** The "repaint every cell next frame" request that [[JLine3Backend]] uses to keep `lastFlushed` render-thread-private.
   *

@@ -15,7 +15,7 @@ final class PickersSpec extends AnyFunSuite:
     val testApp = new TuiApp:
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0
-    Pilot.start(backend) { val _ = testApp.runWith(backend) }.waitForIdle()
+    Pilot.start(backend) { testApp.runWith(backend) }.waitForIdle()
 
   private def quitApp(pilot: Pilot): Unit =
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)

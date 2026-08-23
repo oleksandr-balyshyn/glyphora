@@ -1,6 +1,6 @@
 package io.worxbend.tui.examples.loadtest
 
-import io.worxbend.tui.core.{KeyCode, Size}
+import io.worxbend.tui.core.Size
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 
@@ -18,7 +18,7 @@ final class LoadTestAppSpec extends AnyFunSuite:
   private def startedApp(target: Target, plan: Plan): (LoadTestApp, Pilot) =
     val backend = HeadlessBackend(Size(88, 30))
     val app     = LoadTestApp(target, plan)
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     (app, pilot)
 
@@ -40,7 +40,7 @@ final class LoadTestAppSpec extends AnyFunSuite:
 
   test("a completed run accounts for every request and raises the summary screen"):
     val (app, pilot) = startedApp(FakeTarget(failureRate = 0.0), Plan(requests = 60, concurrency = 6))
-    pilot.pressKey(KeyCode.Char('s'))
+    pilot.press("s")
 
     assert(waitUntil()(app.phase.peek == Phase.Finished(RunOutcome.Completed)))
     val finished = app.stats.peek
@@ -52,12 +52,12 @@ final class LoadTestAppSpec extends AnyFunSuite:
     assert(pilot.screenText.contains("success"))
     assert(pilot.screenText.contains("no errors"))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination(5.seconds))
 
   test("failures are tallied by reason and do not abort the run"):
     val (app, pilot) = startedApp(FakeTarget(failureRate = 1.0, pace = 0.millis), Plan(requests = 40, concurrency = 4))
-    pilot.pressKey(KeyCode.Char('s'))
+    pilot.press("s")
 
     assert(waitUntil()(app.phase.peek == Phase.Finished(RunOutcome.Completed)))
     val finished = app.stats.peek
@@ -68,17 +68,17 @@ final class LoadTestAppSpec extends AnyFunSuite:
     assert(waitUntil()(pilot.screenText.contains("Run summary")))
     assert(pilot.screenText.contains("operation timed out"))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination(5.seconds))
 
   test("stopping mid-flight ends the run short and empties the worker pool"):
     val plan         = Plan(requests = 5000, concurrency = 4)
     val (app, pilot) = startedApp(FakeTarget(failureRate = 0.0, pace = 2.millis), plan)
-    pilot.pressKey(KeyCode.Char('s'))
+    pilot.press("s")
 
     assert(waitUntil()(app.stats.peek.sent > 0))
     assert(waitUntil()(pilot.screenText.contains("Running")))
-    pilot.pressKey(KeyCode.Char('x'))
+    pilot.press("x")
 
     assert(waitUntil()(app.phase.peek == Phase.Finished(RunOutcome.Stopped)))
     assert(app.stats.peek.sent > 0)
@@ -86,32 +86,32 @@ final class LoadTestAppSpec extends AnyFunSuite:
     assert(waitUntil()(app.workersAlive == 0))
     assert(waitUntil()(pilot.screenText.contains("Stopped")))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination(5.seconds))
 
   test("reset clears the counters and dismisses the summary"):
     val (app, pilot) = startedApp(FakeTarget(failureRate = 0.0), Plan(requests = 30, concurrency = 3))
-    pilot.pressKey(KeyCode.Char('s'))
+    pilot.press("s")
     assert(waitUntil()(app.phase.peek == Phase.Finished(RunOutcome.Completed)))
     assert(waitUntil()(pilot.screenText.contains("Run summary")))
 
-    pilot.pressKey(KeyCode.Char('r'))
+    pilot.press("r")
     assert(waitUntil()(app.phase.peek == Phase.Idle))
     assert(app.stats.peek == RunStats.empty)
     assert(waitUntil()(!pilot.screenText.contains("Run summary")))
     assert(pilot.screenText.contains("press s to start"))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination(5.seconds))
 
   test("quitting mid-run leaves no worker thread behind"):
     val (app, pilot) =
       startedApp(FakeTarget(failureRate = 0.0, pace = 2.millis), Plan(requests = 5000, concurrency = 8))
-    pilot.pressKey(KeyCode.Char('s'))
+    pilot.press("s")
     assert(waitUntil()(app.stats.peek.sent > 0))
     assert(liveThreadsNamed(app.workerThreadPrefix).nonEmpty, "the pool should be busy before we quit")
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination(5.seconds))
 
     // The runner is gone, but the pool it started is not the runner's to garbage-collect: `q` has to stop it. The
@@ -125,17 +125,17 @@ final class LoadTestAppSpec extends AnyFunSuite:
     // landed after the phase had already left Running, halving the requests and failing the freeze assertion.
     val (app, pilot) = startedApp(FakeTarget(failureRate = 0.0, pace = 50.millis), Plan(requests = 40, concurrency = 4))
 
-    pilot.pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char(']')).waitForIdle()
+    pilot.press("+", "+", "]").waitForIdle()
     assert(app.plan.peek == Plan(requests = 80, concurrency = 6))
     assert(pilot.screenText.contains("n=80 c=6"))
 
-    pilot.pressKey(KeyCode.Char('s'))
+    pilot.press("s")
     assert(waitUntil()(app.phase.peek == Phase.Running))
-    pilot.pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char('[')).waitForIdle()
+    pilot.press("+", "[").waitForIdle()
     assert(app.plan.peek == Plan(requests = 80, concurrency = 6))
 
     assert(waitUntil()(app.phase.peek == Phase.Finished(RunOutcome.Completed)))
     assert(app.stats.peek.sent == 80)
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination(5.seconds))

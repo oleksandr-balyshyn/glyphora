@@ -11,31 +11,43 @@ import io.worxbend.tui.widgets as w
 def topBar(title: String, tabs: Seq[String] = Seq.empty, selectedTab: Int = 0, right: String = "")(using
     theme: Theme
 ): Element =
-  // the reserved cells must be *display* columns, or a CJK/emoji title asks for fewer cells than it renders into
+  // the reserved cells must be *display* columns, or a CJK/emoji title asks for fewer cells than it renders into.
+  // the gaps are `spacer`s, not spaces baked into the strings: a spacer inside the `FilledElement` still paints the
+  // surface, and unlike " $title " it cannot drift out of step with the `.length(...)` beside it
   val parts = Seq.newBuilder[Element]
-  parts += Element.text(s" $title ").styled(_ => theme.surface.bold).length(CharWidth.of(title) + 2)
+  parts += Element.spacer(1)
+  parts += Element.text(title).styled(_ => theme.surface.bold).length(CharWidth.of(title))
+  parts += Element.spacer(1)
   if tabs.nonEmpty then
     val tabsWidth = tabs.map(CharWidth.of).sum + (tabs.size - 1) * 3 // " │ " between titles
     parts += Element.spacer(2)
     parts += Element.tabs(tabs, selectedTab).styled(_ => theme.surface).length(tabsWidth)
   parts += Element.spacer
-  if right.nonEmpty then parts += Element.text(s"$right ").styled(_ => theme.surface).length(CharWidth.of(right) + 1)
+  if right.nonEmpty then
+    parts += Element.text(right).styled(_ => theme.surface).length(CharWidth.of(right))
+    parts += Element.spacer(1)
   FilledElement(Element.row(parts.result()*), theme.surface).length(1)
 
 /** A one-row status bar of `key description` hints over the theme surface. */
 def statusBar(hints: Seq[(String, String)])(using theme: Theme): Element =
   val content = hints.map((key, description) => s"$key $description").mkString("  │  ")
-  FilledElement(Element.text(s" $content").styled(_ => theme.surface), theme.surface).length(1)
+  // a leading `spacer`, not a leading space in the string — see `topBar`
+  val row     = Element.row(Element.spacer(1), Element.text(content).styled(_ => theme.surface).fill)
+  FilledElement(row, theme.surface).length(1)
 
 /** Status bar fed directly from the app's declared [[KeyBindings]]. */
 def statusBar(bindings: KeyBindings)(using Theme): Element =
   statusBar(bindings.hints)
 
-/** Sidebar configuration for [[scaffold]]. */
-final case class Sidebar(content: Element, width: Int = 24, onRight: Boolean = false)
+/** Which edge of the content a [[Sidebar]] sits against. */
+enum Side:
+  case Left, Right
 
-def sidebar(content: Element, width: Int = 24, onRight: Boolean = false): Sidebar =
-  Sidebar(content, width, onRight)
+/** Sidebar configuration for [[scaffold]]. */
+final case class Sidebar(content: Element, width: Int = 24, side: Side = Side.Left)
+
+def sidebar(content: Element, width: Int = 24, side: Side = Side.Left): Sidebar =
+  Sidebar(content, width, side)
 
 /** The application shell: optional top bar, optional sidebar (left or right of the content), the content filling the
   * middle, and an optional status bar.
@@ -47,10 +59,12 @@ def scaffold(
 )(content: Element): Element =
   val middle = sidebar match
     case None       => content.fill
-    case Some(side) =>
-      val sideElement = side.content.length(side.width)
+    case Some(pane) =>
+      val sideElement = pane.content.length(pane.width)
       val mainElement = content.fill
-      val ordered     = if side.onRight then Seq(mainElement, sideElement) else Seq(sideElement, mainElement)
+      val ordered     = pane.side match
+        case Side.Left  => Seq(sideElement, mainElement)
+        case Side.Right => Seq(mainElement, sideElement)
       Element.row(ordered*).fill
   val rows   = topBar.toSeq ++ Seq(middle) ++ statusBar.toSeq
   Element.column(rows*)
@@ -91,29 +105,35 @@ def masterDetail(master: Element, detail: Element, masterWidth: Int = 30): Eleme
 def centered(width: Int, height: Int)(content: Element): Element =
   place(width, height)(content)
 
-/** Where a fixed-size block sits inside a larger area along one axis. */
-enum Align:
-  case Start, Center, End
-
 /** Positions `content` (sized `width` x `height`) inside whatever area it is given, aligned `horizontal` x `vertical`
-  * (both `Center` by default — the [[centered]] case). Pass `fill` to paint the surrounding whitespace with a style
-  * (Lip Gloss `Place`-style), e.g. a dimmed backdrop behind a dialog.
+  * (both `Center` by default — the [[centered]] case). Pass `backdrop` to paint the surrounding whitespace with a style
+  * (Lip Gloss `Place`-style), e.g. a dimmed area behind a dialog.
+  *
+  * The parameter is `backdrop`, not `fill`, because `Element.fill` already means something else in every snippet this
+  * appears in: there it is the layout extension that claims a row's or column's leftover space.
+  *
+  * Both axes are described with [[Alignment]] — the same three-case enum `Block` titles and `Paragraph` text use. There
+  * used to be a second enum here, `Align(Start, Center, End)`, which meant exactly the same thing and landed one
+  * keystroke away from `Alignment` in every application's scope. On the vertical axis read `Left` as *top* and `Right`
+  * as *bottom*; the horizontal names win because titles and paragraphs, where the horizontal reading is the natural
+  * one, are the overwhelming majority of uses.
   */
 def place(
     width: Int,
     height: Int,
-    horizontal: Align = Align.Center,
-    vertical: Align = Align.Center,
-    fill: Option[Style] = None,
+    horizontal: Alignment = Alignment.Center,
+    vertical: Alignment = Alignment.Center,
+    backdrop: Option[Style] = None,
 )(content: Element): Element =
-  def bracket(align: Align, block: Element): Seq[Element] =
+  // `Left` is the near edge of the axis and `Right` the far one: left/right across, top/bottom down
+  def bracket(align: Alignment, block: Element): Seq[Element] =
     align match
-      case Align.Start  => Seq(block, Element.spacer)
-      case Align.Center => Seq(Element.spacer, block, Element.spacer)
-      case Align.End    => Seq(Element.spacer, block)
+      case Alignment.Left   => Seq(block, Element.spacer)
+      case Alignment.Center => Seq(Element.spacer, block, Element.spacer)
+      case Alignment.Right  => Seq(Element.spacer, block)
   val sized = content.withProps(content.props.copy(constraint = Some(Constraint.Length(width))))
-  val row                                                 = Element.row(bracket(horizontal, sized)*).length(height)
-  val placed                                              = Element.column(bracket(vertical, row)*)
-  fill match
+  val row                                                     = Element.row(bracket(horizontal, sized)*).length(height)
+  val placed                                                  = Element.column(bracket(vertical, row)*)
+  backdrop match
     case Some(style) => FilledElement(placed, style)
     case None        => placed

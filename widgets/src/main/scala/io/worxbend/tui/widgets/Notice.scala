@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Text, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Measured, Rect, Style, Text, Widget}
 
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -14,8 +14,8 @@ import java.time.format.DateTimeFormatter
   * would be impossible, and a redraw triggered by something else entirely would silently change the displayed time.
   * Stamp the message when the event happens, which is the moment the reader actually cares about.
   *
-  * A message longer than the area is clipped, not wrapped: see [[Notice.heightOf]] and pass `wrap = true` for a notice
-  * that should grow instead.
+  * A message longer than the area is clipped, not wrapped. Pass `overflow = Overflow.Wrap` for a notice that should
+  * grow onto further rows instead, and ask [[heightAt]] how many rows that turns out to be.
   */
 final case class Notice(
     message: String,
@@ -25,33 +25,35 @@ final case class Notice(
     accentStyle: Style = Style.Default,
     timestampStyle: Style = Style.Default.dim,
     icon: Option[String] = None,
-    wrap: Boolean = false,
-) extends Widget:
+    overflow: Overflow = Overflow.Clip,
+) extends Widget
+    with Measured:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      var x = area.x
-      timestamp.foreach: at =>
-        val stamped = CharWidth.substringByWidth(s"[${Notice.Clock.format(at)}] ", area.right - x)
-        buffer.setString(x, area.y, stamped, timestampStyle)
-        x += CharWidth.of(stamped)
-      if x < area.right then
-        val marker = CharWidth.substringByWidth(s"${icon.getOrElse(level.icon)} ", area.right - x)
-        buffer.setString(x, area.y, marker, accentStyle)
-        x += CharWidth.of(marker)
-      if x < area.right then
-        if wrap then
-          val body = Rect(x, area.y, area.right - x, area.height)
-          Paragraph(Text.raw(message), wrap = true, style = style).render(body, buffer)
-        else buffer.setString(x, area.y, CharWidth.substringByWidth(message, area.right - x), style)
+      val cursor = RowCursor(buffer, area.y, area.x, area.right)
+      timestamp.foreach(at => cursor.write(s"[${Notice.Clock.format(at)}] ", timestampStyle))
+      cursor.write(s"${icon.getOrElse(level.icon)} ", accentStyle)
+      overflow match
+        case Overflow.Clip => cursor.write(message, style)
+        case Overflow.Wrap =>
+          // the body gets whatever the prefix left; an empty rect renders nothing, which is the "no room" case
+          body.render(Rect(cursor.at, area.y, cursor.remaining, area.height), buffer)
 
-  /** How many rows this notice needs at `width` — one unless it wraps. */
-  def heightOf(width: Int): Int =
-    if !wrap then 1
-    else
-      val prefix = CharWidth.of(prefixText)
-      if width - prefix <= 0 then 1
-      else Paragraph.heightOf(Text.raw(message), width - prefix)
+  /** How many rows this notice needs at `width` — one unless it wraps, and then however many rows the message needs in
+    * the columns the prefix leaves it. Always an answer: a notice always knows its own height.
+    */
+  override def heightAt(width: Int): Option[Int] =
+    overflow match
+      case Overflow.Clip => Some(1)
+      case Overflow.Wrap =>
+        val bodyWidth = width - CharWidth.of(prefixText)
+        if bodyWidth <= 0 then Some(1) else body.heightAt(bodyWidth)
+
+  /** The message on its own, drawn the way this notice draws it — one owner for both the wrapped render and the
+    * measurement of it, so they cannot disagree about how many rows the text takes.
+    */
+  private def body: Paragraph = Paragraph(Text.raw(message), overflow = overflow, style = style)
 
   /** Everything drawn before the message — the timestamp and the icon — so a caller can measure the room the body has
     * left.

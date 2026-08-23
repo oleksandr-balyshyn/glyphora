@@ -69,3 +69,10 @@ final class CanvasSpec extends AnyFunSuite:
     assert(cellFor(Seq(1.0)) == "▀")
     assert(cellFor(Seq(0.0)) == "▄")
     assert(cellFor(Seq(0.0, 1.0)) == "█")
+
+  test("a marker wider than one column is refused rather than smeared into the next cell"):
+    // at Cell resolution the marker *is* the glyph, and the neighbouring column belongs to the cell next door — which
+    // this same canvas may also be drawing into. A two-column marker is replaced by the fallback rather than clipped.
+    val canvas = Canvas(bounds, bounds, Seq(Shape.Points(Seq((0.0, 0.0)))), marker = "🙂")
+    val buffer = rendered(canvas, 5, 5)
+    assert(trimmedLines(buffer) == Seq("", "", "", "", SubCell.FallbackMarker))

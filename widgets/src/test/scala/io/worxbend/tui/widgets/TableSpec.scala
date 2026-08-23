@@ -27,8 +27,8 @@ final class TableSpec extends AnyFunSuite:
     )
     val buffer = rendered(table, 8, 3)
     assert(trimmedLines(buffer) == Seq("id val", "1  x", ""))
-    assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Bold))
-    assert(!buffer.get(0, 1).style.modifiers.has(Modifiers.Bold))
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Bold))
+    assert(!buffer.get(0, 1).style.modifiers.hasAny(Modifiers.Bold))
 
   test("cell content is clipped to its column width"):
     val table  = Table(
@@ -46,3 +46,9 @@ final class TableSpec extends AnyFunSuite:
     )
     val buffer = rendered(table, 3, 2)
     assert(trimmedLines(buffer) == Seq("1", "2"))
+
+  test("ofStrings builds the same table as wrapping every cell in Line.raw"):
+    val widths     = Seq(Constraint.Length(2), Constraint.Fill(1))
+    val fromLines  = Table(Seq(row("a", "one")), widths, header = Some(row("k", "v")), columnSpacing = 0)
+    val fromString = Table.ofStrings(Seq(Seq("a", "one")), widths, header = Some(Seq("k", "v")), columnSpacing = 0)
+    assert(fromString == fromLines)

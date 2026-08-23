@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -78,30 +78,38 @@ final class InputDecoderSpec extends AnyFunSuite:
     assert(decoded(csi("1;3Z")*) == Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Alt | KeyModifiers.Shift)))
 
   test("an SGR mouse report keeps decoding when a field carries a sub-parameter"):
-    assert(decoded(csi("<0:1;10;5M")*) == Event.Mouse(MouseEvent(9, 4, MouseEventKind.Down, KeyModifiers.None)))
+    assert(
+      decoded(csi("<0:1;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Down, KeyModifiers.None))
+    )
 
   test("an SGR mouse press decodes with zero-based coordinates"):
-    assert(decoded(csi("<0;10;5M")*) == Event.Mouse(MouseEvent(9, 4, MouseEventKind.Down, KeyModifiers.None)))
+    assert(decoded(csi("<0;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Down, KeyModifiers.None)))
 
   test("an SGR mouse release decodes to Up"):
-    assert(decoded(csi("<0;3;3m")*) == Event.Mouse(MouseEvent(2, 2, MouseEventKind.Up, KeyModifiers.None)))
+    assert(decoded(csi("<0;3;3m")*) == Event.Mouse(MouseEvent(Position(2, 2), MouseEventKind.Up, KeyModifiers.None)))
 
   test("a drag report decodes to Drag"):
-    assert(decoded(csi("<32;4;4M")*) == Event.Mouse(MouseEvent(3, 3, MouseEventKind.Drag, KeyModifiers.None)))
+    assert(decoded(csi("<32;4;4M")*) == Event.Mouse(MouseEvent(Position(3, 3), MouseEventKind.Drag, KeyModifiers.None)))
 
   test("wheel reports decode to scroll events"):
-    assert(decoded(csi("<64;1;1M")*) == Event.Mouse(MouseEvent(0, 0, MouseEventKind.ScrollUp, KeyModifiers.None)))
-    assert(decoded(csi("<65;1;1M")*) == Event.Mouse(MouseEvent(0, 0, MouseEventKind.ScrollDown, KeyModifiers.None)))
+    assert(
+      decoded(csi("<64;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollUp, KeyModifiers.None))
+    )
+    assert(
+      decoded(csi("<65;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollDown, KeyModifiers.None))
+    )
 
   test("mouse modifier bits decode to key modifiers"):
-    assert(decoded(csi("<16;2;2M")*) == Event.Mouse(MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.Ctrl)))
-    assert(decoded(csi("<4;2;2M")*) == Event.Mouse(MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.Shift)))
+    assert(decoded(csi("<16;2;2M")*) == Event.Mouse(MouseEvent(Position(1, 1), MouseEventKind.Down, KeyModifiers.Ctrl)))
+    assert(decoded(csi("<4;2;2M")*) == Event.Mouse(MouseEvent(Position(1, 1), MouseEventKind.Down, KeyModifiers.Shift)))
 
   test("a mouse report carrying several modifier bits decodes to all of them"):
     // 4|8|16 is the mouse encoding of shift|alt|ctrl, the same bitmask a CSI modifier parameter carries at 1|2|4
     assert(
       decoded(csi("<28;2;2M")*) ==
-        Event.Mouse(MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.Shift | KeyModifiers.Alt | KeyModifiers.Ctrl))
+        Event.Mouse(
+          MouseEvent(Position(1, 1), MouseEventKind.Down, KeyModifiers.Shift | KeyModifiers.Alt | KeyModifiers.Ctrl)
+        )
     )
 
   test("kitty keypad keys decode to their non-keypad equivalents"):

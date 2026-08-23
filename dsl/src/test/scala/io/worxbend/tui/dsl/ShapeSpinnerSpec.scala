@@ -21,7 +21,7 @@ final class ShapeSpinnerSpec extends AnyFunSuite:
       override def config: RunnerConfig      = RunnerConfig(tickRate = Some(20.millis))
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0(using chosen)
-    Pilot.start(backend) { val _ = app.runWith(backend) }.waitForIdle()
+    Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
 
   private def close(pilot: Pilot): Unit =
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
@@ -38,12 +38,12 @@ final class ShapeSpinnerSpec extends AnyFunSuite:
       assert(colors.contains(Theme.Dark.loading.spinner.fg), "the arc should take the theme's spinner colour")
       close(pilot)
 
-  /** `.color(...)` recolors the moving part and leaves the resting path themed, the rule the one-glyph spinner already
+  /** `.fg(...)` recolors the moving part and leaves the resting path themed, the rule the one-glyph spinner already
     * follows for its glyph and its label.
     */
   test("an explicit colour patches the arc and not the path"):
     AnimationClockLock.frozenAt(0.millis):
-      val pilot = renderWith(Theme.Dark)(orbitSpinner().radius(3).color(Color.Magenta))
+      val pilot = renderWith(Theme.Dark)(orbitSpinner().radius(3).fg(Color.Magenta))
       val fgs   = (for
         y <- 0 until 8
         x <- 0 until 24
@@ -93,7 +93,7 @@ final class ShapeSpinnerSpec extends AnyFunSuite:
         override def config: RunnerConfig      = RunnerConfig(tickRate = Some(10.millis))
         override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
         def view(using ReactiveScope): Element = orbitSpinner().radius(3)
-      val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }.waitForIdle()
+      val pilot   = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
       val before  = backend.drawCount
       val until   = System.nanoTime() + 400_000_000L
       while System.nanoTime() < until do pilot.waitForIdle()

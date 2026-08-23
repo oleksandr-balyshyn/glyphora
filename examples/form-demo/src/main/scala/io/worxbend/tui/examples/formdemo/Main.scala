@@ -10,7 +10,7 @@ import io.worxbend.tui.macros.{deriveForm, Field}
   */
 final case class Signup(username: String, age: Int, subscribe: Boolean)
 
-final class FormDemoApp extends TuiApp:
+class FormDemoApp extends TuiApp:
 
   val formState: FormState[Signup] = FormState.of(
     deriveForm[Signup],
@@ -27,18 +27,16 @@ final class FormDemoApp extends TuiApp:
       Form(formState),
       spacer,
       formState.result.get match
-        case Some(signup) => text(s"submitted: $signup").color(Color.Green)
+        case Some(signup) => text(s"submitted: $signup").fg(Color.Green)
         case None         => text("Tab: next · Space: toggle · Ctrl+S: submit · Esc: quit").dim,
     ).rounded.onKeyEvent {
-      case KeyEvent(KeyCode.Char('s'), m) if m.has(KeyModifiers.Ctrl) =>
+      case KeyEvent(KeyCode.Char('s'), m) if m.hasAny(KeyModifiers.Ctrl) =>
         formState.submit()
         true
-      case KeyEvent(KeyCode.Escape, _)                                =>
+      case KeyEvent(KeyCode.Escape, _)                                   =>
         quit()
         true
-      case _                                                          => false
+      case _                                                             => false
     }
 
-object Main:
-  def main(args: Array[String]): Unit =
-    FormDemoApp().run().left.foreach(error => println(s"failed to run: $error"))
+object Main extends FormDemoApp

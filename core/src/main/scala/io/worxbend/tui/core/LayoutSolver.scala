@@ -15,8 +15,11 @@ package io.worxbend.tui.core
   *      one), honoring `Max` caps and re-distributing what a cap refuses;
   *   1. if nothing grew and the constraints between them claim the whole axis proportionally, the cells lost to integer
   *      division are handed back so the segments fill the container exactly.
+  *
+  * Applications reach this through [[Layout.split]] and rarely call [[solve]] directly; it is public because how a
+  * toolkit decides sizes is the part users most need to be able to read, and a `private` object documents it to nobody.
   */
-private[core] object LayoutSolver:
+object LayoutSolver:
 
   /** What one constraint asks of the axis, in every currency the solver spends.
     *
@@ -171,8 +174,11 @@ private[core] object LayoutSolver:
     * weighted division, or all-equal keys when the split is even) and gets back the per-claimant surplus to add on top
     * of its whole-cell share. Wrapping keeps `amount` larger than the number of claimants meaningful; any two claimants
     * then differ by at most one cell.
+    *
+    * Internal to the layout implementation — [[Layout]] shares it so the even splits behind [[Flex]] round the same way
+    * the constraints do — rather than part of what `tui-core` publishes.
     */
-  def distributeRemainder(amount: Int, keys: IndexedSeq[Double]): IndexedSeq[Int] =
+  private[core] def distributeRemainder(amount: Int, keys: IndexedSeq[Double]): IndexedSeq[Int] =
     if keys.isEmpty then IndexedSeq.empty
     else
       val order   = keys.indices.sortBy(index => (-keys(index), index))

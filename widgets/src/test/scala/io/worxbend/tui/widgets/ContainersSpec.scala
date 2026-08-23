@@ -25,7 +25,7 @@ final class ContainersSpec extends AnyFunSuite:
     )
     assert(trimmedLines(rendered(column, 6, 3)) == Seq("top", "bottom", ""))
 
-  test("layout composition: a row of two Tier 1 widgets renders both"):
+  test("layout composition: a row of a gauge and a sparkline renders both"):
     val dashboardRow = Row(
       Seq(
         LayoutItem(Constraint.Percentage(50), Gauge(0.5)),

@@ -2,7 +2,7 @@ package io.worxbend.tui.dsl
 
 import io.worxbend.tui.core.{Color, Constraint, Line, Style, Text, Widget}
 import io.worxbend.tui.testsupport.BufferAssertions.rendered
-import io.worxbend.tui.widgets.{Block, BorderType, Column, LayoutItem, Paragraph, Spacer}
+import io.worxbend.tui.widgets.{Block, BlockTitle, BorderType, Column, LayoutItem, Paragraph, Spacer}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -13,14 +13,14 @@ import org.scalatest.funsuite.AnyFunSuite
 final class DslFaithfulnessSpec extends AnyFunSuite:
 
   private val dslTree = panel("Hello")(
-    text("Welcome!").bold.color(Color.Cyan),
+    text("Welcome!").bold.fg(Color.Cyan),
     spacer,
     text("Press 'q' to quit").dim,
   ).rounded
 
   private val handBuilt: Widget =
     (area, buffer) =>
-      val block = Block(Some(Line.styled("Hello", Style.Default)), BorderType.Rounded)
+      val block = Block(Seq(BlockTitle.top(Line.styled("Hello", Style.Default))), BorderType.Rounded)
       block.render(area, buffer)
       Column(
         Seq(

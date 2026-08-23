@@ -105,12 +105,15 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     printedLines.synchronized { printedLines ++= lines }
     Right(())
 
-  /** Releases the simulated terminal, so a test can assert the runner tore everything down on its way out. */
-  def close(): Unit =
+  /** Releases the simulated terminal, so a test can assert the runner tore everything down on its way out. There is no
+    * device to fail, so this always succeeds.
+    */
+  def close(): Either[BackendError, Unit] =
     mouseCapture = false
     cursorVisible = true
     alternateScreen = false
     rawMode = false
+    Right(())
 
   // ---- test-driver surface ----
 

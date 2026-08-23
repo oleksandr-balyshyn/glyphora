@@ -1,6 +1,6 @@
 package io.worxbend.tui.examples.airsensor
 
-import io.worxbend.tui.core.{KeyCode, Size}
+import io.worxbend.tui.core.Size
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 
@@ -26,7 +26,7 @@ final class AirSensorAppSpec extends AnyFunSuite:
     val app     = AirSensorApp(FakeSensor(script), interval)
     // `runWith` takes the headless backend; `run()` would open the real TTY. The `val _` discards its Either so the
     // block types as Unit, which `-Wunused:all -Werror` insists on.
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     (app, pilot, backend)
 
@@ -52,14 +52,14 @@ final class AirSensorAppSpec extends AnyFunSuite:
     assert(app.history.peek == Vector(clean))
     assert(app.worstBand.peek == Band.Good)
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("a failed poll explains itself and keeps the last good reading on screen"):
     val (app, pilot, _) = startedApp(Vector(Right(clean), Left("sensor offline")))
     waitFor()(pilot.screenText.contains("640 ppm"))
 
-    pilot.pressKey(KeyCode.Char('r'))
+    pilot.press("r")
     waitFor()(pilot.screenText.contains("sensor offline"))
 
     val screen = pilot.screenText
@@ -68,7 +68,7 @@ final class AirSensorAppSpec extends AnyFunSuite:
     assert(app.status.peek == Status.Failed("sensor offline"))
     assert(app.history.peek == Vector(clean))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("readings arrive on the poll timer with no key presses"):
@@ -81,7 +81,7 @@ final class AirSensorAppSpec extends AnyFunSuite:
     assert(backend.drawCount > drawsBefore) // the timer alone drove repaints
     assert(pilot.screenText.contains("History · last"))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("the band word and the worst-band summary follow the reading"):
@@ -90,7 +90,7 @@ final class AirSensorAppSpec extends AnyFunSuite:
     assert(app.worstBand.peek == Band.Good)
     assert(pilot.screenText.contains("air quality: Good"))
 
-    pilot.pressKey(KeyCode.Char('r'))
+    pilot.press("r")
     waitFor()(pilot.screenText.contains("1900 ppm"))
 
     val screen = pilot.screenText
@@ -98,20 +98,20 @@ final class AirSensorAppSpec extends AnyFunSuite:
     assert(screen.contains("Elevated")) // temperature bands on a range, so 31 C is uncomfortable, not unhealthy
     assert(app.worstBand.peek == Band.Unhealthy)
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("h collapses the history pane and ? opens the help overlay"):
     val (_, pilot, _) = startedApp(Vector(Right(clean)))
     waitFor()(pilot.screenText.contains("History · last"))
 
-    pilot.pressKey(KeyCode.Char('h')).waitForIdle()
+    pilot.press("h").waitForIdle()
     assert(!pilot.screenText.contains("History · last"))
 
-    pilot.pressKey(KeyCode.Char('?')).waitForIdle()
+    pilot.press("?").waitForIdle()
     assert(pilot.screenText.contains("airsensor keys"))
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("an AirGradient /measures/current payload parses into a reading"):

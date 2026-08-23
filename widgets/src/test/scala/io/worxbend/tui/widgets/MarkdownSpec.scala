@@ -11,8 +11,8 @@ final class MarkdownSpec extends AnyFunSuite:
     val buffer = rendered(Markdown("# Title\n## Section\n### Sub"), 20, 3)
     assert(trimmedLines(buffer) == Seq("Title", "Section", "Sub"))
     assert(buffer.get(0, 0).style.fg.contains(Color.Cyan))
-    assert(buffer.get(0, 1).style.modifiers.has(Modifiers.Bold))
-    assert(buffer.get(0, 2).style.modifiers.has(Modifiers.Underline))
+    assert(buffer.get(0, 1).style.modifiers.hasAny(Modifiers.Bold))
+    assert(buffer.get(0, 2).style.modifiers.hasAny(Modifiers.Underline))
 
   test("bullets and numbered items get their markers"):
     val buffer = rendered(Markdown("- alpha\n* beta\n2. gamma"), 20, 3)
@@ -21,14 +21,14 @@ final class MarkdownSpec extends AnyFunSuite:
   test("blockquotes are prefixed and quoted-styled"):
     val buffer = rendered(Markdown("> wise words"), 20, 1)
     assert(trimmedLines(buffer) == Seq("▎ wise words"))
-    assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Dim))
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Dim))
 
   test("inline strong, emphasis, and code style their runs only"):
     val buffer = rendered(Markdown("a **b** *c* `d`"), 20, 1)
     assert(trimmedLines(buffer) == Seq("a b c d"))
-    assert(!buffer.get(0, 0).style.modifiers.has(Modifiers.Bold))
-    assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Bold))
-    assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Italic))
+    assert(!buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Bold))
+    assert(buffer.get(2, 0).style.modifiers.hasAny(Modifiers.Bold))
+    assert(buffer.get(4, 0).style.modifiers.hasAny(Modifiers.Italic))
     assert(buffer.get(6, 0).style.fg.contains(Color.Yellow))
 
   test("unclosed markers render literally"):
@@ -51,16 +51,16 @@ final class MarkdownSpec extends AnyFunSuite:
     val buffer = rendered(Markdown("see [the docs](https://example.com) here"), 40, 1)
     assert(trimmedLines(buffer).head == "see the docs here")
     assert(buffer.get(4, 0).style.link.contains("https://example.com"))
-    assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Underline))
+    assert(buffer.get(4, 0).style.modifiers.hasAny(Modifiers.Underline))
     assert(buffer.get(0, 0).style.link.isEmpty)
 
   test("a malformed link renders literally"):
     val buffer = rendered(Markdown("just [brackets] here"), 30, 1)
     assert(trimmedLines(buffer).head == "just [brackets] here")
 
-  test("heightOf measures wrapped markdown"):
-    assert(Markdown.heightOf("1234567890 1234567890", 30) == 1)
-    assert(Markdown.heightOf("1234567890 1234567890", 10) >= 2)
+  test("heightAt measures wrapped markdown"):
+    assert(Markdown("1234567890 1234567890").heightAt(30).contains(1))
+    assert(Markdown("1234567890 1234567890").heightAt(10).exists(_ >= 2))
 
   test("a language-tagged code fence is syntax-highlighted"):
     val theme = MarkdownTheme()

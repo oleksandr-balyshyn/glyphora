@@ -126,7 +126,7 @@ final class OrbitSpinnerSpec extends AnyFunSuite:
         y <- 0 until 8
         x <- 0 until 16
       yield buffer.get(x, y)).count(cell =>
-        cell.symbol != " " && !cell.style.modifiers.has(io.worxbend.tui.core.Modifiers.Dim)
+        cell.symbol != " " && !cell.style.modifiers.hasAny(io.worxbend.tui.core.Modifiers.Dim)
       )
     assert(litCells(0.5) > litCells(0.125))
 

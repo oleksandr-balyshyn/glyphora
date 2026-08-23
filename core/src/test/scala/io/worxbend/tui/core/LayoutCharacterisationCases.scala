@@ -1,7 +1,7 @@
 package io.worxbend.tui.core
 
-/** The input matrix shared by the layout characterisation test and, while it was being written, the generator that
-  * produced its expected values.
+/** The input matrix behind `LayoutCharacterisationSpec`, in one place so the run that records the fixture and the run
+  * that checks it against the solver can never disagree about which cases exist.
   */
 object LayoutCharacterisationCases:
 

@@ -9,7 +9,7 @@ import scala.concurrent.duration.DurationInt
 /** dashboard: `Gauge` + `Sparkline` + `Chart` under tick-rate animation — layout composition and the tick/redraw cycle.
   * `q` quits.
   */
-final class DashboardApp extends TuiApp:
+class DashboardApp extends TuiApp:
 
   override def config: RunnerConfig = RunnerConfig(tickRate = Some(100.millis))
 
@@ -27,14 +27,16 @@ final class DashboardApp extends TuiApp:
         panel("Load")(gauge(load)).percent(50),
         panel("Throughput")(sparkline(samples).fill).percent(50),
       ).length(4),
+      // `titleBottom` writes into the bottom border, so the reading costs no content row
       panel("Signal")(
         chart(
           Seq(Dataset("wave", wave, graphType = GraphType.Line)),
           xBounds = (0.0, 60.0),
           yBounds = (0.0, 100.0),
         ).fill
-      ).fill,
-      text(s"tick $t · press 'q' to quit").dim,
+      ).titleBottom(f"load ${load * 100}%.0f%%").fill,
+      // one row, two styles, and no hand-counted column widths
+      line(s"tick $t · press ".styled(_.dim), "q".styled(_.bold), " to quit".styled(_.dim)),
     ).onKeyEvent {
       case KeyEvent(KeyCode.Char('q'), _) =>
         quit()
@@ -42,6 +44,4 @@ final class DashboardApp extends TuiApp:
       case _                              => false
     }
 
-object Main:
-  def main(args: Array[String]): Unit =
-    DashboardApp().run().left.foreach(error => println(s"failed to run: $error"))
+object Main extends DashboardApp

@@ -13,7 +13,7 @@ final class DashboardAppSpec extends AnyFunSuite:
   test("ticks drive redraws without any input"):
     val backend     = HeadlessBackend(Size(60, 16))
     val app         = DashboardApp()
-    val pilot       = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot       = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     val ticksBefore = app.tick.peek
     val drawsBefore = backend.drawCount

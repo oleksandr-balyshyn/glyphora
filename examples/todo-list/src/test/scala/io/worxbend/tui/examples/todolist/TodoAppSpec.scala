@@ -12,7 +12,7 @@ final class TodoAppSpec extends AnyFunSuite:
   private def startedApp(): (TodoApp, Pilot) =
     val backend = HeadlessBackend(Size(50, 10))
     val app     = TodoApp()
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     (app, pilot)
 

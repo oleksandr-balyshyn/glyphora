@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -25,10 +25,5 @@ final case class Marquee(
       var x        = area.x
       var index    = offset
       while x < area.right do
-        val cluster = clusters(index % clusters.size)
-        val width   = math.max(1, CharWidth.of(cluster))
-        if x + width <= area.right then
-          buffer.set(x, area.y, Cell(cluster, style))
-          if width == 2 then buffer.set(x + 1, area.y, Cell.Empty)
-        x += width
+        x = ClusterRow.put(buffer, x, area.y, clusters(index % clusters.size), style, area.right)
         index += 1

@@ -30,21 +30,22 @@ final class RunnerTaskFailureReportingSpec extends AnyFunSuite:
     def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
       reads += 1
       if reads == 1 then Right(Some(Event.Key(KeyEvent.of(KeyCode.Char('x'))))) else Left(BackendError.NotInRawMode)
-    def close(): Unit                                                     = ()
+    def close(): Either[BackendError, Unit]                               = Right(())
 
   /** Runs `bodies` as queued render-thread work, triggered by the first key, quitting on the second. */
   private def runQueueing(backend: HeadlessBackend, bodies: Seq[() => Unit]): Either[RunnerError, Unit] =
     backend.postEvent(Event.Key(KeyEvent.of(KeyCode.Char('x'))))
     backend.postEvent(Event.Key(KeyEvent.of(KeyCode.Char('q'))))
     TerminalRunner(backend).run(
+      _ => (),
       (event, handle) =>
         event match
           case Event.Key(KeyEvent(KeyCode.Char('x'), _)) =>
             bodies.foreach(body => RenderThread.runLater(body()))
-            false
+            EventOutcome.Ignored
           case _                                         =>
             handle.quit()
-            false
+            EventOutcome.Ignored
       ,
       _ => (),
     )
@@ -86,12 +87,13 @@ final class RunnerTaskFailureReportingSpec extends AnyFunSuite:
 
   test("a backend failure afterwards reports the terminal error without erasing the task failure"):
     val result = TerminalRunner(FailAfterFirstKey()).run(
+      _ => (),
       (event, _) =>
         event match
           case Event.Key(KeyEvent(KeyCode.Char('x'), _)) =>
             RenderThread.runLater(throw RuntimeException("boom-1"))
-            false
-          case _                                         => false
+            EventOutcome.Ignored
+          case _                                         => EventOutcome.Ignored
       ,
       _ => (),
     )
@@ -109,15 +111,16 @@ final class RunnerTaskFailureReportingSpec extends AnyFunSuite:
     backend.postEvent(Event.Key(KeyEvent.of(KeyCode.Char('x'))))
     backend.postEvent(Event.Key(KeyEvent.of(KeyCode.Char('q'))))
     val result                         = TerminalRunner(backend, RunnerConfig(onTaskError = Some(record))).run(
+      _ => (),
       (event, handle) =>
         event match
           case Event.Key(KeyEvent(KeyCode.Char('x'), _)) =>
             RenderThread.runLater(throw RuntimeException("boom-1"))
             RenderThread.runLater(throw RuntimeException("boom-2"))
-            false
+            EventOutcome.Ignored
           case _                                         =>
             handle.quit()
-            false
+            EventOutcome.Ignored
       ,
       _ => (),
     )

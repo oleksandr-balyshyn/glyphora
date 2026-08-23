@@ -38,7 +38,7 @@ final case class SpinnerPreset(
     * that back out of a padded string.
     */
   def frameIndexAt(elapsed: FiniteDuration): Int =
-    math.floorMod(elapsed.toNanos / frameDuration.toNanos, frames.size.toLong).toInt
+    Animation.step(elapsed, cycleDuration, frames.size)
 
   /** How long one full cycle takes — useful for syncing a caption or a second animation to it. */
   def cycleDuration: FiniteDuration = frameDuration * frames.size.toLong

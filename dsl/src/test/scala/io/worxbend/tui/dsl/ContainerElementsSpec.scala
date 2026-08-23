@@ -10,6 +10,9 @@ import org.scalatest.funsuite.AnyFunSuite
 
 final class ContainerElementsSpec extends AnyFunSuite:
 
+  /** These tests build elements outside a running app, so nothing needs subscribing. */
+  private given ReactiveScope = ReactiveScope.untracked
+
   test("layers paint later children over earlier ones"):
     val stacked = layers(text("bottom layer"), text("top"))
     assert(trimmedLines(rendered(stacked.widget, 14, 1)) == Seq("toptom layer"))
@@ -46,7 +49,7 @@ final class ContainerElementsSpec extends AnyFunSuite:
     val app     = new TuiApp:
       override def bindings: KeyBindings     = KeyBindings(binding("q", "quit")(quit()))
       def view(using ReactiveScope): Element = scrollView(content, contentHeight = 8, state)
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenLines.head.startsWith("row 0"))
     pilot.pressKey(KeyCode.Down).pressKey(KeyCode.Down).waitForIdle()
@@ -60,11 +63,11 @@ final class ContainerElementsSpec extends AnyFunSuite:
     val backend  = HeadlessBackend(Size(20, 3))
     val selected = Signal(0)
     val app      = new TuiApp:
-      override def bindings: KeyBindings     = KeyBindings(binding("q", "quit")(quit()))
+      override def bindings: KeyBindings = KeyBindings(binding("q", "quit")(quit()))
       def view(using ReactiveScope): Element =
-        val _ = selected.get // subscribe so switching re-renders
+        // no explicit `selected.get`: the factory reads the signal tracked, so switching pages re-renders on its own
         tabbedContent("One" -> text("page one"), "Two" -> text("page two"))(selected)
-    val pilot    = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot    = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("page one"))
     pilot.pressKey(KeyCode.Right).waitForIdle()

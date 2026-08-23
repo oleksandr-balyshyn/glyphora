@@ -2,7 +2,7 @@ package io.worxbend.tui.runtime
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.duration.DurationInt
 
 /** `Async` runs work off-thread and enqueues the continuation onto the render thread. With no runner active, tests play
@@ -35,6 +35,42 @@ final class AsyncSpec extends AnyFunSuite:
     Async.runCatching[Int](throw new RuntimeException("boom"))(v => bad.set(Some(v)))
     pumpUntil(2000)(bad.peek.isDefined)
     assert(bad.peek.exists(_.isLeft))
+
+  /** The failure path of `run` is the one an app hits in production — a fetch times out, a file is missing — and it is
+    * the only path whose default (`AsyncErrorHandler.rethrow`) throws on the *worker* thread, where nothing but the
+    * JVM's uncaught-exception handler is listening. These three pin what each handler actually does with it.
+    */
+  test("a failing run reports to the ambient handler and never delivers a result"):
+    val failure             = AtomicReference[Option[Throwable]](None)
+    val delivered           = new AtomicInteger(0)
+    given AsyncErrorHandler = error => failure.set(Some(error))
+
+    Async.run[Int](throw new IllegalStateException("boom"))(_ => delivered.incrementAndGet())
+    pumpUntil(2000)(failure.get().isDefined)
+
+    assert(failure.get().exists(_.getMessage == "boom"))
+    assert(delivered.get() == 0)
+
+  test("AsyncErrorHandler.ignore swallows the failure and the queue keeps working"):
+    given AsyncErrorHandler = AsyncErrorHandler.ignore
+    val afterwards          = new AtomicInteger(0)
+
+    Async.run[Int](throw new RuntimeException("boom"))(_ => ())
+    Async.run(1 + 1)(_ => afterwards.incrementAndGet())
+    pumpUntil(2000)(afterwards.get() > 0)
+
+    assert(afterwards.get() == 1)
+
+  test("AsyncErrorHandler.onRenderThread reports from the drain rather than on the worker"):
+    val reportedOn          = AtomicReference[Option[String]](None)
+    given AsyncErrorHandler = AsyncErrorHandler.onRenderThread(_ => reportedOn.set(Some(Thread.currentThread.getName)))
+
+    Async.run[Int](throw new RuntimeException("boom"))(_ => ())
+    pumpUntil(2000)(reportedOn.get().isDefined)
+
+    // the report ran on whichever thread called `RenderThread.drainPending` — here the test thread, never the worker
+    assert(reportedOn.get().contains(Thread.currentThread.getName))
+    assert(!reportedOn.get().exists(_.startsWith("glyphora-async")))
 
   test("after fires once on the render thread"):
     val fired = new AtomicInteger(0)

@@ -52,12 +52,25 @@ final class FormState[A] private (private[dsl] val bindings: Seq[FieldBinding], 
 
 object FormState:
 
+  /** The `Field` factory that produces `input`, named so a rejected validator can say what to write instead. */
+  private def factoryFor(input: FieldInput): String = input match
+    case FieldInput.TextField => "Field.text"
+    case FieldInput.IntField  => "Field.int"
+    case FieldInput.BoolField => "Field.bool"
+
   /** Builds live state from a derived [[FormSpec]]; `validators` override the default per-type parsers by field name
-    * (only the name is taken from their own `FieldSpec` — position comes from the derived spec).
+    * (only the name and the input kind are taken from their own `FieldSpec` — position comes from the derived spec).
     *
-    * A validator naming a field the spec does not declare, or two validators naming the same field, is a programmer
-    * error and throws here, the way a malformed key spec throws from [[binding]]. Both are static declarations, and a
-    * silently dropped validator is invisible at runtime: the form submits unvalidated data and looks like it passed.
+    * Three things are programmer errors and throw here, the way a malformed key spec throws from [[binding]]: a
+    * validator naming a field the spec does not declare, two validators naming the same field, and a validator built
+    * from the wrong `Field` factory for the field's declared type. All three are static declarations, and all three are
+    * invisible at runtime otherwise — the first two silently drop the validator so the form submits unvalidated data
+    * and looks like it passed, and the third hands a value of the wrong type to the case class's constructor, which
+    * fails as a `ClassCastException` out of `Mirror.fromProduct` on the render thread when the user presses submit.
+    *
+    * The type check compares [[FieldInput]]s, which is what a `Field.*` factory stamps into its spec. It cannot see
+    * through a `map` that changes the value type without changing the factory — `Field.int("age").map(_.toString)`
+    * still says `IntField` — so [[Field.map]] keeps its own warning about that one residual case.
     */
   def of[A](spec: FormSpec[A], validators: Field[?]*): FormState[A] =
     val declared = spec.fields.map(_.name).toSet
@@ -71,6 +84,18 @@ object FormState:
       validators.groupBy(_.spec.name).collect { case (name, declaredTwice) if declaredTwice.sizeIs > 1 => name }
     if repeated.nonEmpty then
       throw IllegalArgumentException(s"more than one validator for field(s) ${repeated.mkString(", ")}")
+
+    val declaredInput = spec.fields.map(field => field.name -> field.input).toMap
+    val mismatched    = validators.flatMap { validator =>
+      declaredInput
+        .get(validator.spec.name)
+        .filterNot(_ == validator.spec.input)
+        .map(declared =>
+          s"field '${validator.spec.name}' is declared as $declared but its validator produces " +
+            s"${validator.spec.input}; use ${factoryFor(declared)}(\"${validator.spec.name}\")"
+        )
+    }
+    if mismatched.nonEmpty then throw IllegalArgumentException(mismatched.mkString("; "))
 
     val byName                                       = validators.map(field => field.spec.name -> field).toMap
     // A field with no caller-supplied validator still needs one, and which parser a field type gets is
@@ -92,8 +117,8 @@ object FormState:
     }
     new FormState(bindings, spec.assemble)
 
-/** Renders a [[FormState]] as labeled controls with inline validation errors — the Tier 2 `Form` widget, composed from
-  * `input`/`checkbox` so it inherits focus traversal for free.
+/** Renders a [[FormState]] as labeled controls with inline validation errors, composed from `input`/`checkbox` so it
+  * inherits focus traversal for free.
   */
 object Form:
 
@@ -117,7 +142,7 @@ object Form:
     * error looks lands in both renderings at once. The two differ only in the text they hand in.
     */
   private def errorRow(message: String): Element =
-    Element.text(message).color(Color.Red).length(1)
+    Element.text(message).fg(Color.Red).length(1)
 
   def apply[A](state: FormState[A])(using ReactiveScope): Element =
     // display columns, not UTF-16 lengths: a field named with CJK or emoji characters otherwise gets a label column

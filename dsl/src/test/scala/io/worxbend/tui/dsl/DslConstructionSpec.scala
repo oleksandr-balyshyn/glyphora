@@ -10,21 +10,21 @@ final class DslConstructionSpec extends AnyFunSuite:
 
   test("the hello-world tree has the documented shape"):
     val tree = panel("Hello")(
-      text("Welcome!").bold.color(Color.Cyan),
+      text("Welcome!").bold.fg(Color.Cyan),
       spacer,
       text("Press 'q' to quit").dim,
     ).rounded
     tree match
-      case PanelElement(Some("Hello"), children, BorderType.Rounded, _) =>
+      case PanelElement(Some("Hello"), children, BorderType.Rounded, _, _, _, _) =>
         assert(children.size == 3)
         assert(children(0).asInstanceOf[TextElement].content == "Welcome!")
         assert(children(1).isInstanceOf[SpacerElement])
-      case other                                                        => fail(s"unexpected tree shape: $other")
+      case other => fail(s"unexpected tree shape: $other")
 
   test("styling extensions accumulate into the element style"):
-    val element = text("x").bold.dim.color(Color.Red).background(Color.Black)
-    assert(element.style.modifiers.has(Modifiers.Bold))
-    assert(element.style.modifiers.has(Modifiers.Dim))
+    val element = text("x").bold.dim.fg(Color.Red).bg(Color.Black)
+    assert(element.style.modifiers.hasAny(Modifiers.Bold))
+    assert(element.style.modifiers.hasAny(Modifiers.Dim))
     assert(element.style.fg.contains(Color.Red))
     assert(element.style.bg.contains(Color.Black))
 
@@ -37,20 +37,33 @@ final class DslConstructionSpec extends AnyFunSuite:
     assert(text("x").maxSize(9).props.constraint.contains(Constraint.Max(9)))
 
   test("text claims one row per line by default; containers fill"):
-    assert(text("a\nb").preferredSize(io.worxbend.tui.core.Direction.Vertical) == Constraint.Length(2))
-    assert(text("ab\nwide line").preferredSize(io.worxbend.tui.core.Direction.Horizontal) == Constraint.Length(9))
-    assert(row().preferredSize(io.worxbend.tui.core.Direction.Vertical) == Constraint.Fill(1))
+    assert(text("a\nb").claim.vertical == Constraint.Length(2))
+    assert(text("ab\nwide line").claim.horizontal == Constraint.Length(9))
+    assert(row().claim.vertical == Constraint.Fill(1))
     assert(spacer(2).props.constraint.contains(Constraint.Length(2)))
 
-  test("rounded only affects panels"):
-    assert(panel(text("x")).rounded.asInstanceOf[PanelElement].borderType == BorderType.Rounded)
-    assert(text("x").rounded == text("x"))
+  test("border builders are typed to panels and give back a panel"):
+    assert(panel(text("x")).rounded.borderType == BorderType.Rounded)
+    assert(panel(text("x")).doubleBorder.borderType == BorderType.Double)
+    // `text("x").rounded` does not compile: `rounded` exists only on PanelElement
+    assertDoesNotCompile("""text("x").rounded""")
+
+  /** The type annotations are the assertion: every fluent call gives back the element's own type, so the node's own
+    * builders stay reachable after a styling or layout call and the two orders mean the same thing.
+    */
+  test("styling and layout calls preserve the element's own type in either order"):
+    given Theme                    = Theme.default
+    val first: ProgressBarElement  = progressBar(0.5).bare.fill
+    val second: ProgressBarElement = progressBar(0.5).fill.bare
+    assert(first == second)
+    val styledPanel: PanelElement  = panel(text("x")).bold.length(3).rounded
+    assert(styledPanel.borderType == BorderType.Rounded)
 
   test("onKeyEvent attaches a handler without disturbing the rest of the props"):
     val handler: KeyEvent => Boolean = _ => true
     val element                      = text("x").bold.onKeyEvent(handler)
     assert(element.props.onKey.contains(handler))
-    assert(element.style.modifiers.has(Modifiers.Bold))
+    assert(element.style.modifiers.hasAny(Modifiers.Bold))
 
   test("key events route to the innermost handler first and consumption stops propagation"):
     val seen     = scala.collection.mutable.Buffer[String]()

@@ -1,9 +1,8 @@
 package io.worxbend.tui.examples.procmon
 
-import io.worxbend.tui.core.MouseEventKind
 import io.worxbend.tui.dsl.*
 import io.worxbend.tui.runtime.RunnerConfig
-import io.worxbend.tui.widgets.{DataTable, DataTableState, TextInputState}
+import io.worxbend.tui.widgets.{ColumnSort, DataTable, DataTableState, SortDirection, TextInputState}
 
 import java.util.Locale
 import scala.concurrent.duration.DurationInt
@@ -25,7 +24,7 @@ import scala.concurrent.duration.DurationInt
   * `p`/`u`/`c`/`m`/`n` sort by PID/USER/CPU/MEM/COMMAND, again to reverse · `r` refresh now · `+`/`-` slower/faster
   * refresh · `ctrl+p` command palette · `q` quit.
   */
-final class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends TuiApp:
+class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends TuiApp:
 
   import ProcmonApp.*
 
@@ -57,10 +56,9 @@ final class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) exten
 
   private var ticksUntilRefresh: Int = 0
 
-  // start where `top` starts, on the busiest process. `sortBy` always begins ascending, so the two fields are set
-  // directly — they are public, and they are the whole of `DataTableState`'s sort API.
-  tableState.sortColumn = Some(CpuColumn)
-  tableState.sortAscending = false
+  // start where `top` starts, on the busiest process. `sortBy` always begins ascending, so the sort is set directly —
+  // `sort` is public, and a `ColumnSort` is the whole of `DataTableState`'s sort API.
+  tableState.sort = Some(ColumnSort(CpuColumn, SortDirection.Descending))
 
   /** Header statistics, derived once per change rather than recomputed per frame.
     *
@@ -101,7 +99,7 @@ final class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) exten
         restoreSelection()
       case Left(error)    =>
         // toasts age in ticks, not seconds, so the lifetime has to be computed from the tick rate
-        notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning, ttlTicks = 3 * TicksPerSecond)
+        notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning, duration = 3.seconds)
     }
 
   // ---- keys ----
@@ -344,6 +342,4 @@ object ProcmonApp:
 
   private def integer(value: Int, width: Int): String = String.format(Locale.ROOT, s"%${width}d", value)
 
-object Main:
-  def main(args: Array[String]): Unit =
-    ProcmonApp().run().left.foreach(error => println(s"failed to run: $error"))
+object Main extends ProcmonApp()

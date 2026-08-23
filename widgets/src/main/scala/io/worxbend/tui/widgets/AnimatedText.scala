@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Measured, Rect, Style, Widget}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
@@ -51,7 +51,8 @@ final case class AnimatedText(
     effect: TextEffect = TextEffect.Wave(),
     style: Style = Style.Default,
     highlightStyle: Style = Style.Default.bold,
-) extends Widget:
+) extends Widget
+    with Measured:
 
   private lazy val clusters: Vector[String] = CharWidth.graphemeClusters(content).toVector
 
@@ -64,34 +65,26 @@ final case class AnimatedText(
         case TextEffect.Shimmer(sparkle, period)  => renderShimmer(area, buffer, sparkle, period)
         case TextEffect.Bounce(trail, cycles)     => renderBounce(area, buffer, trail, cycles)
 
-  /** Writes `cluster` at `x` if it fits, blanking the continuation cell of a wide glyph; returns the next x. */
-  private def put(buffer: Buffer, x: Int, y: Int, cluster: String, cellStyle: Style, right: Int): Int =
-    val width = math.max(1, CharWidth.of(cluster))
-    if x + width <= right then
-      buffer.set(x, y, Cell(cluster, cellStyle))
-      if width == 2 then buffer.set(x + 1, y, Cell.Empty)
-    x + width
-
   private def renderTypewriter(area: Rect, buffer: Buffer, speed: Double, cursor: String): Unit =
     val revealed = if speed <= 0 then clusters.size else (elapsed.toNanos / 1e9 * speed).toInt
     val shown    = math.max(0, math.min(clusters.size, revealed))
     var x        = area.x
     var index    = 0
     while index < shown && x < area.right do
-      x = put(buffer, x, area.y, clusters(index), style, area.right)
+      x = ClusterRow.put(buffer, x, area.y, clusters(index), style, area.right)
       index += 1
     // the cursor blinks only while there is still text to come, so a finished line reads as finished
     if shown < clusters.size && x < area.right then
       val blinkOn = Animation.step(elapsed, AnimatedText.CursorBlink, 2) == 0
       if blinkOn then
-        val _ = put(buffer, x, area.y, cursor, highlightStyle, area.right)
+        val _ = ClusterRow.put(buffer, x, area.y, cursor, highlightStyle, area.right)
 
   private def renderWave(area: Rect, buffer: Buffer, crestWidth: Int, speed: Double): Unit =
     val crest = Animation.stepAtRate(elapsed, speed, clusters.size)
     var x     = area.x
     clusters.zipWithIndex.foreach: (cluster, index) =>
       val onCrest = math.abs(index - crest) < math.max(1, crestWidth)
-      x = put(buffer, x, area.y, cluster, if onCrest then highlightStyle else style, area.right)
+      x = ClusterRow.put(buffer, x, area.y, cluster, if onCrest then highlightStyle else style, area.right)
 
   private def renderGradient(area: Rect, buffer: Buffer, ramp: ColorRamp, speed: Double): Unit =
     val offset = Animation.stepAtRate(elapsed, speed, clusters.size)
@@ -100,7 +93,7 @@ final case class AnimatedText(
       // the ramp scrolls through the text rather than the text through the ramp, so the string stays put
       val position =
         if clusters.sizeIs <= 1 then 0.0 else math.floorMod(index - offset, clusters.size) / (clusters.size - 1.0)
-      x = put(buffer, x, area.y, cluster, style.withFg(ramp.at(position)), area.right)
+      x = ClusterRow.put(buffer, x, area.y, cluster, style.withFg(ramp.at(position)), area.right)
 
   private def renderShimmer(area: Rect, buffer: Buffer, sparkle: String, period: FiniteDuration): Unit =
     // the sweep crosses in the first half of the period and rests for the second, so it reads as a shine, not a strobe
@@ -114,14 +107,14 @@ final case class AnimatedText(
         else if distance > 0 && distance <= AnimatedText.ShimmerTail then highlightStyle.dim
         else style
       val glyph     = if distance == 0 && CharWidth.of(sparkle) > 0 then sparkle else cluster
-      x = put(buffer, x, area.y, glyph, cellStyle, area.right)
+      x = ClusterRow.put(buffer, x, area.y, glyph, cellStyle, area.right)
 
   private def renderBounce(area: Rect, buffer: Buffer, trail: Int, cycles: Double): Unit =
     val rows    = area.height
     val seconds = elapsed.toNanos / 1e9
     var x       = area.x
     clusters.zipWithIndex.foreach: (cluster, index) =>
-      val width = math.max(1, CharWidth.of(cluster))
+      val width = ClusterRow.renderedWidth(cluster)
       if x + width <= area.right then
         // a phase offset per grapheme turns a shared bounce into a wave travelling along the string
         val phase  = seconds * cycles * 2 * math.Pi - index * AnimatedText.BouncePhaseStep
@@ -133,15 +126,19 @@ final case class AnimatedText(
           // the after-image is the same glyph as the head, so it occupies the same columns: a two-column cluster has to
           // claim its continuation cell on the trail row too, or whatever was underneath shows through the middle of it
           if trailRow < area.bottom then
-            val _ = put(buffer, x, trailRow, cluster, style.dim, area.right)
+            val _ = ClusterRow.put(buffer, x, trailRow, cluster, style.dim, area.right)
           back -= 1
-        val _      = put(buffer, x, row, cluster, highlightStyle, area.right)
+        val _      = ClusterRow.put(buffer, x, row, cluster, highlightStyle, area.right)
       x += width
 
-  /** The rows this text needs: one, except for a bounce, which needs room to move. */
-  def preferredHeight: Int = effect match
-    case TextEffect.Bounce(trail, _) => math.max(2, trail + 2)
-    case _                           => 1
+  /** The rows this text needs: one, except for a bounce, which needs room to move. The text never wraps, so the width
+    * it is given makes no difference and `width` is ignored.
+    */
+  override def heightAt(width: Int): Option[Int] =
+    val _ = width
+    Some(effect match
+      case TextEffect.Bounce(trail, _) => math.max(2, trail + 2)
+      case _                           => 1)
 
 object AnimatedText:
 

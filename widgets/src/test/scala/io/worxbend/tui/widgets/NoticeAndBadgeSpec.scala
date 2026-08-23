@@ -56,11 +56,11 @@ final class NoticeAndBadgeSpec extends AnyFunSuite:
     assert(render(long, 0).isEmpty)
 
   test("a wrapping notice grows instead of clipping, and reports the height it needs"):
-    val notice = Notice("one two three four five six", NoticeLevel.Info, wrap = true)
-    assert(notice.heightOf(12) > 1)
-    val drawn  = trimmedLines(rendered(notice, 12, notice.heightOf(12)))
+    val notice = Notice("one two three four five six", NoticeLevel.Info, overflow = Overflow.Wrap)
+    assert(notice.heightAt(12).exists(_ > 1))
+    val drawn  = trimmedLines(rendered(notice, 12, notice.heightAt(12).getOrElse(1)))
     assert(drawn.count(_.nonEmpty) > 1, s"wrapping produced $drawn")
-    assert(Notice("short", NoticeLevel.Info).heightOf(40) == 1, "a non-wrapping notice is always one row")
+    assert(Notice("short", NoticeLevel.Info).heightAt(40).contains(1), "a non-wrapping notice is always one row")
 
   test("the icon and the message are styled independently"):
     val buffer = rendered(
@@ -86,13 +86,13 @@ final class NoticeAndBadgeSpec extends AnyFunSuite:
   test("a solid badge reverses its style and pads its label"):
     val buffer = rendered(Badge("OK", BadgeVariant.Solid, Style.Default.withFg(Color.Green)), 12, 1)
     assert(buffer.get(0, 0).symbol == " ", "a solid badge is padded so the fill is visible")
-    assert(buffer.get(0, 0).style.modifiers.has(io.worxbend.tui.core.Modifiers.Reverse))
+    assert(buffer.get(0, 0).style.modifiers.hasAny(io.worxbend.tui.core.Modifiers.Reverse))
     assert(
       !rendered(Badge("OK", BadgeVariant.Outline), 12, 1)
         .get(0, 0)
         .style
         .modifiers
-        .has(
+        .hasAny(
           io.worxbend.tui.core.Modifiers.Reverse
         ),
       "an outline badge must not paint a block of colour",
@@ -104,16 +104,16 @@ final class NoticeAndBadgeSpec extends AnyFunSuite:
     assert(buffer.get(0, 0).style.fg.contains(Color.Green))
     assert(buffer.get(2, 0).style.fg.isEmpty)
 
-  /** A caller sizes a column from `preferredWidth`, so it has to match the drawn extent including any padding —
-    * measured on the untrimmed cells, since the solid variant's trailing pad is real output.
+  /** A caller sizes a column from `widthAt`, so it has to match the drawn extent including any padding — measured on
+    * the untrimmed cells, since the solid variant's trailing pad is real output.
     */
-  test("preferredWidth matches what each variant actually draws"):
+  test("widthAt matches what each variant actually draws"):
     BadgeVariant.values.foreach: variant =>
       val badge   = Badge("NEW", variant)
       val buffer  = rendered(badge, 40, 1)
       val painted = (0 until 40).count(x => buffer.get(x, 0).symbol != " ")
-      assert(painted <= badge.preferredWidth, s"$variant drew more than it asked for")
-      assert(raw(badge, 40).length <= badge.preferredWidth, s"$variant mis-reports its width")
+      assert(painted <= badge.widthAt(1).getOrElse(0), s"$variant drew more than it asked for")
+      assert(raw(badge, 40).length <= badge.widthAt(1).getOrElse(0), s"$variant mis-reports its width")
 
   test("a badge clips to its area instead of spilling"):
     BadgeVariant.values.foreach: variant =>

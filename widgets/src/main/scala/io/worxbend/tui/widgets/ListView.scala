@@ -18,22 +18,32 @@ final class ListState(var selected: Option[Int] = None, var offset: Int = 0):
   *
   * Named `ListView` rather than the reference libraries' `List` to avoid colliding with `scala.List` at every call
   * site.
+  *
+  * An item is either a plain `String` or a multi-style [[Line]], and the two may be mixed in one list. The union type
+  * saves every caller with plain text the `items.map(Line.raw)` ceremony without closing the door on a styled row; it
+  * follows the shape `Layout.apply` already uses for its `Int | Double | Constraint` constraints. The normalisation
+  * happens once, in [[lines]], rather than on every render.
   */
 final case class ListView(
-    items: Seq[Line],
+    items: Seq[String | Line],
+    style: Style = Style.Default,
     highlightStyle: Style = Style.Default.reverse,
     highlightSymbol: String = "> ",
-    style: Style = Style.Default,
 ) extends StatefulWidget[ListState]:
 
+  private val lines: Seq[Line] = items.map {
+    case content: String => Line.raw(content)
+    case line: Line      => line
+  }
+
   def render(area: Rect, buffer: Buffer, state: ListState): Unit =
-    if !area.isEmpty && items.nonEmpty then
-      val selected    = state.selected.map(index => math.max(0, math.min(index, items.size - 1)))
+    if !area.isEmpty && lines.nonEmpty then
+      val selected    = state.selected.map(index => math.max(0, math.min(index, lines.size - 1)))
       state.selected = selected
-      state.offset = ScrollWindow.offsetFor(state.offset, selected, items.size, area.height)
+      state.offset = ScrollWindow.offsetFor(state.offset, selected, lines.size, area.height)
       val symbolWidth = CharWidth.of(highlightSymbol)
       val padding     = " ".repeat(symbolWidth)
-      items.slice(state.offset, state.offset + area.height).zipWithIndex.foreach { (line, row) =>
+      lines.slice(state.offset, state.offset + area.height).zipWithIndex.foreach { (line, row) =>
         val index      = state.offset + row
         val isSelected = selected.contains(index)
         val rowStyle   = if isSelected then style.patch(highlightStyle) else style

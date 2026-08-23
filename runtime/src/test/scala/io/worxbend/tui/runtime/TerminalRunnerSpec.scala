@@ -22,16 +22,16 @@ final class TerminalRunnerSpec extends AnyFunSuite:
       frame.area,
     )
 
-  private def quitOnQ(event: Event, handle: RunnerHandle): Boolean =
+  private def quitOnQ(event: Event, handle: RunnerHandle): EventOutcome =
     event match
       case Event.Key(KeyEvent(KeyCode.Char('q'), _)) =>
         handle.quit()
-        false
-      case _                                         => true
+        EventOutcome.Ignored
+      case _                                         => EventOutcome.Redraw
 
   test("the runner renders an initial frame before any event arrives"):
     val backend = HeadlessBackend(Size(30, 5))
-    val pilot   = Pilot.start(backend)(TerminalRunner(backend).run(quitOnQ, helloWorldRender))
+    val pilot   = Pilot.start(backend)(TerminalRunner(backend).run(_ => (), quitOnQ, helloWorldRender))
     pilot.waitForIdle()
     assert(pilot.screenLines(1) == "  Hello from glyphora!")
     assert(pilot.screenLines(3) == "  Press 'q' to quit")
@@ -40,7 +40,7 @@ final class TerminalRunnerSpec extends AnyFunSuite:
 
   test("the runner sets up and tears down the terminal around the loop"):
     val backend = HeadlessBackend(Size(30, 5))
-    val pilot   = Pilot.start(backend)(TerminalRunner(backend).run(quitOnQ, helloWorldRender))
+    val pilot   = Pilot.start(backend)(TerminalRunner(backend).run(_ => (), quitOnQ, helloWorldRender))
     pilot.waitForIdle()
     assert(backend.isRawMode)
     assert(backend.isAlternateScreen)
@@ -48,20 +48,21 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     pilot.pressKey(KeyCode.Char('q'))
     assert(pilot.awaitTermination())
 
-  test("an event handler returning true triggers a redraw with updated state"):
+  test("an event handler answering Redraw triggers a repaint with updated state"):
     val backend = HeadlessBackend(Size(20, 3))
     var count   = 0
     val pilot   = Pilot.start(backend) {
-      val _ = TerminalRunner(backend).run(
+      TerminalRunner(backend).run(
+        _ => (),
         (event, handle) =>
           event match
             case Event.Key(KeyEvent(KeyCode.Char('q'), _)) =>
               handle.quit()
-              false
+              EventOutcome.Ignored
             case Event.Key(KeyEvent(KeyCode.Char('+'), _)) =>
               count += 1
-              true
-            case _                                         => false
+              EventOutcome.Redraw
+            case _                                         => EventOutcome.Ignored
         ,
         frame =>
           frame.renderWidget(
@@ -81,7 +82,8 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     val backend  = HeadlessBackend(Size(20, 3))
     var lastArea = Size(0, 0)
     val pilot    = Pilot.start(backend) {
-      val _ = TerminalRunner(backend).run(
+      TerminalRunner(backend).run(
+        _ => (),
         quitOnQ,
         frame =>
           lastArea = Size(frame.area.width, frame.area.height)
@@ -100,14 +102,15 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     val backend         = HeadlessBackend(Size(10, 2))
     @volatile var ticks = 0
     val pilot           = Pilot.start(backend) {
-      val _ = TerminalRunner(backend, RunnerConfig(tickRate = Some(10.millis))).run(
+      TerminalRunner(backend, RunnerConfig(tickRate = Some(10.millis))).run(
+        _ => (),
         (event, handle) =>
           event match
             case Event.Tick =>
               ticks += 1
               if ticks >= 3 then handle.quit()
-              true
-            case _          => false
+              EventOutcome.Redraw
+            case _          => EventOutcome.Ignored
         ,
         frame => frame.renderWidget((_, _) => (), frame.area),
       )
@@ -119,7 +122,8 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     val backend                   = HeadlessBackend(Size(10, 2))
     @volatile var wasRenderThread = false
     val pilot                     = Pilot.start(backend) {
-      val _ = TerminalRunner(backend).run(
+      TerminalRunner(backend).run(
+        _ => (),
         (event, handle) =>
           wasRenderThread = RenderThread.isRenderThread
           quitOnQ(event, handle)
@@ -137,7 +141,8 @@ final class TerminalRunnerSpec extends AnyFunSuite:
     @volatile var message = "before"
     @volatile var dirty   = false
     val pilot             = Pilot.start(backend) {
-      val _ = TerminalRunner(backend, redrawRequested = () => dirty).run(
+      TerminalRunner(backend, redrawRequested = () => dirty).run(
+        _ => (),
         quitOnQ,
         frame =>
           dirty = false

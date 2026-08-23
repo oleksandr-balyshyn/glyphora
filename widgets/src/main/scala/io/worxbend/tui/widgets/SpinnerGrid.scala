@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Rect, Style, Widget}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -76,7 +76,7 @@ final case class SpinnerGrid(
             val shade  = ramp.map: chosen =>
               val position = if frames <= 1 then 0.0 else preset.frameIndexAt(at).toDouble / (frames - 1)
               style.withFg(chosen.at(position))
-            buffer.set(area.x + col * slotWidth, area.y + row, Cell(glyph, shade.getOrElse(style)))
-            if slotWidth == 2 then buffer.set(area.x + col * slotWidth + 1, area.y + row, Cell.Empty)
+            val _      =
+              ClusterRow.put(buffer, area.x + col * slotWidth, area.y + row, glyph, shade.getOrElse(style), area.right)
             col += 1
           row += 1

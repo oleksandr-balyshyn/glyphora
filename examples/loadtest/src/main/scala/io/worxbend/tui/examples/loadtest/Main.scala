@@ -76,13 +76,15 @@ final class LoadTestApp(
     binding("]", "double the request count")(scaleRequests(_ * 2)),
     binding("[", "halve the request count")(scaleRequests(_ / 2)),
     binding("enter", "dismiss the summary")(dismissSummary()),
-    binding("q", "quit")(quitCleanly()),
+    binding("q", "quit")(quit()),
   )
 
-  /** Ctrl+C should not race the workers on the way out either. `false` lets the normal teardown proceed. */
-  override def onInterrupt(): Boolean =
-    runner.stop()
-    false
+  /** Stops the workers on the way out, whatever ended the run — `q`, Ctrl+C, a backend failure.
+    *
+    * `Async`'s threads are daemons, so the JVM would exit regardless — but a headless test outlives the runner, and "no
+    * thread survives quit" is a property worth actually having.
+    */
+  override def onStop(): Unit = runner.stop()
 
   override def onTick(): Unit =
     if phase.peek == Phase.Running then
@@ -138,12 +140,6 @@ final class LoadTestApp(
     throughput.set(Vector.empty)
     peakThroughput.set(1L)
     elapsed.set(0.millis)
-
-  private def quitCleanly(): Unit =
-    // Stop the workers *before* leaving the loop. `Async`'s threads are daemons, so the JVM would exit regardless —
-    // but a headless test outlives the runner, and "no thread survives quit" is a property worth actually having.
-    runner.stop()
-    quit()
 
   private def adjustConcurrency(delta: Int): Unit =
     if phase.peek != Phase.Running then
@@ -202,10 +198,10 @@ final class LoadTestApp(
     val rate    = if seconds <= 0.0 then 0.0 else current.sent / seconds
     panel("Counters")(
       text(f"sent     ${current.sent}%7d"),
-      text(f"ok       ${current.ok}%7d").color(Color.Green),
-      if current.failed > 0 then text(f"failed   ${current.failed}%7d").color(Color.Red)
+      text(f"ok       ${current.ok}%7d").fg(Color.Green),
+      if current.failed > 0 then text(f"failed   ${current.failed}%7d").fg(Color.Red)
       else text(f"failed   ${current.failed}%7d").dim,
-      text(f"req/s    $rate%7.1f").color(Color.Cyan),
+      text(f"req/s    $rate%7.1f").fg(Color.Cyan),
       text(f"elapsed  $seconds%6.1fs"),
       // Not a signal, so this only refreshes because a tick redrew the frame anyway — which is exactly what it is
       // here to show: the pool filling up on start and emptying again on stop.
@@ -220,7 +216,7 @@ final class LoadTestApp(
       // `sparkline(data)` autoscales to the window's own maximum on every frame, so a live trace rescales under the
       // reader and a flat line looks identical to a spiky one. Pinning `max` to the peak seen this run fixes the
       // scale. The DSL factory does not expose `max`; the node behind it does.
-      else SparklineElement(window, max = Some(peak)).color(Color.Cyan).fill
+      else SparklineElement(window, max = Some(peak)).fg(Color.Cyan).fill
     )
 
   private def histogramPanel(using ReactiveScope, Theme): Element =
@@ -285,18 +281,18 @@ final class LoadTestApp(
       Seq(
         text(phaseLabel).bold,
         text(f"requests    ${current.sent}%d in $seconds%.2f s"),
-        text(f"success     $success%.2f %%").color(successColor),
+        text(f"success     $success%.2f %%").fg(successColor),
         text(f"throughput  ${current.sent / seconds}%.1f req/s"),
-        text(f"fastest     ${LoadTestApp.ms(summary.min)}%.2f ms").color(Color.Green),
-        text(f"slowest     ${LoadTestApp.ms(summary.max)}%.2f ms").color(Color.Yellow),
+        text(f"fastest     ${LoadTestApp.ms(summary.min)}%.2f ms").fg(Color.Green),
+        text(f"slowest     ${LoadTestApp.ms(summary.max)}%.2f ms").fg(Color.Yellow),
         text(
           f"p50/p90/p99 ${LoadTestApp.ms(summary.p50)}%.2f / ${LoadTestApp.ms(summary.p90)}%.2f" +
             f" / ${LoadTestApp.ms(summary.p99)}%.2f ms"
-        ).color(Color.Cyan),
+        ).fg(Color.Cyan),
         spacer(1),
       ) ++ (
         if worstErrors.isEmpty then Seq(text("no errors").dim)
-        else worstErrors.map((reason, count) => text(s"[$count] $reason").color(Color.Red))
+        else worstErrors.map((reason, count) => text(s"[$count] $reason").fg(Color.Red))
       ) ++ Seq(
         spacer,
         text("Enter dismiss  ·  r reset  ·  q quit").dim,
@@ -305,9 +301,11 @@ final class LoadTestApp(
     // fill of its own the histogram behind this dialog shows through the gaps between the words.
     centered(56, 17)(FilledElement(panel("Run summary")(body*).rounded, summon[Theme].primary))
 
+/** The one example that reads its command line, so it builds the app first and then hands over to the `main` `TuiApp`
+  * supplies — which is also where the failure reporting lives.
+  */
 object Main:
-  def main(args: Array[String]): Unit =
-    LoadTestApp.fromArgs(args).run().left.foreach(error => println(s"failed to run: $error"))
+  def main(args: Array[String]): Unit = LoadTestApp.fromArgs(args).main(args)
 
 object LoadTestApp:
 

@@ -3,10 +3,15 @@ package io.worxbend.tui.runtime
 import io.worxbend.tui.core.Event
 import io.worxbend.tui.terminal.BackendError
 
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.FiniteDuration
 
 /** Runner configuration: an optional tick rate (synthetic [[Event.Tick]]s for animation) and whether to capture mouse
   * events.
+  *
+  * `tickRate` is a [[FiniteDuration]] rather than a `Duration` on purpose: "no ticks" is spelled `None`, and every
+  * infinite `Duration` is a runtime failure waiting to happen — `Duration.Inf.toNanos` throws, so
+  * `RunnerConfig(tickRate = Some(Duration.Inf))`, a plausible spelling of "never tick", used to type-check and then
+  * kill the render loop on its first iteration.
   *
   * `onTaskError` decides what happens when a body queued onto the render thread (an [[Async]] continuation, a timer
   * body) throws. `None` — the default — accumulates them and returns them from [[Runner.run]] as
@@ -18,40 +23,86 @@ import scala.concurrent.duration.Duration
   * and out of [[Runner.run]]. Keep a handler total.
   */
 final case class RunnerConfig(
-    tickRate: Option[Duration] = None,
+    tickRate: Option[FiniteDuration] = None,
     mouseCapture: Boolean = false,
     onTaskError: Option[RenderTaskErrorHandler] = None,
 )
 
+/** An event handler's answer to one question: does this event change what is on screen?
+  *
+  * [[Redraw]] asks the loop to compose and flush a frame once the handler returns; [[Ignored]] says the handler left
+  * the UI exactly as it was, so the loop goes straight back to waiting for input. Answering [[Ignored]] after changing
+  * state the render function reads is what leaves a stale frame on screen; answering [[Redraw]] when nothing changed
+  * costs one composed frame that the backend's diff then flushes as nothing.
+  *
+  * One event reads more into the answer than "repaint or not". [[Event.Interrupt]] (Ctrl+C) is offered to the handler
+  * first, and a handler that answers [[Ignored]] is taken to have declined it: the loop then quits through its normal
+  * teardown, which is what makes Ctrl+C work in an app that never wrote a handler for it. A handler that wants to stay
+  * running through an interrupt — to ask "really quit?", say — answers [[Redraw]], which it was going to have to do
+  * anyway to put that question on screen.
+  */
+enum EventOutcome:
+  /** Compose and flush a frame before waiting for the next event. */
+  case Redraw
+
+  /** Nothing on screen changed. (On [[Event.Interrupt]] this also declines the interrupt, and the loop quits.) */
+  case Ignored
+
 /** The mid-level API tier: owns the event/render loop over a `Backend`.
   *
-  * `handleEvent` returns whether the UI should redraw; `render` fills the frame on each redraw. `run` blocks until the
-  * app quits (via [[RunnerHandle.quit]]) or the backend fails, and always restores the terminal on the way out. The
-  * calling thread becomes the render thread for the duration of `run`.
+  * `onStart` runs once, on the render thread, after the terminal has been prepared and before the first frame is
+  * composed. It is the earliest moment at which the app is certainly on the render thread, which makes it the correct
+  * place to start background work: [[Async]] captures its target loop from the calling thread, so a repeating task
+  * armed from a constructor attaches to no loop at all. Calling [[RunnerHandle.quit]] from `onStart` exits without ever
+  * rendering a frame. `onStart` has no default: an app that needs nothing there passes `_ => ()`, which costs one
+  * lambda and keeps the hook visible at every call site.
+  *
+  * `handleEvent` answers, per event, whether the UI must be repainted — see [[EventOutcome]]. `render` fills the frame
+  * on each redraw. `run` blocks until the app quits (via [[RunnerHandle.quit]]) or the backend fails, and always
+  * restores the terminal on the way out — including when `handleEvent` throws, which ends the loop as
+  * [[RunnerError.Handler]] rather than unwinding out of `run` past the terminal restore. The calling thread becomes the
+  * render thread for the duration of `run`.
   */
 trait Runner:
   def run(
-      handleEvent: (Event, RunnerHandle) => Boolean,
+      onStart: RunnerHandle => Unit,
+      handleEvent: (Event, RunnerHandle) => EventOutcome,
       render: Frame => Unit,
   ): Either[RunnerError, Unit]
 
-/** Handed to event handlers: request loop exit, marshal work onto the render thread, or reach the backend for
-  * out-of-band terminal operations like clipboard access.
+/** Handed to `onStart` and to event handlers: request loop exit, ask for a frame, marshal work onto the render thread,
+  * or reach the backend for out-of-band terminal operations like clipboard access.
+  *
+  * Every method is called on the render thread. None of them has a default implementation, deliberately: a handle that
+  * silently did nothing for [[suspend]] or [[printAbove]] would let a backend forget to implement them and fail with no
+  * symptom other than a `$EDITOR` that never opens.
   */
 trait RunnerHandle:
   def quit(): Unit
   def runOnRenderThread(body: => Unit): Unit
 
+  /** Schedules one frame.
+    *
+    * The escape hatch for state the reactive layer cannot see. A `Signal` write already schedules its own redraw, but
+    * caller-owned widget state — a `ListState`, a `TextInputState`, the rows of a `DataTableState` — is a plain mutable
+    * object, so mutating it from outside the event path (an [[Async]] continuation, a timer body) changes what the next
+    * frame would draw without anything noticing that a next frame is owed. Call this after such a mutation.
+    *
+    * Redundant from inside an event handler, which answers [[EventOutcome.Redraw]] instead. Callable only from the
+    * render thread, like the rest of this handle.
+    */
+  def requestRedraw(): Unit
+
   /** Copies `text` to the system clipboard (OSC 52). Best-effort; unsupported terminals ignore it. */
   def copyToClipboard(text: String): Unit
 
   /** Hands the terminal to `body` (leaving the app's screen) and restores afterward — e.g. launch `$EDITOR`. Call it
-    * from an event handler (already on the render thread). Default: just runs `body`.
+    * from an event handler (already on the render thread).
     */
-  def suspend(body: => Unit): Unit = body
+  def suspend(body: => Unit): Unit
 
-  /** Prints `lines` into the terminal scrollback above the live UI (durable log output). Default: a no-op. */
-  def printAbove(lines: Seq[String]): Unit = ()
+  /** Prints `lines` into the terminal scrollback above the live UI (durable log output). */
+  def printAbove(lines: Seq[String]): Unit
 
 /** Every queued-body failure one run absorbed, collapsed into a single report.
   *
@@ -71,3 +122,34 @@ enum RunnerError:
     * app has exited. Install [[RunnerConfig.onTaskError]] to handle them as they happen instead.
     */
   case QueuedTask(failures: QueuedTaskFailures)
+
+  /** The event handler itself threw, which ends the loop.
+    *
+    * Unlike a queued body, a handler failure is not absorbed: the handler is the app, and an app that cannot process an
+    * event has no defined next frame. What the loop does guarantee is that the throwable comes back *here* rather than
+    * unwinding out of `run` — that path would skip the terminal restore and leave the shell in raw mode on the
+    * alternate screen.
+    */
+  case Handler(error: Throwable)
+
+  /** One human-readable line describing the failure, for an app that reports it to the user before exiting.
+    *
+    * The generated `toString` of an enum case is a constructor call — `Backend(Io(java.io.IOException: ...),None)` —
+    * which is a fine debugging string and a poor thing to print at someone. This is the sentence to print instead;
+    * [[RunnerError.Backend]] delegates to [[BackendError.message]] for its half.
+    */
+  def message: String =
+    this match
+      case Backend(error, queuedTasks) =>
+        val tasks = queuedTasks.map(failures => s" (${describe(failures)} beforehand)").getOrElse("")
+        s"${error.message}$tasks"
+      case QueuedTask(failures)        => describe(failures)
+      case Handler(error)              =>
+        val detail = Option(error.getMessage).getOrElse(error.getClass.getName)
+        s"the event handler threw on the render thread: $detail"
+
+  /** How many render-thread bodies failed and what the first one said. */
+  private def describe(failures: QueuedTaskFailures): String =
+    val detail = Option(failures.first.getMessage).getOrElse(failures.first.getClass.getName)
+    val plural = if failures.count == 1 then "task" else "tasks"
+    s"${failures.count} background $plural failed on the render thread; the first was: $detail"

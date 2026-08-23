@@ -24,20 +24,30 @@ object Key:
   val PageDown: KeyEvent  = KeyEvent.of(KeyCode.PageDown)
   val Space: KeyEvent     = KeyEvent.char(' ')
 
-  /** A bare printable character with no modifiers. */
+  /** A bare printable character with no modifiers. `Char` is a UTF-16 code unit, so this names only keys in the Basic
+    * Multilingual Plane; use [[charAt]] for anything above it.
+    */
   def char(c: Char): KeyEvent = KeyEvent.char(c)
 
-  /** A function key, `f(1)` … `f(12)`. */
+  /** A bare printable character named by its Unicode **code point**, so keys outside the Basic Multilingual Plane — an
+    * emoji, say — can be written here too. `Key.charAt(0x1F600)` is the same event that `KeyEvent.parse` returns for
+    * the one-code-point string spelling that emoji.
+    */
+  def charAt(codePoint: Int): KeyEvent = KeyEvent.charAt(codePoint)
+
+  /** A function key, `f(1)` … `f(35)`. `f(13)` and up exist only on terminals that speak the kitty keyboard protocol,
+    * which is the range `InputDecoder` can report.
+    */
   def f(n: Int): KeyEvent = KeyEvent.of(KeyCode.F(n))
 
   /** `Ctrl`+letter (e.g. `Key.ctrl('s')`). */
-  def ctrl(c: Char): KeyEvent = KeyEvent(KeyCode.Char(c), KeyModifiers.Ctrl)
+  def ctrl(c: Char): KeyEvent = Key.char(c).ctrl
 
   /** `Alt`/Option+letter. */
-  def alt(c: Char): KeyEvent = KeyEvent(KeyCode.Char(c), KeyModifiers.Alt)
+  def alt(c: Char): KeyEvent = Key.char(c).alt
 
-  /** `Shift`+a named key. */
-  def shift(code: KeyCode): KeyEvent = KeyEvent(code, KeyModifiers.Shift)
+  /** `Shift`+another key (e.g. `Key.shift(Key.Tab)`). */
+  def shift(key: KeyEvent): KeyEvent = key.shift
 
   val CtrlC: KeyEvent = ctrl('c')
   val CtrlS: KeyEvent = ctrl('s')
@@ -45,15 +55,33 @@ object Key:
   val CtrlQ: KeyEvent = ctrl('q')
   val CtrlD: KeyEvent = ctrl('d')
 
+/** Modifiers as suffixes, so any key in the [[Key]] vocabulary can carry any combination of them: `Key.Left.ctrl`,
+  * `Key.Enter.alt`, `Key.f(5).shift`, `Key.char('p').ctrl.shift`.
+  *
+  * Each one adds its modifier to whatever the key already had rather than replacing the set, so the calls chain in any
+  * order and applying the same one twice is harmless.
+  *
+  * Whether a terminal can actually *report* a given combination is a separate question: on a terminal without the kitty
+  * keyboard protocol, `Ctrl` plus `i`, `m`, `j`, `h` or `[` arrives as `Tab`, `Enter`, `Enter`, `Backspace` and
+  * `Escape` respectively — see [[io.worxbend.tui.core.KeyEvent.parse]], which rejects those spellings outright.
+  */
+extension (key: KeyEvent)
+  def ctrl: KeyEvent  = key.copy(modifiers = key.modifiers | KeyModifiers.Ctrl)
+  def alt: KeyEvent   = key.copy(modifiers = key.modifiers | KeyModifiers.Alt)
+  def shift: KeyEvent = key.copy(modifiers = key.modifiers | KeyModifiers.Shift)
+
 /** Ergonomic key handlers that hide the `true`/`false` stop-propagation ceremony.
   *
   * `onKey` binds an action to one or more keys; it consumes the event only when a bound key matches, delegating
   * anything else to a handler already on the element — so several `.onKey(…)` calls compose instead of overwriting each
   * other. Use [[Element.onKeyEvent]] directly when a handler needs the raw event or conditional consumption.
+  *
+  * Like the styling and layout builders it gives back the element's own type, so `panel(…).onKey(Key.Enter){…}.rounded`
+  * still sees a `PanelElement` and the panel-only builders stay reachable after the binding.
   */
-extension (element: Element)
+extension [E <: Element](element: E)
 
-  def onKey(keys: KeyEvent*)(handler: => Unit): Element =
+  def onKey(keys: KeyEvent*)(handler: => Unit): element.Self =
     val previous = element.props.onKey
     element.withProps(
       element.props.copy(onKey = Some { event =>

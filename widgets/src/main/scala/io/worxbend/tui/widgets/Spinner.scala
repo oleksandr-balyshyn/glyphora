@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Measured, Rect, Style, Widget}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -19,17 +19,20 @@ final case class Spinner(
     preset: SpinnerPreset = SpinnerPreset.Dots,
     style: Style = Style.Default,
     labelStyle: Option[Style] = None,
-) extends Widget:
+) extends Widget
+    with Measured:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val glyph = CharWidth.substringByWidth(preset.frameAt(elapsed), area.width)
-      buffer.setString(area.x, area.y, glyph, style)
+      val cursor = RowCursor(buffer, area.y, area.x, area.right)
+      cursor.write(preset.frameAt(elapsed), style)
       if label.nonEmpty then
-        val labelX     = area.x + CharWidth.of(glyph) + 1
-        val labelWidth = area.right - labelX
-        if labelWidth > 0 then
-          buffer.setString(labelX, area.y, CharWidth.substringByWidth(label, labelWidth), labelStyle.getOrElse(style))
+        cursor.skip(1) // one blank column between the moving glyph and its label
+        cursor.write(label, labelStyle.getOrElse(style))
 
-  /** The width this spinner wants: the preset's frame width plus `" $label"` when there is one. */
-  def preferredWidth: Int = preset.width + (if label.isEmpty then 0 else 1 + CharWidth.of(label))
+  /** The width this spinner wants: the preset's frame width plus `" $label"` when there is one. A spinner is always one
+    * row and its width never depends on how many rows it is given, so `height` is ignored.
+    */
+  override def widthAt(height: Int): Option[Int] =
+    val _ = height
+    Some(preset.width + (if label.isEmpty then 0 else 1 + CharWidth.of(label)))

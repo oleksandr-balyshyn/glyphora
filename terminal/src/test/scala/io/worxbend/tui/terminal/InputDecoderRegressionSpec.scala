@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -26,6 +26,16 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
 
   private def csi(body: String): Seq[Int] = Esc +: '['.toInt +: body.map(_.toInt)
 
+  /** The two vocabularies in one assertion: what an application writes as a key spec, and what the terminal actually
+    * sends for that key. `KeyEvent.parse` lives in `tui-core`, so this side of the contract is now checkable from here
+    * rather than only describable in a comment.
+    */
+  private def assertSpecMatches(spec: String, chars: Int*): Unit =
+    KeyEvent.parse(spec) match
+      case Right(event)  =>
+        assert(decoded(chars*) == Event.Key(event), s"spec '$spec' does not name what these bytes send")
+      case Left(problem) => fail(s"spec '$spec' did not parse: $problem")
+
   test("SS3 application-mode cursor keys decode to the arrows"):
     // what a terminal sends once DECCKM is on (e.g. tmux with xterm-keys); previously a stray Escape
     assert(decoded(Esc, 'O', 'A') == Event.Key(KeyEvent.of(KeyCode.Up)))
@@ -49,11 +59,11 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
   test("a legacy X10 mouse report decodes as a mouse event, not as keystrokes"):
     // a terminal that ignores the SGR-1006 request keeps sending X10; those bytes used to be injected as text
     val report = Seq(Esc, '['.toInt, 'M'.toInt, 32 + 0, 32 + 33, 32 + 33)
-    assert(decoded(report*) == Event.Mouse(MouseEvent(32, 32, MouseEventKind.Down, KeyModifiers.None)))
+    assert(decoded(report*) == Event.Mouse(MouseEvent(Position(32, 32), MouseEventKind.Down, KeyModifiers.None)))
 
   test("an X10 button-3 report is a release"):
     val report = Seq(Esc, '['.toInt, 'M'.toInt, 32 + 3, 32 + 5, 32 + 5)
-    assert(decoded(report*) == Event.Mouse(MouseEvent(4, 4, MouseEventKind.Up, KeyModifiers.None)))
+    assert(decoded(report*) == Event.Mouse(MouseEvent(Position(4, 4), MouseEventKind.Up, KeyModifiers.None)))
 
   test("a truncated X10 report is dropped rather than half-decoded"):
     dropped(Esc, '['.toInt, 'M'.toInt, 32)
@@ -96,9 +106,35 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
 
   test("kitty modifier parameters follow the 1 + bitmask encoding"):
     assert(decoded(csi("97;5u")*) == Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.Ctrl)))
-    assert(decoded(csi("97;2u")*) == Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.Shift)))
+    // 97;2u is the unshifted 'a' plus a Shift bit, which folds onto the legacy uppercase encoding
+    assert(decoded(csi("97;2u")*) == Event.Key(KeyEvent(KeyCode.Char('A'), KeyModifiers.None)))
     // caps-lock (64) and num-lock (128) bits are reported but carry no glyphora modifier
     assert(decoded(csi("97;65u")*) == Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.None)))
+
+  /** A key spec names one key, so the two protocols must agree on what that key *is*.
+    *
+    * Kitty reports a shifted letter as the unshifted base key plus a Shift bit; a legacy terminal sends the uppercase
+    * character with no Shift bit. Before the decoder folded them together, `binding("alt+A", …)` fired under xterm and
+    * never under kitty, while `binding("alt+shift+a", …)` did the exact reverse.
+    */
+  test("a shifted letter decodes the same under the kitty protocol as it does on a legacy terminal"):
+    assert(decoded(csi("97;4u")*) == decoded(Esc, 'A')) // Alt+Shift+A
+    assert(decoded(csi("97;4u")*) == Event.Key(KeyEvent(KeyCode.Char('A'), KeyModifiers.Alt)))
+    assert(decoded(csi("97;2u")*) == decoded('A'.toInt)) // Shift+A, no other modifier
+
+  /** Ctrl+Shift+letter is the same agreement seen from the other side: a legacy terminal has one control byte for both
+    * Ctrl+S and Ctrl+Shift+S, so case cannot survive there and must not survive under kitty either — otherwise the
+    * `"ctrl+s"` spec stops matching as soon as the user's caps-lock is on.
+    */
+  test("kitty Ctrl+Shift+letter collapses onto the legacy control byte"):
+    assert(decoded(csi("115;6u")*) == decoded(0x13))
+    assert(decoded(csi("115;6u")*) == Event.Key(KeyEvent(KeyCode.Char('s'), KeyModifiers.Ctrl)))
+
+  /** A character with no uppercase form keeps its Shift bit: folding it would discard the only evidence that the key
+    * was shifted, and rebuilding the shifted glyph needs a keyboard layout the decoder does not have.
+    */
+  test("a shifted key with no uppercase form is reported unchanged"):
+    assert(decoded(csi("50;2u")*) == Event.Key(KeyEvent(KeyCode.Char('2'), KeyModifiers.Shift)))
 
   test("the escape timeout is configurable"):
     val impatient = InputDecoder(_ => -2, escapeTimeoutMillis = 5L)
@@ -108,7 +144,8 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     dropped(csi("1" * 500)*)
 
   test("an ESC-prefixed control byte decodes to the named key, not to a raw control character"):
-    // `KeyBindings.parseKey("alt+backspace")` yields Backspace+Alt; anything else is a binding that never fires
+    // the spec an app would declare has to name what the bytes actually deliver, or the binding never fires
+    assertSpecMatches("alt+backspace", Esc, 0x7f)
     assert(decoded(Esc, 0x7f) == Event.Key(KeyEvent(KeyCode.Backspace, KeyModifiers.Alt)))
     assert(decoded(Esc, 0x08) == Event.Key(KeyEvent(KeyCode.Backspace, KeyModifiers.Alt)))
     assert(decoded(Esc, 0x0d) == Event.Key(KeyEvent(KeyCode.Enter, KeyModifiers.Alt)))
@@ -126,7 +163,9 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     assert(decoded(Esc, 1) == decoded(csi("97;7u")*))
 
   test("control bytes outside the letter range still carry Ctrl"):
-    // `parseKey("ctrl+space")` yields Char(' ')+Ctrl; a bare Char(0) with no modifier is inserted as text instead
+    // a bare Char(0) with no modifier would be inserted as text instead of firing the declared binding
+    assertSpecMatches("ctrl+space", 0x00)
+    assertSpecMatches("ctrl+\\", 0x1c)
     assert(decoded(0x00) == Event.Key(KeyEvent(KeyCode.Char(' '), KeyModifiers.Ctrl)))
     assert(decoded(0x1c) == Event.Key(KeyEvent(KeyCode.Char('\\'), KeyModifiers.Ctrl)))
     assert(decoded(0x1d) == Event.Key(KeyEvent(KeyCode.Char(']'), KeyModifiers.Ctrl)))
@@ -147,8 +186,12 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     dropped(csi("<66;1;1M")*)
     dropped(csi("<67;1;1M")*)
     // the vertical wheel still works
-    assert(decoded(csi("<64;1;1M")*) == Event.Mouse(MouseEvent(0, 0, MouseEventKind.ScrollUp, KeyModifiers.None)))
-    assert(decoded(csi("<65;1;1M")*) == Event.Mouse(MouseEvent(0, 0, MouseEventKind.ScrollDown, KeyModifiers.None)))
+    assert(
+      decoded(csi("<64;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollUp, KeyModifiers.None))
+    )
+    assert(
+      decoded(csi("<65;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollDown, KeyModifiers.None))
+    )
 
   test("an unpaired surrogate is dropped rather than delivered as half a character"):
     // a lone surrogate corrupts every string it is appended to, which is what `printable` exists to prevent

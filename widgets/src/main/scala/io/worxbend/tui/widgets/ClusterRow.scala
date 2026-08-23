@@ -33,6 +33,27 @@ private[widgets] object ClusterRow:
     */
   def drawnSymbol(cluster: String): String = if CharWidth.of(cluster) == 0 then " " else cluster
 
+  /** Writes one grapheme cluster at `(x, y)` and returns the column the next one starts at.
+    *
+    * The single-cell counterpart of [[RowCursor.write]], and the one place the whole rule is stated: a cluster measures
+    * [[renderedWidth]] (at least one column); it is refused outright — not clipped — when it would straddle `right`,
+    * because half of a wide glyph is not a character; a zero-width cluster is substituted by [[drawnSymbol]] so the
+    * cell drawn is as wide as the cell measured; and the continuation cell of a two-column glyph is blanked so the
+    * diffing backend does not leave whatever was underneath showing through the middle of it.
+    *
+    * The head advances by the cluster's width whether or not it was drawn, so a caller looping to `right` always
+    * terminates.
+    *
+    * @param right
+    *   the first column that must not be written — an area's `right`, i.e. exclusive
+    */
+  def put(buffer: Buffer, x: Int, y: Int, cluster: String, style: Style, right: Int): Int =
+    val width = renderedWidth(cluster)
+    if x + width <= right then
+      buffer.set(x, y, Cell(drawnSymbol(cluster), style))
+      if width == 2 then buffer.set(x + 1, y, Cell.Empty)
+    x + width
+
   /** The columns clusters `[from, until)` occupy together. */
   def visibleWidth(clusters: Vector[String], from: Int, until: Int): Int =
     clusters.slice(from, until).map(renderedWidth).sum
@@ -93,14 +114,12 @@ private[widgets] object ClusterRow:
     var x     = x0
     var index = scroll
     while index <= clusters.size && x < right do
-      val atEnd  = index == clusters.size
-      val symbol = if atEnd then " " else clusters(index)
-      val width  = renderedWidth(symbol)
-      if x + width <= right then
-        val isCursor  = showCursor && index == cursorAt
-        val cellStyle = if isCursor then style.patch(cursorStyle) else style
-        if !atEnd || isCursor || paintEndCell then
-          buffer.set(x, y, Cell(drawnSymbol(symbol), cellStyle))
-          if width == 2 then buffer.set(x + 1, y, Cell.Empty)
-      x += width
+      val atEnd     = index == clusters.size
+      val symbol    = if atEnd then " " else clusters(index)
+      val isCursor  = showCursor && index == cursorAt
+      val cellStyle = if isCursor then style.patch(cursorStyle) else style
+      // the blank past the end is skipped rather than painted when the caller wants whatever is behind it to show
+      x =
+        if !atEnd || isCursor || paintEndCell then put(buffer, x, y, symbol, cellStyle, right)
+        else x + renderedWidth(symbol)
       index += 1

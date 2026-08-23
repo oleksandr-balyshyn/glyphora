@@ -105,10 +105,10 @@ final class SpinnerPresetSpec extends AnyFunSuite:
     assert(trimmedLines(rendered(Spinner(0.millis, "loading the world"), 6, 1)).head.length <= 6)
     assert(trimmedLines(rendered(Spinner(0.millis, "x", SpinnerPreset.Moon), 1, 1)).head.length <= 1)
 
-  test("preferredWidth accounts for the frame, the gap and the label"):
-    assert(Spinner(0.millis, "", SpinnerPreset.Line).preferredWidth == 1)
-    assert(Spinner(0.millis, "abc", SpinnerPreset.Line).preferredWidth == 5)
-    assert(Spinner(0.millis, "abc", SpinnerPreset.Moon).preferredWidth == 6, "emoji frames are two columns")
+  test("widthAt accounts for the frame, the gap and the label"):
+    assert(Spinner(0.millis, "", SpinnerPreset.Line).widthAt(1).contains(1))
+    assert(Spinner(0.millis, "abc", SpinnerPreset.Line).widthAt(1).contains(5))
+    assert(Spinner(0.millis, "abc", SpinnerPreset.Moon).widthAt(1).contains(6), "emoji frames are two columns")
 
   test("a spinner cycles its frames by tick index"):
     assert(trimmedLines(rendered(Spinner(0.millis, "loading"), 12, 1)) == Seq("⠋ loading"))

@@ -1,7 +1,7 @@
 package io.worxbend.tui.testsupport
 
 import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, Size}
-import io.worxbend.tui.runtime.{Frame, RunnerHandle, TerminalRunner}
+import io.worxbend.tui.runtime.{EventOutcome, Frame, RunnerHandle, TerminalRunner}
 import io.worxbend.tui.terminal.HeadlessBackend
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -27,18 +27,18 @@ final class PilotTypeTextSpec extends AnyFunSuite:
     * establishes the happens-before edge that makes those writes visible.
     */
   private def keysDeliveredFor(text: String): Seq[KeyCode] =
-    val seen                                                     = mutable.ArrayBuffer.empty[KeyCode]
-    val backend                                                  = HeadlessBackend(Size(20, 3))
-    def handleEvent(event: Event, handle: RunnerHandle): Boolean =
+    val seen                                                          = mutable.ArrayBuffer.empty[KeyCode]
+    val backend                                                       = HeadlessBackend(Size(20, 3))
+    def handleEvent(event: Event, handle: RunnerHandle): EventOutcome =
       event match
         case Event.Key(KeyEvent(KeyCode.Escape, _)) =>
           handle.quit()
-          false
+          EventOutcome.Ignored
         case Event.Key(KeyEvent(code, _))           =>
           seen += code
-          false
-        case _                                      => false
-    val pilot = Pilot.start(backend)(TerminalRunner(backend).run(handleEvent, (_: Frame) => ()))
+          EventOutcome.Ignored
+        case _                                      => EventOutcome.Ignored
+    val pilot = Pilot.start(backend)(TerminalRunner(backend).run(_ => (), handleEvent, (_: Frame) => ()))
     pilot.typeText(text).waitForIdle()
     pilot.pressKey(KeyCode.Escape)
     assert(pilot.awaitTermination())

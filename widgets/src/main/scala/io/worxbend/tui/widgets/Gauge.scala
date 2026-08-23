@@ -4,14 +4,15 @@ import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Modifiers, Rect, Style, Wi
 
 /** A filled progress bar with a centered label; the fill spans the whole area height.
   *
-  * `ratio` is clamped to `[0, 1]` and `NaN` reads as no progress. The default label is the percentage.
+  * `ratio` is clamped to `[0, 1]` and `NaN` reads as no progress. The caption comes from a [[ProgressLabel]], the same
+  * vocabulary [[LineGauge]] uses, and defaults to the percentage; `ProgressLabel.Hidden` leaves the bar uncaptioned.
   *
   * `fillRamp` colors the fill by how far along it is. It replaces `filledStyle`'s background — the fill is drawn as
   * blank cells, so the bar's color *is* its background — and leaves everything else alone.
   */
 final case class Gauge(
     ratio: Double,
-    label: Option[String] = None,
+    label: ProgressLabel = ProgressLabel.Percentage,
     style: Style = Style.Default,
     filledStyle: Style = Style.Default.reverse,
     fillRamp: Option[ColorRamp] = None,
@@ -34,21 +35,17 @@ final case class Gauge(
           x += 1
         y += 1
 
-      val text      = label.getOrElse(s"${math.round(clamped * 100)}%")
-      val fitted    = CharWidth.substringByWidth(text, area.width)
-      val textWidth = CharWidth.of(fitted)
-      val startX    = area.x + (area.width - textWidth) / 2
-      val labelY    = area.y + area.height / 2
-      var x         = startX
-      CharWidth.graphemeClusters(fitted).foreach { cluster =>
-        val width = CharWidth.of(cluster)
-        if width > 0 then
-          buffer.set(x, labelY, Cell(cluster, styleAt(x)))
-          if width == 2 then buffer.set(x + 1, labelY, Cell.Empty)
-          x += width
-      }
+      val text = label.render(clamped)
+      // `ProgressLabel.Hidden` renders nothing at all; centring an empty string would still walk the cluster loop
+      if text.nonEmpty then
+        val fitted = CharWidth.substringByWidth(text, area.width)
+        val labelY = area.y + area.height / 2
+        var x      = Alignment.Center.originAt(area.x, area.width, CharWidth.of(fitted))
+        CharWidth.graphemeClusters(fitted).foreach { cluster =>
+          x = ClusterRow.put(buffer, x, labelY, cluster, styleAt(x), area.right)
+        }
 
 object Gauge:
   /** Convenience for out-of-`[0,1]` progress values: `Gauge.of(3, 10)` is a 30% gauge. */
   def of(current: Int, total: Int): Gauge =
-    Gauge(if total <= 0 then 0.0 else current.toDouble / total)
+    Gauge(Fraction.ratio(current, total))

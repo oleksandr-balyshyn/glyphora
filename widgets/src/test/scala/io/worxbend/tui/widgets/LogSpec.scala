@@ -30,7 +30,7 @@ final class LogSpec extends AnyFunSuite:
     val stillDetached = Buffer(Rect(0, 0, 10, 3))
     Log().render(stillDetached.area, stillDetached, state)
     assert(trimmedLines(stillDetached) == Seq("line 1", "line 2", "line 3"))
-    state.scrollDown(9, viewportHeight = 3)
+    state.scrollDown(9)
     assert(state.follow)
 
   test("the ring drops the oldest lines past the cap"):
@@ -46,4 +46,4 @@ final class LogSpec extends AnyFunSuite:
     state.append(Line.styled("err", Style.Default.bold))
     val buffer = Buffer(Rect(0, 0, 5, 1))
     Log().render(buffer.area, buffer, state)
-    assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Bold))
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Bold))

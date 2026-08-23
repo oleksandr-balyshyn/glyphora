@@ -48,5 +48,5 @@ private[widgets] object ColumnChart:
     */
   def drawCentredLabel(buffer: Buffer, area: Rect, barLeft: Int, barWidth: Int, label: String, style: Style): Unit =
     val fitted = CharWidth.substringByWidth(label, barWidth)
-    val offset = (barWidth - CharWidth.of(fitted)) / 2
-    buffer.setString(barLeft + offset, area.bottom - 1, fitted, style)
+    val startX = Alignment.Center.originAt(barLeft, barWidth, CharWidth.of(fitted))
+    buffer.setString(startX, area.bottom - 1, fitted, style)

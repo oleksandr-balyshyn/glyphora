@@ -22,13 +22,13 @@ import scala.concurrent.duration.DurationInt
   *
   * Keys: `ctrl+t` theme · `ctrl+n` toast · `ctrl+o` modal · `ctrl+p` palette · `Tab` focus · `Esc` quit.
   */
-final class ShowcaseApp extends TuiApp:
+class ShowcaseApp extends TuiApp:
 
   override def config: RunnerConfig = RunnerConfig(tickRate = Some(200.millis))
 
   override def splash: Option[SplashScreen] = Some(
     SplashScreen(
-      centered(36, 5)(bigText("GLYPHORA").color(Color.Cyan)),
+      centered(36, 5)(bigText("GLYPHORA").fg(Color.Cyan)),
       effect = Effect.coalesce(800.millis),
       minimumDuration = 1200.millis,
     )
@@ -76,7 +76,6 @@ final class ShowcaseApp extends TuiApp:
 
   def view(using ReactiveScope): Element =
     given Theme = theme
-    val _       = themeIndex.get // theme switching re-renders
     scaffold(
       topBar =
         Some(topBar("glyphora", tabs = Seq("Widgets", "Loading", "Log", "About"), selectedTab = selectedTab.get)),
@@ -128,7 +127,8 @@ final class ShowcaseApp extends TuiApp:
       row(
         text("linear").length(10),
         linearSpinner().fill,
-        text(" bounce").length(8),
+        spacer(1),
+        text("bounce").length(7),
         linearSpinner().bouncing.fill,
       ).length(1),
       rule("indeterminate"),
@@ -147,7 +147,8 @@ final class ShowcaseApp extends TuiApp:
     column(
       spacer(1),
       row(
-        text("  note: ").length(8),
+        spacer(2),
+        text("note:").length(6),
         input(noteField, placeholder = "type here…"),
       ).length(1),
       spacer(1),
@@ -169,6 +170,4 @@ object ShowcaseApp:
       |- `ctrl+t` switches the theme
       |""".stripMargin
 
-object Main:
-  def main(args: Array[String]): Unit =
-    ShowcaseApp().run().left.foreach(error => println(s"failed to run: $error"))
+object Main extends ShowcaseApp

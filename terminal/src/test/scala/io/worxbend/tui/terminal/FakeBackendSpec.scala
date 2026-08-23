@@ -37,7 +37,7 @@ final class FakeBackendSpec extends AnyFunSuite:
     def showCursor(): Either[BackendError, Unit]                          = Right(())
     def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
       Right(if queue.isEmpty then None else Some(queue.dequeue()))
-    def close(): Unit                                                     = ()
+    def close(): Either[BackendError, Unit]                               = Right(())
 
   test("a backend can be implemented purely in terms of core types"):
     val backend: Backend = FakeBackend(Event.Key(KeyEvent.of(KeyCode.Enter)))

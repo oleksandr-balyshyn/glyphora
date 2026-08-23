@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
 
 /** A one-row progress meter: a caption followed by a filled/unfilled line.
   *
@@ -24,11 +24,10 @@ final case class LineGauge(
       val clamped   = Fraction.clamped(ratio)
       val caption   = label.render(clamped)
       // a hidden or empty caption must not leave its separator column behind as a stray blank
-      val text      = if caption.isEmpty then "" else caption + " "
-      val fitted    = CharWidth.substringByWidth(text, area.width)
-      buffer.setString(area.x, area.y, fitted, style)
-      val lineStart = area.x + CharWidth.of(fitted)
-      val lineWidth = area.right - lineStart
+      val cursor    = RowCursor(buffer, area.y, area.x, area.right)
+      cursor.write(if caption.isEmpty then "" else caption + " ", style)
+      val lineStart = cursor.at
+      val lineWidth = cursor.remaining
       if lineWidth > 0 then
         val glyphs = progressStyle.glyphs(clamped, lineWidth)
         val filled = progressStyle.filledCells(clamped, lineWidth)
@@ -42,8 +41,4 @@ object LineGauge:
 
   /** Convenience for out-of-`[0,1]` progress values: `LineGauge.of(3, 10)` is a 30% meter. */
   def of(current: Int, total: Int, label: ProgressLabel = ProgressLabel.Percentage): LineGauge =
-    LineGauge(ratioOf(current, total), label)
-
-  /** `current / total` as a fraction, with a zero or negative total reading as no progress rather than `NaN`. */
-  private[widgets] def ratioOf(current: Int, total: Int): Double =
-    if total <= 0 then 0.0 else current.toDouble / total
+    LineGauge(Fraction.ratio(current, total), label)

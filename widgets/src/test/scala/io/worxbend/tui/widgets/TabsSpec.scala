@@ -16,8 +16,8 @@ final class TabsSpec extends AnyFunSuite:
   test("the selected title carries the highlight style"):
     val buffer = rendered(tabs.copy(selected = 1), 20, 1)
     // 'two' starts after "one │ " (6 columns)
-    assert(buffer.get(6, 0).style.modifiers.has(Modifiers.Reverse))
-    assert(!buffer.get(0, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(6, 0).style.modifiers.hasAny(Modifiers.Reverse))
+    assert(!buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("overflowing titles are clipped at the area edge"):
     val buffer = rendered(tabs, 8, 1)

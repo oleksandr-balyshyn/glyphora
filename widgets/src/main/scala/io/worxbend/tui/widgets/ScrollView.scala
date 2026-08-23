@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Position, Rect, StatefulWidget, Widget}
+import io.worxbend.tui.core.{Buffer, Rect, StatefulWidget, Widget}
 
 /** Caller-owned scroll offset for a [[ScrollView]]. */
 final class ScrollViewState:
@@ -37,7 +37,5 @@ final case class ScrollView(
         state.offset = math.max(0, math.min(state.offset, contentHeight - area.height))
         val offscreen = Buffer(Rect(0, 0, contentWidth, contentHeight))
         content.render(offscreen.area, offscreen)
-        buffer.blit(offscreen, Position(area.x, area.y), Rect(0, state.offset, contentWidth, area.height))
-        if scrollbarWidth == 1 then
-          val scrollbarState = ScrollbarState(contentLength = contentHeight, position = state.offset)
-          Scrollbar().render(area, buffer, scrollbarState)
+        buffer.blit(offscreen, area.position, Rect(0, state.offset, contentWidth, area.height))
+        if scrollbarWidth == 1 then Scrollbar(contentHeight, state.offset).render(area, buffer)

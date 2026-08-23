@@ -12,8 +12,8 @@ final case class Table(
     widths: Seq[Constraint],
     header: Option[Seq[Line]] = None,
     columnSpacing: Int = 1,
-    headerStyle: Style = Style.Default.bold,
     style: Style = Style.Default,
+    headerStyle: Style = Style.Default.bold,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -36,3 +36,29 @@ final case class Table(
       if !column.isEmpty then
         val _ = LineRenderer.render(buffer, column.x, y, cell, column.width, rowStyle)
     }
+
+object Table:
+
+  /** A table of plain unstyled text.
+    *
+    * The cells of a table are [[Line]]s so that any one of them can carry several styles, but the common case is a grid
+    * of `String`s and every such caller was writing the same `rows.map(_.map(Line.raw))` incantation. This does that
+    * once. A `Seq[Seq[String | Line]]` union would have removed the need for a second factory altogether, but a union
+    * two collections deep is unpleasant to read and to infer, so the two shapes get two names instead.
+    */
+  def ofStrings(
+      rows: Seq[Seq[String]],
+      widths: Seq[Constraint],
+      header: Option[Seq[String]] = None,
+      columnSpacing: Int = 1,
+      style: Style = Style.Default,
+      headerStyle: Style = Style.Default.bold,
+  ): Table =
+    Table(
+      rows.map(_.map(Line.raw)),
+      widths,
+      header.map(_.map(Line.raw)),
+      columnSpacing,
+      style,
+      headerStyle,
+    )

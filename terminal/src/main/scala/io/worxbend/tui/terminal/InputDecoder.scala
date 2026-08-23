@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position}
 
 /** Decodes terminal input bytes into [[Event]]s: printable keys, control keys, ANSI CSI/SS3 escape sequences for
   * navigation and function keys, kitty-protocol keys, bracketed paste, and both SGR and legacy X10 mouse reports.
@@ -246,10 +246,49 @@ private[terminal] final class InputDecoder(
 
   /** Kitty keyboard protocol `CSI codepoint ; modifiers u`: unambiguous keys, no Esc timeout heuristic.
     *
-    * The code point vocabulary itself lives in [[KittyKeys]].
+    * The code point vocabulary itself lives in [[KittyKeys]]; [[foldShiftedChar]] rewrites the one shape kitty reports
+    * differently from every legacy terminal.
     */
   private def decodeKittyKey(numbers: Seq[Int], modifiers: KeyModifiers): Option[Event] =
-    numbers.headOption.flatMap(KittyKeys.keyCode).map(c => Event.Key(KeyEvent(c, modifiers)))
+    numbers.headOption.flatMap(KittyKeys.keyCode).map(c => Event.Key(foldShiftedChar(c, modifiers)))
+
+  /** Rewrites a kitty "base key plus a Shift bit" report into the single legacy encoding, so a key spec has one
+    * spelling that works on every terminal.
+    *
+    * Kitty reports the *unshifted* key together with a Shift modifier — Alt+Shift+A arrives as `CSI 97;4u`, which is
+    * `Char('a')` with Alt|Shift. A legacy terminal sends `ESC 'A'` for the same keypress, which [[decodeControl]]
+    * reports as `Char('A')` with Alt and no Shift bit. Left alone, the two encodings reach the binding table as
+    * different keys: `"alt+A"` would fire under xterm and never under kitty, and `"alt+shift+a"` the reverse. Folding
+    * here means exactly one vocabulary ever reaches a [[KeyEvent]], and the legacy one is chosen because it is what
+    * every other code path in the library already produces.
+    *
+    * Two cases, matching what the legacy wire format can actually carry:
+    *   - Ctrl is *not* held: emit the uppercase code point and clear Shift — `CSI 97;4u` becomes `Char('A')` + Alt.
+    *   - Ctrl *is* held: emit the base (lower-case) code point and clear Shift — a legacy terminal collapses both
+    *     Ctrl+S and Ctrl+Shift+S onto the control byte `0x13`, which decodes as `Char('s')` + Ctrl, so case cannot
+    *     survive there and must not survive here either. `CSI 115;6u` therefore decodes identically to `0x13`.
+    *
+    * A character with no uppercase form (a digit, punctuation, an emoji) is left exactly as reported: dropping its
+    * Shift bit would throw away the only signal that the key was shifted at all, and reconstructing the shifted glyph
+    * would need a keyboard-layout table the decoder does not have.
+    */
+  private def foldShiftedChar(code: KeyCode, modifiers: KeyModifiers): KeyEvent =
+    code match
+      case KeyCode.Char(codePoint) if modifiers.hasAny(KeyModifiers.Shift) =>
+        val upper = Character.toUpperCase(codePoint)
+        if upper == codePoint then KeyEvent(code, modifiers)
+        else if modifiers.hasAny(KeyModifiers.Ctrl) then KeyEvent(code, withoutShift(modifiers))
+        else KeyEvent(KeyCode.Char(upper), withoutShift(modifiers))
+      case _                                                               => KeyEvent(code, modifiers)
+
+  /** `modifiers` with the Shift bit removed. Rebuilt rather than masked because [[KeyModifiers]] is an opaque bitset
+    * that exposes `|` and `hasAny` but no clear operation.
+    */
+  private def withoutShift(modifiers: KeyModifiers): KeyModifiers =
+    var kept = KeyModifiers.None
+    if modifiers.hasAny(KeyModifiers.Ctrl) then kept = kept | KeyModifiers.Ctrl
+    if modifiers.hasAny(KeyModifiers.Alt) then kept = kept | KeyModifiers.Alt
+    kept
 
   /** Bracketed paste: everything between `CSI 200~` and `CSI 201~` is one paste payload.
     *
@@ -353,7 +392,7 @@ private[terminal] final class InputDecoder(
       else Some(MouseEventKind.Up)
     // a mouse report carries the same shift/alt/ctrl bitmask as a CSI modifier parameter, shifted up by two positions
     val modifiers = modifiersFromBits(button >> MouseModifierShift)
-    kind.map(k => Event.Mouse(MouseEvent(math.max(0, x), math.max(0, y), k, modifiers)))
+    kind.map(k => Event.Mouse(MouseEvent(Position(math.max(0, x), math.max(0, y)), k, modifiers)))
 
   /** Wheel buttons 64 and 65 are wheel-up and wheel-down; 66 and 67 are wheel-left and wheel-right, which
     * [[MouseEventKind]] has no vocabulary for.

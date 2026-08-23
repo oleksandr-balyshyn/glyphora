@@ -11,7 +11,7 @@ final class ShowcaseAppSpec extends AnyFunSuite:
   private def startedApp(): (ShowcaseApp, Pilot) =
     val backend = HeadlessBackend(Size(70, 20))
     val app     = ShowcaseApp()
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Enter).waitForIdle() // skip the splash
     (app, pilot)
@@ -43,8 +43,12 @@ final class ShowcaseAppSpec extends AnyFunSuite:
 
   test("theme switching, toasts, and the modal all work end to end"):
     val (app, pilot) = startedApp()
+    // the theme lives behind `TuiApp.theme`, which the view never reads through a signal, so this also pins that
+    // switching it repaints rather than only updating the counter
+    val beforeSwitch = pilot.cellAt(0, 0).style
     pilot.pressKey(KeyCode.Char('t'), KeyModifiers.Ctrl).waitForIdle()
     assert(app.themeIndex.peek == 1)
+    assert(pilot.cellAt(0, 0).style != beforeSwitch, "switching the theme must repaint the frame, not just the signal")
     pilot.pressKey(KeyCode.Char('n'), KeyModifiers.Ctrl).waitForIdle()
     assert(pilot.screenText.contains("hello from glyphora"))
     pilot.pressKey(KeyCode.Char('o'), KeyModifiers.Ctrl).waitForIdle()

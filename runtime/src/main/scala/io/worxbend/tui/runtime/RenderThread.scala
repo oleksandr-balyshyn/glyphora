@@ -22,10 +22,29 @@ object RenderThread:
 
     private val pending = ConcurrentLinkedQueue[() => Unit]()
 
-    /** Queues `body` and nudges the runner, so it is picked up on the next iteration rather than at the next poll. */
+    // read by every thread that queues work, written by the runner thread that owned this loop
+    @volatile private var closed = false
+
+    /** Queues `body` and nudges the runner, so it is picked up on the next iteration rather than at the next poll.
+      *
+      * A body queued after [[close]] is **dropped**: its runner has exited and nothing will ever drain this queue
+      * again, so keeping it would only grow memory. See [[Async]] for what that means for scheduled work.
+      */
     private[runtime] def enqueue(body: () => Unit): Unit =
-      val _ = pending.add(body)
-      wake()
+      if !closed then
+        val _ = pending.add(body)
+        wake()
+
+    /** Retires this loop: whatever is still pending is discarded and nothing new is accepted.
+      *
+      * Called by the runner that owns this loop, once, as it exits — after a final [[drain]], so work queued during the
+      * loop's last iteration still runs. It matters because [[Async]]'s scheduler is a process-lifetime daemon
+      * singleton: an `Async.every(16.millis)` that was never cancelled holds a reference to this loop and, without
+      * this, would keep appending sixty closures a second to a queue nothing drains, for the life of the JVM.
+      */
+    private[runtime] def close(): Unit =
+      closed = true
+      pending.clear()
 
     /** Runs everything queued, in FIFO order, isolating each body: a `NonFatal` throwable from one task goes to
       * `handler` and the drain continues with the next task, so one failing continuation can neither stop the runner

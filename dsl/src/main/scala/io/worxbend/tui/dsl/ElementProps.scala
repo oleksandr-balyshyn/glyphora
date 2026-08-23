@@ -2,13 +2,28 @@ package io.worxbend.tui.dsl
 
 import io.worxbend.tui.core.{Constraint, KeyEvent, MouseEvent, Style}
 
+/** The focus bookkeeping the framework writes and an application only reads.
+  *
+  * `focused` marks the one element keystrokes go to; `inert` marks a subtree a modal layer covers, which takes no key
+  * and no mouse event at all and supplies neither a focus path nor a hit-test path; `focusStyle` is the theme's focus
+  * cue, resolved once per render.
+  *
+  * The constructor is package-private on purpose. [[FocusPass]] rewrites this on every render and [[EventRouter]]
+  * honours what it finds, so an application able to build one could hand itself focus that the router would then
+  * respect. There is no supported way to construct one outside the framework.
+  */
+final case class FocusState private[dsl] (
+    focused: Boolean = false,
+    inert: Boolean = false,
+    focusStyle: Style = Style.Default.reverse,
+)
+
 /** The cross-cutting properties every [[Element]] carries: its style, an optional layout constraint (how much space it
   * claims inside a `row`/`column`/`panel`), its event handlers, and focus participation. Styling and layout extension
   * methods produce a new element with updated props — elements stay immutable values.
   *
-  * `focusable` opts the element into tab-order traversal; `focused` is set by the framework's focus pass each render,
-  * never by user code. `inert` marks a subtree a modal layer covers: it takes no key and no mouse event at all and
-  * supplies no focus or hit-test path. Like `focused`, the framework's passes set it each render, never user code.
+  * `focusable` opts the element into tab-order traversal. Everything the framework itself sets each render lives in
+  * [[focusState]], which user code can read but not build.
   */
 final case class ElementProps(
     style: Style = Style.Default,
@@ -16,8 +31,15 @@ final case class ElementProps(
     onKey: Option[KeyEvent => Boolean] = None,
     onMouse: Option[MouseEvent => Boolean] = None,
     focusable: Boolean = false,
-    focused: Boolean = false,
     focusKey: Option[String] = None,
-    focusStyle: Style = Style.Default.reverse,
-    inert: Boolean = false,
-)
+    focusState: FocusState = FocusState(),
+):
+
+  /** Whether this element is the one the focus pass marked — where keystrokes go this frame. */
+  private[dsl] def focused: Boolean = focusState.focused
+
+  /** Whether this element sits on a layer a modal covers, and so takes no input at all. */
+  private[dsl] def inert: Boolean = focusState.inert
+
+  /** The focus cue the theme resolved for this render. */
+  private[dsl] def focusStyle: Style = focusState.focusStyle

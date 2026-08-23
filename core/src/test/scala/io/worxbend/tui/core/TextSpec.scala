@@ -21,4 +21,4 @@ final class TextSpec extends AnyFunSuite:
 
   test("styled text carries the style on every line"):
     val text = Text.styled("a\nb", Style.Default.bold)
-    assert(text.lines.forall(_.spans.forall(_.style.modifiers.has(Modifiers.Bold))))
+    assert(text.lines.forall(_.spans.forall(_.style.modifiers.hasAny(Modifiers.Bold))))

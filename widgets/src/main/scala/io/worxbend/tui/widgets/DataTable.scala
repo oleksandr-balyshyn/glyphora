@@ -2,41 +2,65 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Constraint, Direction, Layout, Line, Rect, Span, StatefulWidget, Style}
 
-/** Caller-owned [[DataTable]] state: sort column/direction, a substring filter, selection, and scroll.
+/** Which way a [[DataTable]] column is sorted. */
+enum SortDirection:
+  case Ascending, Descending
+
+  /** The other direction — what sorting an already-sorted column again does. */
+  def flipped: SortDirection = this match
+    case Ascending  => Descending
+    case Descending => Ascending
+
+/** A column index paired with the direction it is sorted in.
+  *
+  * The two travel together because neither means anything alone: a direction with no column says nothing at all, and
+  * before this pairing existed an unsorted table still carried an `ascending` flag that could be flipped — changing the
+  * memoization key, and so recomputing an identical view.
+  */
+final case class ColumnSort(column: Int, direction: SortDirection)
+
+/** A page window over a [[DataTable]]: how many rows a page holds, and which page is showing.
+  *
+  * Also a pair for a reason: a page number with no page size describes nothing the widget can render, which is what a
+  * separate `pageSize: Option[Int]` plus `page: Int` allowed anyone to write.
+  */
+final case class Paging(size: Int, page: Int)
+
+/** Caller-owned [[DataTable]] state: the sort (if any), a substring filter, selection, scroll, and paging (if any).
   *
   * Selection indexes into the *view* (the filtered, sorted rows) — use [[DataTable.visibleRows]] to map it back to
   * data.
   */
 final class DataTableState:
-  var sortColumn: Option[Int] = None
-  var sortAscending: Boolean  = true
-  var filter: String          = ""
-  var selected: Option[Int]   = None
-  var offset: Int             = 0
-  var pageSize: Option[Int]   = None
-  var page: Int               = 0
+  var sort: Option[ColumnSort] = None
+  var filter: String           = ""
+  var selected: Option[Int]    = None
+  var offset: Int              = 0
+  var paging: Option[Paging]   = None
 
-  /** Moves to the next/previous page (no-ops without a `pageSize`); `totalFiltered` bounds the last page. */
+  /** Moves to the next/previous page (no-ops while `paging` is unset, the one state where no-op is the honest answer);
+    * `totalFiltered` bounds the last page.
+    */
   def nextPage(totalFiltered: Int): Unit =
-    pageSize.foreach { size =>
-      val lastPage = math.max(0, (totalFiltered - 1) / math.max(1, size))
-      page = math.min(page + 1, lastPage)
+    paging.foreach { window =>
+      val lastPage = math.max(0, (totalFiltered - 1) / math.max(1, window.size))
+      paging = Some(window.copy(page = math.min(window.page + 1, lastPage)))
       selected = None
       offset = 0
     }
 
   def previousPage(): Unit =
-    if pageSize.nonEmpty then
-      page = math.max(0, page - 1)
+    paging.foreach { window =>
+      paging = Some(window.copy(page = math.max(0, window.page - 1)))
       selected = None
       offset = 0
+    }
 
   /** Sorts by `column`; sorting the same column again flips the direction. */
   def sortBy(column: Int): Unit =
-    if sortColumn.contains(column) then sortAscending = !sortAscending
-    else
-      sortColumn = Some(column)
-      sortAscending = true
+    sort = sort match
+      case Some(current) if current.column == column => Some(current.copy(direction = current.direction.flipped))
+      case _                                         => Some(ColumnSort(column, SortDirection.Ascending))
 
   /** Drops the memoized filtered/sorted view.
     *
@@ -71,13 +95,12 @@ final class DataTableState:
 object DataTableState:
   /** Everything that can change the filtered/sorted view, used as the memoization key. */
   private[widgets] final case class ViewKey(
-      sortColumn: Option[Int],
-      sortAscending: Boolean,
+      sort: Option[ColumnSort],
       filter: String,
       rowCount: Int,
   )
 
-/** A sortable, filterable table with a selectable, scrollable body (the Tier 5 upgrade over [[Table]]).
+/** A sortable, filterable table with a selectable, scrollable body — [[Table]] plus the interaction a data grid needs.
   *
   * The header shows a `▲`/`▼` indicator on the sorted column; the filter keeps rows where *any* cell contains the text
   * (case-insensitive); sorting compares numerically when both cells parse as numbers, else as text.
@@ -87,8 +110,8 @@ final case class DataTable(
     rows: Seq[Seq[String]],
     widths: Seq[Constraint],
     columnSpacing: Int = 1,
-    headerStyle: Style = Style.Default.bold,
     style: Style = Style.Default,
+    headerStyle: Style = Style.Default.bold,
     highlightStyle: Style = Style.Default.reverse,
 ) extends StatefulWidget[DataTableState]:
 
@@ -99,21 +122,23 @@ final case class DataTable(
     * count standing in for the data itself — see [[DataTableState.invalidate]] for when that is not enough.
     */
   def filteredRows(state: DataTableState): Seq[Seq[String]] =
-    val key = DataTableState.ViewKey(state.sortColumn, state.sortAscending, state.filter, rows.size)
+    val key = DataTableState.ViewKey(state.sort, state.filter, rows.size)
     state.cachedView(key) {
       val filtered =
         if state.filter.isEmpty then rows
         else
           val needle = state.filter.toLowerCase
           rows.filter(_.exists(_.toLowerCase.contains(needle)))
-      state.sortColumn match
-        case None         => filtered
-        case Some(column) =>
+      state.sort match
+        case None                                => filtered
+        case Some(ColumnSort(column, direction)) =>
           val cells   = filtered.map(row => row.lift(column).getOrElse(""))
           val ordered = ordering(cells)
           val sorted  =
             filtered.sortWith((a, b) => ordered.lt(a.lift(column).getOrElse(""), b.lift(column).getOrElse("")))
-          if state.sortAscending then sorted else sorted.reverse
+          direction match
+            case SortDirection.Ascending  => sorted
+            case SortDirection.Descending => sorted.reverse
     }
 
   /** The rows the widget is currently showing: filtered, sorted, and windowed to the current page — what a selection
@@ -121,15 +146,16 @@ final case class DataTable(
     */
   def visibleRows(state: DataTableState): Seq[Seq[String]] =
     val all = filteredRows(state)
-    state.pageSize match
-      case None       => all
-      case Some(size) =>
-        // one page size for every use: `Some(0)` arises naturally from `Some(area.height - 2)` on a short terminal,
+    state.paging match
+      case None         => all
+      case Some(window) =>
+        // one page size for every use: `Paging(0, …)` arises naturally from `area.height - 2` on a short terminal,
         // and paging by 0 shows no rows at all on every page
-        val page     = math.max(1, size)
-        val lastPage = math.max(0, (all.size - 1) / page)
-        state.page = math.max(0, math.min(state.page, lastPage))
-        all.slice(state.page * page, (state.page + 1) * page)
+        val size     = math.max(1, window.size)
+        val lastPage = math.max(0, (all.size - 1) / size)
+        val page     = math.max(0, math.min(window.page, lastPage))
+        state.paging = Some(window.copy(page = page))
+        all.slice(page * size, (page + 1) * size)
 
   def render(area: Rect, buffer: Buffer, state: DataTableState): Unit =
     if !area.isEmpty then
@@ -150,9 +176,10 @@ final case class DataTable(
   private def renderHeader(buffer: Buffer, segments: Seq[Rect], state: DataTableState): Unit =
     columns.zipWithIndex.foreach { (title, index) =>
       segments.lift(index).filterNot(_.isEmpty).foreach { segment =>
-        val indicator =
-          if state.sortColumn.contains(index) then if state.sortAscending then " ▲" else " ▼"
-          else ""
+        val indicator = state.sort match
+          case Some(ColumnSort(`index`, SortDirection.Ascending))  => " ▲"
+          case Some(ColumnSort(`index`, SortDirection.Descending)) => " ▼"
+          case _                                                   => ""
         val line      = Line(Seq(Span(title + indicator, headerStyle)))
         val _         = LineRenderer.render(buffer, segment.x, segment.y, line, segment.width)
       }

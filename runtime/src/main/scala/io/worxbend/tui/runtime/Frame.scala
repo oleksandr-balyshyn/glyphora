@@ -1,6 +1,6 @@
 package io.worxbend.tui.runtime
 
-import io.worxbend.tui.core.{Buffer, Rect, StatefulWidget, Widget}
+import io.worxbend.tui.core.{Buffer, Effect, Rect, StatefulWidget, Widget}
 import scala.concurrent.duration.FiniteDuration
 
 /** One frame being rendered: the drawable `area` plus the buffer widgets write into.

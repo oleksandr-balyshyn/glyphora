@@ -17,7 +17,10 @@ object RenderLoopBench:
         LayoutItem(Constraint.Length(1), Tabs(Seq("overview", "detail", "logs").map(Line.raw))),
         LayoutItem(Constraint.Length(1), Gauge(0.42)),
         LayoutItem(Constraint.Length(3), Sparkline((1L to 200L).map(n => n % 17))),
-        LayoutItem(Constraint.Fill(1), Paragraph(Text.raw(("lorem ipsum dolor sit amet " * 40) + "\n"), wrap = true)),
+        LayoutItem(
+          Constraint.Fill(1),
+          Paragraph(Text.raw(("lorem ipsum dolor sit amet " * 40) + "\n"), overflow = Overflow.Wrap),
+        ),
       )
     )
     val frames         = 2000

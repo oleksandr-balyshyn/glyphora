@@ -42,27 +42,39 @@ final class Buffer(val area: Rect):
     *
     * Writing [[Cell.Empty]] over a continuation is the one exception and leaves the pair intact — that pair is how
     * callers spell the filler itself, so treating it as a claim would erase the grapheme they just wrote.
+    *
+    * A wide cell aimed at the last column of a row is stored as a blank in `cell`'s style rather than as itself: there
+    * is no column left to reserve, and a terminal handed a two-column glyph in a one-column slot wraps the row. The
+    * style is kept so a background fill stays continuous to the edge.
     */
   def set(x: Int, y: Int, cell: Cell): Unit =
-    if area.contains(Position(x, y)) then
+    setMeasured(x, y, cell, CharWidth.ofCluster(cell.symbol))
+
+  /** [[set]] for a caller that already knows `cell`'s display width, so the cluster is measured once per written cell
+    * rather than once by the caller and again here. `width` must be `CharWidth.ofCluster(cell.symbol)`.
+    */
+  private def setMeasured(x: Int, y: Int, cell: Cell, width: Int): Unit =
+    if area.contains(x, y) then
       val index    = indexOf(x, y)
       // `&&` short-circuits, so the structural compare (which walks `Style`) only runs on the rare flagged column
       val isFiller = continuations(index) && cell == Cell.Empty
       if !isFiller then
         if continuations(index) then cells(index - 1) = Cell.Empty
-        write(index, x, cell)
+        write(index, x, cell, width)
 
   /** [[set]]'s tail, once the addressed cell is known not to be a wide grapheme's filler: stores `cell` and re-derives
     * the continuation to its right. `x` is passed only to test the row's right edge — `index + 1` would otherwise wrap
     * onto the next row.
     */
-  private def write(index: Int, x: Int, cell: Cell): Unit =
+  private def write(index: Int, x: Int, cell: Cell, width: Int): Unit =
     val hasRight = x + 1 < area.right
+    val isWide   = width == 2
     // the cell being replaced may itself be a wide grapheme, in which case it owns the column to its right
     if hasRight && continuations(index + 1) then releaseContinuation(index + 1)
-    cells(index) = cell
+    // a wide grapheme with no column left to claim would render across a column this buffer does not own
+    cells(index) = if isWide && !hasRight then Cell(" ", cell.style) else cell
     continuations(index) = false
-    if hasRight && CharWidth.ofCluster(cell.symbol) == 2 then
+    if isWide && hasRight then
       // the column being claimed may itself be a wide grapheme's left half, in which case it owns the column beyond
       // it; that continuation is orphaned the moment we blank its owner, so release it in the same breath
       if x + 2 < area.right && continuations(index + 2) then releaseContinuation(index + 2)
@@ -101,11 +113,13 @@ final class Buffer(val area: Rect):
       val clusters = CharWidth.graphemeClusters(text)
       while clusters.hasNext && !stopped && column < area.right do
         val cluster = clusters.next()
-        val width   = CharWidth.of(cluster)
+        // `ofCluster`, not `of`: the iterator has already established this is exactly one cluster, and `of` would
+        // build a second cluster iterator over it. The width is then handed to `setMeasured` rather than re-derived.
+        val width   = CharWidth.ofCluster(cluster)
         // a zero-width cluster (a combining mark with no base character before it) claims no cell at all
         if width > 0 then
           if column + width <= area.right then
-            set(column, y, Cell(cluster, style))
+            setMeasured(column, y, Cell(cluster, style), width)
             column += width
           else stopped = true // a wide cluster that only half-fits at the edge
       end while
@@ -115,7 +129,8 @@ final class Buffer(val area: Rect):
     var index  = 0
     var column = x
     while index < text.length && column < area.right do
-      set(column, y, Cell(CharWidth.asciiSymbol(text.charAt(index)), style))
+      // printable ASCII is one column by definition, so the width needs no measuring at all
+      setMeasured(column, y, Cell(CharWidth.asciiSymbol(text.charAt(index)), style), 1)
       column += 1
       index += 1
 
@@ -145,7 +160,10 @@ final class Buffer(val area: Rect):
         while dx < clipped.width do
           val cell = source.get(clipped.x + dx, y)
           val safe =
-            // a wide grapheme cut in half by the window edge would render torn — blank the half instead
+            // a wide grapheme cut in half by the *window* edge would render torn — blank the half instead. This is a
+            // different edge from the destination's own: `set` blanks a wide cell that does not fit the destination
+            // row, but a window narrower than the destination would otherwise let the glyph spill one column past
+            // the region the caller asked to copy.
             if dx == 0 && source.isContinuationAt(clipped.x, y) then Cell.Empty
             else if dx == clipped.width - 1 && CharWidth.ofCluster(cell.symbol) == 2 then Cell.Empty
             else cell
@@ -212,18 +230,18 @@ final class Buffer(val area: Rect):
   private def sameCell(a: Cell, b: Cell): Boolean =
     (a eq b) || a == b
 
-  /** The single bounds-check-and-index site behind [[get]], without the `Position` allocation `Rect.contains` would
-    * need. Kept separate from [[get]] so the hot diff loop reads a `private` method the compiler can inline freely.
+  /** The single bounds-check-and-index site behind [[get]]. Kept separate from [[get]] so the hot diff loop reads a
+    * `private` method the compiler can inline freely.
     */
   private def cellAt(x: Int, y: Int): Cell =
-    if x >= area.x && x < area.right && y >= area.y && y < area.bottom then cells(indexOf(x, y)) else Cell.Empty
+    if area.contains(x, y) then cells(indexOf(x, y)) else Cell.Empty
 
   /** Whether `(x, y)` is the second column of a two-column grapheme. The state is *recorded* by [[set]], never measured
     * here: inferring it from the left neighbour's width is what made [[diff]] silently drop every cell written over a
     * wide grapheme's second column. Out-of-area coordinates are never continuations.
     */
   private def isContinuationAt(x: Int, y: Int): Boolean =
-    x >= area.x && x < area.right && y >= area.y && y < area.bottom && continuations(indexOf(x, y))
+    area.contains(x, y) && continuations(indexOf(x, y))
 
   private def indexOf(x: Int, y: Int): Int =
     (y - area.y) * area.width + (x - area.x)

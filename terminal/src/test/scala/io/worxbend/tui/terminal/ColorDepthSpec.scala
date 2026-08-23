@@ -13,6 +13,15 @@ final class ColorDepthSpec extends AnyFunSuite:
     assert(ColorDepth.detect(Map("TERM" -> "vt100")) == ColorDepth.Ansi16)
     assert(ColorDepth.detect(Map.empty) == ColorDepth.Ansi16)
 
+  /** Case folding uses `Locale.ROOT`, not the JVM's default locale. Under a Turkish locale the default folding turns
+    * `"24BIT"` into `"24bıt"` (a dotless i), which matches nothing — so a true-colour terminal used to be downgraded to
+    * sixteen colours purely because of the user's language setting.
+    */
+  test("capability detection is case-insensitive in every locale"):
+    assert(ColorDepth.detect(Map("COLORTERM" -> "24BIT")) == ColorDepth.TrueColor)
+    assert(ColorDepth.detect(Map("COLORTERM" -> "TrueColor")) == ColorDepth.TrueColor)
+    assert(ColorDepth.detect(Map("TERM" -> "XTERM-256COLOR")) == ColorDepth.Ansi256)
+
   test("NO_COLOR disables color regardless of terminal capability"):
     assert(ColorDepth.detect(Map("NO_COLOR" -> "1", "COLORTERM" -> "truecolor")) == ColorDepth.NoColor)
     assert(ColorDepth.detect(Map("NO_COLOR" -> "anything")) == ColorDepth.NoColor)

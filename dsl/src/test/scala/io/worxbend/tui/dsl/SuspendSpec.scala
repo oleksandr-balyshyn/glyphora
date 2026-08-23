@@ -17,7 +17,7 @@ final class SuspendSpec extends AnyFunSuite:
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("editor host")
-    val pilot            = Pilot.start(backend) { val _ = app.runWith(backend) }.waitForIdle()
+    val pilot            = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
     assert(backend.isAlternateScreen) // the app runs on the alternate screen
     pilot.typeText("e").waitForIdle()
     assert(backend.suspendCount == 1)
@@ -34,7 +34,7 @@ final class SuspendSpec extends AnyFunSuite:
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("app")
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }.waitForIdle()
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
     pilot.typeText("l").waitForIdle()
     assert(backend.printedAbove == Seq("build ok", "deployed ✓"))
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)

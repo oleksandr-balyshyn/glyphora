@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Color, Line, Rect, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{Buffer, Color, Line, Measured, Rect, Span, Style, Text, Widget}
 
 /** Styles for each Markdown construct; override individual entries to theme the view. */
 final case class MarkdownTheme(
@@ -21,22 +21,25 @@ final case class MarkdownTheme(
   *
   * Inline `[label](url)` links render underlined with an OSC 8 target. Deliberately excluded: images, tables, and
   * nested lists — this is a document *viewer* for help screens and READMEs, not a rendering-complete engine. Prose
-  * wraps at the area width (cluster-safe); code blocks render verbatim, except that a fence tagged with a [[Language]]
-  * the highlighter knows (` ```scala `) is coloured through [[SyntaxHighlighter]].
+  * always wraps at the area width (cluster-safe) — there is no clipping mode, because a document that silently lost the
+  * right-hand half of its sentences would not be a document viewer; code blocks render verbatim, except that a fence
+  * tagged with a [[Language]] the highlighter knows (` ```scala `) is coloured through [[SyntaxHighlighter]].
   */
 final case class Markdown(
     source: String,
     theme: MarkdownTheme = MarkdownTheme(),
-) extends Widget:
+) extends Widget
+    with Measured:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    Paragraph(MarkdownParser.parse(source, theme), wrap = true).render(area, buffer)
+    rendered.render(area, buffer)
 
-object Markdown:
+  /** The rows the rendered document occupies at `width`, wrapping included — measured off the very [[Paragraph]] that
+    * `render` draws, so parsing and wrapping can only ever be counted the same way they are painted.
+    */
+  override def heightAt(width: Int): Option[Int] = rendered.heightAt(width)
 
-  /** The rows the rendered markdown occupies at `width` — the measurement counterpart of rendering. */
-  def heightOf(source: String, width: Int, theme: MarkdownTheme = MarkdownTheme()): Int =
-    Paragraph.heightOf(MarkdownParser.parse(source, theme), width)
+  private def rendered: Paragraph = Paragraph(MarkdownParser.parse(source, theme), overflow = Overflow.Wrap)
 
 private[widgets] object MarkdownParser:
 

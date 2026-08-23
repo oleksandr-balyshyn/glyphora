@@ -1,4 +1,4 @@
-package io.worxbend.tui.runtime
+package io.worxbend.tui.core
 
 /** A damped-spring integrator (à la Charm's Harmonica) for physical, non-linear motion — scrolling, progress fills,
   * layout transitions.

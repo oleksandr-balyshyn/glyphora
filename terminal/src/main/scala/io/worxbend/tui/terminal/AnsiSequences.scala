@@ -157,4 +157,4 @@ private[terminal] object AnsiSequences:
       Modifiers.Reverse    -> "7",
       Modifiers.Hidden     -> "8",
       Modifiers.CrossedOut -> "9",
-    ).collect { case (flag, code) if modifiers.has(flag) => code }
+    ).collect { case (flag, code) if modifiers.hasAny(flag) => code }

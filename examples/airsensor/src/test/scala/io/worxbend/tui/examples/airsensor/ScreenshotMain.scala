@@ -20,7 +20,7 @@ object ScreenshotMain:
     val backend = HeadlessBackend(Size(width, height))
     // a fast cadence so the history pane has something in it by the time the frame is captured
     val app     = AirSensorApp(FakeSensor(), 60.millis)
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
 
     val deadline = System.nanoTime() + 10.seconds.toNanos

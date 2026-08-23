@@ -14,7 +14,7 @@ final class FormDemoAppSpec extends AnyFunSuite:
   private def startedApp(): (FormDemoApp, Pilot) =
     val backend = HeadlessBackend(Size(50, 12))
     val app     = FormDemoApp()
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     (app, pilot)
 

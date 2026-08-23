@@ -1,6 +1,4 @@
-package io.worxbend.tui.runtime
-
-import io.worxbend.tui.core.{Buffer, Color, Rect, Style}
+package io.worxbend.tui.core
 
 import org.scalatest.funsuite.AnyFunSuite
 

@@ -4,11 +4,16 @@ import io.worxbend.tui.core.{Buffer, Event, Rect}
 import io.worxbend.tui.terminal.{Backend, BackendError}
 
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
+import scala.util.control.NonFatal
 
 /** The production [[Runner]]: raw mode + alternate screen setup, diff-driven redraws, tick emission, resize handling,
   * and render-thread registration around a [[Backend]].
   *
   * `nanoTime` is injectable so tick scheduling is testable; production code uses the system clock.
+  *
+  * `redrawRequested` is the host's own "is a frame owed?" question, asked once per iteration — a `TuiApp` answers it
+  * from its signal-invalidation flag. It is read alongside, not instead of, [[RunnerHandle.requestRedraw]]: the handle
+  * serves code that has no reactive state to invalidate.
   */
 final class TerminalRunner(
     backend: Backend,
@@ -18,41 +23,91 @@ final class TerminalRunner(
 ) extends Runner:
 
   def run(
-      handleEvent: (Event, RunnerHandle) => Boolean,
+      onStart: RunnerHandle => Unit,
+      handleEvent: (Event, RunnerHandle) => EventOutcome,
       render: Frame => Unit,
   ): Either[RunnerError, Unit] =
-    setup() match
-      case Left(error) =>
-        backend.close()
-        Left(RunnerError.Backend(error))
-      case Right(())   =>
-        val recorder          = new QueuedTaskFailureRecorder
-        val loop              = RenderThread.register(
-          Thread.currentThread(),
-          () => backend.wake(),
-          config.onTaskError.getOrElse(recorder),
-        )
-        val restoreOnShutdown = installRestoreHook()
-        try
-          val outcome = runLoop(handleEvent, render, loop)
-          report(outcome, recorder.collected)
-        finally
-          RenderThread.unregister()
-          backend.close()
-          removeRestoreHook(restoreOnShutdown)
+    // Installed *before* the terminal is dressed up. Between `setup()` and this line the app runs in raw mode on the
+    // alternate screen with no protection at all, and a signal that terminates the JVM directly (SIGTERM, SIGHUP)
+    // skips straight to shutdown hooks — so a kill landing in that window used to hand back an unusable terminal.
+    // Installing it early costs nothing: every sequence the hook writes is an idempotent DEC private-mode reset, so it
+    // is harmless against a terminal on which nothing was ever enabled.
+    val restoreOnShutdown = installRestoreHook()
+    try
+      setup() match
+        case Left(error) =>
+          // the partial setup still dressed part of the terminal up; undo whatever took effect, both ways
+          val _ = backend.close()
+          backend.emergencyRestore()
+          Left(RunnerError.Backend(error))
+        case Right(())   => runRegistered(onStart, handleEvent, render)
+    finally removeRestoreHook(restoreOnShutdown)
+
+  /** Runs the loop with this thread registered as the render thread, and tears that registration down around it.
+    *
+    * Split out of [[run]] so the teardown that must happen (unregister, close the work queue, restore the terminal) is
+    * not tangled with the shutdown hook's own lifetime, which spans the setup that happens before any of it exists.
+    */
+  private def runRegistered(
+      onStart: RunnerHandle => Unit,
+      handleEvent: (Event, RunnerHandle) => EventOutcome,
+      render: Frame => Unit,
+  ): Either[RunnerError, Unit] =
+    val recorder = new QueuedTaskFailureRecorder
+    val loop     = RenderThread.register(
+      Thread.currentThread(),
+      () => backend.wake(),
+      config.onTaskError.getOrElse(recorder),
+    )
+
+    // written by the `finally` below and read after it, so the terminal-restore failure can be folded into the result
+    var closed: Either[BackendError, Unit] = Right(())
+
+    val result =
+      try
+        val outcome = runLoop(onStart, handleEvent, render, loop)
+        // work queued during the loop's final iteration still belongs to this run: drain it once more before the queue
+        // stops accepting anything, so a quit-time continuation is not silently dropped
+        RenderThread.drainPending(loop)
+        report(outcome, recorder.collected)
+      finally
+        RenderThread.unregister()
+        // the scheduler is a process-lifetime singleton, so an uncancelled `Async.every` still holds this loop and
+        // would keep filling a queue nothing will ever drain again
+        loop.close()
+        closed = backend.close()
+
+    withRestoreFailure(result, closed)
+
+  /** Folds a failed terminal restore into what [[run]] returns.
+    *
+    * A run that finished cleanly but could not hand the terminal back has failed in the way the user will most
+    * certainly notice, so it reports as [[RunnerError.Backend]]. A run that already failed keeps its original error:
+    * that is the one that explains why the app exited, and the restore failure is usually its consequence.
+    */
+  private def withRestoreFailure(
+      result: Either[RunnerError, Unit],
+      closed: Either[BackendError, Unit],
+  ): Either[RunnerError, Unit] =
+    result match
+      case Left(_)   => result
+      case Right(()) => closed.left.map(RunnerError.Backend(_))
 
   /** Combines the loop's own outcome with the queued-task failures it absorbed into what [[run]] returns.
     *
     * A terminal backend failure ends the loop but says nothing about the tasks that already failed, so it carries them
-    * rather than replacing them. Called from `run` on the render thread, once the loop has exited.
+    * rather than replacing them. A handler failure reports on its own: the throwable that stopped the app is the whole
+    * story, and pinning absorbed background failures to it would bury it. Called from `run` on the render thread, once
+    * the loop has exited.
     */
   private def report(
-      outcome: Either[BackendError, Unit],
+      outcome: Option[LoopFailure],
       tasks: Option[QueuedTaskFailures],
   ): Either[RunnerError, Unit] =
     outcome match
-      case Left(error) => Left(RunnerError.Backend(error, tasks))
-      case Right(())   => tasks.map(RunnerError.QueuedTask(_)).toLeft(())
+      case Some(LoopFailure.Backend(error)) => Left(RunnerError.Backend(error, tasks))
+      case Some(LoopFailure.Handler(error)) => Left(RunnerError.Handler(error))
+      case None                             => tasks.map(RunnerError.QueuedTask(_)).toLeft(())
 
   /** Registers a JVM shutdown hook that restores the terminal, and hands the hook back so `run` can remove it again.
     *
@@ -61,12 +116,17 @@ final class TerminalRunner(
     * runs the backend's own resources may already have been torn down underneath it — so follow up with
     * `emergencyRestore()`, which takes the shortest path to a usable terminal and cannot fail.
     *
+    * Installed before `setup()` dresses the terminal up, so there is no window in which the app is on the alternate
+    * screen with no hook behind it; the hook writes only idempotent mode resets, which are harmless against a terminal
+    * that was never dressed.
+    *
     * The returned thread is owned by `run`, which is the only caller and the only thing that unregisters it.
     */
   private def installRestoreHook(): Thread =
     val hook = new Thread(
       () =>
-        try backend.close()
+        try
+          val _ = backend.close()
         finally backend.emergencyRestore(),
       "glyphora-terminal-restore",
     )
@@ -91,10 +151,11 @@ final class TerminalRunner(
     yield ()
 
   private def runLoop(
-      handleEvent: (Event, RunnerHandle) => Boolean,
+      onStart: RunnerHandle => Unit,
+      handleEvent: (Event, RunnerHandle) => EventOutcome,
       render: Frame => Unit,
       loop: RenderThread.RenderLoop,
-  ): Either[BackendError, Unit] =
+  ): Option[LoopFailure] =
     val state    = LoopState()
     var lastTick = nanoTime()
 
@@ -103,27 +164,53 @@ final class TerminalRunner(
 
     def redraw(): Unit = state.record(composer.compose())
 
+    /** Runs `body` on the app's behalf, recording a throwable as the loop's failure instead of letting it unwind.
+      *
+      * Unwinding would leave `run`'s callers with the throwable and the user with a terminal still in raw mode on the
+      * alternate screen: the restore lives further down this call stack, not above it.
+      */
+    def guarded(body: => EventOutcome): EventOutcome =
+      try body
+      catch
+        case NonFatal(error) =>
+          state.failHandler(error)
+          EventOutcome.Ignored
+
     /** Dispatches one event; `true` when the frame should be repainted afterward. */
     def dispatch(event: Event): Boolean =
       event match
         case Event.Interrupt =>
           // an app that does not consume Ctrl+C quits cleanly, so teardown runs on the normal path
-          if handleEvent(event, handle) then true
+          if guarded(handleEvent(event, handle)) == EventOutcome.Redraw then true
           else
             handle.quit()
             false
         case _: Event.Resize =>
           // a resize always repaints, whatever the handler answers, because the composed frame no longer fits the
           // terminal. The handler still runs, and runs first, so an app that tracks its own dimensions sees the event.
-          val _ = handleEvent(event, handle)
+          val _ = guarded(handleEvent(event, handle))
           true
-        case _               => handleEvent(event, handle)
+        case _               => guarded(handleEvent(event, handle)) == EventOutcome.Redraw
 
-    redraw()
+    /** Whether a frame is owed for a reason no event asked for: caller-owned state mutated through
+      * [[RunnerHandle.requestRedraw]], or whatever the host's own `redrawRequested` tracks (a DSL app's signals).
+      *
+      * Both are read every iteration — neither short-circuits the other — because the handle's request is consumed by
+      * reading it and dropping it would owe a frame nobody ever pays.
+      */
+    def frameOwed(): Boolean =
+      val byHandle = state.takeRedrawRequest()
+      val byHost   = redrawRequested()
+      byHandle || byHost
+
+    // Before the first frame and after the terminal is dressed: the earliest point at which this is certainly the
+    // render thread, so background work armed here captures this loop. A `quit()` from it exits without rendering.
+    val _ = guarded { onStart(handle); EventOutcome.Ignored }
+    if state.isLive then redraw()
     while state.isLive do
       RenderThread.drainPending(loop)
       // queued work (runLater/runOnRenderThread) may have invalidated state between events
-      if redrawRequested() && state.isLive then redraw()
+      if frameOwed() && state.isLive then redraw()
       backend.readEvent(pollTimeout(lastTick)) match
         case Left(error)        => state.fail(error)
         case Right(Some(event)) =>
@@ -136,7 +223,7 @@ final class TerminalRunner(
       config.tickRate.foreach { rate =>
         if nanoTime() - lastTick >= rate.toNanos then
           lastTick = nanoTime()
-          if handleEvent(Event.Tick, handle) && state.isLive then redraw()
+          if guarded(handleEvent(Event.Tick, handle)) == EventOutcome.Redraw && state.isLive then redraw()
       }
     state.outcome
 
@@ -186,34 +273,62 @@ private final class FrameComposer(backend: Backend, render: Frame => Unit):
       backend.draw(buffer)
     }
 
-/** The two reasons a [[TerminalRunner]] loop stops, held in one place so every site asks the same question.
+/** Why a [[TerminalRunner]] loop stopped early, when it did.
+  *
+  * Two failures end the loop and they are not the same kind of thing: the terminal broke, or the app did. Naming both
+  * in one type is what lets [[LoopState]] answer "may I run another iteration?" once, rather than once per kind.
+  */
+private enum LoopFailure:
+  /** A call into the [[Backend]] failed — reading input, drawing, an out-of-band terminal operation. */
+  case Backend(error: BackendError)
+
+  /** The app's event handler (or its `onStart`) threw. */
+  case Handler(error: Throwable)
+
+/** The reasons a [[TerminalRunner]] loop stops and the frames it still owes, held in one place so every site asks the
+  * same question.
   *
   * The loop asks "should I keep going?" at four points and can be stopped from five more, so both questions get one
   * name each — [[isLive]] and [[record]] — instead of being spelled out at each site. A third reason to stop is then a
   * change to [[isLive]] alone; spelled out, one missed site would draw an extra frame after the failure.
   *
   * Confined to the render thread: the loop, the [[BackendHandle]] it hands to event handlers, and the redraw/dispatch
-  * helpers all run there, so neither field needs to be volatile.
+  * helpers all run there, so no field here needs to be volatile.
   */
 private final class LoopState:
 
-  private var running                       = true
-  private var failure: Option[BackendError] = None
+  private var running                      = true
+  private var failure: Option[LoopFailure] = None
+  private var redrawPending                = false
 
-  /** Whether the loop should run another iteration: nobody has asked to quit and no backend call has failed. */
+  /** Whether the loop should run another iteration: nobody has asked to quit and nothing has failed. */
   def isLive: Boolean = running && failure.isEmpty
 
   /** Asks for a clean exit once the current iteration finishes — what [[RunnerHandle.quit]] does. */
   def stop(): Unit = running = false
 
   /** Records the backend failure that ends the loop. The most recent one is what gets reported. */
-  def fail(error: BackendError): Unit = failure = Some(error)
+  def fail(error: BackendError): Unit = failure = Some(LoopFailure.Backend(error))
+
+  /** Records the throwable an event handler let escape, which also ends the loop. */
+  def failHandler(error: Throwable): Unit = failure = Some(LoopFailure.Handler(error))
 
   /** Records `result`'s failure if it has one; a successful value is deliberately discarded. */
   def record[A](result: Either[BackendError, A]): Unit = result.left.foreach(fail)
 
-  /** What the loop returns to `run`: the recorded failure, or `Right(())` when it exited cleanly. */
-  def outcome: Either[BackendError, Unit] = failure.toLeft(())
+  /** Notes that a frame is owed — what [[RunnerHandle.requestRedraw]] does. Idempotent: two requests before the next
+    * iteration are one frame, because a frame is a snapshot of current state and not a queue of edits.
+    */
+  def requestRedraw(): Unit = redrawPending = true
+
+  /** Answers whether a frame was requested and clears the request, so the next iteration does not draw it twice. */
+  def takeRedrawRequest(): Boolean =
+    val pending = redrawPending
+    redrawPending = false
+    pending
+
+  /** What the loop returns to `run`: the recorded failure, or `None` when it exited cleanly. */
+  def outcome: Option[LoopFailure] = failure
 
 /** The [[RunnerHandle]] handed to event handlers for the lifetime of one [[TerminalRunner]] loop.
   *
@@ -225,11 +340,12 @@ private final class BackendHandle(backend: Backend, state: LoopState) extends Ru
 
   def quit(): Unit                           = state.stop()
   def runOnRenderThread(body: => Unit): Unit = RenderThread.runOnRenderThread(body)
+  def requestRedraw(): Unit                  = state.requestRedraw()
   def copyToClipboard(text: String): Unit    = state.record(backend.copyToClipboard(text))
 
   // the backend forces a full repaint once `body` hands the terminal back
-  override def suspend(body: => Unit): Unit         = state.record(backend.suspend(body))
-  override def printAbove(lines: Seq[String]): Unit = state.record(backend.printAbove(lines))
+  def suspend(body: => Unit): Unit         = state.record(backend.suspend(body))
+  def printAbove(lines: Seq[String]): Unit = state.record(backend.printAbove(lines))
 
 /** Collects the failures of bodies queued onto the render thread during a single [[TerminalRunner.run]].
   *

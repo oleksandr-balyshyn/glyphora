@@ -120,7 +120,7 @@ final class ProgressStyleSpec extends AnyFunSuite:
     assert(ramped(0.25).style.fg.contains(ColorRamp(Color.Red, Color.Green).at(0.25)))
     assert(ramped(1.0).style.fg.contains(ColorRamp(Color.Red, Color.Green).at(1.0)))
     assert(ramped(0.25).style.fg != ramped(1.0).style.fg, "the ramp must actually move")
-    assert(ramped(1.0).style.modifiers.has(Modifiers.Bold), "the ramp must not drop bold")
+    assert(ramped(1.0).style.modifiers.hasAny(Modifiers.Bold), "the ramp must not drop bold")
 
   test("without a ramp the fill keeps the style it was given"):
     val cell = rendered(

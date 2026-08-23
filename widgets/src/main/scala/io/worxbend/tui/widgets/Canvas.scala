@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Rect, Widget}
 
 /** How many drawable sub-pixels one terminal cell contributes to a [[Canvas]]. */
 enum CanvasResolution:
@@ -13,116 +13,11 @@ enum CanvasResolution:
   /** 2×4 sub-pixels per cell via braille patterns — the smoothest lines. */
   case Braille
 
-/** Paints world-coordinate points into terminal cells for one [[Canvas]] render, accumulating sub-pixel hits and
-  * flushing them as glyphs.
-  */
-final class Painter private[widgets] (
-    area: Rect,
-    xBounds: (Double, Double),
-    yBounds: (Double, Double),
-    resolution: CanvasResolution,
-    marker: String,
-):
-
-  private val (subWidth, subHeight) = SubCell.dotsPerCell(resolution)
-
-  private val gridWidth  = area.width * subWidth
-  private val gridHeight = area.height * subHeight
-  private val masks      = Array.fill(area.area)(0)
-  private val styles     = Array.fill(area.area)(Style.Default)
-
-  /** Marks the sub-pixel containing the world-coordinate point; points outside the bounds are dropped. The y axis
-    * points up (world), while rows grow down (terminal) — the mapping flips it.
-    */
-  def paint(x: Double, y: Double, style: Style): Unit =
-    val (xMin, xMax) = xBounds
-    val (yMin, yMax) = yBounds
-    if x >= xMin && x <= xMax && y >= yMin && y <= yMax && xMax > xMin && yMax > yMin then
-      val column    = ((x - xMin) / (xMax - xMin) * (gridWidth - 1)).round.toInt
-      val row       = ((yMax - y) / (yMax - yMin) * (gridHeight - 1)).round.toInt
-      val cellIndex = (row / subHeight) * area.width + (column / subWidth)
-      masks(cellIndex) |= bitFor(column % subWidth, row % subHeight)
-      styles(cellIndex) = style
-
-  private[widgets] def flush(buffer: Buffer): Unit =
-    var index = 0
-    while index < masks.length do
-      if masks(index) != 0 then
-        val x = area.x + index % area.width
-        val y = area.y + index / area.width
-        buffer.set(x, y, Cell(glyphFor(masks(index)), styles(index)))
-      index += 1
-
-  // the sub-cell bit layouts live in `SubCell`, shared with the animated widgets that draw at the same resolutions;
-  // two divergent copies of the braille bit table is the one outcome that extraction exists to prevent
-  private def bitFor(dx: Int, dy: Int): Int = SubCell.bitFor(resolution, dx, dy)
-
-  private def glyphFor(mask: Int): String = SubCell.glyphFor(resolution, mask, marker)
-
-/** Something drawable on a [[Canvas]] in world coordinates. */
-trait Shape:
-  def draw(painter: Painter): Unit
-
-object Shape:
-
-  final case class Points(points: Seq[(Double, Double)], style: Style = Style.Default) extends Shape:
-    def draw(painter: Painter): Unit =
-      points.foreach((x, y) => painter.paint(x, y, style))
-
-  /** A straight segment, painted by parametric stepping (resolution-independent, no Bresenham needed at terminal-cell
-    * densities).
-    */
-  final case class SegmentShape(
-      x1: Double,
-      y1: Double,
-      x2: Double,
-      y2: Double,
-      style: Style = Style.Default,
-  ) extends Shape:
-    def draw(painter: Painter): Unit =
-      val steps = math.max(1, math.max(math.abs(x2 - x1), math.abs(y2 - y1)).ceil.toInt * 4)
-      (0 to steps).foreach { i =>
-        val t = i.toDouble / steps
-        painter.paint(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, style)
-      }
-
-  /** Consecutive points joined by segments — what a line chart plots. */
-  final case class Polyline(points: Seq[(Double, Double)], style: Style = Style.Default) extends Shape:
-    def draw(painter: Painter): Unit =
-      points.lazyZip(points.drop(1)).foreach { case ((x1, y1), (x2, y2)) =>
-        SegmentShape(x1, y1, x2, y2, style).draw(painter)
-      }
-
-  final case class RectangleShape(
-      x: Double,
-      y: Double,
-      width: Double,
-      height: Double,
-      style: Style = Style.Default,
-  ) extends Shape:
-    def draw(painter: Painter): Unit =
-      Seq(
-        SegmentShape(x, y, x + width, y, style),
-        SegmentShape(x, y + height, x + width, y + height, style),
-        SegmentShape(x, y, x, y + height, style),
-        SegmentShape(x + width, y, x + width, y + height, style),
-      ).foreach(_.draw(painter))
-
-  final case class CircleShape(
-      centerX: Double,
-      centerY: Double,
-      radius: Double,
-      style: Style = Style.Default,
-  ) extends Shape:
-    def draw(painter: Painter): Unit =
-      val steps = math.max(8, (radius * 32).toInt)
-      (0 until steps).foreach { i =>
-        val angle = 2 * math.Pi * i / steps
-        painter.paint(centerX + radius * math.cos(angle), centerY + radius * math.sin(angle), style)
-      }
-
 /** A free-form drawing surface: shapes describe themselves in a world coordinate system (`xBounds` right-ward,
   * `yBounds` up-ward) and the canvas maps them onto its cell grid — at cell, half-block, or braille resolution.
+  *
+  * `marker` is read only at [[CanvasResolution.Cell]], where there is one dot per cell; a marker that is not exactly
+  * one column wide is replaced by [[SubCell.FallbackMarker]] rather than allowed to smear into the next cell.
   */
 final case class Canvas(
     xBounds: (Double, Double),

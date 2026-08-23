@@ -1,5 +1,7 @@
 package io.worxbend.tui.dsl
 
+import io.worxbend.tui.core.KeyEvent
+
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.nio.file.{Files, Path, Paths}
@@ -34,20 +36,35 @@ final class DocumentedKeySpecSpec extends AnyFunSuite:
   /** Matches the spec literal in `binding("ctrl+s", "save")(…)` — the first string argument only. */
   private val BindingSpec = """binding\("((?:[^"\\]|\\.)*)"""".r
 
+  /** The multi-key form, `binding(Seq("down", "j"), "next")(…)`: the whole `Seq(…)` argument, whose string literals are
+    * then pulled out by [[StringLiteral]]. Every one of them is a key spec, unlike the single-key form where only the
+    * first argument is.
+    */
+  private val BindingSpecSeq = """binding\(Seq\(([^)]*)\)""".r
+
+  private val StringLiteral = """"((?:[^"\\]|\\.)*)"""".r
+
+  /** Every key spec on one line of documentation, from either `binding` form. */
+  private def specsOn(line: String): Iterator[String] =
+    BindingSpec.findAllMatchIn(line).map(_.group(1)) ++
+      BindingSpecSeq
+        .findAllMatchIn(line)
+        .flatMap(argument => StringLiteral.findAllMatchIn(argument.group(1)).map(_.group(1)))
+
   test("every key spec published in the documentation parses"):
     val root  = repoRoot.getOrElse(cancel("not running from a checkout: no build.mill above the working directory"))
     val found =
       for
         page <- markdownSources(root)
         line <- Files.readAllLines(page).asScala
-        spec <- BindingSpec.findAllMatchIn(line).map(_.group(1))
+        spec <- specsOn(line)
       yield (root.relativize(page).toString, spec)
 
     assert(found.nonEmpty, "found no documented bindings — the extraction pattern or the doc paths are wrong")
 
     val broken = found.collect:
-      case (page, spec) if KeyBindings.parseKey(spec).isLeft =>
-        s"$page: binding(\"$spec\") -> ${KeyBindings.parseKey(spec).left.getOrElse("")}"
+      case (page, spec) if KeyEvent.parse(spec).isLeft =>
+        s"$page: binding(\"$spec\") -> ${KeyEvent.parse(spec).left.getOrElse("")}"
     assert(broken.isEmpty, s"documented key specs that throw at declaration time:\n${broken.mkString("\n")}")
 
   /** The specific specs the counter app in the README and the getting-started guide declares. Pinned by value so a
@@ -55,4 +72,4 @@ final class DocumentedKeySpecSpec extends AnyFunSuite:
     */
   test("the documented counter app's own specs parse"):
     Seq("+", "-", "q").foreach: spec =>
-      assert(KeyBindings.parseKey(spec).isRight, s"the documented counter app cannot declare binding(\"$spec\")")
+      assert(KeyEvent.parse(spec).isRight, s"the documented counter app cannot declare binding(\"$spec\")")

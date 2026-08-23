@@ -2,10 +2,18 @@ package build.`test-support`
 
 import mill.*
 
-// Not published: shared test infrastructure (Pilot driver, Buffer assertion matchers),
-// consumed by other modules' test submodules only.
-object `package` extends build.TuiModule {
+// Published as `tui-test`: `Pilot`, `BufferAssertions` and `GoldenFrames` are the documented way to
+// test a glyphora app without a PTY, so they belong on Maven Central rather than in this repository.
+// The Scala package stays `io.worxbend.tui.testsupport`.
+object `package` extends build.TuiPublishModule {
 
+  def artifactName = "tui-test"
+
+  def moduleDescription =
+    "Headless test harness for the tui library: the Pilot app driver, buffer assertions, and golden-frame snapshots."
+
+  // `Pilot.start` takes the runner's own `Either[RunnerError, Unit]` result and reports a `Left` as a test failure, so
+  // `RunnerError` is part of this module's public signature and `tui-runtime` is a real, declared dependency.
   def moduleDeps = Seq(build.core, build.terminal, build.runtime)
 
   object test extends TuiTests

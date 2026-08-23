@@ -35,8 +35,8 @@ final case class Calendar(
   private def drawTitle(area: Rect, buffer: Buffer, yearMonth: YearMonth): Unit =
     val title  = s"${yearMonth.getMonth.getDisplayName(JTextStyle.FULL, Locale.ENGLISH)} ${yearMonth.getYear}"
     val fitted = CharWidth.substringByWidth(title, area.width)
-    val offset = (math.min(area.width, GridWidth) - CharWidth.of(fitted)) / 2
-    buffer.setString(area.x + math.max(0, offset), area.y, fitted, headerStyle)
+    val startX = Alignment.Center.originAt(area.x, math.min(area.width, GridWidth), CharWidth.of(fitted))
+    buffer.setString(startX, area.y, fitted, headerStyle)
 
   private def drawWeekdayHeader(area: Rect, buffer: Buffer): Unit =
     val header = WeekDays.map(_.getDisplayName(JTextStyle.SHORT, Locale.ENGLISH).take(2)).mkString(" ")

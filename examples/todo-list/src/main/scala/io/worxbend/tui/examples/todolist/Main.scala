@@ -8,7 +8,7 @@ import io.worxbend.tui.widgets.{ListState, TextInputState}
   *
   * Keys: type + `Enter` to add · `Tab` to switch focus · `↑`/`↓` to select · `d` to delete · `Esc` to quit.
   */
-final class TodoApp extends TuiApp:
+class TodoApp extends TuiApp:
 
   val items: Signal[Vector[String]] = Signal(Vector.empty)
   val inputState: TextInputState    = TextInputState()
@@ -50,6 +50,4 @@ final class TodoApp extends TuiApp:
       listState.selected = if remaining == 0 then None else Some(math.min(index, remaining - 1))
     }
 
-object Main:
-  def main(args: Array[String]): Unit =
-    TodoApp().run().left.foreach(error => println(s"failed to run: $error"))
+object Main extends TodoApp

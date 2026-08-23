@@ -27,7 +27,7 @@ final class FuzzySpec extends AnyFunSuite:
 
   /** Case folding must not depend on the machine's locale: `"Install".toLowerCase` is `"ınstall"` under `tr`, so a
     * default-locale fold would make the command palette come up empty for any query containing `i` — the same trap
-    * `KeyBindings.keyCodeFor` guards against.
+    * `KeyEvent.parse` guards against.
     */
   test("matching folds case the same way in every locale"):
     val original = Locale.getDefault

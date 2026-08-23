@@ -10,14 +10,18 @@ import org.scalatest.funsuite.AnyFunSuite
   * exact [[KeyEvent]] values `InputDecoderSpec`/`InputFixtureSpec` pin the byte side against. Each case names the
   * sequence it corresponds to; change one side and the other fails.
   *
-  * Equality is the whole contract: `KeyBindings.handle` matches with `==`, so a spec that parses to an event the
-  * decoder never emits is a binding that silently never fires.
+  * Equality is the whole contract: `KeyBindings.handle` matches its triggers with `==`, so a spec that parses to an
+  * event the decoder never emits is a binding that silently never fires.
+  *
+  * `KeyEvent.parse` now lives in `tui-core`, so `InputDecoderRegressionSpec` can assert the two sides against each
+  * other directly for the cases it covers. This suite stays because it covers the whole spec vocabulary, including the
+  * sequences that spec has no byte fixture for here.
   */
 final class KeySpecRoundTripSpec extends AnyFunSuite:
 
   /** Asserts the spec parses, and parses to precisely the event the decoder produces for `sentAs`. */
   private def roundTrip(spec: String, sentAs: String, expected: KeyEvent): Unit =
-    KeyBindings.parseKey(spec) match
+    KeyEvent.parse(spec) match
       case Right(parsed) => assert(parsed == expected, s"spec '$spec' does not match what the terminal sends ($sentAs)")
       case Left(problem) => fail(s"spec '$spec' did not parse: $problem")
 
@@ -34,7 +38,7 @@ final class KeySpecRoundTripSpec extends AnyFunSuite:
   test("a shifted letter matches the upper-case character the terminal sends"):
     roundTrip("G", "0x47", KeyEvent.of(KeyCode.Char('G')))
     roundTrip("Z", "0x5a", KeyEvent.of(KeyCode.Char('Z')))
-    assert(KeyBindings.parseKey("G") != KeyBindings.parseKey("g"))
+    assert(KeyEvent.parse("G") != KeyEvent.parse("g"))
 
   test("named keys match their sequences"):
     roundTrip("enter", "0x0d", KeyEvent.of(KeyCode.Enter))
@@ -139,7 +143,7 @@ final class KeySpecRoundTripSpec extends AnyFunSuite:
     )
     named.foreach: code =>
       val spec = specNameFor(code).getOrElse(fail(s"no spec name for $code"))
-      assert(KeyBindings.parseKey(spec) == Right(KeyEvent.of(code)), s"spec '$spec' does not name $code")
+      assert(KeyEvent.parse(spec) == Right(KeyEvent.of(code)), s"spec '$spec' does not name $code")
 
   /** A printable key names itself, including the ones that are also spec syntax or need no shift-key ceremony. */
   test("every printable KeyCode names itself"):
@@ -147,14 +151,14 @@ final class KeySpecRoundTripSpec extends AnyFunSuite:
     printable.foreach: char =>
       val code = KeyCode.Char(char)
       val spec = specNameFor(code).getOrElse(fail(s"no spec name for $code"))
-      assert(KeyBindings.parseKey(spec) == Right(KeyEvent.of(code)), s"spec '$spec' does not name $code")
+      assert(KeyEvent.parse(spec) == Right(KeyEvent.of(code)), s"spec '$spec' does not name $code")
 
   /** `F(n)` is parameterized, so it is absent from `KeyCode.values` and needs its own sweep across the range
     * `InputDecoder` maps from the kitty functional-key block.
     */
   test("every function key the decoder can emit is nameable in a spec"):
     (1 to 35).foreach: n =>
-      assert(KeyBindings.parseKey(s"f$n") == Right(KeyEvent.of(KeyCode.F(n))), s"spec 'f$n' does not name F($n)")
+      assert(KeyEvent.parse(s"f$n") == Right(KeyEvent.of(KeyCode.F(n))), s"spec 'f$n' does not name F($n)")
 
   /** The README's counter app, end to end: every spec it declares matches the bytes a terminal sends for that key. */
   test("every spec the documented counter app declares matches a real keypress"):

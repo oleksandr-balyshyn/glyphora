@@ -2,6 +2,8 @@ package io.worxbend.tui.terminal
 
 import io.worxbend.tui.core.Color
 
+import java.util.Locale
+
 /** How many colors the terminal can actually show; RGB output is downsampled to fit.
   *
   * [[NoColor]] is not a device capability but an explicit opt-out: when it is in effect the backend emits text
@@ -28,10 +30,18 @@ object ColorDepth:
     if disabled && !forced then NoColor
     else capability(env)
 
+  /** The capability half of [[detect]], on the environment variables the conventions above name.
+    *
+    * Both comparisons lower-case with `Locale.ROOT` rather than the default locale. Under a Turkish locale
+    * `"24BIT".toLowerCase` is `"24bıt"` with a dotless i, so `contains("24bit")` fails and a true-colour terminal is
+    * silently downgraded to sixteen colours — every RGB style in the app flattens to the nearest named colour because
+    * of the user's language setting.
+    */
   private def capability(env: Map[String, String]): ColorDepth =
-    val colorterm = env.getOrElse("COLORTERM", "").toLowerCase
+    val colorterm = env.getOrElse("COLORTERM", "").toLowerCase(Locale.ROOT)
+    val term      = env.getOrElse("TERM", "").toLowerCase(Locale.ROOT)
     if colorterm.contains("truecolor") || colorterm.contains("24bit") then TrueColor
-    else if env.getOrElse("TERM", "").contains("256") then Ansi256
+    else if term.contains("256") then Ansi256
     else Ansi16
 
   /** Reduces `color` to something `depth` can represent (identity for capable terminals). [[NoColor]] is handled by the

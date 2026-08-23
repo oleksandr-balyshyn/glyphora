@@ -4,7 +4,7 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Style}
 
 import scala.collection.mutable
 
-/** Caller-owned multi-line editing state (the Tier 5 editor model).
+/** Caller-owned multi-line editing state for [[TextArea]].
   *
   * Text is a vector of lines, each a vector of grapheme clusters — the cursor is `(line, column)` in cluster
   * coordinates and can never split a combining sequence or emoji. Every editing operation snapshots onto a bounded undo
@@ -143,7 +143,7 @@ final case class TextArea(
   def render(area: Rect, buffer: Buffer, state: TextAreaState): Unit =
     if !area.isEmpty then
       val (cursorLine, cursorColumn) = state.cursor
-      state.scrollRow = scrolled(state.scrollRow, cursorLine, state.clusterLines.size, area.height)
+      state.scrollRow = ScrollWindow.offsetFor(state.scrollRow, Some(cursorLine), state.clusterLines.size, area.height)
       state.scrollColumn = scrolledHorizontally(state, cursorColumn, area.width)
       state.clusterLines.slice(state.scrollRow, state.scrollRow + area.height).zipWithIndex.foreach { (clusters, row) =>
         val lineIndex = state.scrollRow + row
@@ -176,18 +176,6 @@ final case class TextArea(
       cursorStyle = cursorStyle,
       paintEndCell = false,
     )
-
-  /** Scrolls vertically just enough to keep the cursor's line visible.
-    *
-    * The offset is caller-owned state that survives across frames, so it also has to be pulled back: deleting lines or
-    * growing the terminal both leave an offset past the last useful row, which renders the tail of the document
-    * followed by blank rows.
-    */
-  private def scrolled(offset: Int, cursorLine: Int, lineCount: Int, height: Int): Int =
-    val clamped = math.min(offset, math.max(0, lineCount - height))
-    if cursorLine < clamped then cursorLine
-    else if cursorLine >= clamped + height then cursorLine - height + 1
-    else clamped
 
   /** Scrolls all lines left just enough that the cursor's column, measured on the cursor's own line, stays visible. The
     * rule and the reason it reserves the cursor cluster's display width rather than a flat column both live in

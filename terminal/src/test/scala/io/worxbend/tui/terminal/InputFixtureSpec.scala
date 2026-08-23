@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -81,10 +81,10 @@ final class InputFixtureSpec extends AnyFunSuite:
     val session = csi("<0;10;5M") ++ csi("<32;12;7M") ++ csi("<0;12;7m") ++ csi("<64;12;7M") ++ text("k")
     assert(
       replay(session) == List(
-        Event.Mouse(MouseEvent(9, 4, MouseEventKind.Down, KeyModifiers.None)),
-        Event.Mouse(MouseEvent(11, 6, MouseEventKind.Drag, KeyModifiers.None)),
-        Event.Mouse(MouseEvent(11, 6, MouseEventKind.Up, KeyModifiers.None)),
-        Event.Mouse(MouseEvent(11, 6, MouseEventKind.ScrollUp, KeyModifiers.None)),
+        Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Down, KeyModifiers.None)),
+        Event.Mouse(MouseEvent(Position(11, 6), MouseEventKind.Drag, KeyModifiers.None)),
+        Event.Mouse(MouseEvent(Position(11, 6), MouseEventKind.Up, KeyModifiers.None)),
+        Event.Mouse(MouseEvent(Position(11, 6), MouseEventKind.ScrollUp, KeyModifiers.None)),
         key(KeyCode.Char('k')),
       )
     )
@@ -94,8 +94,8 @@ final class InputFixtureSpec extends AnyFunSuite:
     val session = click(10, 4) ++ click(11, 5) ++ text("q")
     assert(
       replay(session) == List(
-        Event.Mouse(MouseEvent(9, 3, MouseEventKind.Down, KeyModifiers.None)),
-        Event.Mouse(MouseEvent(10, 4, MouseEventKind.Down, KeyModifiers.None)),
+        Event.Mouse(MouseEvent(Position(9, 3), MouseEventKind.Down, KeyModifiers.None)),
+        Event.Mouse(MouseEvent(Position(10, 4), MouseEventKind.Down, KeyModifiers.None)),
         key(KeyCode.Char('q')),
       )
     )

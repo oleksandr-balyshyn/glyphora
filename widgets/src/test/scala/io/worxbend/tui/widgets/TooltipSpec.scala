@@ -9,7 +9,7 @@ final class TooltipSpec extends AnyFunSuite:
 
   test("a tooltip draws a rounded border around its text"):
     val tip    = Tooltip("save file")
-    val buffer = Buffer(Rect(0, 0, tip.width, tip.height))
+    val buffer = Buffer(Rect(0, 0, tip.widthAt(0).getOrElse(0), tip.heightAt(0).getOrElse(0)))
     tip.render(buffer.area, buffer)
     val lines  = trimmedLines(buffer)
     assert(lines.head.startsWith("╭") && lines.head.endsWith("╮"))
@@ -18,12 +18,12 @@ final class TooltipSpec extends AnyFunSuite:
 
   test("width and height fit the widest line and the line count plus borders"):
     val tip = Tooltip("aa\nbbbb")
-    assert(tip.height == 4) // 2 text rows + 2 borders
-    assert(tip.width == 4 + 4) // widest line (4) + padding/borders (4)
+    assert(tip.heightAt(0).contains(4)) // 2 text rows + 2 borders
+    assert(tip.widthAt(0).contains(4 + 4)) // widest line (4) + padding/borders (4)
 
   test("multi-line tooltips render each line on its own row"):
     val tip    = Tooltip("line1\nline2")
-    val buffer = Buffer(Rect(0, 0, tip.width, tip.height))
+    val buffer = Buffer(Rect(0, 0, tip.widthAt(0).getOrElse(0), tip.heightAt(0).getOrElse(0)))
     tip.render(buffer.area, buffer)
     val lines  = trimmedLines(buffer)
     assert(lines(1).contains("line1"))

@@ -35,12 +35,15 @@ final class LogState(maxLines: Int = 1000):
     follow = false
     offset = math.max(0, offset - count)
 
-  /** Scrolling down past the end re-enables follow. `viewportHeight` defaults to the height of the last render, so
-    * interactive scrolling needs no extra bookkeeping.
+  /** Scrolls `count` lines towards the newest ones, against the viewport of the last render; scrolling down past the
+    * end re-enables follow. The mirror of [[scrollUp]].
+    *
+    * There is no viewport parameter: by the time any key or wheel handler runs, the widget has already rendered at
+    * least once and `lastViewportHeight` is the height the user is looking at. A caller-supplied height could only
+    * disagree with what is on screen. Render thread only, like every other method here.
     */
-  def scrollDown(count: Int = 1, viewportHeight: Int = -1): Unit =
-    val height    = if viewportHeight > 0 then viewportHeight else lastViewportHeight
-    val maxOffset = math.max(0, ring.size - height)
+  def scrollDown(count: Int = 1): Unit =
+    val maxOffset = math.max(0, ring.size - lastViewportHeight)
     offset = math.min(maxOffset, offset + count)
     if offset >= maxOffset then follow = true
 

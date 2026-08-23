@@ -21,10 +21,36 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
     override def bindings: KeyBindings        = KeyBindings(binding("q", "quit")(quit()))
     def view(using ReactiveScope): Element    = text("main view")
 
+  test("a player with no splash declared is never active"):
+    assert(!SplashPlayer(None, () => 0L).isActive)
+
+  test("skip ends the intro without any time passing"):
+    val player = SplashPlayer(Some(SplashScreen(text("INTRO"), Effect.fadeIn(50.millis))), () => 0L)
+    assert(player.isActive)
+    player.skip()
+    assert(!player.isActive)
+
+  /** The stack times effects off the clock it is handed, so this pins the drop boundary exactly rather than sleeping
+    * past it and hoping.
+    */
+  test("the effect stack drops an effect the moment its own clock says it is done"):
+    var nanos = 0L
+    val stack = EffectStack(() => nanos)
+    assert(stack.isEmpty)
+    stack.start(Effect.dissolve(150.millis))
+    assert(!stack.isEmpty)
+    assert(!stack.prune(), "an effect that has not started running yet is not done")
+    nanos = 149.millis.toNanos
+    assert(!stack.prune())
+    nanos = 150.millis.toNanos
+    assert(stack.prune(), "the tick that crosses the duration reports the drop")
+    assert(stack.isEmpty)
+    assert(!stack.prune(), "an empty stack has nothing left to report")
+
   test("the splash shows first, then transitions to the main view"):
     val backend  = HeadlessBackend(Size(30, 5))
     val app      = SplashApp()
-    val pilot    = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot    = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("LOADING"))
     assert(!pilot.screenText.contains("main view"))
@@ -42,7 +68,7 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
       )
       override def bindings: KeyBindings        = KeyBindings(binding("q", "quit")(quit()))
       def view(using ReactiveScope): Element    = text("main view")
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("INTRO"))
     pilot.pressKey(KeyCode.Enter).waitForIdle()
@@ -59,7 +85,7 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
         binding("q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("solid content here")
-    val pilot           = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot           = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("solid content here"))
     pilot.pressKey(KeyCode.Char('e'))

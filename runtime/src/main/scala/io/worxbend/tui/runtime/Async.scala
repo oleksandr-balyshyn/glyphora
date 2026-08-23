@@ -21,6 +21,24 @@ object Cancelable:
   *
   * All executor threads are daemons, so pending work never keeps the JVM alive after the app quits. Callbacks scheduled
   * while no runner is active simply wait on the queue until one drains it (or are dropped when the process exits).
+  *
+  * **Lifetime.** Every entry point here captures its target runner at the moment it is called, and that runner's queue
+  * stops accepting work once the runner exits. Concretely:
+  *
+  *   - Work already queued when the runner exits still runs: the runner drains its queue one last time on the way out,
+  *     so a continuation that arrived during the final iteration is not lost.
+  *   - Work queued *after* that is silently dropped — there is no longer a render thread to run it on, and keeping it
+  *     would only grow memory.
+  *   - A [[Cancelable]] from [[after]] or [[every]] is **not** cancelled by the app quitting. The scheduler is a
+  *     process-lifetime daemon singleton, so an uncancelled `every` keeps firing (into a queue that now discards its
+  *     bodies) until the JVM exits. Cancel it when the app quits — from `TuiApp.onStop`, which runs on every exit path
+  *     including Ctrl+C, or wherever a bare [[Runner]] app finishes — which matters most in the embedded and
+  *     multiple-runner cases this module is built for.
+  *
+  * The mirror-image rule applies to *starting* repeating work: every entry point here captures the render loop of the
+  * thread that calls it, so arming a task from a constructor — before any runner is registered — attaches it to no
+  * loop, and its bodies are discarded forever. Start it from `TuiApp.onStart` (or a bare runner's `onStart`), which is
+  * the first moment the app is certainly on the render thread.
   */
 object Async:
 

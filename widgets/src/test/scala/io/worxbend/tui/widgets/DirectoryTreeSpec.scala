@@ -1,7 +1,7 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Modifiers, Rect}
-import io.worxbend.tui.testsupport.BufferAssertions.trimmedLines
+import io.worxbend.tui.core.Modifiers
+import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -19,20 +19,17 @@ final class DirectoryTreeSpec extends AnyFunSuite:
     root.toFile.deleteOnExit()
     root
 
-  private def renderedWith(state: DirectoryTreeState, height: Int = 6): Buffer =
-    val buffer = Buffer(Rect(0, 0, 25, height))
-    DirectoryTree().render(buffer.area, buffer, state)
-    buffer
+  private val tree = DirectoryTree()
 
   test("the collapsed root shows directories first, then files"):
     val state = DirectoryTreeState(fixture())
-    assert(trimmedLines(renderedWith(state)).take(2) == Seq("▸ src/", "  README.md"))
+    assert(trimmedLines(rendered(tree, state, 25, 6)).take(2) == Seq("▸ src/", "  README.md"))
 
   test("expanding a directory reveals its entries indented"):
     val state = DirectoryTreeState(fixture())
     state.selectNext() // src/
     state.toggle()
-    val lines = trimmedLines(renderedWith(state))
+    val lines = trimmedLines(rendered(tree, state, 25, 6))
     assert(lines.take(4) == Seq("▾ src/", "  ▸ util/", "    Main.scala", "  README.md"))
 
   test("selection walks visible entries and toggling a file is a no-op"):
@@ -46,8 +43,8 @@ final class DirectoryTreeSpec extends AnyFunSuite:
   test("the selected row is highlighted"):
     val state  = DirectoryTreeState(fixture())
     state.selectNext()
-    val buffer = renderedWith(state)
-    assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Reverse))
+    val buffer = rendered(tree, state, 25, 6)
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("listings are cached until invalidated"):
     val root  = fixture()
@@ -78,14 +75,14 @@ final class DirectoryTreeSpec extends AnyFunSuite:
     val state = DirectoryTreeState(root)
     state.selectNext() // src/
     state.toggle()
-    val before = trimmedLines(renderedWith(state))
+    val before = trimmedLines(rendered(tree, state, 25, 6))
     assert(before.take(4) == Seq("▾ src/", "  ▸ util/", "    Main.scala", "  README.md"))
     Files.delete(root.resolve("src/util/Io.scala"))
     Files.delete(root.resolve("src/util"))
     Files.writeString(root.resolve("src/util"), "") // same name, now a plain file
-    assert(trimmedLines(renderedWith(state)) == before)
+    assert(trimmedLines(rendered(tree, state, 25, 6)) == before)
     state.invalidate()
-    val after = trimmedLines(renderedWith(state))
+    val after = trimmedLines(rendered(tree, state, 25, 6))
     assert(after.take(4) == Seq("▾ src/", "    Main.scala", "    util", "  README.md"))
 
   test("invalidate(Some(directory)) re-reads that branch's directory flags"):
@@ -94,12 +91,12 @@ final class DirectoryTreeSpec extends AnyFunSuite:
     val state = DirectoryTreeState(root)
     val src   = root.resolve("src")
     state.expanded += src
-    assert(trimmedLines(renderedWith(state)).take(2) == Seq("▾ src/", "  ▸ util/"))
+    assert(trimmedLines(rendered(tree, state, 25, 6)).take(2) == Seq("▾ src/", "  ▸ util/"))
     Files.delete(root.resolve("src/util/Io.scala"))
     Files.delete(src.resolve("util"))
     Files.writeString(src.resolve("util"), "")
     state.invalidate(Some(src))
-    assert(trimmedLines(renderedWith(state)).take(3) == Seq("▾ src/", "    Main.scala", "    util"))
+    assert(trimmedLines(rendered(tree, state, 25, 6)).take(3) == Seq("▾ src/", "    Main.scala", "    util"))
 
   test("toggle works on a path the caller assigned directly"):
     val root  = fixture()
@@ -115,4 +112,4 @@ final class DirectoryTreeSpec extends AnyFunSuite:
   test("an unreadable directory renders as empty instead of crashing"):
     val state = DirectoryTreeState(Path.of("/nonexistent-glyphora-path"))
     assert(state.visiblePaths().isEmpty)
-    assert(trimmedLines(renderedWith(state)).forall(_.isEmpty))
+    assert(trimmedLines(rendered(tree, state, 25, 6)).forall(_.isEmpty))

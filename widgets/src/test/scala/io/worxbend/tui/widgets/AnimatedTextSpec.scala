@@ -43,7 +43,7 @@ final class AnimatedTextSpec extends AnyFunSuite:
         x <- 0 until 20
       yield
         val cell = buffer.get(x, y)
-        (cell.symbol, cell.style.fg, cell.style.modifiers.has(io.worxbend.tui.core.Modifiers.Bold))
+        (cell.symbol, cell.style.fg, cell.style.modifiers.hasAny(io.worxbend.tui.core.Modifiers.Bold))
     every.foreach: effect =>
       val frames = (0 to 30).map(step => snapshot(effect, (step * 120).millis)).distinct
       assert(frames.size > 1, s"$effect never changed across three seconds")
@@ -91,7 +91,7 @@ final class AnimatedTextSpec extends AnyFunSuite:
     val highlight = Style.Default.bold
     val litCounts = (0 to 20).map: step =>
       val buffer = rendered(AnimatedText("abcdefgh", (step * 50).millis, effect, highlightStyle = highlight), 12, 1)
-      (0 until 8).count(x => buffer.get(x, 0).style.modifiers.has(io.worxbend.tui.core.Modifiers.Bold))
+      (0 until 8).count(x => buffer.get(x, 0).style.modifiers.hasAny(io.worxbend.tui.core.Modifiers.Bold))
     assert(litCounts.exists(_ > 0), "the shimmer never lit anything")
     assert(litCounts.exists(_ == 0), "the shimmer never rested, so it reads as a strobe")
 
@@ -116,10 +116,10 @@ final class AnimatedTextSpec extends AnyFunSuite:
       (0 until 5).indexWhere(y => buffer.get(0, y).symbol == "a")
     assert((0 to 10).map(step => rowOf((step * 100).millis)).distinct.size > 1)
 
-  test("preferredHeight asks for room only when the effect needs it"):
-    assert(AnimatedText("x", 0.millis, TextEffect.Wave()).preferredHeight == 1)
-    assert(AnimatedText("x", 0.millis, TextEffect.Typewriter()).preferredHeight == 1)
-    assert(AnimatedText("x", 0.millis, TextEffect.Bounce(trail = 3)).preferredHeight >= 4)
+  test("heightAt asks for room only when the effect needs it"):
+    assert(AnimatedText("x", 0.millis, TextEffect.Wave()).heightAt(20).contains(1))
+    assert(AnimatedText("x", 0.millis, TextEffect.Typewriter()).heightAt(20).contains(1))
+    assert(AnimatedText("x", 0.millis, TextEffect.Bounce(trail = 3)).heightAt(20).exists(_ >= 4))
 
   /** Wide graphemes must not be split across the boundary or double-counted, the repo-wide rule for any glyph work. */
   test("wide graphemes keep their continuation cell"):
@@ -130,10 +130,10 @@ final class AnimatedTextSpec extends AnyFunSuite:
   test("wave text highlights the clusters at the crest"):
     val buffer = rendered(AnimatedText("hello", 200.millis, TextEffect.Wave(crestWidth = 1)), 6, 1)
     assert(trimmedLines(buffer) == Seq("hello"))
-    assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Bold))
-    assert(!buffer.get(0, 0).style.modifiers.has(Modifiers.Bold))
+    assert(buffer.get(2, 0).style.modifiers.hasAny(Modifiers.Bold))
+    assert(!buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Bold))
 
   test("the wave crest advances with the phase"):
     val buffer = rendered(AnimatedText("hello", 400.millis, TextEffect.Wave(crestWidth = 1)), 6, 1)
-    assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Bold))
-    assert(!buffer.get(2, 0).style.modifiers.has(Modifiers.Bold))
+    assert(buffer.get(4, 0).style.modifiers.hasAny(Modifiers.Bold))
+    assert(!buffer.get(2, 0).style.modifiers.hasAny(Modifiers.Bold))

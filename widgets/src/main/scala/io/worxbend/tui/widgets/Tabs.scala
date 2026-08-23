@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Line, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Line, Rect, Style, Widget}
 
 /** A single-row tab bar: titles separated by a divider, the selected title highlighted. */
 final case class Tabs(
@@ -13,15 +13,10 @@ final case class Tabs(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      var x = area.x
+      val cursor = RowCursor(buffer, area.y, area.x, area.right)
       titles.zipWithIndex.foreach { (title, index) =>
-        val remaining = area.right - x
-        if remaining > 0 then
-          val titleStyle = if index == selected then style.patch(highlightStyle) else style
-          x += LineRenderer.render(buffer, x, area.y, title, remaining, titleStyle)
-          val isLast     = index == titles.size - 1
-          if !isLast && area.right - x > 0 then
-            val fitted = CharWidth.substringByWidth(divider, area.right - x)
-            buffer.setString(x, area.y, fitted, style)
-            x += CharWidth.of(fitted)
+        val titleStyle = if index == selected then style.patch(highlightStyle) else style
+        cursor.skip(LineRenderer.render(buffer, cursor.at, area.y, title, cursor.remaining, titleStyle))
+        val isLast     = index == titles.size - 1
+        if !isLast then cursor.write(divider, style)
       }

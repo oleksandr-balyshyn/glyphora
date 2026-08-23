@@ -9,10 +9,10 @@ import org.scalatest.funsuite.AnyFunSuite
 final class MenuSpec extends AnyFunSuite:
 
   private val items = Seq(
-    MenuItem("Open"),
-    MenuItem("Save"),
-    MenuItem.Separator,
-    MenuItem("Reload"),
+    MenuEntry.Item("Open"),
+    MenuEntry.Item("Save"),
+    MenuEntry.Separator,
+    MenuEntry.Item("Reload"),
   )
 
   private def startApp(view0: ReactiveScope ?=> Element): Pilot =
@@ -20,7 +20,7 @@ final class MenuSpec extends AnyFunSuite:
     val testApp = new TuiApp:
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0
-    Pilot.start(backend) { val _ = testApp.runWith(backend) }.waitForIdle()
+    Pilot.start(backend) { testApp.runWith(backend) }.waitForIdle()
 
   private def quitApp(pilot: Pilot): Unit =
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
@@ -32,7 +32,7 @@ final class MenuSpec extends AnyFunSuite:
     val pilot  = startApp(menu(items, state)(chosen = _))
     pilot.pressKey(KeyCode.Down).waitForIdle() // Open -> Save
     pilot.pressKey(KeyCode.Down).waitForIdle() // Save -> Reload (separator skipped)
-    assert(state.selected == 3)
+    assert(state.selected.contains(3))
     pilot.pressKey(KeyCode.Enter).waitForIdle()
     assert(chosen == 3)
     quitApp(pilot)
@@ -43,7 +43,7 @@ final class MenuSpec extends AnyFunSuite:
     val pilot  = startApp(menu(items, state)(chosen = _))
     // rows render inside the border: y=0 border, y=1 Open, y=2 Save
     pilot.click(3, 2).waitForIdle()
-    assert(state.selected == 1)
+    assert(state.selected.contains(1))
     assert(chosen == 1)
     quitApp(pilot)
 

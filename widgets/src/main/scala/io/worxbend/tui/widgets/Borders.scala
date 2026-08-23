@@ -12,5 +12,5 @@ object Borders:
   val All: Borders    = Top | Right | Bottom | Left
 
   extension (b: Borders)
-    def |(other: Borders): Borders  = (b: Int) | (other: Int)
-    def has(side: Borders): Boolean = ((b: Int) & (side: Int)) != 0
+    def |(other: Borders): Borders     = (b: Int) | (other: Int)
+    def hasAny(side: Borders): Boolean = ((b: Int) & (side: Int)) != 0

@@ -21,7 +21,7 @@ final class AnimationClockSpec extends AnyFunSuite:
       override def config: RunnerConfig      = RunnerConfig(tickRate = rate)
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0
-    (backend, Pilot.start(backend) { val _ = started.runWith(backend) }.waitForIdle())
+    (backend, Pilot.start(backend) { started.runWith(backend) }.waitForIdle())
 
   private def close(pilot: Pilot): Unit =
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)

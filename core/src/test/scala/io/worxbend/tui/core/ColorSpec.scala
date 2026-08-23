@@ -82,7 +82,13 @@ final class ColorSpec extends AnyFunSuite:
     assert(Color.approximateRgb(Color.Rgb(999, -4, 0)) == (255, 0, 0))
     assert(Color.mix(Color.Rgb(999, 0, 0), Color.Rgb(999, 0, 0), 1.0) == Color.Rgb(255, 0, 0))
 
-  test("AdaptiveColor resolves by terminal background"):
-    val adaptive = AdaptiveColor(light = Color.Black, dark = Color.White)
-    assert(adaptive.resolve(darkBackground = true) == Color.White)
-    assert(adaptive.resolve(darkBackground = false) == Color.Black)
+  test("the fluent transformations agree with the functions they delegate to"):
+    assert(Color.Red.lighten(0.5) == Color.lighten(Color.Red, 0.5))
+    assert(Color.Red.darken(0.5) == Color.darken(Color.Red, 0.5))
+    assert(Color.Red.mixedWith(Color.Blue, 0.25) == Color.mix(Color.Red, Color.Blue, 0.25))
+    assert(Color.Red.over(Color.Black, 0.5) == Color.blend(Color.Red, Color.Black, 0.5))
+    assert(Color.Red.gradientTo(Color.Blue, 3) == Color.gradient(Color.Red, Color.Blue, 3))
+
+  test("a chain of transformations reads in the order it happens"):
+    val chained = Color.Green.mixedWith(Color.Cyan, 0.3).darken(0.1)
+    assert(chained == Color.darken(Color.mix(Color.Green, Color.Cyan, 0.3), 0.1))

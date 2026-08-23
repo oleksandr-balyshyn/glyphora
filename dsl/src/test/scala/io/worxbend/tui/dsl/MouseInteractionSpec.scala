@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Buffer, Rect, Size, Style}
+import io.worxbend.tui.core.{Buffer, Position, Rect, Size, Style}
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 import io.worxbend.tui.widgets.{ListState, ScrollViewState}
@@ -16,7 +16,7 @@ final class MouseInteractionSpec extends AnyFunSuite:
     val testApp = new TuiApp:
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0
-    Pilot.start(backend) { val _ = testApp.runWith(backend) }.waitForIdle()
+    Pilot.start(backend) { testApp.runWith(backend) }.waitForIdle()
 
   /** Twenty single-row content rows inside a scroll view that is deliberately *not* at the frame origin, so a
     * content-space rect and a screen rect can never coincide.
@@ -27,11 +27,13 @@ final class MouseInteractionSpec extends AnyFunSuite:
     * (content row 8), 3 the slider (content row 12).
     */
   private final class ScrollFixture:
-    var topPresses            = 0
-    var aPresses              = 0
-    val value                 = Signal(0)
-    val state                 = ScrollViewState()
-    private val contentColumn = column(
+    // the fixture tree is built once, outside any view, so its signal reads subscribe nothing
+    private given ReactiveScope = ReactiveScope.untracked
+    var topPresses              = 0
+    var aPresses                = 0
+    val value                   = Signal(0)
+    val state                   = ScrollViewState()
+    private val contentColumn   = column(
       (0 until 20).map[Element] {
         case 0  => button("TOP") { topPresses += 1 }
         case 8  => button("A") { aPresses += 1 }
@@ -39,7 +41,7 @@ final class MouseInteractionSpec extends AnyFunSuite:
         case n  => text(s"row $n")
       }*
     )
-    val root: Element         = column(
+    val root: Element           = column(
       text("header").length(1),
       row(text("|").length(4), scrollView(contentColumn, contentHeight = 20, state).fill).fill,
     )
@@ -52,14 +54,14 @@ final class MouseInteractionSpec extends AnyFunSuite:
   private def press(pilot: Pilot, x: Int, y: Int): Unit =
     pilot.backend.postEvent(
       io.worxbend.tui.core.Event.Mouse(
-        io.worxbend.tui.core.MouseEvent(x, y, io.worxbend.tui.core.MouseEventKind.Down, KeyModifiers.None)
+        io.worxbend.tui.core.MouseEvent(Position(x, y), io.worxbend.tui.core.MouseEventKind.Down, KeyModifiers.None)
       )
     )
     val _ = pilot.waitForIdle()
 
   private def wheel(pilot: Pilot, x: Int, y: Int, kind: io.worxbend.tui.core.MouseEventKind): Unit =
     pilot.backend.postEvent(
-      io.worxbend.tui.core.Event.Mouse(io.worxbend.tui.core.MouseEvent(x, y, kind, KeyModifiers.None))
+      io.worxbend.tui.core.Event.Mouse(io.worxbend.tui.core.MouseEvent(Position(x, y), kind, KeyModifiers.None))
     )
     val _ = pilot.waitForIdle()
 
@@ -86,7 +88,8 @@ final class MouseInteractionSpec extends AnyFunSuite:
     assert(pilot.screenLines.head.startsWith("row 0"))
     pilot.backend.postEvent(
       io.worxbend.tui.core.Event.Mouse(
-        io.worxbend.tui.core.MouseEvent(3, 3, io.worxbend.tui.core.MouseEventKind.ScrollDown, KeyModifiers.None)
+        io.worxbend.tui.core
+          .MouseEvent(Position(3, 3), io.worxbend.tui.core.MouseEventKind.ScrollDown, KeyModifiers.None)
       )
     )
     pilot.waitForIdle()
@@ -117,8 +120,8 @@ final class MouseInteractionSpec extends AnyFunSuite:
     assert(tracker.areaOf(0).contains(Rect(4, 1, 36, 11))) // the scroll view's own area is already a screen area
     assert(tracker.areaOf(2).contains(Rect(4, 4, 35, 1)))  // button A, translated onto the screen
     assert(tracker.areaOf(1).isEmpty)                      // button TOP is scrolled above the viewport
-    assert(tracker.hitTest(6, 4).contains(2))              // and beats the enclosing scroll view on area
-    assert(tracker.hitTest(1, 8).isEmpty) // the old content-space coordinates hit nothing
+    assert(tracker.hitTest(Position(6, 4)).contains(2))    // and beats the enclosing scroll view on area
+    assert(tracker.hitTest(Position(1, 8)).isEmpty) // the old content-space coordinates hit nothing
 
   test("a slider inside a scrollView positions from its on-screen area"):
     val fixture = ScrollFixture()
@@ -295,7 +298,7 @@ final class MouseInteractionSpec extends AnyFunSuite:
   private def drag(pilot: Pilot, x: Int, y: Int): Unit =
     pilot.backend.postEvent(
       io.worxbend.tui.core.Event.Mouse(
-        io.worxbend.tui.core.MouseEvent(x, y, io.worxbend.tui.core.MouseEventKind.Drag, KeyModifiers.None)
+        io.worxbend.tui.core.MouseEvent(Position(x, y), io.worxbend.tui.core.MouseEventKind.Drag, KeyModifiers.None)
       )
     )
     val _ = pilot.waitForIdle()

@@ -23,6 +23,6 @@ final class BigTextSpec extends AnyFunSuite:
     assert(upper.diff(lower).isEmpty)
     assert(trimmedLines(rendered(BigText("~"), 4, 5)).forall(_.isEmpty))
 
-  test("BigText.widthOf matches the rendered footprint"):
-    assert(BigText.widthOf("HI") == 7)
-    assert(BigText.widthOf("") == 0)
+  test("BigText.widthAt matches the rendered footprint"):
+    assert(BigText("HI").widthAt(BigText.GlyphHeight).contains(7))
+    assert(BigText("").widthAt(BigText.GlyphHeight).contains(0))

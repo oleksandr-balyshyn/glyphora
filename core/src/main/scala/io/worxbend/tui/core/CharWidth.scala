@@ -14,6 +14,10 @@ import java.util.Arrays
   * Variation selectors override the base width — VS16 forces emoji presentation (two columns), VS15 text presentation
   * (one) — but only after a base that has both presentations; after a letter or an ideograph they are inert. A
   * regional-indicator pair (flag emoji) is two.
+  *
+  * Everything here is a pure function of its arguments and holds no state, so it is safe to call from any thread. The
+  * one exception is [[graphemeClusters]], which hands back a stateful iterator; its own documentation states who owns
+  * that iterator.
   */
 object CharWidth:
 
@@ -42,9 +46,11 @@ object CharWidth:
 
   /** A shared single-character `String` for a printable-ASCII char, so filling a buffer with ASCII allocates nothing.
     *
-    * Returns `null` for anything outside `0x20`–`0x7E`; callers on the fast path have already checked.
+    * Returns `null` for anything outside `0x20`–`0x7E`; callers on the fast path have already checked. That sentinel is
+    * why this is `private[core]` and not part of what `tui-core` publishes: an `Option` would allocate on every ASCII
+    * character written, and a `null` nobody outside this module can reach is a local trade rather than a contract.
     */
-  def asciiSymbol(c: Char): String =
+  private[core] def asciiSymbol(c: Char): String =
     if c >= FirstPrintableAscii && c <= LastPrintableAscii then AsciiSymbols(c - FirstPrintableAscii)
     else null // scalafix:ok DisableSyntax; hot-path sentinel: an Option here allocates on every ASCII character
 
@@ -101,6 +107,12 @@ object CharWidth:
   /** Splits `text` into the units that occupy terminal cells: a base codepoint plus its combining marks, variation
     * selectors, ZWJ-joined continuations, or regional-indicator partner. This is the only sanctioned way to step
     * through text one cell-unit at a time (wrapping, cursor movement, truncation).
+    *
+    * '''The returned iterator is stateful, single-use, and owned by the calling thread.''' It carries a cursor into
+    * `text` that advances on every `next()`, so it can be walked exactly once: to traverse the same text again, call
+    * this again — the call is cheap and `text` itself is immutable. Never store one across frames and never share one
+    * between threads; two threads pulling from the same instance interleave their cursor updates and each receives a
+    * mixture of the other's clusters, with no error to say so. Unlike this iterator, the object around it is pure.
     */
   def graphemeClusters(text: String): Iterator[String] =
     new Iterator[String]:

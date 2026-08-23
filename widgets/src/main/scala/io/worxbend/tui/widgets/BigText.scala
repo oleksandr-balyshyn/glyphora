@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, Measured, Rect, Style, Widget}
 
 /** Large banner text drawn with block glyphs from a built-in 3x5 pixel font (A–Z, 0–9, and common punctuation) — the
   * splash-screen and header building block. Unknown characters render as blanks; lowercase maps to uppercase. Each
@@ -10,7 +10,8 @@ final case class BigText(
     content: String,
     style: Style = Style.Default,
     pixel: String = "█",
-) extends Widget:
+) extends Widget
+    with Measured:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
@@ -27,6 +28,19 @@ final case class BigText(
         x += BigText.GlyphWidth + 1
       }
 
+  /** The cells this banner occupies when rendered: one glyph box per character with a blank column between them. The
+    * height it is given makes no difference — a glyph is always [[BigText.GlyphHeight]] rows, clipped if there is less
+    * room than that.
+    */
+  override def widthAt(height: Int): Option[Int] =
+    val _ = height
+    Some(if content.isEmpty then 0 else content.length * (BigText.GlyphWidth + 1) - 1)
+
+  /** A [[BigText]] line is exactly [[BigText.GlyphHeight]] rows tall, whatever width it is given. */
+  override def heightAt(width: Int): Option[Int] =
+    val _ = width
+    Some(BigText.GlyphHeight)
+
 object BigText:
 
   /** Columns one glyph occupies (glyphs are separated by one further blank column). */
@@ -36,10 +50,6 @@ object BigText:
   val GlyphHeight: Int = 5
 
   private[widgets] val Blank: Vector[String] = Vector("...", "...", "...", "...", "...")
-
-  /** The width in cells `content` occupies when rendered. */
-  def widthOf(content: String): Int =
-    if content.isEmpty then 0 else content.length * (GlyphWidth + 1) - 1
 
   private[widgets] val Font: Map[Char, Vector[String]] = Map(
     ' ' -> Blank,

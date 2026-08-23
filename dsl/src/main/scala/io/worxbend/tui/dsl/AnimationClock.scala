@@ -2,7 +2,8 @@ package io.worxbend.tui.dsl
 
 import io.worxbend.tui.runtime.{ReactiveScope, RenderThread, Signal}
 
-import scala.concurrent.duration.{DurationLong, FiniteDuration}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 
 /** The ambient time source the animated elements read, so showing a spinner needs no tick plumbing at all.
   *
@@ -46,5 +47,22 @@ object AnimationClock:
     * The render-thread guard is process-wide, so a suite running beside another one that happens to have a live runner
     * would otherwise throw here — and it would throw only sometimes, depending on which suites were scheduled together,
     * which is the worst kind of test failure to be handed.
+    *
+    * The call then *waits* for that hand-off to complete. `RenderThread.runOnRenderThread` runs the body inline when
+    * the caller is already a render thread, but queues it otherwise — and a test thread that belongs to no runner, in a
+    * JVM where some other suite has one, queues onto a detached loop drained by whichever render thread reaches it
+    * first. Returning before the queued body ran would leave the very next rendered frame pinned to the *old* value,
+    * which is the frame the caller is about to assert on. The wait is bounded: if nothing drains the queue within
+    * [[FreezeTimeout]] this gives up and returns rather than hanging the suite.
     */
-  def freezeAt(elapsed: FiniteDuration): Unit = RenderThread.runOnRenderThread(signal.set(elapsed))
+  def freezeAt(elapsed: FiniteDuration): Unit =
+    val applied = CountDownLatch(1)
+    RenderThread.runOnRenderThread:
+      signal.set(elapsed)
+      applied.countDown()
+    val _       = applied.await(FreezeTimeout.toMillis, TimeUnit.MILLISECONDS)
+
+  /** How long [[freezeAt]] waits for its value to reach the render thread before giving up. Long enough that a busy
+    * loop still gets there, short enough that a suite fails on an assertion rather than on a timeout.
+    */
+  private val FreezeTimeout: FiniteDuration = 2.seconds

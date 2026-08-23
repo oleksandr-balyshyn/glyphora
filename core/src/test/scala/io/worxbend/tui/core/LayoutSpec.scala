@@ -10,6 +10,13 @@ final class LayoutSpec extends AnyFunSuite:
     val rects = Layout(Direction.Vertical, Seq(Constraint.Length(3), Constraint.Length(4))).split(area)
     assert(rects == Seq(Rect(0, 0, 10, 3), Rect(0, 3, 10, 4)))
 
+  test("a negative spacing is treated as zero rather than overlapping the segments"):
+    // `split` clamped the product `spacing * (n - 1)` but the placement steps used the raw value, so a negative
+    // spacing pulled each segment back over the one before it: two 4-cell segments at x=0 and x=2
+    val rects = Layout(Direction.Horizontal, Seq(Constraint.Length(4), Constraint.Length(4)), spacing = -2)
+      .split(Rect(0, 0, 10, 1))
+    assert(rects == Seq(Rect(0, 0, 4, 1), Rect(4, 0, 4, 1)))
+
   test("Percentage segments take their share of the axis"):
     val rects = Layout(Direction.Vertical, Seq(Constraint.Percentage(50), Constraint.Percentage(50))).split(area)
     assert(rects.map(_.height) == Seq(5, 5))
@@ -65,3 +72,24 @@ final class LayoutSpec extends AnyFunSuite:
   test("offset areas position segments in absolute coordinates"):
     val rects = Layout(Direction.Vertical, Seq(Constraint.Length(2), Constraint.Fill(1))).split(Rect(5, 5, 4, 6))
     assert(rects == Seq(Rect(5, 5, 4, 2), Rect(5, 7, 4, 4)))
+
+  test("split2 destructures a two-way split into a checked tuple"):
+    val (top, bottom) = Layout(Direction.Vertical)(3, Constraint.fill).split2(area)
+    assert(top == Rect(0, 0, 10, 3))
+    assert(bottom == Rect(0, 3, 10, 7))
+
+  test("the tuple helpers pad a short result with empty rects instead of throwing"):
+    // asking for more segments than the layout declares is a coding mistake, but crashing a terminal in raw mode
+    // over it is worse than rendering one pane short
+    val (first, second, third) = Layout(Direction.Vertical)(Constraint.fill).split3(area)
+    assert(first == Rect(0, 0, 10, 10))
+    assert(second == Rect(0, 0, 0, 0))
+    assert(third == Rect(0, 0, 0, 0))
+
+  test("split4 and split5 agree with split on the segments they share"):
+    val layout             = Layout(Direction.Horizontal)(2, 2, 2, 2, Constraint.fill)
+    val segments           = layout.split(area)
+    val (a, b, c, d)       = layout.split4(area)
+    val (v, wide, x, y, z) = layout.split5(area)
+    assert(Seq(a, b, c, d) == segments.take(4))
+    assert(Seq(v, wide, x, y, z) == segments)

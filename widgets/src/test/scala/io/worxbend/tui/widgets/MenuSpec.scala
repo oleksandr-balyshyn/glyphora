@@ -1,26 +1,22 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Rect}
-import io.worxbend.tui.testsupport.BufferAssertions.trimmedLines
+import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
 
 final class MenuSpec extends AnyFunSuite:
 
   private val items = Seq(
-    MenuItem("Open", shortcut = Some("^O")),
-    MenuItem("Save", shortcut = Some("^S")),
-    MenuItem.Separator,
-    MenuItem("Quit", enabled = false),
+    MenuEntry.Item("Open", shortcut = Some("^O")),
+    MenuEntry.Item("Save", shortcut = Some("^S")),
+    MenuEntry.Separator,
+    MenuEntry.Item("Quit", enabled = false),
   )
 
-  private def renderedWith(state: MenuState, width: Int = 14, height: Int = 6): Buffer =
-    val buffer = Buffer(Rect(0, 0, width, height))
-    Menu(items).render(buffer.area, buffer, state)
-    buffer
+  private val menu = Menu(items)
 
   test("the menu draws a border, labels, right-aligned shortcuts, and a separator rule"):
-    val lines = trimmedLines(renderedWith(MenuState()))
+    val lines = trimmedLines(rendered(menu, MenuState(), 14, 6))
     assert(lines.head.startsWith("╭") && lines.head.endsWith("╮"))
     assert(lines(1).contains("Open") && lines(1).contains("^O"))
     assert(lines(2).contains("Save") && lines(2).contains("^S"))
@@ -28,24 +24,30 @@ final class MenuSpec extends AnyFunSuite:
     assert(lines(4).contains("Quit"))
 
   test("selectNext skips separators and disabled entries, wrapping back to the top"):
-    val state = MenuState(selected = 0)
+    val state = MenuState(selected = Some(0))
     state.selectNext(items)
-    assert(state.selected == 1) // Save
+    assert(state.selected.contains(1)) // Save
     state.selectNext(items)
-    assert(state.selected == 0) // skips separator(2) and disabled Quit(3), wraps to Open
+    assert(state.selected.contains(0)) // skips separator(2) and disabled Quit(3), wraps to Open
 
   test("selectPrevious wraps and also skips non-selectable entries"):
-    val state = MenuState(selected = 0)
+    val state = MenuState(selected = Some(0))
     state.selectPrevious(items)
-    assert(state.selected == 1) // wraps up past disabled Quit and separator to Save
+    assert(state.selected.contains(1)) // wraps up past disabled Quit and separator to Save
+
+  test("moving the highlight in a menu with nothing selectable leaves it unset"):
+    val state = MenuState()
+    val inert = Seq(MenuEntry.Separator, MenuEntry.Item("Quit", enabled = false))
+    state.selectNext(inert)
+    state.selectPrevious(inert)
+    assert(state.selected.isEmpty)
 
   test("rendering normalizes a highlight that sits on a non-selectable entry onto the first selectable one"):
-    val state = MenuState(selected = 2) // a separator
-    renderedWith(state)
-    assert(state.selected == 0)
+    val state = MenuState(selected = Some(2)) // a separator
+    val _     = rendered(menu, state, 14, 6)
+    assert(state.selected.contains(0))
 
   test("width and height report the popup's natural size"):
-    val menu = Menu(items)
     assert(menu.height == items.size + 2)
     assert(menu.width >= "Save".length + "^S".length) // widest content plus borders/padding
 
@@ -53,6 +55,5 @@ final class MenuSpec extends AnyFunSuite:
     // the label truncates to " 設定パネ" (9 columns) so ネ sits at inner.x + 7 with its continuation at inner.x + 8,
     // and the hint "q " is written at inner.right - 2, i.e. exactly that continuation column. The buffer used to hold
     // the `q` while every reader of the frame — the diff engine included — stepped straight over it.
-    val buffer = Buffer(Rect(0, 0, 12, 3))
-    Menu(Seq(MenuItem("設定パネル", shortcut = Some("q")))).render(buffer.area, buffer, MenuState())
+    val buffer = rendered(Menu(Seq(MenuEntry.Item("設定パネル", shortcut = Some("q")))), MenuState(), 12, 3)
     assert(trimmedLines(buffer)(1).contains("q"))

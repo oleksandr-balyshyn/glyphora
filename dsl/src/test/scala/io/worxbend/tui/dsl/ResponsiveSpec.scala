@@ -29,10 +29,10 @@ final class ResponsiveSpec extends AnyFunSuite:
             panel("Detail")(input(detailQuery, placeholder = "detail")).fill,
           )
       body.onKeyEvent {
-        case KeyEvent(KeyCode.Char('q'), m) if m.has(KeyModifiers.Ctrl) =>
+        case KeyEvent(KeyCode.Char('q'), m) if m.hasAny(KeyModifiers.Ctrl) =>
           quit()
           true
-        case _                                                          => false
+        case _                                                             => false
       }
 
   /** The same swap, expressed with a `responsive` node nested inside a panel rather than an `if` at the top of `view`.
@@ -46,15 +46,15 @@ final class ResponsiveSpec extends AnyFunSuite:
           case _                       => column(text("wide branch"), input(query, placeholder = "wide input"))
         }
       ).onKeyEvent {
-        case KeyEvent(KeyCode.Char('q'), m) if m.has(KeyModifiers.Ctrl) =>
+        case KeyEvent(KeyCode.Char('q'), m) if m.hasAny(KeyModifiers.Ctrl) =>
           quit()
           true
-        case _                                                          => false
+        case _                                                             => false
       }
 
   private def start(app: TuiApp, size: Size): Pilot =
     val backend = HeadlessBackend(size)
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot
 
@@ -154,10 +154,10 @@ final class ResponsiveSpec extends AnyFunSuite:
     var clicks                             = 0
     def view(using ReactiveScope): Element =
       responsive(_ => column(button("press")(clicks += 1))).onKeyEvent {
-        case KeyEvent(KeyCode.Char('q'), m) if m.has(KeyModifiers.Ctrl) =>
+        case KeyEvent(KeyCode.Char('q'), m) if m.hasAny(KeyModifiers.Ctrl) =>
           quit()
           true
-        case _                                                          => false
+        case _                                                             => false
       }
 
   // ---- resolution-pass mechanics ----

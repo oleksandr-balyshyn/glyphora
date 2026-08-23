@@ -104,9 +104,11 @@ private[dsl] final class FocusTracker:
 
   def pointerAreaOf(id: Int): Option[Rect] = pointerAreas.get(id)
 
-  /** The innermost focusable rendered at this position, if any. */
-  def hitTest(x: Int, y: Int): Option[Int] =
-    val hits = areas.filter((_, area) => area.contains(Position(x, y)))
+  /** The innermost focusable rendered at `pos`, if any. `pos` is absolute, the same coordinate space a
+    * [[io.worxbend.tui.core.MouseEvent]] reports in.
+    */
+  def hitTest(pos: Position): Option[Int] =
+    val hits = areas.filter((_, area) => area.contains(pos))
     hits.minByOption((_, area) => area.area).map((index, _) => index)
 
 private[dsl] object FocusPass:
@@ -117,7 +119,9 @@ private[dsl] object FocusPass:
     * focusable of its own ([[EventRouter]] refuses to descend into an inert subtree).
     */
   def suppressFocus(element: Element): Element =
-    val cleared = element.withProps(element.props.copy(focusable = false, inert = true))
+    val cleared = element.withProps(
+      element.props.copy(focusable = false, focusState = element.props.focusState.copy(inert = true))
+    )
     cleared.withChildren(cleared.children.map(suppressFocus))
 
   /** The focus keys of every focusable in depth-first order (`None` for unkeyed ones) — the domain of
@@ -144,7 +148,9 @@ private[dsl] object FocusPass:
           counter += 1
           val marked =
             if index == tracker.focusedIndex then
-              element.withProps(element.props.copy(focused = true, focusStyle = focusStyle))
+              element.withProps(
+                element.props.copy(focusState = element.props.focusState.copy(focused = true, focusStyle = focusStyle))
+              )
             else element
           TrackedElement(marked, index, tracker)
         else if element.props.onMouse.isDefined then

@@ -31,5 +31,5 @@ final class CalendarSpec extends AnyFunSuite:
   test("the selected day is highlighted"):
     val buffer = rendered(Calendar(2026, 7, selected = Some(1)), 20, 8)
     // day 1 sits in the We column (x = 6..7) on the first grid row (y = 2)
-    assert(buffer.get(7, 2).style.modifiers.has(Modifiers.Reverse))
-    assert(!buffer.get(10, 2).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Reverse))
+    assert(!buffer.get(10, 2).style.modifiers.hasAny(Modifiers.Reverse))

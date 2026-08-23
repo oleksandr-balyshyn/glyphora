@@ -22,7 +22,7 @@ final class LoadingThemeSpec extends AnyFunSuite:
     val app     = new TuiApp:
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0(using chosen)
-    Pilot.start(backend) { val _ = app.runWith(backend) }.waitForIdle()
+    Pilot.start(backend) { app.runWith(backend) }.waitForIdle()
 
   private def close(pilot: Pilot): Unit =
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
@@ -52,9 +52,9 @@ final class LoadingThemeSpec extends AnyFunSuite:
     assert(pilot.cellAt(2, 0).style.fg == Theme.Dark.loading.label.fg, "the label recedes")
     close(pilot)
 
-  /** An explicit style at the call site has to win over the theme, or `.color(...)` would silently do nothing. */
+  /** An explicit style at the call site has to win over the theme, or `.fg(...)` would silently do nothing. */
   test("an explicit color overrides the theme on the glyph only"):
-    val pilot = renderWith(Theme.Dark)(spinner("x").color(Color.Magenta))
+    val pilot = renderWith(Theme.Dark)(spinner("x").fg(Color.Magenta))
     assert(pilot.cellAt(0, 0).style.fg.contains(Color.Magenta))
     assert(pilot.cellAt(2, 0).style.fg == Theme.Dark.loading.label.fg, "the label keeps the theme's style")
     close(pilot)

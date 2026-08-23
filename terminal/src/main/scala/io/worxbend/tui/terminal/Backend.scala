@@ -81,7 +81,17 @@ trait Backend:
     val _ = lines
     Right(())
 
-  def close(): Unit
+  /** Restores the terminal and releases everything this backend owns.
+    *
+    * Fallible like every other operation here, because the failure it can report is the most user-visible one the
+    * library has: a terminal handed back in raw mode, on the alternate screen, or with the cursor hidden leaves the
+    * user's shell unusable and gives no hint why. The returned value is the *first* step that failed; the remaining
+    * steps are still attempted, since a half-restored terminal is worse than a fully attempted one.
+    *
+    * Must be idempotent: the runner closes the backend on its normal teardown path and a JVM shutdown hook may close it
+    * again.
+    */
+  def close(): Either[BackendError, Unit]
 
 private[terminal] object Backend:
 
@@ -97,7 +107,27 @@ private[terminal] object Backend:
   def requirePositiveTimeout(timeout: Duration): Unit =
     require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
 
+/** Why a [[Backend]] operation could not be carried out. */
 enum BackendError:
+
+  /** The terminal's underlying I/O failed — a closed stream, a disconnected TTY, a write that could not complete. */
   case Io(cause: Throwable)
+
+  /** The terminal lacks a capability the operation needs (no alternate screen, no TTY at all). */
   case UnsupportedTerminal(reason: String)
+
+  /** Raw mode was asked to be left when it had never been entered. */
   case NotInRawMode
+
+  /** One human-readable line describing the failure, for an app that reports it to the user.
+    *
+    * The generated `toString` of an enum case is a constructor call — `Io(java.io.IOException: Stream closed)` — which
+    * is a fine debugging string and a poor thing to print at someone. This is the sentence to print instead.
+    */
+  def message: String =
+    this match
+      case Io(cause)                   =>
+        val detail = Option(cause.getMessage).getOrElse(cause.getClass.getName)
+        s"terminal I/O failed: $detail"
+      case UnsupportedTerminal(reason) => s"terminal not supported: $reason"
+      case NotInRawMode                => "the terminal is not in raw mode"

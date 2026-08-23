@@ -51,7 +51,7 @@ final class ViewportCostSpec extends AnyFunSuite:
     val lines  = Vector.tabulate(10000)(i => Line(Seq(Span(s"line $i " + "word " * 40, Style.Default))))
     val text   = CountingSeq(lines)
     val buffer = Buffer(Rect(0, 0, 30, 10))
-    Paragraph(Text(text), wrap = true).render(Rect(0, 0, 30, 10), buffer)
+    Paragraph(Text(text), overflow = Overflow.Wrap).render(Rect(0, 0, 30, 10), buffer)
     assert(text.touched <= 20, s"wrapped ${text.touched} source lines to fill 10 rows")
     assert(buffer.get(0, 0).symbol == "l")
 
@@ -59,7 +59,7 @@ final class ViewportCostSpec extends AnyFunSuite:
     val data   = Vector.tabulate(500)(i => Seq(i.toString, s"item ${(i * 37) % 500}"))
     val table  = DataTable(Seq("id", "name"), data, widths)
     val state  = DataTableState()
-    state.sortColumn = Some(1)
+    state.sort = Some(ColumnSort(1, SortDirection.Ascending))
     val first  = table.filteredRows(state)
     state.offset = 42
     val second = table.filteredRows(state)
@@ -86,7 +86,7 @@ final class ViewportCostSpec extends AnyFunSuite:
     val first  = Vector(Seq("1", "b"), Seq("2", "a"))
     val second = Vector(Seq("1", "z"), Seq("2", "y"))
     val state  = DataTableState()
-    state.sortColumn = Some(1)
+    state.sort = Some(ColumnSort(1, SortDirection.Ascending))
     assert(DataTable(Seq("id", "name"), first, widths).filteredRows(state).map(_(1)) == Seq("a", "b"))
     // the cache key cannot see through a Seq to its contents, so the caller must say the data moved
     state.invalidate()

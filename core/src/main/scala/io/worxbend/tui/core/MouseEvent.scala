@@ -9,5 +9,10 @@ package io.worxbend.tui.core
 enum MouseEventKind:
   case Down, Up, Drag, Moved, ScrollUp, ScrollDown
 
-/** A mouse action at an absolute terminal position. */
-final case class MouseEvent(x: Int, y: Int, kind: MouseEventKind, modifiers: KeyModifiers)
+/** A mouse action at an absolute terminal position.
+  *
+  * `position` is absolute and zero-based, in the same coordinate space as [[Position]] and [[Rect]]: column `0`, row
+  * `0` is the top-left cell of the terminal, not of any widget. A handler that wants coordinates relative to the area
+  * it was given subtracts that area's own origin (`event.position.x - area.x`).
+  */
+final case class MouseEvent(position: Position, kind: MouseEventKind, modifiers: KeyModifiers)

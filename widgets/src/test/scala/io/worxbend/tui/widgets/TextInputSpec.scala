@@ -1,16 +1,13 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Modifiers, Rect}
-import io.worxbend.tui.testsupport.BufferAssertions.trimmedLines
+import io.worxbend.tui.core.Modifiers
+import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
 
 final class TextInputSpec extends AnyFunSuite:
 
-  private def renderedWith(state: TextInputState, input: TextInput = TextInput(), width: Int = 10): Buffer =
-    val buffer = Buffer(Rect(0, 0, width, 1))
-    input.render(buffer.area, buffer, state)
-    buffer
+  private val input = TextInput()
 
   test("typing inserts at the cursor"):
     val state = TextInputState()
@@ -42,31 +39,31 @@ final class TextInputSpec extends AnyFunSuite:
     val state  = TextInputState("abc")
     state.moveHome()
     state.moveRight()
-    val buffer = renderedWith(state)
+    val buffer = rendered(input, state, 10, 1)
     assert(trimmedLines(buffer).head == "abc")
-    assert(buffer.get(1, 0).style.modifiers.has(Modifiers.Reverse))
-    assert(!buffer.get(0, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(1, 0).style.modifiers.hasAny(Modifiers.Reverse))
+    assert(!buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("the cursor at the end highlights the trailing space"):
     val state  = TextInputState("ab")
-    val buffer = renderedWith(state)
-    assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Reverse))
+    val buffer = rendered(input, state, 10, 1)
+    assert(buffer.get(2, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("an unfocused input renders no cursor"):
     val state  = TextInputState("ab")
-    val buffer = renderedWith(state, TextInput(showCursor = false))
-    assert((0 until 10).forall(x => !buffer.get(x, 0).style.modifiers.has(Modifiers.Reverse)))
+    val buffer = rendered(TextInput(showCursor = false), state, 10, 1)
+    assert((0 until 10).forall(x => !buffer.get(x, 0).style.modifiers.hasAny(Modifiers.Reverse)))
 
   test("the placeholder shows while empty"):
-    val buffer = renderedWith(TextInputState(), TextInput(placeholder = "name..."))
+    val buffer = rendered(TextInput(placeholder = "name..."), TextInputState(), 10, 1)
     assert(trimmedLines(buffer).head == "name...")
 
   test("long content scrolls horizontally to keep the cursor visible"):
     val state  = TextInputState("abcdefghij")
-    val buffer = renderedWith(state, width = 5)
+    val buffer = rendered(input, state, 5, 1)
     // cursor at end: the visible window is the tail of the text plus the cursor cell
     assert(trimmedLines(buffer).head == "ghij")
-    assert(buffer.get(4, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(4, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("clear empties value, cursor, and scroll"):
     val state = TextInputState("abc")
@@ -85,7 +82,7 @@ final class TextInputSpec extends AnyFunSuite:
     assert(state.value == "ab[31mX")
 
   test("no control character reaches a cell"):
-    val buffer = renderedWith(TextInputState("a\tb"))
+    val buffer = rendered(input, TextInputState("a\tb"), 10, 1)
     assert((0 until 10).forall(x => !buffer.get(x, 0).symbol.exists(c => Character.isISOControl(c))))
     assert(trimmedLines(buffer).head == "ab")
 
@@ -94,40 +91,40 @@ final class TextInputSpec extends AnyFunSuite:
     // symbol, or the backend advances one column further than the terminal did
     val state  = TextInputState(CombiningAcute + "a")
     state.moveHome()
-    val buffer = renderedWith(state)
+    val buffer = rendered(input, state, 10, 1)
     assert(buffer.get(0, 0).symbol == " ")
     assert(buffer.get(1, 0).symbol == "a")
-    assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("the cursor on a wide grapheme stays visible at an odd inner width"):
     // the solver must reserve two columns for the cursor cluster, or the render loop drops it and the field looks dead
     val state = TextInputState("你好")
     state.moveLeft() // cursor on the second cluster
-    val buffer = renderedWith(state, width = 3)
+    val buffer = rendered(input, state, 3, 1)
     assert(state.scrollCluster == 1)
     assert(buffer.get(0, 0).symbol == "好")
-    assert(buffer.get(0, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
     assert(trimmedLines(buffer).head == "好")
 
   test("a wide-grapheme cursor renders unscrolled when the whole value fits"):
     val state  = TextInputState("你好")
     state.moveLeft()
-    val buffer = renderedWith(state, width = 4)
+    val buffer = rendered(input, state, 4, 1)
     assert(state.scrollCluster == 0)
     assert(trimmedLines(buffer).head == "你好")
-    assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(2, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("the end-of-text cursor after a wide grapheme still costs one column"):
     val state  = TextInputState("你好") // the cursor defaults past the last cluster
-    val buffer = renderedWith(state, width = 3)
+    val buffer = rendered(input, state, 3, 1)
     assert(state.scrollCluster == 1)
     assert(buffer.get(0, 0).symbol == "好")
-    assert(buffer.get(2, 0).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(2, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("a cluster wider than the whole area terminates the scroll solver"):
     val state  = TextInputState("你")
     state.moveHome()
-    val buffer = renderedWith(state, width = 1)
+    val buffer = rendered(input, state, 1, 1)
     assert(state.scrollCluster == 0)
     assert(buffer.get(0, 0).symbol == " ", "nothing fits, so the field is blank rather than hung")
 

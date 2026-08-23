@@ -1,0 +1,116 @@
+package io.worxbend.tui.dsl
+
+import io.worxbend.tui.core.{Constraint, Rect, Widget}
+import io.worxbend.tui.widgets as w
+
+/** A node that wraps exactly one other node and is transparent to everything but rendering.
+  *
+  * Props, children, measurement, and all three built-in handlers delegate to [[inner]]; a decorator only has to say how
+  * it paints and how it rebuilds. One definition rather than one hand-copied set of forwarders per wrapper — a
+  * decorator that forgot one of them silently changed measurement or dropped a subtree out of focus traversal.
+  */
+private[dsl] trait DecoratingElement extends Element:
+
+  /** The single node this one wraps. */
+  def inner: Element
+
+  def props: ElementProps                                                    = inner.props
+  override def children: Seq[Element]                                        = Seq(inner)
+  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     = inner.builtinKeyHandler
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] = inner.builtinMouseHandler
+  private[dsl] override def builtinPasteHandler: Option[BuiltinPasteHandler] = inner.builtinPasteHandler
+  private[dsl] override def claim: SizeClaim                                 = inner.claim
+
+  /** An explicit `.length(n)` on the decorator itself still wins — it is the caller's own measurement of the whole
+    * wrapper. With nothing set, the wrapped node's measurement is the decorator's. The trait default cannot serve here:
+    * a decorator's own `widget` is a lambda around `inner.widget`, so it is not a [[io.worxbend.tui.core.Measured]] and
+    * the wrapped node's own answer would be lost on the way through.
+    */
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+    props.constraint match
+      case Some(Constraint.Length(cells)) => Some(cells)
+      case Some(_)                        => None
+      case None                           => inner.intrinsicHeight(width)
+
+/** Wraps a focusable element during the focus pass so its rendered area is recorded for click-to-focus hit-testing. */
+private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker: FocusTracker)
+    extends DecoratingElement:
+  type Self = TrackedElement
+
+  /** The wrapped node's children, not the node itself: [[FocusPass.decorate]] wraps an element *after* deciding what it
+    * is and then recurses through `children`, so handing back `inner` would decorate it a second time — and every walk
+    * in [[EventRouter]] would offer this element's own handlers twice, once here and once on the identical `inner`.
+    */
+  override def children: Seq[Element] = inner.children
+
+  def widget: Widget                                                             =
+    (area, buffer) =>
+      tracker.record(index, area)
+      inner.widget.render(area, buffer)
+  private[dsl] def withProps(props: ElementProps): TrackedElement                = copy(inner = inner.withProps(props))
+  private[dsl] override def withChildren(children: Seq[Element]): TrackedElement =
+    copy(inner = inner.withChildren(children))
+
+/** Wraps the content of a [[ScrollViewElement]] during the focus pass so the areas recorded inside it are screen areas.
+  *
+  * `w.ScrollView` renders its content into an offscreen buffer anchored at (0, 0) and blits the visible window into
+  * place, so every rect the content subtree is handed is in content coordinates. This node publishes the
+  * content-to-screen mapping to the [[FocusTracker]] for exactly the duration of the content render — pushed from
+  * inside that render, so the paths where `ScrollView` draws no content push nothing, and popped in a `finally`.
+  * Transparent otherwise: it renders, measures and routes straight to `inner`, and carries neutral props of its own so
+  * it never doubles up the wrapped element's handlers or focus state.
+  *
+  * Owned by the [[FocusPass]] that built it and touched only on the render thread, like the tracker it writes to. A
+  * focusable only partly inside the viewport records the clipped rect; width is never clipped (the offscreen buffer is
+  * exactly the viewport width less the scrollbar column), so `x`/`width`-based built-ins such as the slider stay exact,
+  * while a `y`/`height`-based one — the splitPane divider — reads the clipped height when half scrolled out.
+  */
+private[dsl] final class ScrollViewportElement(
+    val inner: Element,
+    tracker: FocusTracker,
+    state: w.ScrollViewState,
+) extends DecoratingElement:
+  type Self = ScrollViewportElement
+
+  /** The enclosing scroll view's own area, published each frame just before it renders this content. */
+  private var screenArea: Rect = Rect.Zero
+
+  private[dsl] def publishScreenArea(area: Rect): Unit = screenArea = area
+
+  override val props: ElementProps = ElementProps()
+
+  def widget: Widget =
+    (area, buffer) =>
+      // `area` is the offscreen content rect: its width is the viewport width less any scrollbar column, and
+      // `state.offset` has already been clamped by `ScrollView.render`
+      val viewport  = Rect(screenArea.x, screenArea.y, area.width, screenArea.height)
+      val transform = ViewportTransform(screenArea.x - area.x, screenArea.y - area.y - state.offset, viewport)
+      tracker.pushViewport(transform)
+      try inner.widget.render(area, buffer)
+      finally tracker.popViewport()
+
+  private[dsl] def withProps(props: ElementProps): ScrollViewportElement =
+    val _ = props
+    this
+
+  private[dsl] override def withChildren(children: Seq[Element]): Element =
+    children.headOption.fold(this)(child => ScrollViewportElement(child, tracker, state))
+
+/** Wraps a non-focusable element that carries an `onMouseEvent` during the focus pass, so its rendered area is recorded
+  * and the mouse router can offer it only the events that landed inside it. Focusable elements need no such wrapper —
+  * [[TrackedElement]] already records their area under their focus index.
+  */
+private[dsl] final case class PointerElement(inner: Element, pointerId: Int, tracker: FocusTracker)
+    extends DecoratingElement:
+  type Self = PointerElement
+
+  /** The wrapped node's children, for the reason [[TrackedElement.children]] spells out. */
+  override def children: Seq[Element] = inner.children
+
+  def widget: Widget                                                             =
+    (area, buffer) =>
+      tracker.recordPointer(pointerId, area)
+      inner.widget.render(area, buffer)
+  private[dsl] def withProps(props: ElementProps): PointerElement                = copy(inner = inner.withProps(props))
+  private[dsl] override def withChildren(children: Seq[Element]): PointerElement =
+    copy(inner = inner.withChildren(children))

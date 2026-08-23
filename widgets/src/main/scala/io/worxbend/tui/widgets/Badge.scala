@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Measured, Rect, Style, Widget}
 
 /** How a [[Badge]] is drawn. The three read at different volumes, which is the point of having three: a solid badge
   * shouts, an outline badge sits inside prose, and a dot is almost silent.
@@ -30,7 +30,8 @@ final case class Badge(
     variant: BadgeVariant = BadgeVariant.Solid,
     style: Style = Style.Default,
     dotSymbol: String = "●",
-) extends Widget:
+) extends Widget
+    with Measured:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
@@ -40,19 +41,21 @@ final case class Badge(
         case BadgeVariant.Outline =>
           buffer.setString(area.x, area.y, CharWidth.substringByWidth(s"[$label]", area.width), style)
         case BadgeVariant.Dot     =>
-          val dot   = CharWidth.substringByWidth(dotSymbol, area.width)
-          buffer.setString(area.x, area.y, dot, style)
-          val textX = area.x + CharWidth.of(dot) + 1
-          if textX < area.right then
-            buffer.setString(textX, area.y, CharWidth.substringByWidth(label, area.right - textX), Style.Default)
+          val cursor = RowCursor(buffer, area.y, area.x, area.right)
+          cursor.write(dotSymbol, style)
+          cursor.skip(1) // the dot carries the colour; one blank column keeps it off the text
+          cursor.write(label, Style.Default)
 
-  /** The width this badge wants, so a caller can size a column for it rather than guessing. */
-  def preferredWidth: Int =
+  /** The width this badge wants, so a caller can size a column for it rather than guessing. A badge is always one row
+    * and its width never depends on how many rows it is given, so `height` is ignored.
+    */
+  override def widthAt(height: Int): Option[Int] =
+    val _    = height
     val text = CharWidth.of(label)
-    variant match
+    Some(variant match
       case BadgeVariant.Solid   => text + 2
       case BadgeVariant.Outline => text + 2
-      case BadgeVariant.Dot     => text + CharWidth.of(dotSymbol) + 1
+      case BadgeVariant.Dot     => text + CharWidth.of(dotSymbol) + 1)
 
 object Badge:
 

@@ -1,8 +1,9 @@
 package io.worxbend.tui.examples.procmon
 
-import io.worxbend.tui.core.{KeyCode, Size}
+import io.worxbend.tui.core.Size
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
+import io.worxbend.tui.widgets.{ColumnSort, SortDirection}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -24,7 +25,7 @@ final class ProcmonAppSpec extends AnyFunSuite:
   private def startedApp(): (ProcmonApp, Pilot) =
     val backend = HeadlessBackend(Size(96, 24))
     val app     = ProcmonApp(SyntheticProcessSource())
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     waitUntil()(app.sampleCount.peek > 0)
     pilot.waitForIdle()
@@ -42,61 +43,59 @@ final class ProcmonAppSpec extends AnyFunSuite:
     assert(screen.contains("COMMAND"))
     assert(screen.contains("q quit"), "the status bar is built from the declared bindings' hints")
     // the default sort is CPU descending, the way `top` starts
-    assert(app.tableState.sortColumn.contains(2))
-    assert(!app.tableState.sortAscending)
-    pilot.pressKey(KeyCode.Char('q'))
+    assert(app.tableState.sort.contains(ColumnSort(2, SortDirection.Descending)))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("sorting by a column once orders it, and a second press reverses it"):
     val (app, pilot) = startedApp()
     val pids         = app.processes.peek.map(_.pid)
 
-    pilot.pressKey(KeyCode.Char('p')).waitForIdle()
-    assert(app.tableState.sortColumn.contains(0))
-    assert(app.tableState.sortAscending)
+    pilot.press("p").waitForIdle()
+    assert(app.tableState.sort.contains(ColumnSort(0, SortDirection.Ascending)))
     assert(app.visibleProcessIds.head == pids.min)
 
-    pilot.pressKey(KeyCode.Char('p')).waitForIdle()
-    assert(!app.tableState.sortAscending)
+    pilot.press("p").waitForIdle()
+    assert(app.tableState.sort.contains(ColumnSort(0, SortDirection.Descending)))
     assert(app.visibleProcessIds.head == pids.max)
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("the filter box narrows the table, Enter keeps the filter and Esc clears it"):
     val (app, pilot) = startedApp()
     assert(app.visibleProcessIds.sizeIs == 48)
 
-    pilot.pressKey(KeyCode.Char('/')).waitForIdle()
+    pilot.press("/").waitForIdle()
     pilot.typeText("nginx").waitForIdle()
     // the filter box owns the keyboard while it is open: 'n' typed into it must not also fire the sort-by-command
     // binding, because the focused element consumes the key before the app's bindings are consulted
-    assert(app.tableState.sortColumn.contains(2))
+    assert(app.tableState.sort.map(_.column).contains(2))
     assert(app.filterInput.value == "nginx")
     assert(app.visibleProcessIds.sizeIs == 3, "three of the forty-eight synthetic processes run nginx")
     assert(pilot.screenText.contains("nginx"))
 
-    pilot.pressKey(KeyCode.Enter).waitForIdle()
+    pilot.press("enter").waitForIdle()
     assert(app.visibleProcessIds.sizeIs == 3, "Enter commits the filter and closes the box")
 
-    pilot.pressKey(KeyCode.Char('/')).waitForIdle()
-    pilot.pressKey(KeyCode.Escape).waitForIdle()
+    pilot.press("/").waitForIdle()
+    pilot.press("esc").waitForIdle()
     assert(app.filterInput.value.isEmpty)
     assert(app.visibleProcessIds.sizeIs == 48, "Esc cancels the filter")
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("the selection follows its process across a re-sort and across a refresh"):
     val (app, pilot) = startedApp()
-    pilot.pressKey(KeyCode.Down).pressKey(KeyCode.Down).pressKey(KeyCode.Down).waitForIdle()
+    pilot.press("down", "down", "down").waitForIdle()
 
     val pinned = app.selectedProcessId
     assert(pinned.isDefined)
     assert(app.tableState.selected.contains(2))
 
     // sorting by pid moves nearly every row; the highlight must land on the same process at its new index
-    pilot.pressKey(KeyCode.Char('p')).waitForIdle()
+    pilot.press("p").waitForIdle()
     assert(app.selectedProcessId == pinned)
     val afterSort = app.tableState.selected
     assert(afterSort.isDefined)
@@ -104,7 +103,7 @@ final class ProcmonAppSpec extends AnyFunSuite:
 
     // and a refresh replaces every row's numbers underneath it without moving the highlight to another process
     val samplesBefore = app.sampleCount.peek
-    pilot.pressKey(KeyCode.Char('r'))
+    pilot.press("r")
     waitUntil()(app.sampleCount.peek > samplesBefore)
     pilot.waitForIdle()
     assert(app.selectedProcessId == pinned)
@@ -112,19 +111,19 @@ final class ProcmonAppSpec extends AnyFunSuite:
     assert(afterRefresh.isDefined)
     assert(app.visibleProcessIds(afterRefresh.get) == pinned.get)
 
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("ticks refresh the table with no input at all"):
     val (app, pilot) = startedApp()
-    pilot.pressKey(KeyCode.Char('-')).waitForIdle() // shortest interval, so the test does not wait two seconds
+    pilot.press("-").waitForIdle() // shortest interval, so the test does not wait two seconds
     assert(app.refreshSeconds.peek == 1)
     val samplesBefore = app.sampleCount.peek
     val drawsBefore   = pilot.backend.drawCount
     waitUntil()(app.sampleCount.peek > samplesBefore && pilot.backend.drawCount > drawsBefore)
     assert(app.sampleCount.peek > samplesBefore)
     assert(pilot.backend.drawCount > drawsBefore, "a new sample repaints without anyone pressing a key")
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   /** Exercises the real detection path — on a machine with `ps` this samples live processes, and everywhere else it

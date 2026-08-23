@@ -15,7 +15,7 @@ final class FormControlsSpec extends AnyFunSuite:
     val testApp = new TuiApp:
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = view0
-    Pilot.start(backend) { val _ = testApp.runWith(backend) }.waitForIdle()
+    Pilot.start(backend) { testApp.runWith(backend) }.waitForIdle()
 
   private def quitApp(pilot: Pilot): Unit =
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
@@ -32,7 +32,7 @@ final class FormControlsSpec extends AnyFunSuite:
 
   test("slider adjusts by step and clamps at the bounds"):
     val value = Signal(50)
-    val pilot = startApp(slider(value, step = 10))
+    val pilot = startApp(slider(value, SliderRange.of(0, 100, step = 10)))
     pilot.pressKey(KeyCode.Right).waitForIdle()
     assert(value.peek == 60)
     pilot.pressKey(KeyCode.End).waitForIdle()
@@ -66,7 +66,7 @@ final class FormControlsSpec extends AnyFunSuite:
 
   test("numberInput allows a single dot only when decimals are enabled"):
     val state = TextInputState()
-    val pilot = startApp(numberInput(state, allowDecimal = true))
+    val pilot = startApp(numberInput(state).decimal)
     pilot.typeText("3.1.4").waitForIdle()
     assert(state.value == "3.14")
     quitApp(pilot)
@@ -84,7 +84,7 @@ final class FormControlsSpec extends AnyFunSuite:
 
   test("paginator renders dots and pages with arrows"):
     val page    = Signal(0)
-    val element = paginator(page, 4)
+    val element = paginator(page, 4)(using ReactiveScope.untracked)
     assert(trimmedLines(rendered(element.widget, 10, 1)).head == "● ○ ○ ○")
     val pilot   = startApp(paginator(page, 4))
     pilot.pressKey(KeyCode.Right).pressKey(KeyCode.Right).waitForIdle()

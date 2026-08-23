@@ -37,7 +37,7 @@ final class AppServicesSpec extends AnyFunSuite:
   test("a modal screen renders over the base and traps focus; pop restores"):
     val backend = HeadlessBackend(Size(30, 8))
     val app     = NavApp()
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("a").waitForIdle()
     assert(app.baseField.value == "a")
@@ -63,7 +63,7 @@ final class AppServicesSpec extends AnyFunSuite:
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("base screen")
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("base screen"))
     pilot.pressKey(KeyCode.Char('f'), KeyModifiers.Ctrl).waitForIdle()
@@ -74,16 +74,19 @@ final class AppServicesSpec extends AnyFunSuite:
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
 
-  test("toasts appear on notify and age out with ticks"):
+  /** The lifetime is wall-clock time; ticks are only what notices it has passed. A 400ms toast is a 400ms toast whether
+    * the app ticks every 10ms or every 200ms, which is the whole point of spelling it as a duration.
+    */
+  test("toasts appear on notify and age out once their duration has passed"):
     val backend  = HeadlessBackend(Size(40, 6))
     val app      = new TuiApp:
       override def config: RunnerConfig      = RunnerConfig(tickRate = Some(10.millis))
       override def bindings: KeyBindings     = KeyBindings(
-        binding("n", "notify me")(notify("saved ok", NoticeLevel.Success, ttlTicks = 40)),
+        binding("n", "notify me")(notify("saved ok", NoticeLevel.Success, duration = 400.millis)),
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("content")
-    val pilot    = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot    = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Char('n')).waitForIdle()
     assert(pilot.screenText.contains("saved ok"))
@@ -103,7 +106,7 @@ final class AppServicesSpec extends AnyFunSuite:
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("content")
-    val pilot    = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot    = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Char('p'), KeyModifiers.Ctrl).waitForIdle()
     assert(pilot.screenText.contains("Commands"))
@@ -125,7 +128,7 @@ final class AppServicesSpec extends AnyFunSuite:
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("content")
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(backend.clipboardContents.isEmpty)
     pilot.pressKey(KeyCode.Char('c')).waitForIdle()
@@ -142,7 +145,7 @@ final class AppServicesSpec extends AnyFunSuite:
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text("content")
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Char('p'), KeyModifiers.Ctrl).waitForIdle()
     assert(pilot.screenText.contains("Commands"))

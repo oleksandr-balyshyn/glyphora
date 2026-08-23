@@ -1,6 +1,6 @@
 package io.worxbend.tui.examples.counter
 
-import io.worxbend.tui.core.{KeyCode, Size}
+import io.worxbend.tui.core.Size
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 
@@ -12,13 +12,13 @@ final class CounterAppSpec extends AnyFunSuite:
   test("increments and decrements re-render the count, and q quits"):
     val backend = HeadlessBackend(Size(44, 6))
     val app     = CounterApp()
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("Count: 0"))
-    pilot.pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char('+')).pressKey(KeyCode.Char('+')).waitForIdle()
+    pilot.press("+", "+", "+").waitForIdle()
     assert(pilot.screenText.contains("Count: 3"))
-    pilot.pressKey(KeyCode.Char('-')).waitForIdle()
+    pilot.press("-").waitForIdle()
     assert(pilot.screenText.contains("Count: 2"))
     assert(app.count.peek == 2)
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())

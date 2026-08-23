@@ -1,8 +1,8 @@
 package io.worxbend.tui.testsupport
 
 import io.worxbend.tui.core.{Color, Event, KeyCode, KeyEvent, Size, Style}
-import io.worxbend.tui.runtime.{Frame, RunnerHandle, TerminalRunner}
-import io.worxbend.tui.terminal.HeadlessBackend
+import io.worxbend.tui.runtime.{EventOutcome, Frame, RunnerError, RunnerHandle, TerminalRunner}
+import io.worxbend.tui.terminal.{BackendError, HeadlessBackend}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -57,7 +57,7 @@ final class PilotFailureSpec extends AnyFunSuite:
 
   test("a clean quit still reports success and never throws"):
     val backend = HeadlessBackend(Size(20, 3))
-    val pilot   = Pilot.start(backend)(TerminalRunner(backend).run(quitOnQ, render))
+    val pilot   = Pilot.start(backend)(TerminalRunner(backend).run(_ => (), quitOnQ, render))
     pilot.waitForIdle()
     assert(pilot.screenLines.nonEmpty)
     assert(pilot.isRunning)
@@ -66,6 +66,16 @@ final class PilotFailureSpec extends AnyFunSuite:
     assert(pilot.screenLines.nonEmpty)
     assert(!pilot.isRunning)
 
+  test("a runner that returned Left is not a clean exit"):
+    // the silent pass this replaces: the app thread finished without throwing, so every observation read as healthy
+    // and a test asserting on the last frame passed against whatever was on screen when the run failed
+    val backend = HeadlessBackend(Size(10, 3))
+    val failure = RunnerError.Backend(BackendError.UnsupportedTerminal("cannot restore"))
+    val pilot   = Pilot.start(backend)(Left(failure))
+    val error   = intercept[AssertionError](pilot.awaitTermination())
+    assert(error.getMessage.contains("terminal not supported: cannot restore"))
+    assert(intercept[AssertionError](pilot.screenLines).getMessage.contains("cannot restore"))
+
   /** The app blocks on a latch rather than on a sleep so the busy app outlives the assertion by microseconds instead of
     * seconds: a test that leaves a live app thread behind hands its cost to whatever runs next, which on a two-core CI
     * runner executing several forked JVMs at once is not free.
@@ -73,7 +83,7 @@ final class PilotFailureSpec extends AnyFunSuite:
   test("an app that never goes idle still reports the timeout, not a crash"):
     val backend = HeadlessBackend(Size(10, 3))
     val release = CountDownLatch(1)
-    val pilot   = Pilot.start(backend)(release.await())
+    val pilot   = Pilot.start(backend) { release.await(); Right(()) }
     try
       val error = intercept[AssertionError](pilot.waitForIdle(100.millis))
       assert(error.getMessage.contains("did not go idle"))
@@ -87,9 +97,9 @@ final class PilotFailureSpec extends AnyFunSuite:
       frame.area,
     )
 
-  private def quitOnQ(event: Event, handle: RunnerHandle): Boolean =
+  private def quitOnQ(event: Event, handle: RunnerHandle): EventOutcome =
     event match
       case Event.Key(KeyEvent(KeyCode.Char('q'), _)) =>
         handle.quit()
-        false
-      case _                                         => true
+        EventOutcome.Ignored
+      case _                                         => EventOutcome.Redraw

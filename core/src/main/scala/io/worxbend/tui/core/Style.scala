@@ -12,6 +12,15 @@ enum UnderlineStyle:
   *
   * `None` for a color means "leave the terminal default in effect". Builders return a new immutable `Style`; they are
   * `with`-prefixed for the color fields because a case-class field and a `def` cannot share a name.
+  *
+  * Text attributes are carried in *two* bitsets, not one (ratatui's `add_modifier`/`sub_modifier` pair). [[modifiers]]
+  * is what the cell renders with; [[clearedModifiers]] records the flags the style was asked to turn off. Without the
+  * second set a style has no way to say "not bold" — only "bold" or "silent about bold" — and the moment it is layered
+  * onto a bolder one with [[patch]], the flag it deliberately dropped comes back.
+  *
+  * @param clearedModifiers
+  *   flags this style turns off when it is layered onto another with [[patch]]. Always disjoint from [[modifiers]]:
+  *   every builder that sets a flag clears it here and vice versa, so the last call in a chain wins.
   */
 final case class Style(
     fg: Option[Color] = None,
@@ -20,25 +29,35 @@ final case class Style(
     link: Option[String] = None,
     underlineColor: Option[Color] = None,
     underlineStyle: UnderlineStyle = UnderlineStyle.None,
+    clearedModifiers: Modifiers = Modifiers.None,
 ):
   def withFg(color: Color): Style = copy(fg = Some(color))
 
   /** Attaches an OSC 8 hyperlink target — terminals that support it make the cells clickable. */
   def withLink(url: String): Style = copy(link = Some(url))
   def withBg(color: Color): Style  = copy(bg = Some(color))
-  def bold: Style                  = copy(modifiers = modifiers | Modifiers.Bold)
-  def dim: Style                   = copy(modifiers = modifiers | Modifiers.Dim)
-  def italic: Style                = copy(modifiers = modifiers | Modifiers.Italic)
-  def underline: Style             = copy(modifiers = modifiers | Modifiers.Underline)
-  def blink: Style                 = copy(modifiers = modifiers | Modifiers.Blink)
-  def reverse: Style               = copy(modifiers = modifiers | Modifiers.Reverse)
-  def hidden: Style                = copy(modifiers = modifiers | Modifiers.Hidden)
-  def crossedOut: Style            = copy(modifiers = modifiers | Modifiers.CrossedOut)
+  def bold: Style                  = setting(Modifiers.Bold)
+  def dim: Style                   = setting(Modifiers.Dim)
+  def italic: Style                = setting(Modifiers.Italic)
+  def underline: Style             = setting(Modifiers.Underline)
+  def blink: Style                 = setting(Modifiers.Blink)
+  def reverse: Style               = setting(Modifiers.Reverse)
+  def hidden: Style                = setting(Modifiers.Hidden)
+  def crossedOut: Style            = setting(Modifiers.CrossedOut)
+
+  /** Turns `flags` on, and withdraws any earlier request to turn them off, so `style.notBold.bold` is bold. */
+  private def setting(flags: Modifiers): Style =
+    copy(modifiers = modifiers | flags, clearedModifiers = clearedModifiers.without(flags))
 
   /** Clears specific text-attribute flags (ratatui's `sub_modifier`) — e.g. `style.without(Modifiers.Bold)` un-bolds a
     * style inherited from a theme or parent.
+    *
+    * The flags are both removed from [[modifiers]] and recorded in [[clearedModifiers]], which is what makes the clear
+    * survive [[patch]]: a style that merely lacks a flag says nothing about it, while one that recorded the clear turns
+    * it off in whatever it is layered onto.
     */
-  def without(flags: Modifiers): Style = copy(modifiers = modifiers.without(flags))
+  def without(flags: Modifiers): Style =
+    copy(modifiers = modifiers.without(flags), clearedModifiers = clearedModifiers | flags)
 
   def notBold: Style       = without(Modifiers.Bold)
   def notDim: Style        = without(Modifiers.Dim)
@@ -71,16 +90,39 @@ final case class Style(
   def dottedUnderline: Style                           = withUnderlineStyle(UnderlineStyle.Dotted)
   def dashedUnderline: Style                           = withUnderlineStyle(UnderlineStyle.Dashed)
 
-  /** This style with `other`'s explicit choices layered on top: `other`'s colors win where set, modifiers union. */
+  /** This style with `other`'s explicit choices layered on top: `other`'s colors win where set, `other`'s modifiers are
+    * added, and the modifiers `other` [[without]]-cleared are removed.
+    *
+    * The result carries both sets forward, so layering is associative: `a.patch(b).patch(c)` and `a.patch(b.patch(c))`
+    * agree. A flag `other` clears is dropped from the union *and* stays recorded as cleared, unless this style sets it
+    * again — which is how a theme → element → span chain lets any level have the final say on a flag.
+    */
   def patch(other: Style): Style =
     Style(
       fg = other.fg.orElse(fg),
       bg = other.bg.orElse(bg),
-      modifiers = modifiers | other.modifiers,
+      modifiers = (modifiers | other.modifiers).without(other.clearedModifiers),
       link = other.link.orElse(link),
       underlineColor = other.underlineColor.orElse(underlineColor),
       underlineStyle = if other.underlineStyle == UnderlineStyle.None then underlineStyle else other.underlineStyle,
+      clearedModifiers = (clearedModifiers | other.clearedModifiers).without(other.modifiers),
     )
+
+  /** The derived `toString` renders both bitsets as the integers they are, which is unreadable in exactly the place it
+    * is read most: a failed assertion on a cell's style. Fields left at their default are elided so the common style
+    * prints as a short line.
+    */
+  override def toString: String =
+    val parts = Seq(
+      fg.map(color => s"fg=$color"),
+      bg.map(color => s"bg=$color"),
+      Option.when(!modifiers.isEmpty)(s"modifiers=${modifiers.show}"),
+      Option.when(!clearedModifiers.isEmpty)(s"cleared=${clearedModifiers.show}"),
+      link.map(url => s"link=$url"),
+      underlineColor.map(color => s"underlineColor=$color"),
+      Option.when(underlineStyle != UnderlineStyle.None)(s"underlineStyle=$underlineStyle"),
+    ).flatten
+    if parts.isEmpty then "Style.Default" else parts.mkString("Style(", ", ", ")")
 
 object Style:
   val Default: Style = Style()

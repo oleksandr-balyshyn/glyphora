@@ -23,7 +23,7 @@ final case class Dialog(
     val box = area.centered(math.min(area.width, math.max(message.width + 4, 20)), message.height + 4)
     if box.width >= 4 && box.height >= 4 then
       clear(box, buffer)
-      Block(Some(Line.styled(title, style)), borderType, style).render(box, buffer)
+      Block(Seq(BlockTitle.top(Line.styled(title, style))), borderType, style).render(box, buffer)
       val inner = box.inset(1)
       Paragraph(message, alignment = Alignment.Center, style = style).render(
         Rect(inner.x, inner.y, inner.width, inner.height - 1),
@@ -43,7 +43,7 @@ final case class Dialog(
   private def renderButtons(inner: Rect, buffer: Buffer): Unit =
     val labels     = buttons.map(label => s"[ $label ]")
     val totalWidth = labels.map(CharWidth.of).sum + math.max(0, labels.size - 1)
-    var x          = inner.x + math.max(0, (inner.width - totalWidth) / 2)
+    var x          = Alignment.Center.originAt(inner.x, inner.width, totalWidth)
     val y          = inner.bottom - 1
     labels.zipWithIndex.foreach { (label, index) =>
       val buttonStyle = if index == selectedButton then style.patch(selectedStyle) else style

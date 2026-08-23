@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Buffer, MouseEventKind, Rect, Size, Style}
+import io.worxbend.tui.core.{Buffer, MouseEventKind, Position, Rect, Size, Style}
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.Pilot
 import io.worxbend.tui.widgets.{ScrollViewState, TextInputState}
@@ -23,16 +23,16 @@ final class FocusSpec extends AnyFunSuite:
         input(second, placeholder = "second"),
         checkbox("agree", agreed),
       ).onKeyEvent {
-        case KeyEvent(KeyCode.Char('q'), m) if m.has(KeyModifiers.Ctrl) =>
+        case KeyEvent(KeyCode.Char('q'), m) if m.hasAny(KeyModifiers.Ctrl) =>
           quit()
           true
-        case _                                                          => false
+        case _                                                             => false
       }
 
   private def startedApp(): (FormApp, Pilot) =
     val backend = HeadlessBackend(Size(30, 5))
     val app     = FormApp()
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     (app, pilot)
 
@@ -111,7 +111,7 @@ final class FocusSpec extends AnyFunSuite:
             true
           case _                              => false
         }
-    val pilot       = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot       = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("x").waitForIdle()            // consumed by the focused input's editing handler
     assert(field.value == "x")
@@ -136,7 +136,7 @@ final class FocusSpec extends AnyFunSuite:
       def view(using ReactiveScope): Element =
         val top = if showTop.get then Seq(input(first).key("first")) else Seq.empty
         column((top :+ input(second).key("second"))*)
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("a").waitForIdle()
     assert(second.value == "a") // 'second' is the only focusable, so it has focus
@@ -155,7 +155,7 @@ final class FocusSpec extends AnyFunSuite:
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element =
         column(input(first).key("first"), input(second).key("second"))
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Tab).typeText("hi").waitForIdle()
     // an explicit focus move must win over the remembered key, or Tab is a no-op on keyed trees
@@ -172,7 +172,7 @@ final class FocusSpec extends AnyFunSuite:
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element =
         column(input(first).key("first"), input(second).key("second"))
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.click(2, 1).waitForIdle()
     pilot.typeText("z").waitForIdle()
@@ -188,12 +188,12 @@ final class FocusSpec extends AnyFunSuite:
       override def theme: Theme              = Theme.HighContrast
       override def bindings: KeyBindings     = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope): Element = checkbox("agree", agreed)
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     val cell    = pilot.backend.lastDrawn.map(_.get(0, 0)).getOrElse(fail("no frame"))
     // HighContrast focus = reverse + bold: proves the theme's focus style is applied, not a hardcoded reverse
-    assert(cell.style.modifiers.has(io.worxbend.tui.core.Modifiers.Reverse))
-    assert(cell.style.modifiers.has(io.worxbend.tui.core.Modifiers.Bold))
+    assert(cell.style.modifiers.hasAny(io.worxbend.tui.core.Modifiers.Reverse))
+    assert(cell.style.modifiers.hasAny(io.worxbend.tui.core.Modifiers.Bold))
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
 
@@ -226,7 +226,9 @@ final class FocusSpec extends AnyFunSuite:
     // for being inert
     val area       = Rect(0, 0, 10, 3)
     suppressed.widget.render(area, Buffer(area))
-    assert(!EventRouter.dispatchMouse(suppressed, MouseEvent(1, 1, MouseEventKind.Down, KeyModifiers.None), None))
+    assert(
+      !EventRouter.dispatchMouse(suppressed, MouseEvent(Position(1, 1), MouseEventKind.Down, KeyModifiers.None), None)
+    )
     assert(baseClicks == 0)
 
   test("a modal with no focusable element takes keys before the layer it covers"):
@@ -240,24 +242,24 @@ final class FocusSpec extends AnyFunSuite:
       )
       def view(using ReactiveScope): Element =
         column(text("base screen")).onKeyEvent {
-          case KeyEvent(KeyCode.Char(c), m) if !m.has(KeyModifiers.Ctrl) =>
+          case KeyEvent(KeyCode.Char(c), m) if !m.hasAny(KeyModifiers.Ctrl) =>
             baseKeys += Character.toString(c)
             true
-          case _                                                         => false
+          case _                                                            => false
         }
       // panel/text only: nothing in the dialog is focusable, so the whole tree has no focus path
       private def openDialog(): Unit         = pushScreen(Screen {
         centered(30, 5)(panel("Delete?")(text("d = confirm, esc = cancel"))).onKeyEvent {
-          case KeyEvent(KeyCode.Escape, _)                               =>
+          case KeyEvent(KeyCode.Escape, _)                                  =>
             popScreen()
             true
-          case KeyEvent(KeyCode.Char(c), m) if !m.has(KeyModifiers.Ctrl) =>
+          case KeyEvent(KeyCode.Char(c), m) if !m.hasAny(KeyModifiers.Ctrl) =>
             modalKeys += Character.toString(c)
             true
-          case _                                                         => false
+          case _                                                            => false
         }
       })
-    val pilot     = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot     = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("d").waitForIdle()
     assert(baseKeys.toSeq == Seq("d"))               // the base handler is live to begin with
@@ -293,7 +295,7 @@ final class FocusSpec extends AnyFunSuite:
           true
         }
       })
-    val pilot       = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot       = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.click(0, 0).waitForIdle()
     val baseBefore  = baseClicks
@@ -324,7 +326,7 @@ final class FocusSpec extends AnyFunSuite:
       )
       def view(using ReactiveScope): Element = responsive(_ => column(input(baseField)))
       private def openDialog(): Unit         = pushScreen(Screen(centered(30, 5)(panel("Delete?")(text("confirm?")))))
-    val pilot     = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot     = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("a").waitForIdle()
     assert(baseField.value == "a")
@@ -365,3 +367,19 @@ final class FocusSpec extends AnyFunSuite:
     val (scroll, tree) = scrollViewOverInput(focusedIndex = 0)
     assert(EventRouter.dispatchKey(tree, KeyEvent(KeyCode.Down, KeyModifiers.None)))
     assert(scroll.offset == 1)
+
+  test("a focusable wrapped straight in a FilledElement still takes a tab stop and a hit-test area"):
+    // FilledElement used to expose its wrapped node's *children* rather than the node, so the focus pass walked past
+    // the node itself: a control handed straight to it got neither a focus index nor a recorded area.
+    val tracker = FocusTracker()
+    val root    = FilledElement(button("press me")(()), Style.Default)
+    assert(FocusPass.focusKeys(root).size == 1)
+    tracker.reconcile(FocusPass.focusKeys(root))
+    val tree    = FocusPass.decorate(root, tracker, Style.Default)
+    val area    = Rect(0, 0, 20, 1)
+    tree.widget.render(area, Buffer(area))
+    assert(tracker.hitTest(Position(2, 0)).contains(0))
+
+  test("a FilledElement measures what it wraps unless it carries a length of its own"):
+    assert(FilledElement(text("a\nb\nc"), Style.Default).intrinsicHeight(20).contains(3))
+    assert(FilledElement(text("a\nb\nc"), Style.Default).length(1).intrinsicHeight(20).contains(1))

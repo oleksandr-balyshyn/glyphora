@@ -6,10 +6,10 @@ final class StyleModifierSpec extends AnyFunSuite:
 
   test("without clears a specific modifier while leaving others"):
     val style = Style.Default.bold.italic
-    assert(style.modifiers.has(Modifiers.Bold))
+    assert(style.modifiers.hasAny(Modifiers.Bold))
     val plain = style.notBold
-    assert(!plain.modifiers.has(Modifiers.Bold))
-    assert(plain.modifiers.has(Modifiers.Italic))
+    assert(!plain.modifiers.hasAny(Modifiers.Bold))
+    assert(plain.modifiers.hasAny(Modifiers.Italic))
 
   test("Modifiers.without clears the requested flags at the bitset level"):
     val both = Modifiers.Bold | Modifiers.Underline
@@ -21,8 +21,11 @@ final class StyleModifierSpec extends AnyFunSuite:
     assert(style.withoutBg.bg.isEmpty)
     assert(style.withoutFg.bg.contains(Color.Blue))
 
-  test("removing a modifier is idempotent on a style that lacks it"):
-    assert(Style.Default.notReverse == Style.Default)
+  test("clearing a modifier a style lacks changes nothing it renders, but is still recorded"):
+    // the rendered attributes are untouched; what the call adds is the record that makes the clear survive `patch`,
+    // which is the whole reason `without` exists
+    assert(Style.Default.notReverse.modifiers == Style.Default.modifiers)
+    assert(Style.Default.notReverse.clearedModifiers.hasAny(Modifiers.Reverse))
 
   /** One `notX` per `x`, so the negative half of the builder set is not missing arbitrary members. Each is checked
     * against a style carrying *every* modifier, which also pins that clearing one leaves the other seven alone.
@@ -50,15 +53,26 @@ final class StyleModifierSpec extends AnyFunSuite:
       Modifiers.CrossedOut,
     )
     cleared.foreach { (flag, style) =>
-      assert(!style.modifiers.has(flag))
-      everyOne.filterNot(_ == flag).foreach(other => assert(style.modifiers.has(other)))
+      assert(!style.modifiers.hasAny(flag))
+      everyOne.filterNot(_ == flag).foreach(other => assert(style.modifiers.hasAny(other)))
     }
 
-  test("has is an ANY test, not an ALL test, when given more than one flag"):
-    // documented rather than changed: the name and the `Modifiers`-typed parameter read as "has all of these", but
-    // the implementation is a non-zero bitwise AND. Changing it would silently flip the meaning of every existing
-    // call site, so it is pinned here instead.
+  test("hasAny is an ANY test, not an ALL test, when given more than one flag"):
+    // the implementation is a non-zero bitwise AND, so a multi-flag argument asks "is at least one of these set?".
+    // The method used to be called `has`, which read as "has all of these" right next to `hasAll` and meant the
+    // opposite; the name now says which of the two it is.
     val boldItalic = Modifiers.Bold | Modifiers.Italic
-    assert(boldItalic.has(Modifiers.Bold | Modifiers.Underline))
-    assert(!boldItalic.has(Modifiers.Underline | Modifiers.Blink))
-    assert(!boldItalic.has(Modifiers.None))
+    assert(boldItalic.hasAny(Modifiers.Bold | Modifiers.Underline))
+    assert(!boldItalic.hasAny(Modifiers.Underline | Modifiers.Blink))
+    assert(!boldItalic.hasAny(Modifiers.None))
+
+  test("hasAll is the every-of test hasAny is not"):
+    val boldItalic = Modifiers.Bold | Modifiers.Italic
+    assert(boldItalic.hasAll(Modifiers.Bold | Modifiers.Italic))
+    assert(!boldItalic.hasAll(Modifiers.Bold | Modifiers.Underline))
+    assert(boldItalic.hasAll(Modifiers.None)) // no flag is required, so every style satisfies it
+
+  test("show names the set flags in bit order"):
+    assert((Modifiers.Italic | Modifiers.Bold).show == "Bold|Italic")
+    assert(Modifiers.None.show == "None")
+    assert((Modifiers.Bold | Modifiers.Italic).names == Seq("Bold", "Italic"))

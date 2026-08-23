@@ -7,7 +7,9 @@ package io.worxbend.tui.core
   * the far edge. How the sizes themselves are decided is documented on `LayoutSolver`.
   *
   * When the fixed demands exceed the available space, trailing segments are truncated (possibly to zero width) rather
-  * than failing — consistent with the library-wide silent-clipping philosophy.
+  * than failing — consistent with the library-wide silent-clipping philosophy. A negative `spacing` is treated as zero
+  * for the same reason: segments that overlap are not a layout anyone can render, and `LayoutSolver` already clamps
+  * every constraint input it reads rather than propagating a negative.
   */
 final case class Layout(
     direction: Direction,
@@ -16,13 +18,48 @@ final case class Layout(
     flex: Flex = Flex.Start,
 ):
 
+  /** [[spacing]] as the layout actually spends it. Read by every step that budgets or places a gap, so a negative
+    * spacing cannot deduct space in one step and hand it back as an overlap in the next.
+    */
+  private val gap: Int = math.max(0, spacing)
+
   def split(area: Rect): Seq[Rect] =
     if constraints.isEmpty then Seq.empty
     else
       val total     = axisExtent(area)
-      val available = math.max(0, total - spacing * (constraints.size - 1))
+      val available = math.max(0, total - gap * (constraints.size - 1))
       val sizes     = LayoutSolver.solve(constraints, available)
       layOutSegments(area, sizes, total)
+
+  /** [[split]] for a layout whose constraint count is known while writing the code: the segments come back as a tuple,
+    * so `val (left, right) = layout.split2(area)` binds two names the compiler checked instead of two `apply` calls it
+    * did not.
+    *
+    * Positional indexing into the `Seq` — `split(area)(2)` — is the shape every caller used before these existed, and
+    * it fails at run time, on a terminal already switched into raw mode, where the stack trace is the last thing the
+    * user sees. A short result is padded with the empty rectangle `Rect(0, 0, 0, 0)`, which every widget renders as
+    * nothing, so a mismatch degrades to a missing pane rather than an exception.
+    */
+  def split2(area: Rect): (Rect, Rect) =
+    val parts = padded(area, 2)
+    (parts(0), parts(1))
+
+  def split3(area: Rect): (Rect, Rect, Rect) =
+    val parts = padded(area, 3)
+    (parts(0), parts(1), parts(2))
+
+  def split4(area: Rect): (Rect, Rect, Rect, Rect) =
+    val parts = padded(area, 4)
+    (parts(0), parts(1), parts(2), parts(3))
+
+  def split5(area: Rect): (Rect, Rect, Rect, Rect, Rect) =
+    val parts = padded(area, 5)
+    (parts(0), parts(1), parts(2), parts(3), parts(4))
+
+  /** [[split]]'s result grown to at least `count` rectangles with empty ones, so the tuple helpers can index safely. */
+  private def padded(area: Rect, count: Int): IndexedSeq[Rect] =
+    val parts = split(area).toIndexedSeq
+    parts ++ IndexedSeq.fill(math.max(0, count - parts.size))(Rect(0, 0, 0, 0))
 
   /** How many cells `area` offers along [[direction]] — its width when horizontal, its height when vertical. The three
     * axis helpers are the only place in this file that knows which `Rect` fields the direction selects.
@@ -67,9 +104,9 @@ final case class Layout(
     */
   private def flexOffsets(sizes: IndexedSeq[Int], total: Int): (Int, IndexedSeq[Int]) =
     val segmentCount = sizes.size
-    val baseGaps     = spacing * math.max(0, segmentCount - 1)
+    val baseGaps     = gap * math.max(0, segmentCount - 1)
     val free         = math.max(0, total - sizes.sum - baseGaps)
-    val betweens     = IndexedSeq.fill(math.max(0, segmentCount - 1))(spacing)
+    val betweens     = IndexedSeq.fill(math.max(0, segmentCount - 1))(gap)
     if free == 0 then (0, betweens)
     else
       flex match
@@ -96,7 +133,7 @@ final case class Layout(
       val extra = LayoutSolver.distributeRemainder(total % parts, IndexedSeq.fill(parts)(0.0))
       (0 until parts).map(i => base + extra(i)).toIndexedSeq
 
-  private def addSpacing(gaps: IndexedSeq[Int]): IndexedSeq[Int] = gaps.map(_ + spacing)
+  private def addSpacing(gaps: IndexedSeq[Int]): IndexedSeq[Int] = gaps.map(_ + gap)
 
 object Layout:
   /** Constraint shorthand: a plain `Int` means `Length(cells)`, a `Double` means a fraction of the whole (`0.5` →

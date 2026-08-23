@@ -14,5 +14,5 @@ final case class Button(
     if !area.isEmpty then
       val text   = s"[ $label ]"
       val fitted = CharWidth.substringByWidth(text, area.width)
-      val startX = area.x + (area.width - CharWidth.of(fitted)) / 2
+      val startX = Alignment.Center.originAt(area.x, area.width, CharWidth.of(fitted))
       buffer.setString(startX, area.y + area.height / 2, fitted, style)

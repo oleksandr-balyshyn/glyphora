@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{KeyEvent, MouseEvent, MouseEventKind, Position, Rect}
+import io.worxbend.tui.core.{KeyEvent, MouseEvent, MouseEventKind, Rect}
 
 /** Event routing.
   *
@@ -86,7 +86,7 @@ private[dsl] object EventRouter:
 
   /** Where this element rendered last frame, if the pointer is inside it. */
   private def coveredArea(element: Element, event: MouseEvent): Option[Rect] =
-    recordedArea(element).filter(_.contains(Position(event.x, event.y)))
+    recordedArea(element).filter(_.contains(event.position))
 
   /** The user's `onMouseEvent` first, then the framework's own behavior for this element. */
   private def handlesMouse(element: Element, event: MouseEvent, hit: Option[(Int, Rect)]): Boolean =

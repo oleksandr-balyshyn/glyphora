@@ -48,7 +48,7 @@ final class ChromeSpec extends AnyFunSuite:
     assert(lines.last == " q quit")
 
   test("a right-hand sidebar renders after the content"):
-    val shell = scaffold(sidebar = Some(sidebar(text("side"), width = 6, onRight = true)))(text("main"))
+    val shell = scaffold(sidebar = Some(sidebar(text("side"), width = 6, side = Side.Right)))(text("main"))
     val lines = trimmedLines(rendered(shell.widget, 20, 2))
     assert(lines.head.startsWith("main"))
     assert(lines.head.contains("side"))
@@ -73,12 +73,12 @@ final class ChromeSpec extends AnyFunSuite:
         binding("q", "quit")(quit()),
       )
       def view(using ReactiveScope): Element = text(s"saves: $saves")
-    val pilot   = Pilot.start(backend) { val _ = app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
-    pilot.pressKey(KeyCode.Char('s'), KeyModifiers.Ctrl).waitForIdle()
+    pilot.press("ctrl+s").waitForIdle()
     assert(saves == 1)
     assert(pilot.screenLines.head.startsWith("saves: 1"))
-    pilot.pressKey(KeyCode.Char('q'))
+    pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("the surface style actually fills the whole bar row"):

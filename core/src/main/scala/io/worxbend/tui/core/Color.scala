@@ -1,5 +1,7 @@
 package io.worxbend.tui.core
 
+import scala.annotation.targetName
+
 /** A terminal color: the 16 named ANSI colors (8 standard + 8 bright), a 24-bit RGB value, or a 256-color palette
   * index.
   *
@@ -9,15 +11,14 @@ package io.worxbend.tui.core
 enum Color:
   case Reset, Black, Red, Green, Yellow, Blue, Magenta, Cyan, White
   case BrightBlack, BrightRed, BrightGreen, BrightYellow, BrightBlue, BrightMagenta, BrightCyan, BrightWhite
+
+  /** A 24-bit color, taken '''unchecked''': the channels are whatever the caller passed, including values outside
+    * `0..255`. Use [[Color.rgb]] to build one that clamps. Everything in this file that reads channels clamps on the
+    * way out, so an out-of-range literal cannot reach the SGR encoder as a malformed escape — but the value itself
+    * keeps what it was given, which is why `Rgb(999, 0, 0) != Rgb(255, 0, 0)`.
+    */
   case Rgb(r: Int, g: Int, b: Int)
   case Indexed(index: Int)
-
-/** A pair of colors picked by the terminal's background: `light` on a light terminal, `dark` on a dark one (Lip Gloss's
-  * `AdaptiveColor`). Resolve it against the theme or a detected background before styling — the render path only ever
-  * sees a concrete [[Color]].
-  */
-final case class AdaptiveColor(light: Color, dark: Color):
-  def resolve(darkBackground: Boolean): Color = if darkBackground then dark else light
 
 object Color:
 
@@ -69,6 +70,34 @@ object Color:
     if steps <= 0 then Seq.empty
     else if steps == 1 then Seq(mix(from, to, 0))
     else Seq.tabulate(steps)(i => mix(from, to, i.toDouble / (steps - 1)))
+
+  /** The same derivations as the functions above, written as methods on the color so a chain reads in the order it
+    * happens: `theme.mixedWith(accent, 0.3).darken(0.1)` instead of `darken(mix(theme, accent, 0.3), 0.1)`.
+    *
+    * Each one delegates to the companion function, which stays the implementation — there is one definition of what
+    * "lighten" means, and this is a second way to spell it. Living in `Color`'s companion means they are found on any
+    * `Color` value without an import.
+    */
+  extension (color: Color)
+
+    /** [[Color.lighten]]: this color moved toward white by `amount` in `0.0..1.0`. */
+    // the extension and the function it delegates to erase to the same JVM signature, so the extension takes a
+    // distinct erased name; the Scala-level name is the one callers write either way
+    @targetName("lightenedBy")
+    def lighten(amount: Double): Color = Color.lighten(color, amount)
+
+    /** [[Color.darken]]: this color moved toward black by `amount` in `0.0..1.0`. */
+    @targetName("darkenedBy")
+    def darken(amount: Double): Color = Color.darken(color, amount)
+
+    /** [[Color.mix]]: this color mixed toward `other`, where `t = 0` keeps this one and `t = 1` yields `other`. */
+    def mixedWith(other: Color, t: Double): Color = Color.mix(color, other, t)
+
+    /** [[Color.blend]]: this color composited over `background` at opacity `alpha`. */
+    def over(background: Color, alpha: Double): Color = Color.blend(color, background, alpha)
+
+    /** [[Color.gradient]]: `steps` evenly-spaced colors from this one to `to`, inclusive. */
+    def gradientTo(to: Color, steps: Int): Seq[Color] = Color.gradient(color, to, steps)
 
   /** RGB approximation for every color model — good enough for fades and capability downsampling, not for color
     * management. Named colors use common terminal palette values; indexed colors decode the xterm 256-color cube and

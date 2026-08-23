@@ -1,7 +1,7 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Constraint, Modifiers, Rect}
-import io.worxbend.tui.testsupport.BufferAssertions.trimmedLines
+import io.worxbend.tui.core.{Constraint, Modifiers}
+import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -13,19 +13,14 @@ final class DataTableSpec extends AnyFunSuite:
     widths = Seq(Constraint.Length(8), Constraint.Length(6)),
   )
 
-  private def renderedWith(state: DataTableState, height: Int = 4): Buffer =
-    val buffer = Buffer(Rect(0, 0, 15, height))
-    table.render(buffer.area, buffer, state)
-    buffer
-
   test("renders the header row then the data rows"):
-    val lines = trimmedLines(renderedWith(DataTableState()))
+    val lines = trimmedLines(rendered(table, DataTableState(), 15, 4))
     assert(lines == Seq("name     size", "beta     20", "alpha    100", "gamma    3"))
 
   test("sorting by a text column orders rows and marks the header"):
     val state = DataTableState()
     state.sortBy(0)
-    val lines = trimmedLines(renderedWith(state))
+    val lines = trimmedLines(rendered(table, state, 15, 4))
     assert(lines.head.startsWith("name ▲"))
     assert(lines.drop(1) == Seq("alpha    100", "beta     20", "gamma    3"))
 
@@ -33,14 +28,14 @@ final class DataTableSpec extends AnyFunSuite:
     val state = DataTableState()
     state.sortBy(0)
     state.sortBy(0)
-    val lines = trimmedLines(renderedWith(state))
+    val lines = trimmedLines(rendered(table, state, 15, 4))
     assert(lines.head.startsWith("name ▼"))
     assert(lines(1).startsWith("gamma"))
 
   test("numeric columns sort as numbers, not text"):
     val state = DataTableState()
     state.sortBy(1)
-    val lines = trimmedLines(renderedWith(state))
+    val lines = trimmedLines(rendered(table, state, 15, 4))
     assert(lines.drop(1) == Seq("gamma    3", "beta     20", "alpha    100"))
 
   test("the filter keeps rows where any cell matches, case-insensitively"):
@@ -62,33 +57,39 @@ final class DataTableSpec extends AnyFunSuite:
     state.selectNext(3)
     state.selectNext(3)
     state.selectNext(3) // clamped at the last row
-    val buffer = renderedWith(state, height = 3) // header + 2 body rows
+    val buffer = rendered(table, state, 15, 3) // header + 2 body rows
     assert(state.selected.contains(2))
     assert(state.offset == 1)
     assert(trimmedLines(buffer)(2) == "gamma    3")
-    assert(buffer.get(0, 2).style.modifiers.has(Modifiers.Reverse))
+    assert(buffer.get(0, 2).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("an empty filter result renders only the header"):
     val state = DataTableState()
     state.setFilter("zzz")
-    val lines = trimmedLines(renderedWith(state))
+    val lines = trimmedLines(rendered(table, state, 15, 4))
     assert(lines == Seq("name     size", "", "", ""))
 
   test("a page size windows the visible rows and paging clamps at the ends"):
     val state = DataTableState()
-    state.pageSize = Some(2)
+    state.paging = Some(Paging(size = 2, page = 0))
     assert(table.visibleRows(state).map(_.head) == Seq("beta", "alpha"))
     state.nextPage(table.filteredRows(state).size)
-    assert(state.page == 1)
+    assert(state.paging.map(_.page).contains(1))
     assert(table.visibleRows(state).map(_.head) == Seq("gamma"))
     state.nextPage(table.filteredRows(state).size) // clamped: already the last page
-    assert(state.page == 1)
+    assert(state.paging.map(_.page).contains(1))
     state.previousPage()
-    assert(state.page == 0)
+    assert(state.paging.map(_.page).contains(0))
+
+  test("paging is a no-op while no page size is set"):
+    val state = DataTableState()
+    state.nextPage(3)
+    state.previousPage()
+    assert(state.paging.isEmpty)
+    assert(table.visibleRows(state).sizeIs == 3)
 
   test("filtering shrinks the page domain and visibleRows re-clamps the page"):
     val state = DataTableState()
-    state.pageSize = Some(2)
-    state.page = 1
+    state.paging = Some(Paging(size = 2, page = 1))
     state.setFilter("alph")
     assert(table.visibleRows(state).map(_.head) == Seq("alpha")) // page snapped back into range
