@@ -1,0 +1,97 @@
+name: Bug report
+description: Something in glyphora does not behave as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Terminal bugs are usually decided by a handful of specifics —
+        the emulator, the size, and whether `HeadlessBackend` reproduces it — so the fields
+        below are the ones that actually shorten the round trip.
+
+        Before filing, it is worth a glance at
+        [Troubleshooting](https://oleksandr-balyshyn.github.io/glyphora/troubleshooting):
+        "the view does not update", "input edits then resets", and "the terminal is broken
+        after a crash" each have a documented cause.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what you expected instead
+      placeholder: |
+        The status bar renders behind the panel border after a resize.
+        I expected it to stay on the bottom row.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: >
+        The smallest app that shows it, ideally one `TuiApp` we can paste into a file and
+        run. A `Pilot` test that fails is even better.
+      render: scala
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: glyphora, Scala, JVM, and OS versions
+      placeholder: "glyphora 0.12.0 · Scala 3.7.1 · Temurin 21.0.4 · Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal emulator and shell
+      description: The emulator matters more than anything else here — width policies and escape-sequence support differ.
+      placeholder: "kitty 0.36 · zsh 5.9 · TERM=xterm-kitty · COLORTERM=truecolor"
+    validations:
+      required: true
+
+  - type: input
+    id: size
+    attributes:
+      label: Smallest terminal size that reproduces it
+      description: Many layout bugs only appear below a certain width or height.
+      placeholder: "80x24 (fine at 120x40)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: headless
+    attributes:
+      label: Does HeadlessBackend reproduce it?
+      description: >
+        This splits the problem in half: reproducing headlessly means the bug is in layout or
+        rendering, and not reproducing means it is in the terminal backend or the emulator.
+      options:
+        - "Yes — it reproduces with HeadlessBackend / Pilot"
+        - "No — only against a real terminal"
+        - "Not tried"
+    validations:
+      required: true
+
+  - type: textarea
+    id: trace
+    attributes:
+      label: Stack trace, and the key or mouse sequence that triggers it
+      description: >
+        Set `GLYPHORA_DEBUG=1` to have failed teardown steps report on stderr instead of being
+        swallowed.
+      render: text
+
+  - type: dropdown
+    id: native
+    attributes:
+      label: JVM vs native image
+      options:
+        - "Happens on the JVM"
+        - "Happens in a native image"
+        - "Happens in both"
+        - "Not tried in a native image"
+    validations:
+      required: true

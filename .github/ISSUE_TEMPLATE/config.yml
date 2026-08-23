@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or idea
+    url: https://github.com/oleksandr-balyshyn/glyphora/discussions
+    about: Usage questions, design discussion, and feature ideas belong in Discussions.
+  - name: Documentation
+    url: https://oleksandr-balyshyn.github.io/glyphora/
+    about: The task-oriented guide, the widget catalogue, and the troubleshooting page.
