@@ -19,6 +19,11 @@ import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent,
   *
   * `escapeTimeoutMillis` bounds how long the decoder waits for the rest of a sequence after `ESC`. It also decides how
   * long a lone `ESC` takes to report; raise it on high-latency links where a real `ESC [ A` can arrive split.
+  *
+  * An `ESC` always *starts* a sequence, so one arriving mid-sequence aborts whatever was being read (ECMA-48 says so,
+  * and every terminal relies on it). The decoder hands that `ESC` back rather than consuming it, which means two
+  * genuine Escape presses report two `Escape` keys — the second one after the escape timeout — where a truncated
+  * sequence followed by a real one reports only the real one.
   */
 private[terminal] final class InputDecoder(
     read: Long => Int,
@@ -91,12 +96,24 @@ private[terminal] final class InputDecoder(
   /** A lone ESC is the Escape key; ESC `[`/`O` opens a control sequence; ESC `]`/`P`/`_` opens a terminal reply; ESC
     * plus anything else is Alt plus whatever that byte decodes to on its own.
     */
-  private def decodeEscape(): Option[Event] =
-    next(escapeTimeoutMillis) match
+  private def decodeEscape(): Option[Event] = decodeEscapeBody(next(escapeTimeoutMillis))
+
+  /** The body of [[decodeEscape]], taking the character after the `ESC` as an argument rather than reading it.
+    *
+    * Split out so [[skipControlString]] can re-dispatch a character it has already consumed. It cannot push that
+    * character back, because the `ESC` that preceded it is gone by then and the single pushback slot holds one
+    * character, not two.
+    */
+  private def decodeEscapeBody(byte: Int): Option[Event] =
+    byte match
       case c if c < 0      => key(KeyCode.Escape)
       case '['             => decodeCsi()
       case 'O'             => decodeSs3()
-      case 0x1b            => key(KeyCode.Escape) // ESC ESC: report one Escape, the second opens nothing
+      case 0x1b            =>
+        // ESC ESC: the second ESC opens the *next* sequence, so it is handed back rather than swallowed. That is what
+        // makes `ESC` followed by an arrow key report Escape and then Up instead of Escape and the literal text `[A`.
+        pushBack(0x1b)
+        key(KeyCode.Escape)
       case ']' | 'P' | '_' => skipControlString()
       case c               => decodeControl(c, KeyModifiers.Alt)
 
@@ -110,21 +127,28 @@ private[terminal] final class InputDecoder(
     * The price is that Alt+`]`, Alt+Shift+P and Alt+`_` can no longer be bound: their legacy encoding is byte-identical
     * to a control-string introducer, and one byte of lookahead cannot tell the two apart. That trade is deliberate — a
     * dead rare key beats a reply typing itself into the focused widget.
+    *
+    * A truncated reply — one whose `ESC` opens a new sequence instead of the `ESC \` terminator — is *not* dropped: the
+    * character after that `ESC` is re-dispatched through [[decodeEscapeBody]] and whatever it decodes to is returned
+    * from here. Pushing it back instead would lose the `ESC` (the pushback slot holds one character), and the sequence
+    * it opened would then be delivered as ordinary keystrokes, where a `q` quits and an Enter submits.
     */
   private def skipControlString(): Option[Event] =
-    var consumed = 0
-    var done     = false
+    var consumed              = 0
+    var done                  = false
+    var result: Option[Event] = None
     while !done && consumed < MaxControlStringLength do
       val c = next(escapeTimeoutMillis)
       consumed += 1
       if c < 0 || c == Bel then done = true
       else if c == 0x1b then
-        // the string terminator is `ESC \`; an ESC followed by anything else means a new sequence has started, so the
-        // reply was truncated and that byte is handed back rather than swallowed
         val terminator = next(escapeTimeoutMillis)
-        if terminator != '\\' then pushBack(terminator)
         done = true
-    None
+        // `ESC \` ends the string and means nothing else; anything else after the ESC is a new sequence that has to be
+        // decoded here. A timed-out read stays `None`: turning a truncated reply into an `Escape` is exactly the
+        // invented keypress this class promises never to report.
+        if terminator >= 0 && terminator != '\\' then result = decodeEscapeBody(terminator)
+    result
 
   /** CSI sequences: parameters (digits, `;`, `:` and the private `<`/`>`/`=`/`?` prefixes) then a final byte in
     * 0x40-0x7E. [[scanCsi]] reads the sequence off the wire and says how it ended; only a complete one becomes an
@@ -162,6 +186,11 @@ private[terminal] final class InputDecoder(
       val c    = next(escapeTimeoutMillis)
       val read = consumed + 1
       if c < 0 then CsiScan.Torn
+      else if c == 0x1b then
+        // an ESC means the sequence in flight was torn off by a new one; hand it back so the next `decode` re-parses it
+        // rather than consuming the new sequence's `[` as this one's final byte
+        pushBack(c)
+        CsiScan.Torn
       else if c >= 0x40 && c <= 0x7e then if overrun then CsiScan.Overrun else CsiScan.Complete(params.result(), c)
       else if params.length < MaxParamLength then
         params.append(c.toChar)
@@ -360,15 +389,25 @@ private[terminal] final class InputDecoder(
 
   /** Legacy X10 mouse report `CSI M b x y`: three raw bytes, each the value biased by 32.
     *
-    * Needed because [[AnsiSequences.EnableMouseCapture]] *requests* SGR 1006 but a terminal that does not implement it
-    * keeps sending X10 — and those three bytes would otherwise be decoded as text and injected as keystrokes.
-    * Coordinates saturate at 223 (the byte is `32 + coordinate`), so a click past column 223 reports as 223.
+    * This branch exists only for a terminal that ignores [[AnsiSequences.EnableMouseCapture]]'s request for SGR 1006
+    * and keeps sending X10 — otherwise those three bytes are decoded as text and injected as keystrokes. SGR 1006 is
+    * unaffected by everything below, because its coordinates are decimal *text* and go through [[decodeSgrMouse]].
+    *
+    * X10's effective ceiling here is column/row 95, not the protocol's own 223. The decoder reads through a reader that
+    * UTF-8-decodes the stream (`JLine3Backend` builds its terminal with `stdinEncoding(UTF_8)`), and a coordinate byte
+    * at or above 0x80 is not valid UTF-8 on its own: it comes back as U+FFFD, which the range check below rejects so
+    * the click is dropped rather than reported at an invented position such as `Position(65500, 9)`. Worse, when two
+    * coordinate bytes happen to form a legal UTF-8 sequence (0xC3 0xA0, say) they collapse into one character, and the
+    * byte after the report is then consumed as the missing coordinate — damage one character of lookahead cannot
+    * repair. Reading raw bytes instead is not an option: the same reader's UTF-16 code units are what
+    * [[decodeControl]]'s C1 branch and [[printable]]'s surrogate recombination are built on.
     */
   private def decodeX10Mouse(): Option[Event] =
     val button = next(escapeTimeoutMillis)
     val column = next(escapeTimeoutMillis)
     val row    = next(escapeTimeoutMillis)
     if button < 0 || column < 0 || row < 0 then None
+    else if button > 0xff || column > 0xff || row > 0xff then None // a replacement character, not a coordinate byte
     else
       val bits    = button - 32
       // X10 has no separate release code: button 3 means "some button came up"

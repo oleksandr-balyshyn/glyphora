@@ -26,6 +26,15 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
 
   private def csi(body: String): Seq[Int] = Esc +: '['.toInt +: body.map(_.toInt)
 
+  /** What a scripted stream produces over `calls` successive `decode` calls, `None` entries included.
+    *
+    * A dropped sequence is half of what these regressions assert — "the torn sequence produced nothing *and* the one
+    * after it decoded correctly" is only checkable by looking at both results in order.
+    */
+  private def decodedAll(calls: Int)(chars: Int*): List[Option[Event]] =
+    val decoder = decoderFor(chars*)
+    List.fill(calls)(decoder.decode(10))
+
   /** The two vocabularies in one assertion: what an application writes as a key spec, and what the terminal actually
     * sends for that key. `KeyEvent.parse` lives in `tui-core`, so this side of the contract is now checkable from here
     * rather than only describable in a comment.
@@ -56,6 +65,38 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     dropped(Esc, '[')
     dropped(csi("1;5")*)
 
+  /** An `ESC` always starts a sequence, so one arriving mid-sequence aborts whatever was being read. The decoder used
+    * to keep consuming instead, which meant the *next* sequence was eaten as the torn one's parameters and its
+    * remaining bytes were delivered as ordinary characters — a `q` fires the quit binding, a `3` fires whatever is
+    * bound to it.
+    */
+  test("an ESC arriving mid-sequence aborts it and still decodes the sequence it opened"):
+    // rxvt-unicode sends exactly these bytes for Alt+Up; the decoder used to report Escape, then '[', then 'A'
+    assert(
+      decodedAll(2)(Esc, Esc, '['.toInt, 'A'.toInt) ==
+        List(Some(Event.Key(KeyEvent.of(KeyCode.Escape))), Some(Event.Key(KeyEvent.of(KeyCode.Up))))
+    )
+    // a CSI torn off mid-parameter: the 'A' used to arrive as a literal character
+    assert(decodedAll(2)((csi("1") ++ csi("A"))*) == List(None, Some(Event.Key(KeyEvent.of(KeyCode.Up)))))
+    // torn after a separator: the '1' and the '~' used to arrive as literal characters
+    assert(decodedAll(2)((csi("1;") ++ csi("1~"))*) == List(None, Some(Event.Key(KeyEvent.of(KeyCode.Home)))))
+
+  test("a truncated terminal reply does not leak the sequence that interrupted it as keystrokes"):
+    // an OSC with no `ESC \` terminator: the '[' and 'A' used to be dispatched as text into the focused widget
+    val bytes = Seq(Esc, ']'.toInt) ++ "11;rgb".map(_.toInt) ++ csi("A")
+    assert(decodedAll(2)(bytes*) == List(Some(Event.Key(KeyEvent.of(KeyCode.Up))), None))
+
+  test("a truncated terminal reply that simply stops is still not reported as an Escape"):
+    dropped((Seq(Esc, ']'.toInt) ++ "11;rgb".map(_.toInt) :+ Esc)*)
+
+  /** Handing the second `ESC` back is what makes the case above work, and it also means two genuine Escape presses
+    * report two Escapes rather than one. That is the intended behaviour; this pins it.
+    */
+  test("a lone ESC reports one Escape and two ESCs report two"):
+    val escape = Some(Event.Key(KeyEvent.of(KeyCode.Escape)))
+    assert(decodedAll(2)(Esc) == List(escape, None))
+    assert(decodedAll(3)(Esc, Esc) == List(escape, escape, None))
+
   test("a legacy X10 mouse report decodes as a mouse event, not as keystrokes"):
     // a terminal that ignores the SGR-1006 request keeps sending X10; those bytes used to be injected as text
     val report = Seq(Esc, '['.toInt, 'M'.toInt, 32 + 0, 32 + 33, 32 + 33)
@@ -67,6 +108,14 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
 
   test("a truncated X10 report is dropped rather than half-decoded"):
     dropped(Esc, '['.toInt, 'M'.toInt, 32)
+
+  /** The reader UTF-8-decodes the stream, so an X10 coordinate byte at or above 0x80 never survives as a byte: it
+    * arrives as U+FFFD (65533). Read as a coordinate that used to place the click at `Position(65500, 9)` — off every
+    * widget in the layout, so the click silently hit nothing.
+    */
+  test("an X10 coordinate that arrived as a replacement character is dropped, not read as a position"):
+    dropped(Esc, '['.toInt, 'M'.toInt, 32 + 0, 0xfffd, 32 + 10)
+    dropped(Esc, '['.toInt, 'M'.toInt, 32 + 0, 32 + 10, 0xfffd)
 
   test("a paste containing an escape sequence keeps its payload and still finds the terminator"):
     // the terminator's own ESC-[ used to be eaten by a five-byte lookahead that could not push back

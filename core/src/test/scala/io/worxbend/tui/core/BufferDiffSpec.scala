@@ -34,6 +34,29 @@ final class BufferDiffSpec extends AnyFunSuite:
     val frame = styled("unchanged")
     assert(collected(frame, frame.snapshot).isEmpty)
 
+  test("a cell whose colour changed under an unchanged glyph is emitted"):
+    // the shape every selection highlight, focus ring and `Effect.fadeIn` frame takes: the text is identical and only
+    // the style moved. A diff that compared symbols alone would freeze the highlight where it first appeared.
+    val previous = Buffer(Rect(0, 0, 6, 1))
+    previous.setString(0, 0, "row", Style.Default)
+    val next     = Buffer(Rect(0, 0, 6, 1))
+    next.setString(0, 0, "row", Style.Default.withBg(Color.Blue))
+    val changes  = collected(previous, next)
+    assert(changes.map(_._1.x) == Seq(0, 1, 2))
+    assert(changes.forall(_._2.style.bg.contains(Color.Blue)))
+
+  test("a cell whose modifiers changed under an unchanged glyph is emitted"):
+    val plain    = Buffer(Rect(0, 0, 6, 1))
+    plain.setString(0, 0, "row", Style.Default)
+    val bold     = Buffer(Rect(0, 0, 6, 1))
+    bold.setString(0, 0, "row", Style.Default.bold)
+    assert(collected(plain, bold).map(_._1.x) == Seq(0, 1, 2))
+    // and back the other way, so the assertion cannot be satisfied by "anything with modifiers differs from Default"
+    val reversed = Buffer(Rect(0, 0, 6, 1))
+    reversed.setString(0, 0, "row", Style.Default.reverse)
+    assert(collected(bold, reversed).map(_._1.x) == Seq(0, 1, 2))
+    assert(collected(reversed, reversed.snapshot).isEmpty)
+
   test("a differing area repaints every cell"):
     val small = Buffer(Rect(0, 0, 4, 1))
     val large = Buffer(Rect(0, 0, 6, 1))
