@@ -85,7 +85,12 @@ Core structural elements:
 - `collapsible(title, expanded)(body)` — toggleable disclosure region;
 - `splitPane(first, second, splitPercent)` — keyboard/mouse-resizable panes;
 - `layers(base, overlays*)` — paint later elements over earlier ones;
-- `menu`, `tooltip`, and `dialog` — transient interaction surfaces.
+- `positioned(dx, dy, width, height)(content)` — place content at an exact offset
+  inside the area, clipped to it (see
+  [Overlay at an exact offset](./layout-and-style#overlay-at-an-exact-offset));
+- `menu`, `tooltip`, and `dialog` — transient interaction surfaces. A `tooltip` sizes
+  itself to its text and has no anchor of its own, so it is `positioned` over a
+  `layers` base at the cell it should point at.
 
 `scrollView` draws its own scrollbar. For the rarer case of a scroll indicator beside
 something the DSL is not scrolling — a custom render loop, a pane whose offset your own
@@ -450,11 +455,11 @@ are on the element too, so `spinner("x").atFps(4)` needs no preset value.
 Frames are padded to the widest frame in the set, so a preset with ragged frames
 (`ellipsis`, `bouncing-bar`) never shoves its label back and forth.
 
-### Progress-bar styles
+### Progress-bar presets
 
-`ProgressStyle` is the glyph vocabulary a bar draws with; `.preset(...)` swaps it.
+`.preset(...)` picks which glyphs a bar draws with. The nine built-ins:
 
-| Style | Look | Sub-cell |
+| Preset | Look | Sub-cell |
 |---|---|---|
 | `Line` (default) | `━━━━────` | no |
 | `Blocks` | `████▌` | yes — eighth blocks |
@@ -466,11 +471,11 @@ Frames are padded to the widest frame in the set, so a preset with ragged frames
 | `Baseline` | `▄▄▄▁▁▁` | no |
 | `Minimal` | `▪▪▪···` | no |
 
-A style with `partials` draws progress finer than its own cell grid — eight partial
+A preset with `partials` draws progress finer than its own cell grid — eight partial
 blocks turn a 20-column bar into 160 distinguishable positions. That also changes the
-rounding, deliberately: sub-cell styles **floor** the fill and render the remainder as
+rounding, deliberately: sub-cell presets **floor** the fill and render the remainder as
 the boundary glyph, so the bar never claims progress that has not happened, while
-whole-cell styles round to nearest because that is the closest a cell can get.
+whole-cell presets round to nearest because that is the closest a cell can get.
 
 `indeterminateBar` draws from the same vocabulary and adds `.motion(...)`:
 

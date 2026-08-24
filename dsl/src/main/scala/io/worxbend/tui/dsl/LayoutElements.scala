@@ -21,6 +21,9 @@ trait FlexContainer extends Element:
   * Two captions are available, and neither costs a content row: `title` is written into the top border at the left,
   * `titleBottom` into the bottom border at the right — the name-above / status-below shape most panes in a real
   * application want. [[padding]] reserves blank cells between the border and the children.
+  *
+  * The children are stacked by the same `w.Column` a [[ColumnElement]] builds, so a panel is a [[FlexContainer]] too:
+  * `.gap`/`.center`/`.spaceBetween` work inside the border without wrapping the children in a `column` first.
   */
 final case class PanelElement(
     title: Option[String],
@@ -29,15 +32,20 @@ final case class PanelElement(
     titleBottom: Option[String] = None,
     titleStyle: Option[Style] = None,
     padding: w.Padding = w.Padding.zero,
+    spacing: Int = 0,
+    flex: Flex = Flex.Start,
     props: ElementProps = ElementProps(),
-) extends Element:
+) extends FlexContainer:
   type Self = PanelElement
 
   def widget: Widget =
     (area, buffer) =>
-      val block = w.Block(blockTitles, borderType, props.style, padding = padding)
+      val block = w.Block(blockTitles, padding = padding, borderStyle = props.style, borderType = borderType)
       block.render(area, buffer)
-      w.Column(children.map(_.layoutItem(Direction.Vertical))).render(block.inner(area), buffer)
+      w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing, flex).render(block.inner(area), buffer)
+
+  def withFlex(mode: Flex): PanelElement    = copy(flex = mode)
+  def withSpacing(cells: Int): PanelElement = copy(spacing = math.max(0, cells))
 
   /** The captions handed to `w.Block`.
     *
@@ -72,8 +80,10 @@ final case class PanelElement(
     // the same fact twice: `w.Block`'s border eats a column on each side and a row at the top and bottom, and the
     // padding eats whatever it was asked for on top of that
     val chrome  = PanelBorderCells + padding.horizontalCells
+    val gaps    = spacing * math.max(0, children.size - 1)
     val heights = children.map(_.intrinsicHeight(math.max(0, width - chrome)))
-    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + PanelBorderCells + padding.verticalCells) else None
+    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + gaps + PanelBorderCells + padding.verticalCells)
+    else None
 
 /** Rounded and double-line borders, on the one node type where a border exists at all. */
 extension (panel: PanelElement)

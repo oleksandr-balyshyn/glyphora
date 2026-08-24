@@ -85,7 +85,7 @@ private[widgets] final class LinearDots(
 
   /** The dot mask a slot at sub-position `sub` contributes at brightness `level`.
     *
-    * A horizontal track fills its dot column from the floor up, which is the direction [[ProgressStyle.Dots]] and
+    * A horizontal track fills its dot column from the floor up, which is the direction [[ProgressPreset.Dots]] and
     * [[SpinnerPreset.GrowVertical]] already fill a cell — a linear spinner sitting beside either should grow the same
     * way. At braille that gives the ladder `⣀ ⣤ ⣶ ⣿`, and a half-cell head reads `⡇` or `⢸` before it straddles into
     * `⣿`. A vertical track fills its dot row from the left, matching how a partial block glyph grows.

@@ -82,3 +82,18 @@ final class OneImportSpec extends AnyFunSuite:
     queued match
       case RunnerError.QueuedTask(failures: QueuedTaskFailures) => assert(failures.count == 3)
       case other                                                => fail(s"expected a QueuedTask error, got $other")
+
+  /** Two names no exported signature forces the block to carry, and which were therefore missing from it.
+    *
+    * `Spring` is the fourth member of the core motion group — `Easing`, `Effect` and `Tween` were already exported, and
+    * the motion guide presents a spring and a tween as alternatives for the same job, so the guide's spring snippet was
+    * the one that opened with a second glyphora import. `.ratio` is the sixth constraint shorthand: `Constraint.Ratio`
+    * appears in completion, the layout solver has a branch for it, and no DSL extension reached it.
+    */
+  test("the whole core motion group, and every constraint, are reachable from the one import"):
+    val spring               = Spring(frequency = 6.0, damping = 0.75, deltaTime = 0.05)
+    val (position, velocity) = spring.step(0.0, 0.0, 100.0)
+    assert(position > 0.0 && !spring.settled(position, velocity, 100.0))
+
+    val third: Element = text("a").ratio(1, 3)
+    assert(third.props.constraint.contains(Constraint.Ratio(1, 3)))

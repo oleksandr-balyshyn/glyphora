@@ -1,11 +1,28 @@
 package io.worxbend.tui.widgets
 
-/** The keyboard-navigation rule every selectable widget in this module follows.
+/** The keyboard-navigation rules every selectable widget in this module follows.
   *
-  * Four widgets — [[ListView]], [[DataTable]], [[Tree]] and [[DirectoryTree]] — let the user walk a highlight up and
-  * down with the arrow keys, and all four have to answer the same two questions: what happens at the ends of the list,
-  * and what happens when nothing is selected yet. Stating the answers once here is what keeps a change to either rule
-  * from having to be found in four separate files.
+  * Five widgets — [[ListView]], [[DataTable]], [[Tree]], [[DirectoryTree]] and [[Menu]] — let the user walk a highlight
+  * up and down with the arrow keys, and all five have to answer the same two questions: what happens at the ends of the
+  * list, and what happens when nothing is selected yet. Stating the answers once here is what keeps a change to either
+  * rule from having to be found in five separate files.
+  *
+  * '''There are two answers to the first question, and the split is deliberate.''' The four list-shaped widgets
+  * ''clamp'': pressing "down" on the last row stays there. They scroll, so the rows on screen are a window onto a
+  * longer list, and jumping from the bottom of that list back to the top moves the highlight somewhere the reader was
+  * not looking and cannot see it arrive — it reads as the selection having been lost. [[Menu]] ''wraps'': a popup menu
+  * is short, bounded and entirely on screen, so the highlight leaving the last entry and appearing on the first is a
+  * move the reader watches happen, and wrapping saves walking back up a menu whose ends are both visible.
+  *
+  * The wrapping pair also takes a selectability test, because a menu is the only one of the five whose entries can be
+  * un-landable — a separator or a disabled item — and navigation has to step over those rather than onto them.
+  *
+  * '''Which function to reach for.''' The clamping rule comes in two shapes, because the five widgets do not all
+  * address a row the same way. [[ListView]] and [[DataTable]] hold an index into the rows they are rendering, so they
+  * call [[next]]/[[previous]]. [[Tree]] and [[DirectoryTree]] hold the *thing* a row shows — a node path, a file path —
+  * because expanding a branch renumbers every row below it, so they call [[moveWithin]], which clamps by the same rule
+  * over a sequence of values instead of a count. [[Menu]] is the wrapping one and calls
+  * [[nextSelectable]]/[[previousSelectable]].
   *
   * These are pure functions of the values passed in. The selection itself lives in caller-owned state, which the render
   * thread reads, so the same thread constraint the widgets carry applies to whoever stores the result.
@@ -27,6 +44,25 @@ private[widgets] object Selection:
     */
   def previous(current: Option[Int], count: Int): Option[Int] =
     if count <= 0 then None else Some(current.fold(0)(index => math.max(index - 1, 0)))
+
+  /** The next index after `current` that `isSelectable` accepts, wrapping past the end — the popup-menu rule.
+    *
+    * Searches at most one full lap, so a list with nothing selectable at all answers `None` rather than spinning. With
+    * nothing selected yet the search starts from index 0, so the first move lands on the first selectable entry after
+    * it. `None` also when `count` is zero, because there is nothing to point at.
+    */
+  def nextSelectable(current: Option[Int], count: Int, isSelectable: Int => Boolean): Option[Int] =
+    wrapping(current, count, 1, isSelectable)
+
+  /** The nearest selectable index before `current`, wrapping past the start — the mirror of [[nextSelectable]]. */
+  def previousSelectable(current: Option[Int], count: Int, isSelectable: Int => Boolean): Option[Int] =
+    wrapping(current, count, -1, isSelectable)
+
+  private def wrapping(current: Option[Int], count: Int, delta: Int, isSelectable: Int => Boolean): Option[Int] =
+    if count <= 0 then None
+    else
+      val start = current.getOrElse(0)
+      (1 to count).iterator.map(step => math.floorMod(start + delta * step, count)).find(isSelectable)
 
   /** `current` moved by `delta` places within `items`, addressed by value rather than by index.
     *

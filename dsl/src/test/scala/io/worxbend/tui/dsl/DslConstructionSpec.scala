@@ -18,7 +18,7 @@ final class DslConstructionSpec extends AnyFunSuite:
       text("Press 'q' to quit").dim,
     ).rounded
     tree match
-      case PanelElement(Some("Hello"), children, BorderType.Rounded, _, _, _, _) =>
+      case PanelElement(Some("Hello"), children, BorderType.Rounded, _, _, _, _, _, _) =>
         assert(children.size == 3)
         children(0) match
           case TextElement(content, _) => assert(content == "Welcome!")

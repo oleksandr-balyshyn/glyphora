@@ -85,6 +85,10 @@ export Element.{
 // `io.worxbend.tui.dsl.*` and nothing else from glyphora, and the tenth adds only
 // `io.worxbend.tui.macros.{deriveForm, Field}`, a genuinely separate module a form-less app never touches. An example
 // that needs a second glyphora import means this list is short.
+//
+// `core.Progress` is the deliberate omission from the motion group (`Easing`, `Effect`, `Spring`, `Tween`): it is the
+// shared time-to-position arithmetic those four and the animated widgets are built *from*, so it belongs to whoever
+// writes a widget, not to whoever writes a view. Widget authors already import `io.worxbend.tui.core`.
 export io.worxbend.tui.core.{
   Buffer,
   Color,
@@ -102,6 +106,7 @@ export io.worxbend.tui.core.{
   Rect,
   Size,
   Span,
+  Spring,
   StatefulWidget,
   Style,
   Text,
@@ -201,7 +206,7 @@ export io.worxbend.tui.widgets.{
   Padding,
   Paging,
   ProgressLabel,
-  ProgressStyle,
+  ProgressPreset,
   ScrollViewState,
   Shape,
   SliderRange,
@@ -238,7 +243,8 @@ type View = (ReactiveScope, Theme) ?=> Element
   */
 extension (content: String) def styled(transform: Style => Style): Span = Span(content, transform(Style.Default))
 
-/** Alignment and inter-child spacing for the two containers that lay children out along an axis.
+/** Alignment and inter-child spacing for the containers that lay children out along an axis — `row`, `column`, and
+  * `panel`, which stacks its children with the same widget `column` does.
   *
   * Typed to [[FlexContainer]] rather than to every element: `text("x").center` used to compile and do nothing, which is
   * the kind of silence a fluent API should not have. Each call gives back the container's own type, so the builders
@@ -307,6 +313,12 @@ extension [E <: Element](element: E)
   def fill(weight: Int): element.Self   = constrained(element, Constraint.Fill(weight))
   def minSize(cells: Int): element.Self = constrained(element, Constraint.Min(cells))
   def maxSize(cells: Int): element.Self = constrained(element, Constraint.Max(cells))
+
+  /** An exact fraction of the container: `.ratio(1, 3)` claims a third. The whole-number companion to [[percent]], for
+    * the splits a percentage cannot say without truncating — `Layout`'s own advice for exact thirds.
+    */
+  def ratio(numerator: Int, denominator: Int): element.Self =
+    constrained(element, Constraint.Ratio(numerator, denominator))
 
 private def constrained(element: Element, constraint: Constraint): element.Self =
   element.withProps(element.props.copy(constraint = Some(constraint)))

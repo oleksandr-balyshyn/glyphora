@@ -27,14 +27,14 @@ enum IndeterminateMotion:
 
 /** An indeterminate progress bar: a segment travelling along a track, advanced by `phase`.
   *
-  * The glyphs come from a [[ProgressStyle]] so a determinate and an indeterminate bar in the same view can be drawn
+  * The glyphs come from a [[ProgressPreset]] so a determinate and an indeterminate bar in the same view can be drawn
   * from the same vocabulary, and the travel comes from an [[IndeterminateMotion]].
   */
 final case class IndeterminateBar(
     elapsed: FiniteDuration,
     style: Style = Style.Default.dim,
     segmentStyle: Style = Style.Default,
-    progressStyle: ProgressStyle = ProgressStyle.Line,
+    preset: ProgressPreset = ProgressPreset.Line,
     motion: IndeterminateMotion = IndeterminateMotion.Bounce,
     segmentWidth: Option[Int] = None,
     period: FiniteDuration = 1600.millis,
@@ -77,13 +77,13 @@ final case class IndeterminateBar(
       val distance = head - (x - area.x)
       if distance >= 0 && distance < segment then
         val glyph =
-          if distance == 0 then progressStyle.fill
-          else if progressStyle.isSubCell then
-            val step = progressStyle.partials.size - 1 - (distance - 1) * progressStyle.partials.size / segment
-            progressStyle.partials(math.max(0, math.min(progressStyle.partials.size - 1, step)))
-          else progressStyle.fill
+          if distance == 0 then preset.fill
+          else if preset.isSubCell then
+            val step = preset.partials.size - 1 - (distance - 1) * preset.partials.size / segment
+            preset.partials(math.max(0, math.min(preset.partials.size - 1, step)))
+          else preset.fill
         buffer.set(x, area.y, Cell(glyph, if distance == 0 then segmentStyle else style))
-      else buffer.set(x, area.y, Cell(progressStyle.track, style))
+      else buffer.set(x, area.y, Cell(preset.track, style))
       x += 1
 
   /** The whole track brightening and dimming in place. Lit for the middle half of each period, so it reads as a breath
@@ -99,4 +99,4 @@ final case class IndeterminateBar(
       x += 1
 
   private def cellFor(active: Boolean, activeStyle: Style): Cell =
-    if active then Cell(progressStyle.fill, activeStyle) else Cell(progressStyle.track, style)
+    if active then Cell(preset.fill, activeStyle) else Cell(preset.track, style)

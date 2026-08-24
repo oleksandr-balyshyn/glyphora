@@ -4,7 +4,7 @@ import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
 
 /** A one-row progress meter: a caption followed by a filled/unfilled line.
   *
-  * The glyphs come from a [[ProgressStyle]], so a bar can step whole cells or move smoothly with sub-cell partials
+  * The glyphs come from a [[ProgressPreset]], so a bar can step whole cells or move smoothly with sub-cell partials
   * without this widget knowing which. `ratio` is clamped to `[0, 1]` and `NaN` reads as no progress.
   *
   * `fillRamp` colors the fill by how far along it is. It overrides `filledStyle`'s foreground and nothing else, so the
@@ -15,7 +15,7 @@ final case class LineGauge(
     label: ProgressLabel = ProgressLabel.Percentage,
     style: Style = Style.Default,
     filledStyle: Style = Style.Default,
-    progressStyle: ProgressStyle = ProgressStyle.Line,
+    preset: ProgressPreset = ProgressPreset.Line,
     fillRamp: Option[ColorRamp] = None,
 ) extends Widget:
 
@@ -29,12 +29,12 @@ final case class LineGauge(
       val lineStart = cursor.at
       val lineWidth = cursor.remaining
       if lineWidth > 0 then
-        val glyphs = progressStyle.glyphs(clamped, lineWidth)
-        val filled = progressStyle.filledCells(clamped, lineWidth)
+        val glyphs = preset.glyphs(clamped, lineWidth)
+        val filled = preset.filledCells(clamped, lineWidth)
         val fill   = fillRamp.fold(filledStyle)(ramp => filledStyle.withFg(ramp.at(clamped)))
         glyphs.zipWithIndex.foreach: (glyph, index) =>
           // the boundary cell counts as filled for styling: it is part of the bar, not part of the track
-          val isFilled = index <= filled && (index < filled || progressStyle.isSubCell)
+          val isFilled = index <= filled && (index < filled || preset.isSubCell)
           buffer.set(lineStart + index, area.y, Cell(glyph, if isFilled then fill else style))
 
 object LineGauge:

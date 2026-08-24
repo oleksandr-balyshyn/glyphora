@@ -15,7 +15,8 @@ dependency. The repository directory is `test-support/`; the Scala package is
   expected strings read like the terminal).
 - **`GoldenFrames`** — whole-frame snapshots: `assertMatches(name, buffer)` compares against
   `golden/<name>.txt` on the test classpath, and `GLYPHORA_GOLDEN_UPDATE=<dir>` records
-  instead of comparing.
+  instead of comparing. The fixture holds glyphs and layout only — styling is not in it, so
+  pin colours and modifiers with cell assertions alongside.
 
 ```scala
 val backend = HeadlessBackend(Size(40, 10))

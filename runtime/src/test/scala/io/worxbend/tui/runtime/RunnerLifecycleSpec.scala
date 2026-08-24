@@ -185,6 +185,26 @@ final class RunnerLifecycleSpec extends AnyFunSuite:
     assert(!backend.isAlternateScreen, "the alternate screen was not left")
     assert(backend.isCursorVisible, "the cursor was left hidden")
 
+  test("a throwing render function ends the run as RunnerError.Handler with the terminal restored"):
+    // the render function is app code as much as the event handler is — in the DSL it *is* the user's `view`, so an
+    // off-by-one index into a list while drawing lands here. It runs inside `FrameComposer.compose`, whose
+    // `Either[BackendError, Unit]` cannot carry a throwable, so the guard sits at the call site instead. Without it the
+    // throwable unwinds past the restore and past `TuiApp`'s "glyphora: <message>" reporting, and the user gets a raw
+    // stack trace printed over a terminal still in raw mode.
+    val backend = HeadlessBackend(Size(20, 3))
+    val result  = TerminalRunner(backend).run(
+      _ => (),
+      (_, handle) => { handle.quit(); EventOutcome.Ignored },
+      _ => throw IndexOutOfBoundsException("render boom"),
+    )
+    result match
+      case Left(RunnerError.Handler(error)) => assert(error.getMessage == "render boom")
+      case other                            => fail(s"expected a handler failure, got $other")
+    assert(result.left.exists(_.message.contains("render boom")))
+    assert(!backend.isRawMode, "raw mode was not restored")
+    assert(!backend.isAlternateScreen, "the alternate screen was not left")
+    assert(backend.isCursorVisible, "the cursor was left hidden")
+
   test("a throwing onStart ends the run the same way, before any frame"):
     val backend = HeadlessBackend(Size(20, 3))
     val result  = TerminalRunner(backend).run(

@@ -11,6 +11,13 @@ import scala.util.Using
 /** Full-frame snapshot assertions: a rendered buffer is compared against a text fixture in the module's test resources
   * (`/golden/<name>.txt`).
   *
+  * **What a fixture records is layout and glyphs, and nothing else.** The frame is serialised through
+  * [[BufferAssertions.text]], which concatenates each cell's symbol, so colours, modifiers and hyperlinks are dropped:
+  * a frame that lost every style still matches its fixture byte for byte. Use a golden fixture to pin *where things
+  * landed*, and assert styling separately against the buffer's cells. Widening the fixture format to carry a style
+  * plane was considered and rejected — it would make every fixture unreadable in review, which is the one thing a text
+  * snapshot is for.
+  *
   * To (re)generate fixtures, run the tests with `GLYPHORA_GOLDEN_UPDATE=<resources-dir>` — each assertion then writes
   * its actual frame there instead of comparing, and the diff shows up in review like any code change.
   *

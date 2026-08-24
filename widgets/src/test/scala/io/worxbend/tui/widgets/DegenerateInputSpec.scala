@@ -96,19 +96,53 @@ final class DegenerateInputSpec extends AnyFunSuite:
     assert(target.get(1, 1).style.modifiers.hasAny(Modifiers.Dim))
     assert(!target.get(1, 1).style.modifiers.hasAny(Modifiers.Reverse))
 
-  test("a calendar clips an out-of-range month instead of throwing"):
-    Calendar(2026, 13).render(Rect(0, 0, 20, 10), buffer(20, 10))
-    Calendar(2026, 0).render(Rect(0, 0, 20, 10), buffer(20, 10))
-    Calendar(Int.MaxValue, 6).render(Rect(0, 0, 20, 10), buffer(20, 10))
+  test("a calendar clamps an out-of-range month into the year instead of throwing or blanking"):
+    // stepping a month at a time through prev/next navigation naturally produces 0 and 13, so both are clamped into
+    // 1..12 — 13 is December, 0 is January. Not throwing is only half the contract: the pane must still show a month.
+    val overflow  = buffer(20, 10)
+    Calendar(2026, 13).render(Rect(0, 0, 20, 10), overflow)
+    assert(line(overflow, 0).contains("December 2026"), s"title row is '${line(overflow, 0)}'")
+    assert(line(overflow, 1).contains("Mo Tu We"), s"weekday header is '${line(overflow, 1)}'")
+    val underflow = buffer(20, 10)
+    Calendar(2026, 0).render(Rect(0, 0, 20, 10), underflow)
+    assert(line(underflow, 0).contains("January 2026"), s"title row is '${line(underflow, 0)}'")
+    // `Int.MaxValue` is past `java.time.Year.MAX_VALUE`, so the year clamps too and the grid is still drawn
+    val distant   = buffer(20, 10)
+    Calendar(Int.MaxValue, 6).render(Rect(0, 0, 20, 10), distant)
+    assert(line(distant, 0).contains("June"), s"title row is '${line(distant, 0)}'")
+    assert(trimmedLines(distant).count(_.nonEmpty) > 2, "the day grid was not drawn at all")
 
   test("charts with an empty palette render instead of dividing by zero"):
-    PieChart(Seq("a" -> 1.0, "b" -> 2.0), styles = Seq.empty).render(Rect(0, 0, 30, 10), buffer(30, 10))
-    StackedBarChart(Seq("a" -> Seq(1L, 2L)), styles = Seq.empty).render(Rect(0, 0, 20, 6), buffer(20, 6))
+    // the palette is indexed by slice, so an empty one is the divide-by-zero. Surviving it is worth nothing if the
+    // chart then paints nothing: these two assertions are what make "render" in the test name mean something.
+    val pie  = buffer(30, 10)
+    PieChart(Seq("a" -> 1.0, "b" -> 2.0), styles = Seq.empty).render(Rect(0, 0, 30, 10), pie)
+    assert(trimmedLines(pie).exists(_.nonEmpty), "the pie chart drew nothing while holding two slices")
+    val bars = buffer(20, 6)
+    StackedBarChart(Seq("a" -> Seq(1L, 2L)), styles = Seq.empty).render(Rect(0, 0, 20, 6), bars)
+    assert(trimmedLines(bars).exists(_.nonEmpty), "the stacked bar chart drew nothing while holding two segments")
 
-  test("an image with ragged rows renders instead of indexing past a short row"):
+  test("an image with a short row repeats that row's last pixel instead of indexing past it"):
+    // `Image` takes its source width from the *first* row, so a ragged `pixels` is where an index would run off the
+    // end. The answer is the same nearest-neighbour clamp the widget already uses for scaling: the last pixel of the
+    // short row fills the columns it does not reach.
+    val top: Color.Rgb    = Color.Rgb(10, 20, 30)
+    val bottom: Color.Rgb = Color.Rgb(200, 100, 50)
+    val ragged            = Image(Vector(Vector.fill(4)(top), Vector(bottom)))
+    val buf               = buffer(20, 2)
+    ragged.render(Rect(0, 0, 4, 2), buf)
+    // two pixel rows over two terminal rows: row 0 samples the full row, row 1 samples the one-pixel row four times
+    assert((0 until 4).forall(x => buf.get(x, 0).style.fg.contains(top)), "the full row did not paint")
+    assert((0 until 4).forall(x => buf.get(x, 1).style.fg.contains(bottom)), "the short row did not fill its width")
+    assert(spillToTheRight(ragged, 4, 2) == Seq("", ""))
+
+  test("an image with an entirely empty row samples black rather than throwing"):
     val rgb: Color.Rgb = Color.Rgb(10, 20, 30)
-    Image(Vector(Vector.fill(4)(rgb), Vector.fill(1)(rgb))).render(Rect(0, 0, 4, 2), buffer(4, 2))
-    Image(Vector(Vector.fill(4)(rgb), Vector.empty)).render(Rect(0, 0, 4, 2), buffer(4, 2))
+    val empty          = Image(Vector(Vector.fill(4)(rgb), Vector.empty))
+    val buf            = buffer(20, 2)
+    empty.render(Rect(0, 0, 4, 2), buf)
+    assert((0 until 4).forall(x => buf.get(x, 1).style.fg.contains(Color.Rgb(0, 0, 0))))
+    assert(spillToTheRight(empty, 4, 2) == Seq("", ""))
 
   /** A column mixing numbers with dates is ordinary data. Deciding numeric-vs-text per comparison is not a valid
     * ordering — `"9" < "10"` numerically, `"10" < "2020-01-01"` and `"2020-01-01" < "9"` textually is a cycle — and

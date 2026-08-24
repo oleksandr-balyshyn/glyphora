@@ -47,9 +47,9 @@ final class MenuSpec extends AnyFunSuite:
     val _     = rendered(menu, state, 14, 6)
     assert(state.selected.contains(0))
 
-  test("width and height report the popup's natural size"):
-    assert(menu.height == items.size + 2)
-    assert(menu.width >= "Save".length + "^S".length) // widest content plus borders/padding
+  test("the measured size reports the popup's natural box"):
+    assert(menu.heightAt(0).contains(items.size + 2))
+    assert(menu.widthAt(0).exists(_ >= "Save".length + "^S".length)) // widest content plus borders/padding
 
   test("a shortcut hint landing on a wide label's continuation column still renders"):
     // the label truncates to " 設定パネ" (9 columns) so ネ sits at inner.x + 7 with its continuation at inner.x + 8,

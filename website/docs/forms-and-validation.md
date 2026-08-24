@@ -5,9 +5,9 @@ description: Derive reflection-free forms from Scala case classes, add validator
 
 # Forms & validation
 
-glyphora can derive a live form from a Scala 3 case class at compile time. String,
-`Int`, and `Boolean` fields become terminal controls; submission parses every value,
-publishes inline errors, and assembles the case class only when all fields are valid.
+glyphora can derive a live form from a Scala 3 case class at compile time. Each field's
+type becomes a terminal control; submission parses every value, publishes inline errors,
+and assembles the case class only when all fields are valid.
 
 There is no runtime reflection, annotation scanner, or `reflect-config.json`.
 
@@ -83,6 +83,51 @@ Field.bool("subscribe").mapValidated { accepted =>
 }
 ```
 
+## Which field types derive
+
+| Field type | Control | Blank input |
+| --- | --- | --- |
+| `String` | text input | the empty string |
+| `Int` | number input — non-digits are refused as you type | a parse error |
+| `Double` | number input that also takes one decimal point | a parse error |
+| `Boolean` | checkbox | — |
+| `Option[A]` | the same control `A` would get | `None` |
+
+Anything else — a `java.time.LocalDate`, a nested case class, a domain type of your own
+— is a compile error rather than a runtime surprise:
+
+```
+deriveForm: no form control is defined for a field of type java.time.LocalDate. Out of
+the box String, Int, Double, Boolean and Option of those are supported; define a
+`given FormFieldType[java.time.LocalDate]` next to your own type to teach the
+derivation about it.
+```
+
+## Teach the derivation about your own type
+
+The list above is not a fixed set the library owns; it is just the instances that ship
+with it. A `FormFieldType[A]` says two things — which control the field is edited with,
+and how the typed text becomes an `A` (or a message to show the user). Put one in your
+type's companion object and it derives like any built-in:
+
+```scala
+import io.worxbend.tui.macros.{FieldInput, FormFieldType}
+
+opaque type Email = String
+
+object Email:
+  def from(raw: String): Either[String, Email] =
+    if raw.contains("@") then Right(raw.trim) else Left(s"'$raw' is not an email address")
+
+  given FormFieldType[Email] = FormFieldType(FieldInput.TextField)(Email.from)
+
+final case class Contact(email: Email, cc: Option[Email])
+// deriveForm[Contact] now compiles; `cc` accepts blank as None
+```
+
+`parse` runs on the render thread when the user submits, so keep it pure and quick — no
+network calls, no locks.
+
 ## Render and submit
 
 ```scala
@@ -149,8 +194,9 @@ flow and a high-contrast theme.
 
 ## Build a manual form when needed
 
-Derivation intentionally covers a small, predictable type set. For dates, nested
-objects, async suggestions, or custom domain types, compose controls directly:
+A `FormFieldType` covers a field the user types into. A layout the derivation cannot
+express — a nested case class, a radio group over an enum, a suggestion list that queries
+a service as you type — is still an ordinary column of controls:
 
 ```scala
 import io.worxbend.tui.widgets.TextInputState

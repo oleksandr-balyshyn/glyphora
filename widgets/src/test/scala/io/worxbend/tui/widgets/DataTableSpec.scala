@@ -88,8 +88,16 @@ final class DataTableSpec extends AnyFunSuite:
     assert(state.paging.isEmpty)
     assert(table.visibleRows(state).sizeIs == 3)
 
-  test("filtering shrinks the page domain and visibleRows re-clamps the page"):
+  test("filtering shrinks the page domain and the visible page snaps back into range"):
     val state = DataTableState()
     state.paging = Some(Paging(size = 2, page = 1))
     state.setFilter("alph")
     assert(table.visibleRows(state).map(_.head) == Seq("alpha")) // page snapped back into range
+
+  test("reading the visible rows leaves the state alone; rendering repairs the out-of-range page"):
+    val state = DataTableState()
+    state.paging = Some(Paging(size = 2, page = 4))
+    val _     = table.visibleRows(state)
+    assert(state.paging.map(_.page).contains(4)) // a read is only a read
+    val _ = rendered(table, state, 15, 4)
+    assert(state.paging.map(_.page).contains(1)) // three rows over two-row pages: page 1 is the last

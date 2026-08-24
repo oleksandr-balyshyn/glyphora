@@ -29,7 +29,7 @@ final class IndeterminateMotionSpec extends AnyFunSuite:
     IndeterminateMotion.values.foreach: motion =>
       (0 until 40).foreach: sample =>
         val moment = at(sample, 40)
-        val drawn  = row(IndeterminateBar(moment, motion = motion, progressStyle = ProgressStyle.Ascii))
+        val drawn  = row(IndeterminateBar(moment, motion = motion, preset = ProgressPreset.Ascii))
         assert(drawn.length == 12, s"$motion at $moment drew ${drawn.length} cells")
         assert(drawn.forall(c => c == '#' || c == '-'), s"$motion at $moment drew '$drawn'")
 
@@ -58,7 +58,7 @@ final class IndeterminateMotionSpec extends AnyFunSuite:
   test("a comet draws a graded tail when the style has partials"):
     val withPartials = (0 until 30)
       .map(sample =>
-        row(IndeterminateBar(at(sample, 30), motion = IndeterminateMotion.Comet, progressStyle = ProgressStyle.Dots))
+        row(IndeterminateBar(at(sample, 30), motion = IndeterminateMotion.Comet, preset = ProgressPreset.Dots))
       )
       .map(_.distinct.length)
       .max
@@ -66,7 +66,7 @@ final class IndeterminateMotionSpec extends AnyFunSuite:
 
   test("a comet over a whole-cell style still renders, without a gradient"):
     val drawn =
-      row(IndeterminateBar(at(4, 30), motion = IndeterminateMotion.Comet, progressStyle = ProgressStyle.Ascii))
+      row(IndeterminateBar(at(4, 30), motion = IndeterminateMotion.Comet, preset = ProgressPreset.Ascii))
     assert(drawn.length == 12)
     assert(drawn.contains('#'))
 

@@ -87,13 +87,19 @@ final class GrammarSpec extends AnyFunSuite:
   /** The annotations are the assertion: the flex helpers hand back the container's own type, so the result can be read
     * for `flex`/`spacing` without a cast, and `text("x").center` no longer compiles at all.
     */
-  test("flex helpers set the mode on row/column and keep the container's own type"):
+  test("flex helpers set the mode on row/column/panel and keep the container's own type"):
     val centeredRow: RowElement     = row(text("a")).center
     val spreadColumn: ColumnElement = column(text("a")).spaceBetween
     val gappedRow: RowElement       = row(text("a")).gap(3)
+    // a panel stacks its children with the same widget a column does, so it carries the same two knobs — and the
+    // annotation is half the assertion: `.rounded` after `.gap` only compiles while the type is still PanelElement
+    val gappedPanel: PanelElement   = panel("Logs")(text("a")).gap(2).rounded
     assert(centeredRow.flex == Flex.Center)
     assert(spreadColumn.flex == Flex.SpaceBetween)
     assert(gappedRow.spacing == 3)
+    assert(gappedPanel.spacing == 2)
+    assert(panel("Logs")(text("a")).spaceBetween.flex == Flex.SpaceBetween)
+    assert(panel("Logs")(text("a")).gap(-4).spacing == 0) // negative counts clamp, as they do on row/column
 
   test("the View alias is a reactive computation producing an Element"):
     val v: View         = text("from a view alias")

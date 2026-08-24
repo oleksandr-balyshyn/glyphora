@@ -341,21 +341,21 @@ private[dsl] trait ElementFactories:
     IndeterminateElement(
       elapsed,
       w.IndeterminateMotion.Bounce,
-      w.ProgressStyle.Line,
+      w.ProgressPreset.Line,
       theme.loading.track,
       theme.loading.fill,
     )
 
   /** A one-row determinate progress bar: a caption then a filled track.
     *
-    * `ratio` is clamped to `[0, 1]`. The glyphs come from [[w.ProgressStyle]] — the default steps whole cells, and
-    * `.preset(ProgressStyle.Blocks)` moves smoothly with sub-cell partials.
+    * `ratio` is clamped to `[0, 1]`. The glyphs come from [[w.ProgressPreset]] — the default steps whole cells, and
+    * `.preset(ProgressPreset.Blocks)` moves smoothly with sub-cell partials.
     */
   def progressBar(ratio: Double)(using theme: Theme): ProgressBarElement =
     ProgressBarElement(
       ratio,
       w.ProgressLabel.Percentage,
-      w.ProgressStyle.Line,
+      w.ProgressPreset.Line,
       theme.loading.track,
       theme.loading.fill,
       theme.loading.fillRamp,

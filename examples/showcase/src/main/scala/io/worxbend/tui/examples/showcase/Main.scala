@@ -98,7 +98,7 @@ class ShowcaseApp extends TuiApp:
       column(SpinnerPreset.All.map(preset => spinner(preset.name).preset(preset).length(1))*).fill,
       rule("determinate"),
       column(
-        ProgressStyle.All.map { bar =>
+        ProgressPreset.All.map { bar =>
           row(
             text(bar.name).length(14),
             progressBar(progress).preset(bar).bare.fill,
@@ -124,7 +124,7 @@ class ShowcaseApp extends TuiApp:
         IndeterminateMotion.values.toSeq.map { motion =>
           row(
             text(motion.toString.toLowerCase).length(14),
-            indeterminateBar().motion(motion).preset(ProgressStyle.Blocks).fill,
+            indeterminateBar().motion(motion).preset(ProgressPreset.Blocks).fill,
           ).length(1)
         }*
       ).fill,

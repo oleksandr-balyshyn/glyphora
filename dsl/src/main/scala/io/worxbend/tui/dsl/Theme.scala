@@ -37,8 +37,8 @@ object LoadingTheme:
   * without any `given` ceremony. Outside a view — a widget-level test, an element built in a helper object — the
   * ambient [[Theme.default]] applies.
   *
-  * The five sub-palettes are grouped rather than flattened because they retheme as units: `loading` for the spinner and
-  * progress family, `markdown` for a rendered document, and `markdown.syntax` (mirrored as [[syntax]] for the
+  * The three sub-palettes are grouped rather than flattened because they retheme as units: `loading` for the spinner
+  * and progress family, `markdown` for a rendered document, and `markdown.syntax` (mirrored as [[syntax]] for the
   * standalone highlighter) for code.
   *
   * @param border
@@ -64,8 +64,17 @@ final case class Theme(
 
 object Theme:
 
-  // The two shared code palettes are declared before the themes that name them: `object` members initialise top to
+  // The three shared code palettes are declared before the themes that name them: `object` members initialise top to
   // bottom, so a `val Light` that read a `LightSyntax` declared below it would capture `null`.
+
+  /** Shared by `Dark`'s Markdown fences and its standalone highlighter, so the two cannot drift apart.
+    *
+    * The widget-level defaults are already tuned for a dark terminal, so `Dark` is the one theme that can take them
+    * unchanged — but it still has to bind them through a single name. Written as two independent `SyntaxTheme()` calls,
+    * retuning the dark highlighter would move the standalone element and silently leave fenced code inside a `markdown`
+    * element on the widget default.
+    */
+  private val DarkSyntax: SyntaxTheme = SyntaxTheme()
 
   /** Shared by `Light`'s Markdown fences and its standalone highlighter, so the two cannot drift apart. */
   private val LightSyntax: SyntaxTheme = SyntaxTheme(
@@ -107,9 +116,8 @@ object Theme:
       fill = Style.Default.withFg(Color.Cyan),
       band = Style.Default.withFg(Color.Indexed(245)),
     ),
-    // the widget-level defaults are already tuned for a dark terminal, so `Dark` is the one theme that can take them
-    markdown = MarkdownTheme(),
-    syntax = SyntaxTheme(),
+    markdown = MarkdownTheme(syntax = DarkSyntax),
+    syntax = DarkSyntax,
   )
 
   val Light: Theme = Theme(

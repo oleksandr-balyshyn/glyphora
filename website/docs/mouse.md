@@ -122,9 +122,15 @@ You do not need custom handlers for common interactions:
 |---|---|
 | input, list, select, controls | click focuses; click may position/select/activate |
 | button, checkbox, toggle | click activates |
-| scroll view and scrollable lists | wheel changes offset |
+| list, menu, tree, directoryTree, selectionList, filePicker | wheel moves the selection one entry |
+| log, scrollView | wheel changes the offset |
 | slider | click or drag positions the value |
 | split pane | drag moves the divider |
+
+`dataTable` is the one selectable collection with no wheel behavior: its selection
+indexes the visible page, so a wheel step would have to choose between moving inside
+the page and turning it. PageUp/PageDown say which, and `.onMouseEvent` is there if a
+particular table wants the wheel to do one of them.
 
 A user `.onMouseEvent` runs first. Return `false` when the widget's built-in behavior
 should still run.

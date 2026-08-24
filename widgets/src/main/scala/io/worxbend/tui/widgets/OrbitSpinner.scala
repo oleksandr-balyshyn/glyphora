@@ -28,10 +28,6 @@ enum OrbitPath:
   private[widgets] def walk(halfColumns: Int, halfRows: Int): RingWalk =
     RingWalk(this, halfColumns, halfRows)
 
-  /** How many dots one lap is at `radius` — the number of positions the arc's head steps through per revolution. */
-  private[widgets] def samplesFor(radius: Int, columnAspect: Int): Int =
-    walk(radius * columnAspect, radius).length
-
 /** How the travelling arc is shaded along its length. */
 enum OrbitTrail:
 

@@ -63,7 +63,7 @@ Seven published modules. Dependency edges are real Mill `moduleDeps`, they only 
 | `terminal` | core | `Backend` trait, `JLine3Backend` (pinned `org.jline:jline-terminal` + `jline-terminal-jni` 3.30.x — *not* the `org.jline:jline` bundle, which drags in a line reader, an SSH server and a telnet server this module never calls), `InputDecoder`, `HeadlessBackend` |
 | `widgets` | core | all 40+ built-in widgets, backend-agnostic |
 | `runtime` | core, terminal | `Signal`/`Computed`/`ReactiveScope`, `RenderThread`, `Runner`/`TerminalRunner`/`Frame`, `Async`, `Timers`, the caller-owned tick clocks `Stopwatch`/`Timer`/`TickDriven` |
-| `macros` | — | `deriveForm` / `bindAction`, inline + `Mirror` only (it derives over the caller's own types and names nothing from `tui-core`) |
+| `macros` | — | `deriveForm` / `FormFieldType`, inline + `Mirror` only (it derives over the caller's own types and names nothing from `tui-core`) |
 | `dsl` | core, terminal, widgets, runtime, macros | `Element` tree, `TuiApp`, `EventRouter`, `Focus`, `Chrome`, `Theme`, `Screen`, `Form` |
 | `test-support` | core, terminal, runtime | `Pilot`, `BufferAssertions`, `GoldenFrames` — published as `tui-test`; the Scala package stays `io.worxbend.tui.testsupport` |
 
@@ -95,12 +95,12 @@ Test-only dependencies go through `def extraTestDeps`, not by overriding `mvnDep
 
 ## Adding a widget
 
-1. Constructor parameters go in one fixed order: **required data, then `style`, then specialised styles, then glyph/symbol overrides.** Every widget reads the same way at the call site, and a reader can tell at a glance which arguments are content and which are appearance.
+1. Constructor parameters go in one fixed order: **required data, then layout and behaviour, then `style`, then specialised styles, then glyph/symbol overrides.** Every widget reads the same way at the call site, and a reader can tell at a glance which arguments are content and which are appearance. "Layout and behaviour" is the slot for a parameter that changes *what is drawn where* rather than what colour it is — `Block`'s `borders`/`padding`, `Table`'s `columnSpacing`, `BarChart`'s `barWidth`/`barGap`, `Scrollbar`'s `orientation`, `Sparkline`'s `max`. It sits before the styles because it is closer to the data than to the appearance. `BorderType` belongs in the *last* slot, not this one: it picks glyphs, not geometry.
 2. Implement in `widgets/` in its **own file named after the widget** — no grab-bag files — depending only on `tui-core`; render inside the given `Rect`, clip safely, all width math via `CharWidth`. Stateless → `Widget`; interactive → `StatefulWidget[S]` with caller-owned state; if the widget knows how much space its content needs, also mix in `Measured` rather than inventing a `heightOf`/`preferredWidth` of its own. Shared render helpers go in a `private[widgets]` object named for the concept (`Fraction`, `BlockLadder`), not copied per widget.
 3. Test the buffer with `BufferAssertions`: empty/tiny areas, truncation, Unicode, focus/selection styling, state boundaries.
 4. Add the DSL node to the node-family file it belongs to (`LayoutElements`, `DisplayElements`, `LoadingElements`, `TextEntryElements`, `ChoiceElements`, `CollectionElements`, `NavigationElements`, `ElementDecorators`) — `Element.scala` holds only the `Element` trait itself. Each node declares `type Self = ThatNodeType` so the fluent builders stay type-preserving. Built-in key/mouse behavior is composed from `ElementBuiltins`; the factory goes in `ElementFactories` (which `object Element` extends) and is re-exported from `dsl.scala`.
 5. Drive interaction through `Pilot` (focus, keys, mouse, resize, redraw).
-6. Document it in `website/docs/widgets.md`; new pages must also be registered in `website/docs-navigation.mjs`, which drives both the Docusaurus sidebar and the generated Wiki.
+6. Document it in `website/docs/widgets.md`; new pages must also be registered in `website/docs-navigation.mjs`, which drives both the Docusaurus sidebar and the generated Wiki. This step is enforced: `DocumentedFactorySpec` reads the `export Element.{…}` block out of `dsl.scala` and fails `dsl.test` if any exported factory is named on no page under `website/docs/` and nowhere in `README.md`. It wants the name in code voice — `positioned(…)` or `` `positioned` `` — so a passing mention has to be about the factory, not a coincidence of English. `DocumentedKeySpecSpec` guards the same prose for key specs, and both share the file walker in `DocumentationSources`.
 
 ## Style docs
 

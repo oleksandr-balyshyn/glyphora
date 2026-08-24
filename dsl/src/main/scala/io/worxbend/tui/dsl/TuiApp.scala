@@ -427,7 +427,7 @@ trait TuiApp:
             true
           case _                                                => false
       else false
-    val target     = hit.flatMap(index => run.tracker.areaOf(index).map(area => (index, area)))
+    val target     = hit.flatMap(index => run.tracker.areaOf(index).map(MouseHit(index, _)))
     val consumed   = run.lastTree.exists(EventRouter.dispatchMouse(_, mouse, target))
     consumed || focusMoved
 

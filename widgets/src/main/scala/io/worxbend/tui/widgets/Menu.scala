@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Style}
+import io.worxbend.tui.core.{Buffer, CharWidth, Measured, Rect, StatefulWidget, Style}
 
 /** One entry in a [[Menu]]: either a row the user can land on, or a rule that divides two groups of them.
   *
@@ -37,24 +37,23 @@ enum MenuEntry:
   */
 final class MenuState(var selected: Option[Int] = None, var offset: Int = 0):
 
-  /** Moves the highlight to the next selectable entry, wrapping; a no-op when nothing is selectable. */
-  def selectNext(items: Seq[MenuEntry]): Unit = step(items, 1)
+  /** Moves the highlight to the next selectable entry, wrapping past the last one; a no-op when nothing is selectable.
+    *
+    * A menu wraps where [[ListView]] and the other list-shaped widgets clamp — see [[Selection]] for why the two rules
+    * differ.
+    */
+  def selectNext(items: Seq[MenuEntry]): Unit =
+    Selection
+      .nextSelectable(selected, items.size, index => items(index).selectable)
+      .foreach(index => selected = Some(index))
 
-  /** Moves the highlight to the previous selectable entry, wrapping. */
-  def selectPrevious(items: Seq[MenuEntry]): Unit = step(items, -1)
-
-  private def step(items: Seq[MenuEntry], delta: Int): Unit =
-    if items.exists(_.selectable) then
-      val size    = items.size
-      var next    = selected.getOrElse(0)
-      var landed  = false
-      // one full lap at most: `items.exists` guarantees a landing spot, the bound just rules out a spin
-      var stepped = 0
-      while !landed && stepped < size do
-        next = (next + delta + size) % size
-        stepped += 1
-        landed = items(next).selectable
-      selected = Some(next)
+  /** Moves the highlight to the previous selectable entry, wrapping past the first one — the mirror of [[selectNext]],
+    * including its wrapping rule.
+    */
+  def selectPrevious(items: Seq[MenuEntry]): Unit =
+    Selection
+      .previousSelectable(selected, items.size, index => items(index).selectable)
+      .foreach(index => selected = Some(index))
 
   /** Snaps the highlight onto the first selectable entry when it sits on a non-selectable one, and clears it entirely
     * when the menu has nothing selectable at all.
@@ -71,14 +70,16 @@ final class MenuState(var selected: Option[Int] = None, var offset: Int = 0):
   */
 final case class Menu(
     items: Seq[MenuEntry],
-    borderType: BorderType = BorderType.Rounded,
     style: Style = Style.Default,
     highlightStyle: Style = Style.Default.reverse,
     disabledStyle: Style = Style.Default.dim,
-) extends StatefulWidget[MenuState]:
+    borderType: BorderType = BorderType.Rounded,
+) extends StatefulWidget[MenuState]
+    with Measured:
 
-  /** The popup's natural width in cells (widest `label  shortcut` plus borders and padding). */
-  def width: Int =
+  /** Natural width: the widest `label  shortcut` plus borders and padding. Independent of the rows given. */
+  override def widthAt(height: Int): Option[Int] =
+    val _       = height
     val content = items
       .map {
         case MenuEntry.Item(label, shortcut, _) =>
@@ -87,10 +88,12 @@ final case class Menu(
       }
       .maxOption
       .getOrElse(0)
-    content + 4 // 1 border + 1 pad each side
+    Some(content + 4) // 1 border + 1 pad each side
 
-  /** The popup's natural height in cells (one row per item plus borders). */
-  def height: Int = items.size + 2
+  /** Natural height: one row per entry plus the top and bottom borders. Independent of the columns given. */
+  override def heightAt(width: Int): Option[Int] =
+    val _ = width
+    Some(items.size + 2)
 
   def render(area: Rect, buffer: Buffer, state: MenuState): Unit =
     if !area.isEmpty then

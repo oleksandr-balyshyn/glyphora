@@ -123,6 +123,40 @@ final class FocusSpec extends AnyFunSuite:
     pilot.pressKey(KeyCode.Char('c'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
 
+  test("onKeyEvent on a control itself runs before that control's own editing behavior"):
+    // every other key-ordering test in this suite hangs `onKeyEvent` on a *container* — a column, a panel, a body —
+    // which has no built-in of its own, so it cannot tell "user first" from "built-in first". This is the arrangement
+    // an ordinary form uses: `input(state).onKeyEvent { case KeyEvent(KeyCode.Enter, _) => submit(); true; case _ =>
+    // false }`, where the handler must beat the input's own typing behavior for the keys it claims and lose to it for
+    // every key it declines.
+    val backend  = HeadlessBackend(Size(30, 5))
+    val field    = TextInputState()
+    var claimed  = 0
+    var declined = 0
+    val app      = new TuiApp:
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element =
+        input(field).onKeyEvent {
+          case KeyEvent(KeyCode.Char('!'), _) =>
+            claimed += 1
+            true
+          case _                              =>
+            declined += 1
+            false
+        }
+    val pilot    = Pilot.start(backend) { app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.typeText("!").waitForIdle()
+    assert(claimed == 1)
+    assert(field.value == "", s"the claimed key was typed anyway: '${field.value}'")
+    pilot.typeText("a").waitForIdle()
+    // the other half: a key the handler declines still reaches the built-in, so the test cannot be satisfied by a
+    // handler that simply always wins
+    assert(declined >= 1)
+    assert(field.value == "a", s"the declined key never reached the input: '${field.value}'")
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
   test("a focus key keeps focus on the same element when the tree changes shape"):
     val backend = HeadlessBackend(Size(30, 6))
     val first   = TextInputState()

@@ -4,9 +4,8 @@ import io.worxbend.tui.core.KeyEvent
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.Files
 import scala.jdk.CollectionConverters.*
-import scala.util.Using
 
 /** The `binding("+", "increment")(…)` in the README and the getting-started guide threw `IllegalArgumentException` from
   * a field initializer — every reader who copied the documented counter app got an `ExceptionInInitializerError` before
@@ -17,21 +16,6 @@ import scala.util.Using
   * but the class of defect it does catch is the one that reached users.
   */
 final class DocumentedKeySpecSpec extends AnyFunSuite:
-
-  /** The test's working directory is not guaranteed, so find the checkout by walking up to the build file. */
-  private lazy val repoRoot: Option[Path] =
-    Iterator
-      .iterate(Paths.get("").toAbsolutePath)(_.getParent)
-      .takeWhile(_ != null) // scalafix:ok DisableSyntax; `Path.getParent` returns null at the filesystem root
-      .find(candidate => Files.isRegularFile(candidate.resolve("build.mill")))
-
-  private def markdownSources(root: Path): Seq[Path] =
-    val docs  = root.resolve("website/docs")
-    val pages =
-      if Files.isDirectory(docs) then
-        Using.resource(Files.list(docs))(_.iterator.asScala.filter(_.toString.endsWith(".md")).toVector)
-      else Vector.empty
-    (root.resolve("README.md") +: pages).filter(Files.isRegularFile(_))
 
   /** Matches the spec literal in `binding("ctrl+s", "save")(…)` — the first string argument only. */
   private val BindingSpec = """binding\("((?:[^"\\]|\\.)*)"""".r
@@ -52,10 +36,11 @@ final class DocumentedKeySpecSpec extends AnyFunSuite:
         .flatMap(argument => StringLiteral.findAllMatchIn(argument.group(1)).map(_.group(1)))
 
   test("every key spec published in the documentation parses"):
-    val root  = repoRoot.getOrElse(cancel("not running from a checkout: no build.mill above the working directory"))
+    val root  = DocumentationSources.repoRoot
+      .getOrElse(cancel("not running from a checkout: no build.mill above the working directory"))
     val found =
       for
-        page <- markdownSources(root)
+        page <- DocumentationSources.markdownSources(root)
         line <- Files.readAllLines(page).asScala
         spec <- specsOn(line)
       yield (root.relativize(page).toString, spec)

@@ -38,10 +38,16 @@ final case class Paging(size: Int, page: Int)
   */
 final class DataTableState:
   var sort: Option[ColumnSort] = None
-  var filter: String           = ""
   var selected: Option[Int]    = None
   var offset: Int              = 0
   var paging: Option[Paging]   = None
+
+  /** The substring rows are filtered by, or `""` for no filter. Read-only: change it through [[setFilter]], which is
+    * the only place that also resets the selection and the scroll to match the new result set.
+    */
+  def filter: String = filterText
+
+  private var filterText: String = ""
 
   /** Moves to the next/previous page (no-ops while `paging` is unset, the one state where no-op is the honest answer);
     * `totalFiltered` bounds the last page.
@@ -86,8 +92,14 @@ final class DataTableState:
         view = Some((key, fresh))
         fresh
 
+  /** Filters the rows to those with `text` in any cell, and clears the selection and the scroll offset.
+    *
+    * Clearing both is the point of routing every filter change through here. A selection is an index into the *view*,
+    * so keeping it across a filter change lands the highlight on whatever unrelated row now happens to sit at that
+    * index, and keeping the offset scrolls a short result set to a position that no longer exists.
+    */
   def setFilter(text: String): Unit =
-    filter = text
+    filterText = text
     selected = None
     offset = 0
 
@@ -154,16 +166,33 @@ final case class DataTable(
     state.paging match
       case None         => all
       case Some(window) =>
-        // one page size for every use: `Paging(0, …)` arises naturally from `area.height - 2` on a short terminal,
-        // and paging by 0 shows no rows at all on every page
-        val size     = math.max(1, window.size)
-        val lastPage = math.max(0, (all.size - 1) / size)
-        val page     = math.max(0, math.min(window.page, lastPage))
-        state.paging = Some(window.copy(page = page))
+        val size = pageSizeOf(window)
+        val page = pageOf(window, all.size)
         all.slice(page * size, (page + 1) * size)
+
+  /** Writes back the page [[visibleRows]] would show, so a page left past the end of a shrunken result set does not
+    * stay there once the user turns it.
+    *
+    * The one write [[visibleRows]] used to make itself, moved out so that reading the rows stays a read. [[render]]
+    * calls it on every frame alongside the selection and offset clamps, which is the moment all three state repairs
+    * belong at.
+    */
+  private[widgets] def clampPage(state: DataTableState): Unit =
+    val total = filteredRows(state).size
+    state.paging = state.paging.map(window => window.copy(page = pageOf(window, total)))
+
+  /** One page size for every use: `Paging(0, …)` arises naturally from `area.height - 2` on a short terminal, and
+    * paging by 0 shows no rows at all on every page.
+    */
+  private def pageSizeOf(window: Paging): Int = math.max(1, window.size)
+
+  private def pageOf(window: Paging, total: Int): Int =
+    val lastPage = math.max(0, (total - 1) / pageSizeOf(window))
+    math.max(0, math.min(window.page, lastPage))
 
   def render(area: Rect, buffer: Buffer, state: DataTableState): Unit =
     if !area.isEmpty then
+      clampPage(state)
       val view       = visibleRows(state)
       val segments   = Layout(Direction.Horizontal, widths, columnSpacing).split(area)
       renderHeader(buffer, segments, state)

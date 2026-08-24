@@ -77,6 +77,14 @@ module being tested. On a mismatch the failure prints the expected and the actua
 frame in full, one after the other. A fixture that does not exist yet fails with an
 assertion telling you to record it.
 
+### A golden frame records glyphs, not styling
+
+The fixture is the frame's *text*: each cell's symbol, and nothing else. Colours,
+modifiers such as bold and reverse, and hyperlinks are not in it, so a change that
+drops every style from a screen still matches its golden file byte for byte. Use a
+golden frame for "did anything move?" and keep a handful of `cellAt` / style
+assertions beside it for "is it still the right colour?".
+
 ### Regenerate a golden frame
 
 You never write these files by hand. Run the tests with `GLYPHORA_GOLDEN_UPDATE`

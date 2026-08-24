@@ -117,7 +117,7 @@ Two more properties worth knowing before choosing an animation:
 - An `orbitSpinner` animates entirely through per-cell **style**; its glyphs are the
   same at every moment. On a terminal that renders neither colour nor dim it is a
   still ring, so prefer `spinnerGrid` or `spinner` there.
-- `SpinnerPreset.AsciiPresets` and `ProgressStyle.Ascii`/`Arrow` need nothing beyond
+- `SpinnerPreset.AsciiPresets` and `ProgressPreset.Ascii`/`Arrow` need nothing beyond
   ASCII, and `orbitSpinner().markers("*")` draws the same figure with one glyph per
   cell. Those are the floors for an unknown terminal, a CI log, or a screen reader.
 

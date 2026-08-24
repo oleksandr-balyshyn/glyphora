@@ -97,9 +97,13 @@ def helpOverlay(bindings: KeyBindings, title: String = "Help")(using theme: Them
 
 // ---- layout presets ----
 
-/** Side pane + main pane. */
-def sidebarLayout(side: Element, main: Element, sideWidth: Int = 24): Element =
-  Element.row(side.length(sideWidth), main.fill)
+/** Side pane + main pane.
+  *
+  * The pane is `pane`, not `side`, because [[Side]] and `Sidebar.side` fifty lines above already own that word for
+  * *which edge*; one name for two ideas in one file is a reading trap.
+  */
+def sidebarLayout(pane: Element, main: Element, paneWidth: Int = 24): Element =
+  Element.row(pane.length(paneWidth), main.fill)
 
 /** The classic list-left, detail-right split. */
 def masterDetail(master: Element, detail: Element, masterWidth: Int = 30): Element =

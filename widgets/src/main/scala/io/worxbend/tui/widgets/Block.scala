@@ -45,10 +45,10 @@ object BlockTitle:
   */
 final case class Block(
     titles: Seq[BlockTitle] = Seq.empty,
-    borderType: BorderType = BorderType.Plain,
-    borderStyle: Style = Style.Default,
     borders: Borders = Borders.All,
     padding: Padding = Padding.zero,
+    borderStyle: Style = Style.Default,
+    borderType: BorderType = BorderType.Plain,
 ) extends Widget:
 
   /** The content region inside the borders and padding. */

@@ -162,7 +162,16 @@ final class TerminalRunner(
     val handle   = BackendHandle(backend, state)
     val composer = FrameComposer(backend, render)
 
-    def redraw(): Unit = state.record(composer.compose())
+    /** Composes and flushes one frame.
+      *
+      * The render function is the app's code too — in the DSL it is the user's `view` — so a throwable out of it is
+      * caught here rather than being allowed to unwind past the terminal restore. `compose` returns
+      * `Either[BackendError, Unit]`, which has no room for a handler failure, hence the guard at the call site: a
+      * backend failure still arrives as a `Left` and is recorded unchanged.
+      */
+    def redraw(): Unit =
+      try state.record(composer.compose())
+      catch case NonFatal(error) => state.failHandler(error)
 
     /** Runs `body` on the app's behalf, recording a throwable as the loop's failure instead of letting it unwind.
       *
@@ -282,7 +291,7 @@ private enum LoopFailure:
   /** A call into the [[Backend]] failed — reading input, drawing, an out-of-band terminal operation. */
   case Backend(error: BackendError)
 
-  /** The app's event handler (or its `onStart`) threw. */
+  /** One of the callbacks the app supplied threw: the event handler, `onStart`, or the render function. */
   case Handler(error: Throwable)
 
 /** The reasons a [[TerminalRunner]] loop stops and the frames it still owes, held in one place so every site asks the

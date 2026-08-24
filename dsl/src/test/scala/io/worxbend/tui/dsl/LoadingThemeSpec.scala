@@ -59,6 +59,22 @@ final class LoadingThemeSpec extends AnyFunSuite:
     assert(pilot.cellAt(2, 0).style.fg == Theme.Dark.loading.label.fg, "the label keeps the theme's style")
     close(pilot)
 
+  /** `labelStyle` takes a transform, not a replacement, because these elements are already themed by the time the
+    * builder runs: `.labelStyle(Style.Default.dim)` — the only thing a replacing builder accepted — threw the theme's
+    * caption colour away and reverted the caption to the terminal default under `Light` and `HighContrast`.
+    */
+  test("labelStyle derives from the theme's caption style rather than replacing it"):
+    val pilot = renderWith(Theme.Light)(spinner("x").labelStyle(_.bold))
+    val label = pilot.cellAt(2, 0).style
+    assert(label.fg == Theme.Light.loading.label.fg, "the theme's caption colour survives the builder")
+    assert(label.modifiers.hasAny(Modifiers.Bold), "and the builder's own modifier is applied on top")
+    close(pilot)
+
+  test("labelStyle can still replace the caption style outright"):
+    val pilot = renderWith(Theme.Light)(spinner("x").labelStyle(_ => Style.Default.withFg(Color.Magenta)))
+    assert(pilot.cellAt(2, 0).style.fg.contains(Color.Magenta))
+    close(pilot)
+
   test("a progress bar takes its track and fill from the theme"):
     val pilot = renderWith(Theme.Dark)(progressBar(0.5).bare)
     assert(pilot.cellAt(0, 0).style.fg == Theme.Dark.loading.fill.fg)
@@ -94,8 +110,8 @@ final class LoadingThemeSpec extends AnyFunSuite:
     val pilot = renderWith(Theme.Dark)(
       column(
         spinnerAt(0.millis).preset(w.SpinnerPreset.Line).label("busy"),
-        progressBar(0.5).preset(w.ProgressStyle.Ascii).bare,
-        indeterminateBarAt(0.millis).motion(w.IndeterminateMotion.Sweep).preset(w.ProgressStyle.Ascii),
+        progressBar(0.5).preset(w.ProgressPreset.Ascii).bare,
+        indeterminateBarAt(0.millis).motion(w.IndeterminateMotion.Sweep).preset(w.ProgressPreset.Ascii),
       )
     )
     assert(pilot.screenLines.head.startsWith("| busy"))

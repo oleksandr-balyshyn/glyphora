@@ -1,12 +1,16 @@
 package io.worxbend.tui.dsl
 
 import io.worxbend.tui.core.Size
+import io.worxbend.tui.macros.deriveForm
 import io.worxbend.tui.terminal.HeadlessBackend
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 import io.worxbend.tui.testsupport.Pilot
 import io.worxbend.tui.widgets.{ListState, TextInputState}
 
 import org.scalatest.funsuite.AnyFunSuite
+
+/** A top-level case class so `deriveForm` can summon its `Mirror`. */
+final case class Reservation(name: String, guests: Int)
 
 final class FormControlsSpec extends AnyFunSuite:
 
@@ -69,6 +73,21 @@ final class FormControlsSpec extends AnyFunSuite:
     val pilot = startApp(numberInput(state).decimal)
     pilot.typeText("3.1.4").waitForIdle()
     assert(state.value == "3.14")
+    quitApp(pilot)
+
+  /** A derived `Int` field used to render as a plain text input, so letters typed into it went in and stayed there
+    * looking accepted until submit answered `'12ab3' is not a whole number`. The rejection now happens at the
+    * keystroke.
+    */
+  test("a derived Int field refuses letters as they are typed, while the String field beside it takes them"):
+    val state = FormState.of(deriveForm[Reservation])
+    val pilot = startApp(Form(state))
+    val text  = state.bindings.collect { case FieldBinding.TextLike(_, input, _) => input }
+    pilot.typeText("ab").waitForIdle()
+    assert(text.head.value == "ab", "the String field still accepts letters")
+    pilot.pressKey(KeyCode.Tab).waitForIdle()
+    pilot.typeText("12ab3").waitForIdle()
+    assert(text(1).value == "123", "letters must never reach a derived Int field's state")
     quitApp(pilot)
 
   test("maskedInput inserts literals automatically and erases whole slots"):

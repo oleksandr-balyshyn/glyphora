@@ -15,15 +15,16 @@ final case class Dialog(
     buttons: Seq[String] = Seq("OK"),
     selectedButton: Int = 0,
     style: Style = Style.Default,
-    borderType: BorderType = BorderType.Double,
     highlightStyle: Style = Style.Default.reverse,
+    borderType: BorderType = BorderType.Double,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     val box = area.centered(math.min(area.width, math.max(message.width + 4, 20)), message.height + 4)
     if box.width >= 4 && box.height >= 4 then
       clear(box, buffer)
-      Block(Seq(BlockTitle.top(Line.styled(title, style))), borderType, style).render(box, buffer)
+      Block(Seq(BlockTitle.top(Line.styled(title, style))), borderStyle = style, borderType = borderType)
+        .render(box, buffer)
       val inner = box.inset(1)
       Paragraph(message, alignment = Alignment.Center, style = style).render(
         Rect(inner.x, inner.y, inner.width, inner.height - 1),

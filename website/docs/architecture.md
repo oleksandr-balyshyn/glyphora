@@ -37,7 +37,7 @@ example, `tui-widgets` with a backend of your own, skipping the DSL entirely).
 | `tui-widgets` | every built-in widget — backend-agnostic, render-to-`Buffer` tested | [tui-widgets](pathname:///api/widgets/) |
 | `tui-runtime` | `Signal`/`Computed`, render thread, runner loop, tick clocks (`Stopwatch`/`Timer`) | [tui-runtime](pathname:///api/runtime/) |
 | `tui-dsl` | `TuiApp`, `Element` tree, focus/mouse routing, chrome presets, screens/toasts/palette | [tui-dsl](pathname:///api/dsl/) |
-| `tui-macros` | `deriveForm`/`bindAction` — compile-time only, keeps native-image reflect-config-free | [tui-macros](pathname:///api/macros/) |
+| `tui-macros` | `deriveForm`/`FormFieldType` — compile-time only, keeps native-image reflect-config-free | [tui-macros](pathname:///api/macros/) |
 | `tui-test` | `Pilot` driver, buffer assertions, golden frames — a test-only dependency (Scala package `io.worxbend.tui.testsupport`, repository directory `test-support/`) | — |
 
 ## tui-core
@@ -175,10 +175,12 @@ bridge is generated at compile time — never runtime reflection. This is the
 constraint that keeps GraalVM native-image builds free of reflect-config JSON.
 
 - **`deriveForm[A]`** derives a `FormSpec[A]` from a case class via
-  `Mirror.ProductOf` (`inline`, stdlib-only): field names become `FieldSpec`s, field
-  types choose the input kind (`String`/`Int`/`Boolean`); anything else is a compile
-  error.
-- **`bindAction[A](handler)`** binds an action handler as a direct call.
+  `Mirror.ProductOf` (`inline`, stdlib-only): field names become `FieldSpec`s, and each
+  field's type contributes its control and its parser through the `FormFieldType`
+  summoned for it. A field type with no instance in scope is a compile error.
+- **`FormFieldType[A]`** is that per-type contribution — control plus parser.
+  `String`/`Int`/`Double`/`Boolean` and `Option` of those ship with the module; a type
+  of your own joins by declaring `given FormFieldType[YourType]` in its companion.
 - **`Field[A]`** is cue4s-style lazily-composed parsing/validation:
   `Field.int("age").mapValidated(a => if a >= 18 then Right(a) else Left("must be 18+"))`.
 

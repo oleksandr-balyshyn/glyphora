@@ -29,3 +29,11 @@ final class LayoutExtrasSpec extends AnyFunSuite:
   test("column .gap inserts blank rows between children"):
     val out = render(column(text("A").length(1), text("B").length(1)).gap(1), 1, 3)
     assert(out == Seq("A", " ", "B"))
+
+  /** The same knob, inside the border, with no intervening `column`. Before `PanelElement` was a `FlexContainer` this
+    * needed `panel("t")(column(...).gap(1))` — an extra node purely to reach a parameter the panel's own `w.Column`
+    * already had.
+    */
+  test("panel .gap inserts blank rows between children inside the border"):
+    val out = render(panel(text("A").length(1), text("B").length(1)).gap(1), 3, 5)
+    assert(out == Seq("┌─┐", "│A│", "│ │", "│B│", "└─┘"))

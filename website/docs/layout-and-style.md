@@ -40,6 +40,7 @@ explicit constraint only when the surrounding composition needs one.
 |---|---|---|
 | `.length(12)` | exactly 12 cells | toolbars, sidebars, single-line regions |
 | `.percent(40)` | 40% of available axis | balanced master/detail layouts |
+| `.ratio(1, 3)` | exactly a third of the axis | splits a whole percentage cannot say |
 | `.fill` | share all space left after fixed constraints | main content |
 | `.fill(2)` | take twice the remaining share of `.fill(1)` | weighted columns |
 | `.minSize(8)` | at least 8 cells when solving | important compact content |
@@ -95,9 +96,43 @@ sits.
 App-oriented presets cover frequent shapes:
 
 ```scala
-sidebarLayout(navigation, content, sideWidth = 26)
+sidebarLayout(navigation, content, paneWidth = 26)
 masterDetail(projectList, projectDetails, masterWidth = 32)
 ```
+
+## Overlay at an exact offset
+
+`centered` and `place` both *align* content inside the area they are handed. When you
+already know the exact cell an overlay belongs at — beside the row the pointer is over,
+under the control that has focus — use `positioned` instead and paint it over the base
+with `layers`:
+
+```scala
+val hoveredRow = Signal(0) // whichever row your app already tracks
+
+def view(using ReactiveScope, Theme): Element =
+  layers(
+    panel("Deployments")(deploymentTable),
+    positioned(dx = 34, dy = hoveredRow.get + 2, width = 30, height = 3)(
+      tooltip("Rolled back 4 minutes ago by ana."),
+    ),
+  )
+```
+
+Three things are worth knowing before you reach for it:
+
+- `dx` and `dy` are offsets from the **top-left corner of the area this element is
+  handed**, not absolute screen coordinates. A `positioned` nested inside a panel is
+  placed relative to that panel, so it keeps working when the panel moves.
+- `width` and `height` size the box the content renders into, and the box is **clipped**
+  to the surrounding area. An offset that runs off the right edge draws the part that
+  fits and nothing more: it never spills onto a neighbouring pane and it never throws.
+- It only paints. It claims no space from the row or column around it, which is exactly
+  why it belongs inside `layers` over a base element rather than beside one.
+
+This is the mechanism the toolkit's own overlays are built from — a toast is a `notice`
+inside a `positioned` box, which is how the stack can sit against the right edge with
+every row a different width.
 
 ## Pad inside a border
 
@@ -137,8 +172,10 @@ Available modes are `.center`, `.spaceBetween`, `.spaceAround`, `.spaceEvenly`, 
 `.flexEnd`, plus `.flex(mode)` and `.gap(cells)`. They matter only when space
 remains; a `.fill` child intentionally consumes that space first.
 
-These helpers exist only on `row` and `column` — the two containers that lay children
-out along an axis. Writing `text("x").center` is a compile error rather than a call
+These helpers exist only on `row`, `column`, and `panel` — the containers that lay
+children out along an axis. (A `panel` stacks its children with the same widget a
+`column` does, so `panel("Logs")(a, b).gap(1)` spaces them inside the border without a
+`column` in between.) Writing `text("x").center` is a compile error rather than a call
 that quietly does nothing. `.rounded` and `.doubleBorder` are typed the same way: they
 exist only on `panel`.
 

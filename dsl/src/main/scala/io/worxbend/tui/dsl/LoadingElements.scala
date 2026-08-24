@@ -27,8 +27,13 @@ final case class SpinnerElement(
   /** Sets the caption shown after the glyph. */
   def label(text: String): SpinnerElement = copy(label = text)
 
-  /** Styles the caption independently of the glyph. */
-  def labelStyle(style: Style): SpinnerElement = copy(labelStyle = style)
+  /** Styles the caption independently of the glyph, deriving from whatever the [[Theme]] resolved at construction.
+    *
+    * `.labelStyle(_.dim)` dims the themed caption; `.labelStyle(_ => someStyle)` is the escape hatch for replacing it
+    * outright. Taking a transform rather than a `Style` is what keeps `Theme.Light`'s grey caption grey — a replacing
+    * builder silently reverted it to the terminal default.
+    */
+  def labelStyle(transform: Style => Style): SpinnerElement = copy(labelStyle = transform(labelStyle))
 
   /** Runs the animation `factor` times slower than the preset's own speed. */
   def slowedBy(factor: Double): SpinnerElement = copy(preset = preset.slowedBy(factor))
@@ -43,7 +48,7 @@ final case class SpinnerElement(
 final case class ProgressBarElement(
     ratio: Double,
     label: w.ProgressLabel,
-    bar: w.ProgressStyle,
+    preset: w.ProgressPreset,
     trackStyle: Style,
     fillStyle: Style,
     ramp: Option[w.ColorRamp],
@@ -51,10 +56,10 @@ final case class ProgressBarElement(
 ) extends Element:
   type Self = ProgressBarElement
   def widget: Widget =
-    w.LineGauge(ratio, label, trackStyle.patch(props.style), fillStyle.patch(props.style), bar, ramp)
+    w.LineGauge(ratio, label, trackStyle.patch(props.style), fillStyle.patch(props.style), preset, ramp)
 
-  /** Swaps the glyph vocabulary — see [[io.worxbend.tui.widgets.ProgressStyle]] for the catalogue. */
-  def preset(chosen: w.ProgressStyle): ProgressBarElement = copy(bar = chosen)
+  /** Swaps the glyph vocabulary — see [[io.worxbend.tui.widgets.ProgressPreset]] for the catalogue. */
+  def preset(chosen: w.ProgressPreset): ProgressBarElement = copy(preset = chosen)
 
   /** Replaces the percentage caption with fixed text. */
   def label(text: String): ProgressBarElement = copy(label = w.ProgressLabel.Text(text))
@@ -78,7 +83,7 @@ final case class ProgressBarElement(
 final case class IndeterminateElement(
     elapsed: FiniteDuration,
     motion: w.IndeterminateMotion,
-    bar: w.ProgressStyle,
+    preset: w.ProgressPreset,
     trackStyle: Style,
     fillStyle: Style,
     period: FiniteDuration = 1600.millis,
@@ -90,7 +95,7 @@ final case class IndeterminateElement(
       elapsed,
       trackStyle.patch(props.style),
       fillStyle.patch(props.style),
-      bar,
+      preset,
       motion,
       period = period,
     )
@@ -102,7 +107,7 @@ final case class IndeterminateElement(
   def motion(chosen: w.IndeterminateMotion): IndeterminateElement = copy(motion = chosen)
 
   /** Swaps the glyph vocabulary. */
-  def preset(chosen: w.ProgressStyle): IndeterminateElement = copy(bar = chosen)
+  def preset(chosen: w.ProgressPreset): IndeterminateElement = copy(preset = chosen)
 
   private[dsl] def withProps(props: ElementProps): IndeterminateElement = copy(props = props)
   private[dsl] override def claim: SizeClaim                            = SizeClaim.OneRow
@@ -122,8 +127,13 @@ final case class AnimatedTextElement(
   /** Swaps the effect — see [[io.worxbend.tui.widgets.TextEffect]] for the catalogue. */
   def effect(chosen: w.TextEffect): AnimatedTextElement = copy(effect = chosen)
 
-  /** Styles the emphasised part — the crest, the cursor, the shimmer head — independently of the resting text. */
-  def highlight(style: Style): AnimatedTextElement = copy(highlightStyle = style)
+  /** Styles the emphasised part — the crest, the cursor, the shimmer head — independently of the resting text.
+    *
+    * Derives from the style the [[Theme]] resolved at construction, the way [[PanelElement.titleStyle]] and
+    * [[SpinnerElement.labelStyle]] do; `.highlightStyle(_ => someStyle)` replaces it outright.
+    */
+  def highlightStyle(transform: Style => Style): AnimatedTextElement =
+    copy(highlightStyle = transform(highlightStyle))
 
   private[dsl] def withProps(props: ElementProps): AnimatedTextElement = copy(props = props)
 

@@ -22,10 +22,10 @@ final case class Scrollbar(
     contentLength: Int,
     position: Int = 0,
     orientation: Direction = Direction.Vertical,
-    trackSymbol: String = "│",
-    thumbSymbol: String = "█",
     style: Style = Style.Default,
     thumbStyle: Style = Style.Default,
+    trackSymbol: String = "│",
+    thumbSymbol: String = "█",
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =

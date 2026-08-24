@@ -12,6 +12,16 @@ import scala.collection.mutable
 private[dsl] final case class ViewportTransform(dx: Int, dy: Int, viewport: Rect):
   def apply(rect: Rect): Rect = rect.offset(dx, dy).intersection(viewport)
 
+/** Which tracked focusable a pointer resolved to, and the area that resolution produced.
+  *
+  * Both fields are easy to mistake for something else, which is why they are named rather than left as a tuple.
+  * `focusIndex` is a *focus* index — a position in the depth-first tab order, the key of [[FocusTracker.areaOf]] — not
+  * the pointer id that keys the deliberately independent `pointerAreaOf` map. `area` is where the hit *resolved to*,
+  * which is not always the element's own recorded area: [[EventRouter]] branches on that difference when it decides
+  * what an outer element's built-in behavior runs against.
+  */
+private[dsl] final case class MouseHit(focusIndex: Int, area: Rect)
+
 /** Per-app focus bookkeeping, owned by a single `TuiApp.runWith` invocation and touched only on the render thread:
   * which focusable (by depth-first order index) has focus, how many exist, and where each rendered last frame (for
   * click-to-focus hit-testing).

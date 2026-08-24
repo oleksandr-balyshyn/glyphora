@@ -35,19 +35,18 @@ private[dsl] object EventRouter:
 
   /** Routes a mouse event to the elements that rendered under the pointer, innermost first.
     *
-    * `hit` is the tracked focusable the pointer resolved to together with its rendered area, when there is one. The
-    * chain is that element's handler-carrying descendants that also cover the pointer, then the element itself, then
-    * its ancestors; with no hit it is the deepest covered path in the tree. Each element on it is offered the user's
-    * `onMouseEvent` and then its own built-in behavior, so an unconsumed event keeps travelling outward until something
-    * takes it. An element that did not render under the pointer is never offered the event, and no element is offered
-    * the same event twice.
+    * The chain starts at the [[MouseHit]]'s handler-carrying descendants that also cover the pointer, then the hit
+    * element itself, then its ancestors; with no hit it is the deepest covered path in the tree. Each element on it is
+    * offered the user's `onMouseEvent` and then its own built-in behavior, so an unconsumed event keeps travelling
+    * outward until something takes it. An element that did not render under the pointer is never offered the event, and
+    * no element is offered the same event twice.
     */
-  def dispatchMouse(root: Element, event: MouseEvent, hit: Option[(Int, Rect)]): Boolean =
+  def dispatchMouse(root: Element, event: MouseEvent, hit: Option[MouseHit]): Boolean =
     chainUnder(root, event, hit).exists(handlesMouse(_, event, hit))
 
   /** The elements the event travels through, innermost first. */
-  private def chainUnder(root: Element, event: MouseEvent, hit: Option[(Int, Rect)]): List[Element] =
-    hit.flatMap((index, _) => pathToTracked(root, index)) match
+  private def chainUnder(root: Element, event: MouseEvent, hit: Option[MouseHit]): List[Element] =
+    hit.flatMap(found => pathToTracked(root, found.focusIndex)) match
       case Some(leafToRoot) => insideOf(leafToRoot.head, event) ::: leafToRoot
       case None             => pathUnder(root, event).getOrElse(Nil)
 
@@ -89,7 +88,7 @@ private[dsl] object EventRouter:
     recordedArea(element).filter(_.contains(event.position))
 
   /** The user's `onMouseEvent` first, then the framework's own behavior for this element. */
-  private def handlesMouse(element: Element, event: MouseEvent, hit: Option[(Int, Rect)]): Boolean =
+  private def handlesMouse(element: Element, event: MouseEvent, hit: Option[MouseHit]): Boolean =
     element.props.onMouse.exists(_(event)) ||
       builtinArea(element, event, hit).exists(area => element.builtinMouseHandler.exists(_(event, area)))
 
@@ -98,11 +97,11 @@ private[dsl] object EventRouter:
     * On the hit element that is the area the hit resolved to. On an *outer* tracked element it is that element's own
     * recorded area, only while the pointer is inside it, and only for a wheel event — see [[reachesOuterBuiltin]].
     */
-  private def builtinArea(element: Element, event: MouseEvent, hit: Option[(Int, Rect)]): Option[Rect] =
+  private def builtinArea(element: Element, event: MouseEvent, hit: Option[MouseHit]): Option[Rect] =
     element match
       case tracked: TrackedElement =>
         hit
-          .collect { case (index, area) if index == tracked.index => area }
+          .collect { case MouseHit(index, area) if index == tracked.index => area }
           .orElse(if reachesOuterBuiltin(event.kind) then coveredArea(tracked, event) else scala.None)
       case _                       => scala.None
 

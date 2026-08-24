@@ -105,8 +105,6 @@ object RenderThread:
       val _    = if task != null then queued.decrementAndGet() else 0 // scalafix:ok DisableSyntax; queue interop
       task
 
-    private[runtime] def isEmpty: Boolean = pending.isEmpty
-
   // Several runners may live in one JVM and must not race on a single registration slot. Each thread maps to a stack
   // (innermost registration first) so a runner started from inside another runner's loop restores its host on exit
   // instead of deregistering the thread outright.
@@ -243,9 +241,6 @@ object RenderThread:
     val own = loops.get(Thread.currentThread())
     if own != null then drainPending(own.head) // scalafix:ok DisableSyntax; java.util.concurrent interop
     else detached.drain()
-
-  private[tui] def hasPending(loop: RenderLoop): Boolean =
-    !loop.isEmpty || !detached.isEmpty
 
 /** How a render loop reports a `NonFatal` throwable escaping a body queued with [[RenderThread.runLater]] — typically
   * the continuation of some background work (see [[Async]]).

@@ -171,8 +171,6 @@ endpoint after the duration.
 A `Spring` has no fixed duration. Step it each tick until it settles:
 
 ```scala
-import io.worxbend.tui.core.Spring
-
 private val spring = Spring(frequency = 6.0, damping = 0.75, deltaTime = 0.05)
 private var position = 0.0
 private var velocity = 0.0

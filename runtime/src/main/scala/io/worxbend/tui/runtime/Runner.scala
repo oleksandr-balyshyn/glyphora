@@ -123,12 +123,13 @@ enum RunnerError:
     */
   case QueuedTask(failures: QueuedTaskFailures)
 
-  /** The event handler itself threw, which ends the loop.
+  /** A callback the app supplied threw, which ends the loop: the event handler, `onStart`, or the render function — in
+    * the DSL, the user's `view`.
     *
-    * Unlike a queued body, a handler failure is not absorbed: the handler is the app, and an app that cannot process an
-    * event has no defined next frame. What the loop does guarantee is that the throwable comes back *here* rather than
-    * unwinding out of `run` — that path would skip the terminal restore and leave the shell in raw mode on the
-    * alternate screen.
+    * Unlike a queued body, such a failure is not absorbed: these callbacks *are* the app, and an app that cannot
+    * process an event or draw a frame has no defined next frame. What the loop does guarantee is that the throwable
+    * comes back *here* rather than unwinding out of `run` — that path would skip the terminal restore and leave the
+    * shell in raw mode on the alternate screen.
     */
   case Handler(error: Throwable)
 

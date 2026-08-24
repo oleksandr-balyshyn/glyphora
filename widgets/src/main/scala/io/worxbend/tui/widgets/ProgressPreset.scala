@@ -13,7 +13,7 @@ package io.worxbend.tui.widgets
   * *floored* and the remainder becomes the boundary glyph, so the bar never claims progress that has not happened;
   * without them it rounds to nearest, because that is the closest a whole cell can get.
   */
-final case class ProgressStyle(
+final case class ProgressPreset(
     name: String,
     fill: String,
     track: String,
@@ -57,8 +57,8 @@ final case class ProgressStyle(
     */
   private def exactCells(fraction: Double, width: Int): Double = Fraction.clamped(fraction) * width
 
-  /** The last filled cell becomes `head` when this style has one and the bar is not yet complete. An empty bar draws no
-    * head at all — a `>` sitting at column zero reads as progress that has not started.
+  /** The last filled cell becomes `head` when this preset has one and the bar is not yet complete. An empty bar draws
+    * no head at all — a `>` sitting at column zero reads as progress that has not started.
     */
   private def fillGlyphAt(index: Int, filled: Int, width: Int): String =
     head match
@@ -72,44 +72,44 @@ final case class ProgressStyle(
       val bucket = math.floor(remainder * (partials.size + 1)).toInt
       if bucket <= 0 then None else Some(partials(math.min(bucket, partials.size) - 1))
 
-object ProgressStyle:
+object ProgressPreset:
 
   /** Heavy and light box-drawing lines. The default, and what a one-row meter reads best as. */
-  val Line: ProgressStyle = ProgressStyle("line", fill = "━", track = "─")
+  val Line: ProgressPreset = ProgressPreset("line", fill = "━", track = "─")
 
   /** Full blocks with eighth-block partials — the smoothest bar available, and the best default for wide bars. */
-  val Blocks: ProgressStyle =
-    ProgressStyle("blocks", fill = "█", track = " ", partials = Vector("▏", "▎", "▍", "▌", "▋", "▊", "▉"))
+  val Blocks: ProgressPreset =
+    ProgressPreset("blocks", fill = "█", track = " ", partials = Vector("▏", "▎", "▍", "▌", "▋", "▊", "▉"))
 
   /** Full blocks over a shaded track, so the bar's extent is visible even where it is empty. */
-  val BlocksShaded: ProgressStyle =
-    ProgressStyle("blocks-shaded", fill = "█", track = "░", partials = Vector("▏", "▎", "▍", "▌", "▋", "▊", "▉"))
+  val BlocksShaded: ProgressPreset =
+    ProgressPreset("blocks-shaded", fill = "█", track = "░", partials = Vector("▏", "▎", "▍", "▌", "▋", "▊", "▉"))
 
   /** Three shading levels stepping up to a full block — reads well without a color-capable terminal. */
-  val Shaded: ProgressStyle =
-    ProgressStyle("shaded", fill = "█", track = "░", partials = Vector("▒", "▓"))
+  val Shaded: ProgressPreset =
+    ProgressPreset("shaded", fill = "█", track = "░", partials = Vector("▒", "▓"))
 
   /** ASCII only: `#` over `-`. Safe anywhere, including a log file. */
-  val Ascii: ProgressStyle = ProgressStyle("ascii", fill = "#", track = "-")
+  val Ascii: ProgressPreset = ProgressPreset("ascii", fill = "#", track = "-")
 
   /** ASCII only, with a leading `>` — the `wget`/`pip` look. */
-  val Arrow: ProgressStyle = ProgressStyle("arrow", fill = "=", track = "-", head = Some(">"))
+  val Arrow: ProgressPreset = ProgressPreset("arrow", fill = "=", track = "-", head = Some(">"))
 
   /** Braille, filling a cell from the bottom up in four steps. */
-  val Dots: ProgressStyle =
-    ProgressStyle("dots", fill = "⣿", track = "⢀", partials = Vector("⡀", "⡄", "⡆", "⡇", "⣇", "⣧", "⣷"))
+  val Dots: ProgressPreset =
+    ProgressPreset("dots", fill = "⣿", track = "⢀", partials = Vector("⡀", "⡄", "⡆", "⡇", "⣇", "⣧", "⣷"))
 
   /** Half-height blocks, so the bar sits on a baseline rather than filling the row. */
-  val Baseline: ProgressStyle = ProgressStyle("baseline", fill = "▄", track = "▁")
+  val Baseline: ProgressPreset = ProgressPreset("baseline", fill = "▄", track = "▁")
 
   /** A dotted track with a solid fill — quiet enough for a dense dashboard. */
-  val Minimal: ProgressStyle = ProgressStyle("minimal", fill = "▪", track = "·")
+  val Minimal: ProgressPreset = ProgressPreset("minimal", fill = "▪", track = "·")
 
-  /** Every built-in style, in catalogue order. */
-  val All: Vector[ProgressStyle] =
+  /** Every built-in preset, in catalogue order. */
+  val All: Vector[ProgressPreset] =
     Vector(Line, Blocks, BlocksShaded, Shaded, Ascii, Arrow, Dots, Baseline, Minimal)
 
-  /** Looks a style up by its [[ProgressStyle.name]] — for a config file or a `--progress-style` flag. */
-  def byName(name: String): Option[ProgressStyle] = byNameIndex.get(name)
+  /** Looks a preset up by its [[ProgressPreset.name]] — for a config file or a `--progress-preset` flag. */
+  def byName(name: String): Option[ProgressPreset] = byNameIndex.get(name)
 
-  private val byNameIndex: Map[String, ProgressStyle] = All.map(style => style.name -> style).toMap
+  private val byNameIndex: Map[String, ProgressPreset] = All.map(preset => preset.name -> preset).toMap

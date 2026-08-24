@@ -25,7 +25,8 @@ final case class ListElement(
     Some(selectionKeys(() => state.selectNext(items.size), () => state.selectPrevious(items.size)))
 
 /** A collapsible tree over an in-memory node list. Up/Down move the selection through the *visible* rows and Enter
-  * expands or collapses the selected branch (a no-op on a leaf), all while focused.
+  * expands or collapses the selected branch (a no-op on a leaf), all while focused; the wheel moves the selection on
+  * hover, as it does over a `list`.
   */
 final case class TreeElement(
     nodes: Seq[w.TreeNode],
@@ -33,12 +34,14 @@ final case class TreeElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   type Self = TreeElement
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
+    Some(wheelScrolls(() => state.selectPrevious(nodes), () => state.selectNext(nodes)))
   def widget: Widget =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
     val tree = w.Tree(nodes, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => tree.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): TreeElement = copy(props = props)
-  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
+  private[dsl] def withProps(props: ElementProps): TreeElement               = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =
     Some(
       keys { case KeyEvent(KeyCode.Enter, _) => state.toggle(nodes) }
         .orElse(selectionKeys(() => state.selectNext(nodes), () => state.selectPrevious(nodes)))
@@ -59,8 +62,12 @@ final case class MenuElement(
     val menu = w.Menu(items, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => menu.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): MenuElement               = copy(props = props)
-  private[dsl] override def claim: SizeClaim                                 =
-    SizeClaim.box(w.Menu(items).width, items.size + 2)
+  private[dsl] override def claim: SizeClaim =
+    // the popup asks for exactly the box it paints; `Fill` is the honest fallback if it ever stops knowing that
+    val menu = w.Menu(items)
+    (menu.widthAt(0), menu.heightAt(0)) match
+      case (Some(width), Some(height)) => SizeClaim.box(width, height)
+      case _                           => SizeClaim.Fill
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =
     Some(
       keys { case KeyEvent(KeyCode.Enter | KeyCode.Char(' '), _) =>
@@ -85,7 +92,8 @@ final case class MenuElement(
         true
       case _                         => false
 
-/** A multi-select list: Up/Down move the cursor, Space toggles membership of the cursor row.
+/** A multi-select list: Up/Down move the cursor, Space toggles membership of the cursor row; the wheel moves the cursor
+  * on hover, as it does over a `list`.
   *
   * `selected` is the set the view read (tracked at construction, see [[CheckboxElement]]); `onToggle` is handed the row
   * whose membership Space flipped.
@@ -98,22 +106,25 @@ final case class SelectionListElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   type Self = SelectionListElement
-  def widget: Widget                                                     =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
+    Some(wheelScrolls(() => state.selectPrevious(items.size), () => state.selectNext(items.size)))
+  def widget: Widget                                                         =
     val rendered = items.zipWithIndex.map { (item, index) =>
       val marker = if selected.contains(index) then "[x] " else "[ ] "
       Line.raw(marker + item)
     }
     val view     = w.ListView(rendered, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => view.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): SelectionListElement  = copy(props = props)
-  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
+  private[dsl] def withProps(props: ElementProps): SelectionListElement      = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =
     Some(
       keys { case KeyEvent(KeyCode.Char(' '), _) => state.selected.foreach(onToggle) }
         .orElse(selectionKeys(() => state.selectNext(items.size), () => state.selectPrevious(items.size)))
     )
 
 /** A file chooser over a [[FilePickerState]]: arrows navigate, Enter opens directories or accepts a file into
-  * `state.chosen`. `chosen` is the accepted path the view read, tracked at construction.
+  * `state.chosen`, and the wheel moves the selection on hover. `chosen` is the accepted path the view read, tracked at
+  * construction.
   */
 final case class FilePickerElement(
     state: FilePickerState,
@@ -121,15 +132,17 @@ final case class FilePickerElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   type Self = FilePickerElement
-  def widget: Widget                                                     =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
+    Some(wheelScrolls(() => state.tree.selectPrevious(), () => state.tree.selectNext()))
+  def widget: Widget                                                         =
     val tree = w.DirectoryTree(style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) =>
       val treeArea   = Rect(area.x, area.y, area.width, math.max(0, area.height - 1))
       tree.render(treeArea, buffer, state.tree)
       val chosenLine = chosen.map(path => s"→ $path").getOrElse("→ (nothing selected)")
       buffer.setString(area.x, area.bottom - 1, chosenLine, props.style.dim)
-  private[dsl] def withProps(props: ElementProps): FilePickerElement     = copy(props = props)
-  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
+  private[dsl] def withProps(props: ElementProps): FilePickerElement         = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =
     Some(
       // the guard keeps Enter with nothing selected unconsumed, so it still reaches the app's own bindings
       keys { case KeyEvent(KeyCode.Enter, _) if state.tree.selected.isDefined => openOrAccept(state.tree.selected) }
@@ -143,19 +156,22 @@ final case class FilePickerElement(
       case Some(path)                                          => state.chosen.set(Some(path))
       case None                                                => ()
 
-/** A filesystem browser. Up/Down move the selection, Enter expands or collapses the selected directory, while focused.
-  * Listings are read lazily and cached in `state` — it touches the disk on expansion, never per frame.
+/** A filesystem browser. Up/Down move the selection, Enter expands or collapses the selected directory, while focused;
+  * the wheel moves the selection on hover. Listings are read lazily and cached in `state` — it touches the disk on
+  * expansion, never per frame.
   */
 final case class DirectoryTreeElement(
     state: w.DirectoryTreeState,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   type Self = DirectoryTreeElement
-  def widget: Widget                                                     =
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
+    Some(wheelScrolls(() => state.selectPrevious(), () => state.selectNext()))
+  def widget: Widget                                                         =
     val tree = w.DirectoryTree(style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => tree.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): DirectoryTreeElement  = copy(props = props)
-  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
+  private[dsl] def withProps(props: ElementProps): DirectoryTreeElement      = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =
     Some(
       keys { case KeyEvent(KeyCode.Enter, _) => state.toggle() }
         .orElse(selectionKeys(() => state.selectNext(), () => state.selectPrevious()))
@@ -164,6 +180,11 @@ final case class DirectoryTreeElement(
 /** A sortable, filterable table. Up/Down move the row selection while focused, and PageUp/PageDown turn the page once
   * `state.paging` is set (they are left unconsumed otherwise, so they keep bubbling). Sorting and filtering have no
   * built-in keys — drive `state.sortBy`/`state.setFilter` from the app's own bindings.
+  *
+  * Alone among the selectable collections this one has no wheel behavior. Its selection indexes the *visible* page
+  * (`table.visibleRows(state)`), so a wheel step would have to decide whether it moves within the page or turns it, and
+  * either answer is wrong for half the tables; the page keys say which one the app meant. Bind `onMouseEvent` if this
+  * table wants one of the two.
   */
 final case class DataTableElement(
     table: w.DataTable,
