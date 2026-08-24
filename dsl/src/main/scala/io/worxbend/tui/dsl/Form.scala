@@ -24,9 +24,8 @@ private[dsl] object FieldBinding:
       parse: Boolean => Either[String, Any],
   ) extends FieldBinding
 
-/** Live state for a compile-time-derived form: text/int fields become inputs, boolean fields become checkboxes;
-  * [[submit]] runs each field's parser/validators — errors land in [[errors]] per field, a fully valid form lands in
-  * [[result]].
+/** Live state for a compile-time-derived form: boolean fields become checkboxes, everything else an input; [[submit]]
+  * runs each field's parser/validators — errors land in [[errors]] per field, a fully valid form lands in [[result]].
   *
   * Custom validation attaches per field name via cue4s-style [[Field]] composition:
   * `FormState.of(deriveForm[Signup], Field.int("age").mapValidated(...))`.
@@ -54,9 +53,10 @@ object FormState:
 
   /** The `Field` factory that produces `input`, named so a rejected validator can say what to write instead. */
   private def factoryFor(input: FieldInput): String = input match
-    case FieldInput.TextField => "Field.text"
-    case FieldInput.IntField  => "Field.int"
-    case FieldInput.BoolField => "Field.bool"
+    case FieldInput.TextField    => "Field.text"
+    case FieldInput.IntField     => "Field.int"
+    case FieldInput.DecimalField => "Field.double"
+    case FieldInput.BoolField    => "Field.bool"
 
   /** Builds live state from a derived [[FormSpec]]; `validators` override the default per-type parsers by field name
     * (only the name and the input kind are taken from their own `FieldSpec` — position comes from the derived spec).
@@ -97,22 +97,19 @@ object FormState:
     }
     if mismatched.nonEmpty then throw IllegalArgumentException(mismatched.mkString("; "))
 
-    val byName                                       = validators.map(field => field.spec.name -> field).toMap
-    // A field with no caller-supplied validator still needs one, and which parser a field type gets is
-    // `deriveForm`'s decision, not this method's — `Field.default` is the other half of that mapping.
-    def validatorFor(fieldSpec: FieldSpec): Field[?] = byName.getOrElse(fieldSpec.name, Field.default(fieldSpec))
+    val byName = validators.map(field => field.spec.name -> field).toMap
 
-    val bindings = spec.fields.map { fieldSpec =>
+    val bindings = spec.defaults.map { derived =>
+      // A field with no caller-supplied validator falls back to the one the derivation already built for it, whose
+      // parser came from the field type's own `FormFieldType`. Nothing here maps an input kind back to a parser, which
+      // is what lets an application's own field type carry a parser this module has never heard of.
+      val field     = byName.getOrElse(derived.spec.name, derived)
+      val fieldSpec = derived.spec
       fieldSpec.input match
-        case FieldInput.BoolField                       =>
+        case FieldInput.BoolField =>
           // a checkbox holds a Boolean, so its validator sees the same `"true"`/`"false"` text `Field.bool` parses
-          FieldBinding.BoolLike(
-            fieldSpec,
-            Signal(false),
-            checked => validatorFor(fieldSpec).parse(checked.toString).map(value => value: Any),
-          )
-        case FieldInput.TextField | FieldInput.IntField =>
-          val field = validatorFor(fieldSpec)
+          FieldBinding.BoolLike(fieldSpec, Signal(false), checked => field.parse(checked.toString).map(v => v: Any))
+        case _                    =>
           FieldBinding.TextLike(fieldSpec, TextInputState(), raw => field.parse(raw).map(value => value: Any))
     }
     new FormState(bindings, spec.assemble)
@@ -144,6 +141,19 @@ object Form:
   private def errorRow(message: String): Element =
     Element.text(message).fg(Color.Red).length(1)
 
+  /** The control a text-like field is edited with, chosen from what the derivation said the field holds.
+    *
+    * A numeric field rendered as a plain text input accepts any keystroke, so typing `abc` into an `age` field looks
+    * accepted right up until submit answers `'abc' is not a whole number`. `numberInput` refuses the keystroke instead:
+    * it claims the same single row and takes the same [[TextInputState]], so it swaps in without changing anything
+    * around it. The parser still runs on submit — this only stops the user reaching it with input that cannot parse.
+    */
+  private def textControl(spec: FieldSpec, state: TextInputState): Element =
+    spec.input match
+      case FieldInput.IntField     => Element.numberInput(state)
+      case FieldInput.DecimalField => Element.numberInput(state).decimal
+      case _                       => Element.input(state)
+
   def apply[A](state: FormState[A])(using ReactiveScope): Element =
     // display columns, not UTF-16 lengths: a field named with CJK or emoji characters otherwise gets a label column
     // narrower than it renders into, and the error line below it no longer lines up with the input
@@ -154,7 +164,7 @@ object Form:
           Element
             .row(
               Element.text(s"${spec.name}:").length(labelWidth),
-              Element.input(inputState).fill,
+              textControl(spec, inputState).fill,
             )
             .length(1)
         case FieldBinding.BoolLike(spec, value, _)      =>
@@ -173,7 +183,7 @@ object Form:
         case FieldBinding.TextLike(spec, inputState, _) =>
           Element.column(
             Element.text(s"$position: ${spec.name}").length(1),
-            Element.input(inputState).fill.length(1),
+            textControl(spec, inputState).fill.length(1),
           )
         case FieldBinding.BoolLike(spec, value, _)      =>
           val announced = if value.get then "checked" else "unchecked"

@@ -26,40 +26,19 @@ final case class Field[A](spec: FieldSpec, parse: String => Either[String, A]):
   def mapValidated[B](f: A => Either[String, B]): Field[B] =
     Field(spec, raw => parse(raw).flatMap(f))
 
+/** The starting points for a validator. Each one is the field a derivation would have produced for that type, so
+  * `Field.int("age").mapValidated(…)` and the derived `age` field parse identically until the extra step runs — both
+  * come from the same [[FormFieldType]].
+  *
+  * A type of your own needs no factory here: `summon[FormFieldType[Email]].field("email")` builds its field from
+  * whatever instance the type supplies.
+  */
 object Field:
 
-  /** The parser a derived field gets when the application supplies no validator of its own.
-    *
-    * This is the other half of the mapping [[deriveForm]] performs: the derivation turns a case-class field's *type*
-    * into a [[FieldInput]], and this turns that `FieldInput` back into the [[Field]] that parses the raw input for it.
-    * Both halves live in `tui-macros` so that adding a fourth input kind is one exhaustive match away from a compile
-    * error here, instead of a silently missing branch in whichever module renders the form.
-    *
-    * Pure and thread-agnostic: it allocates a `Field` and touches no shared state, so it is safe to call from any
-    * thread, including the render thread.
-    *
-    * @param spec
-    *   the derived field to build a parser for; its name is carried over unchanged
-    * @return
-    *   a `Field[String]`, `Field[Int]` or `Field[Boolean]` according to `spec.input`
-    */
-  def default(spec: FieldSpec): Field[?] =
-    spec.input match
-      case FieldInput.TextField => text(spec.name)
-      case FieldInput.IntField  => int(spec.name)
-      case FieldInput.BoolField => bool(spec.name)
+  def text(name: String): Field[String] = FormFieldType.text.field(name)
 
-  def text(name: String): Field[String] =
-    Field(FieldSpec(name, FieldInput.TextField), raw => Right(raw))
+  def int(name: String): Field[Int] = FormFieldType.int.field(name)
 
-  def int(name: String): Field[Int] =
-    Field(
-      FieldSpec(name, FieldInput.IntField),
-      raw => raw.trim.toIntOption.toRight(s"'$raw' is not a whole number"),
-    )
+  def double(name: String): Field[Double] = FormFieldType.decimal.field(name)
 
-  def bool(name: String): Field[Boolean] =
-    Field(
-      FieldSpec(name, FieldInput.BoolField),
-      raw => raw.trim.toBooleanOption.toRight(s"'$raw' is not true/false"),
-    )
+  def bool(name: String): Field[Boolean] = FormFieldType.bool.field(name)
