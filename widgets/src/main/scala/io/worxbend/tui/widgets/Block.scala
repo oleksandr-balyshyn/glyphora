@@ -2,12 +2,38 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, Line, Rect, Span, Style, Widget}
 
-/** The box-drawing set a [[Block]] frames itself with: `┌─┐`, `╭─╮`, `╔═╗`, or `┏━┓`.
+/** The named frame a [[Block]] draws itself with — the box-drawing set, the dashed set, or the block-element set that
+  * picks its corner and edge glyphs. [[BorderGlyphs.of]] turns one of these into the eight glyphs it stands for, and
+  * `Block(borderSet = ...)` takes such a record directly when none of the named sets is the one you want.
   *
-  * All four are single-column glyphs, so the border never changes a block's [[Block.inner]] geometry — only its look.
+  * Every glyph in every set here is one terminal column wide, so choosing a set never changes a block's [[Block.inner]]
+  * geometry — only its look.
+  *
+  *   - [[Plain]] `┌─┐`, [[Rounded]] `╭─╮`, [[Double]] `╔═╗`, [[Thick]] `┏━┓` — the four classic box-drawing weights.
+  *   - [[Ascii]] `+-+` — plain ASCII, for a terminal or a font with no box-drawing glyphs, and for output that has to
+  *     survive being pasted somewhere that is not a terminal at all.
+  *   - The six dashed sets — light or heavy, broken into two, three or four dashes per cell — draw a frame that reads
+  *     as provisional or inactive next to a solid one. Their corners stay solid, because a dashed corner glyph does not
+  *     exist.
+  *   - [[QuadrantInside]] and [[QuadrantOutside]] treat each cell as a 2x2 grid of half-cell "pixels", so the frame
+  *     sits half a cell inside the block's area or half a cell outside it. Two nested blocks drawn one inside and one
+  *     outside meet with no gap between them.
+  *   - [[OneEighthWide]] and [[OneEighthTall]] are the "McGugan box", named after Will McGugan: one-eighth block
+  *     elements pushed right up against the cell edge, which reads as a hairline rather than as a row of glyphs.
+  *   - [[ProportionalWide]] and [[ProportionalTall]] compensate for a terminal cell being about twice as tall as it is
+  *     wide, so the frame looks the same thickness horizontally and vertically.
+  *   - [[Full]] `█` is a solid slab, and [[Blank]] draws spaces — the way to give a block a border-styled margin, or to
+  *     keep a title's border row without any frame under it.
   */
 enum BorderType:
   case Plain, Rounded, Double, Thick
+  case Ascii
+  case LightDoubleDashed, LightTripleDashed, LightQuadrupleDashed
+  case HeavyDoubleDashed, HeavyTripleDashed, HeavyQuadrupleDashed
+  case QuadrantInside, QuadrantOutside
+  case OneEighthWide, OneEighthTall
+  case ProportionalWide, ProportionalTall
+  case Full, Blank
 
 /** Which horizontal border a [[BlockTitle]] is written into. */
 enum TitlePosition:
@@ -42,9 +68,13 @@ object BlockTitle:
   * There are two styles, and they do different jobs. [[style]] is painted over the *whole* area — border cells and
   * interior alike — before anything is drawn, which is how a panel gets a background colour of its own against the
   * screen behind it; because it only patches the style of each cell and never its glyph, content already drawn there
-  * keeps its text and its foreground colour. [[borderStyle]] is then layered on top of it for the border glyphs and
-  * the titles, so it only has to say what is *different* about the frame. A block left at the default `style` paints
-  * no fill at all and behaves exactly as it did before the parameter existed.
+  * keeps its text and its foreground colour. [[borderStyle]] is then layered on top of it for the border glyphs and the
+  * titles, so it only has to say what is *different* about the frame. A block left at the default `style` paints no
+  * fill at all and behaves exactly as it did before the parameter existed.
+  *
+  * [[borderType]] names one of the built-in frames. [[borderSet]] is the escape hatch under it: hand it a
+  * [[BorderGlyphs]] of your own and it wins over `borderType`, which is how a frame nothing in the enum describes gets
+  * drawn without waiting for the enum to grow a case.
   *
   * Titles sharing a border *and* an alignment are drawn as one run separated by a single space, in the order given.
   * Titles that share a border with different alignments can still collide on a narrow block; the block clips rather
@@ -57,6 +87,7 @@ final case class Block(
     style: Style = Style.Default,
     borderStyle: Style = Style.Default,
     borderType: BorderType = BorderType.Plain,
+    borderSet: Option[BorderGlyphs] = None,
 ) extends Widget:
 
   /** The content region inside the borders and padding. */
@@ -72,15 +103,16 @@ final case class Block(
       // `mapStyle` with `patch`, not `setStyle`: the panel background has to layer *onto* whatever is already there,
       // keeping each cell's foreground colour and modifiers. `setStyle` would replace them outright.
       if style != Style.Default then buffer.mapStyle(area)(_.patch(style))
-      val glyphs = BorderGlyphs.of(borderType)
+      val glyphs = borderSet.getOrElse(BorderGlyphs.of(borderType))
       val top    = area.y
       val bottom = area.bottom - 1
       val left   = area.x
       val right  = area.right - 1
-      if borders.hasAny(Borders.Left) then verticalEdge(buffer, area, left, glyphs)
-      if borders.hasAny(Borders.Right) && area.width > 1 then verticalEdge(buffer, area, right, glyphs)
-      if borders.hasAny(Borders.Top) then horizontalEdge(buffer, area, top, glyphs)
-      if borders.hasAny(Borders.Bottom) && area.height > 1 then horizontalEdge(buffer, area, bottom, glyphs)
+      if borders.hasAny(Borders.Left) then verticalEdge(buffer, area, left, glyphs.verticalLeft)
+      if borders.hasAny(Borders.Right) && area.width > 1 then verticalEdge(buffer, area, right, glyphs.verticalRight)
+      if borders.hasAny(Borders.Top) then horizontalEdge(buffer, area, top, glyphs.horizontalTop)
+      if borders.hasAny(Borders.Bottom) && area.height > 1 then
+        horizontalEdge(buffer, area, bottom, glyphs.horizontalBottom)
       if area.width > 1 && area.height > 1 then
         corner(buffer, left, top, glyphs.topLeft, Borders.Top, Borders.Left)
         corner(buffer, right, top, glyphs.topRight, Borders.Top, Borders.Right)
@@ -88,16 +120,16 @@ final case class Block(
         corner(buffer, right, bottom, glyphs.bottomRight, Borders.Bottom, Borders.Right)
       if titles.nonEmpty then renderTitles(buffer, area)
 
-  private def horizontalEdge(buffer: Buffer, area: Rect, y: Int, glyphs: BorderGlyphs): Unit =
+  private def horizontalEdge(buffer: Buffer, area: Rect, y: Int, glyph: String): Unit =
     var x = area.x
     while x < area.right do
-      buffer.set(x, y, Cell(glyphs.horizontal, edgeStyle))
+      buffer.set(x, y, Cell(glyph, edgeStyle))
       x += 1
 
-  private def verticalEdge(buffer: Buffer, area: Rect, x: Int, glyphs: BorderGlyphs): Unit =
+  private def verticalEdge(buffer: Buffer, area: Rect, x: Int, glyph: String): Unit =
     var y = area.y
     while y < area.bottom do
-      buffer.set(x, y, Cell(glyphs.vertical, edgeStyle))
+      buffer.set(x, y, Cell(glyph, edgeStyle))
       y += 1
 
   private def corner(buffer: Buffer, x: Int, y: Int, glyph: String, first: Borders, second: Borders): Unit =
@@ -139,32 +171,14 @@ final case class Block(
     val startX = alignment.originAt(area.x + insetLeft, available, width)
     val _      = LineRenderer.render(buffer, startX, y, line, available - (startX - area.x - insetLeft), edgeStyle)
 
-  /** The style the border glyphs and titles are drawn in: the whole-area [[style]] with [[borderStyle]] layered on
-    * top.
+  /** The style the border glyphs and titles are drawn in: the whole-area [[style]] with [[borderStyle]] layered on top.
     *
     * Layering rather than replacing is what keeps a panel's background continuous. If the border were drawn in
-    * `borderStyle` alone, a block given a blue background and a bold border would paint the frame with no background
-    * at all and leave a one-cell hole around the panel; with the layering, `borderStyle` only has to say what is
+    * `borderStyle` alone, a block given a blue background and a bold border would paint the frame with no background at
+    * all and leave a one-cell hole around the panel; with the layering, `borderStyle` only has to say what is
     * *different* about the border.
     */
   private def edgeStyle: Style = style.patch(borderStyle)
 
   private def borderWidth(side: Borders): Int =
     if borders.hasAny(side) then 1 else 0
-
-private final case class BorderGlyphs(
-    horizontal: String,
-    vertical: String,
-    topLeft: String,
-    topRight: String,
-    bottomLeft: String,
-    bottomRight: String,
-)
-
-private object BorderGlyphs:
-  def of(borderType: BorderType): BorderGlyphs =
-    borderType match
-      case BorderType.Plain   => BorderGlyphs("─", "│", "┌", "┐", "└", "┘")
-      case BorderType.Rounded => BorderGlyphs("─", "│", "╭", "╮", "╰", "╯")
-      case BorderType.Double  => BorderGlyphs("═", "║", "╔", "╗", "╚", "╝")
-      case BorderType.Thick   => BorderGlyphs("━", "┃", "┏", "┓", "┗", "┛")

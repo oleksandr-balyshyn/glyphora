@@ -170,6 +170,42 @@ after the content and get the same frame. `borderStyle` is layered on `style` ra
 replacing it, so it only has to say what is *different* about the frame; a block left at
 the default `style` paints no fill at all.
 
+### Border sets
+
+`borderType` picks the glyphs the frame is drawn from. Every built-in set is one terminal
+column wide in every position, so switching between them never moves `inner` — the frame
+changes, the content area does not.
+
+| `BorderType` | Looks like | Use it for |
+|---|---|---|
+| `Plain`, `Rounded`, `Double`, `Thick` | `┌─┐` `╭─╮` `╔═╗` `┏━┓` | the four classic box-drawing weights |
+| `Ascii` | `+--+` | terminals and fonts with no box-drawing glyphs, and output that gets pasted somewhere that is not a terminal |
+| `LightDoubleDashed`, `LightTripleDashed`, `LightQuadrupleDashed` | `┌╌╌┐` `┌┄┄┐` `┌┈┈┐` | a frame that reads as provisional or inactive next to a solid one |
+| `HeavyDoubleDashed`, `HeavyTripleDashed`, `HeavyQuadrupleDashed` | `┏╍╍┓` `┏┅┅┓` `┏┉┉┓` | the same, at the thick weight |
+| `QuadrantOutside`, `QuadrantInside` | `▛▀▜` / `▗▄▖` | half-cell frames — one sits half a cell outside the area, the other half a cell inside, so two nested blocks meet with no gap |
+| `OneEighthWide`, `OneEighthTall` | `▁▁▁` / `▕▔▏` | the "McGugan box": one-eighth blocks pressed against the cell edge, which reads as a hairline |
+| `ProportionalWide`, `ProportionalTall` | `▄▄▄` / `█▀█` | a frame that looks the same thickness all round, compensating for a cell being about twice as tall as it is wide |
+| `Full` | `███` | a solid slab |
+| `Blank` | spaces | a border-styled margin, or keeping a title's border row with no frame under it |
+
+The dashed sets keep the solid corners of their weight, because a dashed corner glyph does
+not exist and the eye only reads a broken run of dashes as a line when its ends are pinned
+down.
+
+When none of those is the frame you want, `borderSet` takes the eight glyphs directly and
+wins over `borderType`:
+
+```scala
+Block(borderSet = Some(BorderGlyphs.symmetric("─", "│", "┌", "┐", "└", "┘")))
+Block(borderSet = Some(BorderGlyphs.uniform("*")))
+```
+
+`BorderGlyphs` keeps the two sides of each axis apart — `verticalLeft`/`verticalRight` and
+`horizontalTop`/`horizontalBottom` — because the half-cell sets are not symmetric: the left
+edge of `QuadrantOutside` is `▌` and its right edge is `▐`. `BorderGlyphs.symmetric` is the
+short spelling when both sides of an axis share a glyph, and `BorderGlyphs.uniform` when all
+eight do.
+
 See [Layout & style](./layout-and-style) for constraints and [The app shell](./app-shell)
 for application-level composition.
 
