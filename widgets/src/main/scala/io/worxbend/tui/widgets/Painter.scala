@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Rect, Style}
+import io.worxbend.tui.core.{Buffer, CharWidth, Line, Rect, Style}
 
 /** Paints world-coordinate points into terminal cells for one [[Canvas]] render, accumulating sub-pixel hits and
   * flushing them as glyphs.
@@ -29,8 +29,16 @@ final class Painter private[widgets] (
     marker: String,
 ):
 
-  private val surface = SubCellSurface(area, resolution, marker)
-  private val styles  = Array.fill(surface.slotCount)(Style.Default)
+  private val surface                = SubCellSurface(area, resolution, marker)
+  private val styles                 = Array.fill(surface.slotCount)(Style.Default)
+  private val (dotsAcross, dotsDown) = SubCell.dotsPerCell(resolution)
+
+  /** Labels recorded by [[print]], as `(cell x, cell y, line)`, written by [[flush]] once every dot is down.
+    *
+    * A growable buffer rather than an immutable list because a canvas may carry many labels and this is built once per
+    * render on the render thread; it never escapes the painter, which itself lives for one render.
+    */
+  private val labels = scala.collection.mutable.ArrayBuffer.empty[(Int, Int, Line)]
 
   /** The world rectangle this painter maps, as `((xMin, xMax), (yMin, yMax))`.
     *
@@ -252,5 +260,38 @@ final class Painter private[widgets] (
           error += columnSpan
           row += stepRow
 
+  /** Records `line` to be written with its first cell at the world point `(x, y)`.
+    *
+    * Text is placed at whole-*cell* granularity whatever the resolution: there is no half of a cell for a character to
+    * sit in, so the label lands in the cell containing the point. A point outside the bounds, or a non-finite one, is
+    * dropped exactly as [[paint]] drops it.
+    *
+    * Nothing is drawn until [[flush]], and labels are written *after* every dot. That ordering is the point: a shape
+    * drawn later than a label cannot punch holes through the text, so a plot's annotations do not have to be added last
+    * to survive.
+    */
+  def print(x: Double, y: Double, line: Line): Unit =
+    getPoint(x, y).foreach { (column, row) =>
+      labels += ((area.x + column / dotsAcross, area.y + row / dotsDown, line))
+    }
+
   private[widgets] def flush(buffer: Buffer): Unit =
     surface.flush(buffer, styles.apply)
+    labels.foreach((x, y, line) => writeLine(buffer, x, y, line))
+
+  /** Writes one line span by span, clipped at the canvas area's right edge.
+    *
+    * The clipping is this widget's own, and it has to be: [[Buffer.setString]] clips at the *buffer's* edge, which is
+    * usually further right than the canvas, and a label running past the plot into whatever is drawn beside it is the
+    * bug that would leave. Trimming goes through [[CharWidth.substringByWidth]] so a label ending in a wide character —
+    * a CJK name, an emoji — is cut between grapheme clusters rather than through one.
+    */
+  private def writeLine(buffer: Buffer, x: Int, y: Int, line: Line): Unit =
+    var column = x
+    line.spans.foreach { span =>
+      val room = area.right - column
+      if room > 0 then
+        val text = CharWidth.substringByWidth(span.content, room)
+        buffer.setString(column, y, text, span.style)
+        column += CharWidth.of(text)
+    }

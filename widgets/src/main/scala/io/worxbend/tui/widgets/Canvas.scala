@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Rect, Widget}
+import io.worxbend.tui.core.{Buffer, Line, Rect, Widget}
 
 /** How many drawable sub-pixels one terminal cell contributes to a [[Canvas]].
   *
@@ -41,11 +41,28 @@ enum CanvasResolution:
     */
   case Octant
 
+/** A piece of text pinned to a world coordinate on a [[Canvas]] — a city on a map, a threshold on a plot.
+  *
+  * The `(x, y)` is in the canvas's own coordinate system, the same one shapes speak, with y pointing up. That is what
+  * makes a label worth having over writing the text yourself next to the canvas: when the bounds change, the label
+  * moves with the thing it names instead of staying where you put it.
+  *
+  * Text lands at whole-*cell* granularity whatever the [[CanvasResolution]] is, because there is no half of a cell for
+  * a character to sit in: the label starts in the cell containing the point and runs right, clipped at the canvas's own
+  * right edge.
+  */
+final case class CanvasLabel(x: Double, y: Double, line: Line)
+
 /** A free-form drawing surface: shapes describe themselves in a world coordinate system (`xBounds` right-ward,
   * `yBounds` up-ward) and the canvas maps them onto its cell grid, at whichever [[CanvasResolution]] it was given.
   *
   * `marker` is read only at [[CanvasResolution.Cell]], where there is one dot per cell; a marker that is not exactly
   * one column wide is replaced by [[Marker.Dot]] rather than allowed to smear into the next cell.
+  *
+  * `labels` breaks the "required data first" parameter order this repository otherwise keeps to, and does so
+  * deliberately: it is an optional annotation layer rather than the canvas's subject, and putting it anywhere but last
+  * would silently rebind the arguments of every positional `Canvas(...)` already written. Labels are drawn after every
+  * shape, so a dot cannot land on top of the text that names it.
   */
 final case class Canvas(
     xBounds: (Double, Double),
@@ -53,10 +70,12 @@ final case class Canvas(
     shapes: Seq[Shape],
     marker: String = Marker.Dot,
     resolution: CanvasResolution = CanvasResolution.Cell,
+    labels: Seq[CanvasLabel] = Seq.empty,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
       val painter = Painter(area, xBounds, yBounds, resolution, marker)
       shapes.foreach(_.draw(painter))
+      labels.foreach(label => painter.print(label.x, label.y, label.line))
       painter.flush(buffer)

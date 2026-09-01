@@ -861,6 +861,36 @@ measured in whole columns and a two-column glyph would spill into the bar next d
 For custom plots, `canvas(xBounds, yBounds)(shapes*)` provides points, segments,
 polylines, rectangles, and circles.
 
+### Labelling a plot
+
+`CanvasLabel(x, y, line)` pins text to a **world** coordinate — the same coordinate
+system the shapes use, with y pointing up. That is what makes it worth having over
+writing the text yourself beside the canvas: when the bounds change, the label moves with
+the thing it names instead of staying where you put it.
+
+```scala
+import io.worxbend.tui.widgets as w
+
+widget(
+  w.Canvas(
+    xBounds = (-180.0, 180.0),
+    yBounds = (-90.0, 90.0),
+    shapes = coastline,
+    labels = Seq(w.CanvasLabel(13.4, 52.5, Line("Berlin"))),
+  )
+)
+```
+
+`w.CanvasLabel` is spelled through the `widgets` alias rather than re-exported from
+`io.worxbend.tui.dsl`, because you are already down at the widget tier to reach `labels`
+at all — `canvas(...)` at the element layer does not expose them.
+
+Labels are drawn after every shape, so a dot can never punch a hole through the text that
+names it, whichever order you listed them in. Text is placed at whole-*cell* granularity
+whatever the resolution — there is no half of a cell for a character to sit in — and it
+is clipped at the canvas's own right edge, cut between grapheme clusters so a label
+ending in a wide character never half-prints.
+
 ### Filled shapes
 
 Three shapes fill an area rather than trace an outline.
