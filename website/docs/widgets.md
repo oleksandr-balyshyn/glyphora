@@ -753,6 +753,28 @@ history scrolls off the left — the behaviour a live metric wants, because the 
 reader is watching never moves. `dualSparkline(upper, lower, SparkDirection.RightToLeft)`
 does the same for both halves at once.
 
+`chart(..., showLabels = true)` prints the two y bounds beside the vertical axis. The
+numbers get a *gutter* of their own — a strip of columns reserved to the left of the
+axis, as wide as the widest of the two labels — and the axis and the plot both move
+right by that much. Earlier versions wrote the labels at the first plot column, where a
+four-digit bound painted over the leftmost points of every series. `labelAlignment`
+decides where a shorter number sits inside that strip: `Alignment.Right` (the default)
+presses it against the axis line, `Alignment.Left` against the frame, `Alignment.Center`
+between the two.
+
+```scala
+chart(
+  Seq(Dataset("wave", wave)),
+  xBounds = (0.0, 80.0),
+  yBounds = (0.0, 100.0),
+  showLabels = true,
+  labelAlignment = Alignment.Left,
+)
+```
+
+A pane too narrow to spare the gutter drops the labels rather than the plot, so a chart
+squeezed into a small pane stays a chart instead of becoming a column of numbers.
+
 ### Bar glyphs
 
 A terminal has no pixels, so a bar two and a half cells tall is drawn as two full cells and

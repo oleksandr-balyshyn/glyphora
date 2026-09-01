@@ -196,9 +196,19 @@ private[dsl] trait ElementFactories:
     * `xBounds` and `yBounds` are `(min, max)` in the data's own units — they are *not* derived from the points, so a
     * series outside the window is simply not drawn. A `GraphType.Line` dataset joins its points in the order they are
     * listed rather than sorting by x, so an unsorted series draws as a zig-zag.
+    *
+    * `showLabels = true` prints the two y bounds in a gutter reserved left of the vertical axis, so the numbers never
+    * overwrite the data; `labelAlignment` places each number inside that gutter (`Right`, the default, presses it
+    * against the axis line). A pane too narrow to spare the gutter drops the labels and keeps the plot.
     */
-  def chart(datasets: Seq[w.Dataset], xBounds: (Double, Double), yBounds: (Double, Double)): WidgetElement =
-    WidgetElement(w.Chart(datasets, xBounds, yBounds))
+  def chart(
+      datasets: Seq[w.Dataset],
+      xBounds: (Double, Double),
+      yBounds: (Double, Double),
+      showLabels: Boolean = false,
+      labelAlignment: w.Alignment = w.Alignment.Right,
+  ): WidgetElement =
+    WidgetElement(w.Chart(datasets, xBounds, yBounds, showLabels = showLabels, labelAlignment = labelAlignment))
 
   /** A free-form drawing surface: shapes describe themselves in world coordinates (`xBounds` increasing rightward,
     * `yBounds` increasing *upward*, unlike buffer coordinates) and the canvas maps them onto the cell grid. See
