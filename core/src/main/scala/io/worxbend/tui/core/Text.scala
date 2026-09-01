@@ -1,10 +1,49 @@
 package io.worxbend.tui.core
 
-/** Multi-line styled text. */
-final case class Text(lines: Seq[Line]):
+/** Multi-line styled text.
+  *
+  * `alignment` is the horizontal placement this text asks for, and `None`, the default, means "whatever the widget
+  * drawing me was told to use" — which is what every text did before this field existed. A [[Line]] that carries an
+  * alignment of its own still overrules it for that one row, so the resolution order a renderer follows is: the line's
+  * alignment first, then the text's, then the widget's own argument.
+  *
+  * `style` is this text's base style, the outermost of the three layers that decide how a character is drawn — the
+  * text's style, then the [[Line]]'s, then the [[Span]]'s, each laid over the last with [[Style.patch]] so the more
+  * specific layer wins wherever it speaks and the outer one shows through wherever it stays silent. The widget's own
+  * style sits underneath all three. The default, [[Style.Default]], sets nothing, so a text that does not use it
+  * renders exactly as it did before the layer existed.
+  */
+final case class Text(lines: Seq[Line], alignment: Option[Alignment] = None, style: Style = Style.Default):
   def height: Int = lines.size
 
   def width: Int = if lines.isEmpty then 0 else lines.map(_.width).max
+
+  /** This text with `style` as its base layer, replacing whatever base it had. The lines and their spans are untouched,
+    * so each keeps its own style and still wins over this one wherever the two disagree.
+    *
+    * This is an O(1) field replacement, unlike [[under]] and [[patchStyle]], which walk every span of every line.
+    */
+  def withStyle(style: Style): Text = copy(style = style)
+
+  /** This text's base style put through `transform`, e.g. `text.withStyleOf(_.dim)`. The lines are untouched. */
+  def withStyleOf(transform: Style => Style): Text = copy(style = transform(style))
+
+  /** This text placed the given way, overriding the widget that draws it. A line that carries an alignment of its own
+    * still wins over this for that one row; the lines are otherwise untouched.
+    */
+  def aligned(alignment: Alignment): Text = copy(alignment = Some(alignment))
+
+  /** Hands the placement decision back to the widget drawing this text — the state a text starts in. */
+  def inheritAlignment: Text = copy(alignment = None)
+
+  /** Pins this block to the left edge even inside a centred or right-aligned widget. */
+  def leftAligned: Text = aligned(Alignment.Left)
+
+  /** Centres every row of this block in the columns it is drawn in, whatever the widget was told to do. */
+  def centered: Text = aligned(Alignment.Center)
+
+  /** Pins this block to the right edge, which is what a column of numbers wants. */
+  def rightAligned: Text = aligned(Alignment.Right)
 
   /** Every line's [[Line.plainText]] joined with `\n`, with no trailing newline added.
     *
@@ -18,19 +57,19 @@ final case class Text(lines: Seq[Line]):
   /** Every span of every line put through `transform` — see [[Line.styled]] for why this is a fold over the spans
     * rather than a style stored on the text.
     */
-  def styled(transform: Style => Style): Text = Text(lines.map(_.styled(transform)))
+  def styled(transform: Style => Style): Text = copy(lines = lines.map(_.styled(transform)))
 
   /** `base` laid underneath every span's own style, so a span that chose a setting keeps it — see [[Span.under]]. */
-  def under(base: Style): Text = Text(lines.map(_.under(base)))
+  def under(base: Style): Text = copy(lines = lines.map(_.under(base)))
 
   /** `style` layered on top of every span of every line — see [[Span.patchStyle]]. */
-  def patchStyle(style: Style): Text = Text(lines.map(_.patchStyle(style)))
+  def patchStyle(style: Style): Text = copy(lines = lines.map(_.patchStyle(style)))
 
   /** This text with `line` added below its existing lines. The receiver is unchanged; a new value is returned. */
-  def appended(line: Line): Text = Text(lines :+ line)
+  def appended(line: Line): Text = copy(lines = lines :+ line)
 
   /** This text with every line of `other` added below its own, in order. */
-  def appendedAll(other: Text): Text = Text(lines ++ other.lines)
+  def appendedAll(other: Text): Text = copy(lines = lines ++ other.lines)
 
   /** This text with `span` added to the right-hand end of its last line.
     *
@@ -43,8 +82,8 @@ final case class Text(lines: Seq[Line]):
     * and the line count does not change.
     */
   def appendedToLast(span: Span): Text =
-    if lines.isEmpty then Text(Seq(Line(Seq(span))))
-    else Text(lines.init :+ lines.last.appended(span))
+    if lines.isEmpty then copy(lines = Seq(Line(Seq(span))))
+    else copy(lines = lines.init :+ lines.last.appended(span))
 
   /** [[appended]] as an operator: `header + body + footer` stacks three rows into one block. */
   infix def +(line: Line): Text = appended(line)
@@ -71,3 +110,12 @@ object Text:
   /** [[styled]] with [[Style.Default]]: splits `content` on newlines, each resulting line unstyled. */
   def raw(content: String): Text =
     styled(content, Style.Default)
+
+  /** A block of already-built lines sitting on `style` as their shared base layer — the companion spelling of
+    * [[Text.withStyle]], for a caller that has the lines and the base style in hand at the same moment.
+    *
+    * It does not touch the lines: each keeps its own style, and each span keeps its own, and both still overrule this
+    * base wherever they disagree with it. That is the difference from the single-string [[styled]] above, which has no
+    * lines yet and puts the style straight onto the spans it makes.
+    */
+  def styled(lines: Seq[Line], style: Style): Text = Text(lines, None, style)

@@ -4,8 +4,14 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, LineBreaks, Measured, Rect
 
 /** Multi-line styled text with alignment and optional wrapping.
   *
-  * `alignment` places every line; a [[Line]] that carries an alignment of its own overrides it for that one row, and a
-  * wrapped line keeps its alignment on every row it spills onto.
+  * `alignment` places every line, and it is the last word rather than the first: a [[Line]] that carries an alignment
+  * of its own overrides it for that one row, and failing that the [[Text]]'s own alignment overrides it for every row.
+  * A wrapped line keeps its alignment on every row it spills onto.
+  *
+  * `style` is likewise the outermost style layer, not the only one. Every character is drawn with this style, then the
+  * text's own [[io.worxbend.tui.core.Text.style]] on top of it, then the line's, then the span's — each step a
+  * [[io.worxbend.tui.core.Style.patch]], so the more specific layer wins wherever it speaks. A `Paragraph` given a
+  * `style` therefore no longer erases a style the `Text` was built with; it sits underneath it.
   *
   * With [[Overflow.Wrap]] the text breaks at word boundaries: a word moves to the next row whole rather than being cut
   * in half, and the blanks that sat at the break are dropped instead of becoming a stray indent on the next row. A word
@@ -32,14 +38,17 @@ final case class Paragraph(
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
       // lazily: wrapping the whole document to draw one screenful makes render cost scale with the text, not the area
-      val lines = overflow match
+      val lines     = overflow match
         case Overflow.Wrap => text.lines.iterator.flatMap(Paragraph.wrapLine(_, area.width))
         case Overflow.Clip => text.lines.iterator
+      // resolved once for the whole paragraph rather than per row: the widget's style is the floor, the text's own
+      // style is laid over it, and each line then lays its own over that inside `LineRenderer`
+      val baseStyle = style.patch(text.style)
       lines.take(area.height).zipWithIndex.foreach { (line, row) =>
         val lineWidth = math.min(line.width, area.width)
-        // the line's own alignment wins over the paragraph's; `None` means "use the paragraph's", which is what
-        // every line said before `Line` could carry one
-        val placement = line.alignment.getOrElse(alignment)
+        // the line's own alignment wins over the text's, which wins over the paragraph's argument; `None` at both
+        // inner levels means "use the paragraph's", which is what every line said before either could carry one
+        val placement = line.alignment.orElse(text.alignment).getOrElse(alignment)
         val startX    = placement.originAt(area.x, area.width, lineWidth)
         // A line wider than the area loses the side *away* from the alignment: a right-aligned line keeps its end, a
         // centred one loses as much from each side. Left-aligned text keeps its beginning, as before.
@@ -50,8 +59,8 @@ final case class Paragraph(
           case Alignment.Right  => tooWideBy
         // the paragraph has already placed the line itself, by choosing `startX`, so the renderer is told to draw from
         // there and not to align a second time
-        val _         =
-          LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, style, skipWidth = skipWidth)
+        val _ =
+          LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, baseStyle, skipWidth = skipWidth)
       }
 
   /** The rows this text occupies at `width` — the measurement counterpart of [[render]], and always an answer: a

@@ -533,6 +533,22 @@ dim and a foreground colour are different settings and neither overrules the oth
 line that never sets a base style has `Style.Default`, which sets nothing, so it renders
 exactly as it did before the layer existed.
 
+A `Text` carries the same layer one level further out, so a whole block can be tinted in
+one call, and it also carries a default alignment for its rows:
+
+```scala
+Text.raw(body).withStyle(theme.muted).centered
+Text.styled(rows, theme.muted)          // the base style at construction time
+```
+
+That makes the full cascade four deep — the widget's style, then the `Text`'s, then the
+`Line`'s, then the `Span`'s. A `Paragraph` given a `style` therefore no longer erases a
+style its `Text` was built with; it sits underneath it.
+
+Alignment resolves the same way, innermost first: a `Line`'s own alignment wins, failing
+that the `Text`'s, failing that the widget's `alignment` argument. So a block can be
+right-aligned as a whole while one heading inside it stays `leftAligned`.
+
 The difference from `patchStyle` is what gets changed. `withStyle` leaves the spans as
 they are and adds a layer beneath them, which is what you want for "this whole row is
 dim". `patchStyle` rewrites every span, which is what you want when the spans themselves
