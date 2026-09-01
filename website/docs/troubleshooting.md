@@ -205,7 +205,9 @@ terminal is deliberately handed over and restored.
 
 Ordinary `println` writes into the terminal glyphora is repainting. Use a `Log`
 widget, write to a file, or call `printAbove(...)` from a handler to add durable lines
-to scrollback without corrupting the frame.
+to scrollback without corrupting the frame. When the line needs styling — a coloured
+log level, a bold prefix — use `insertBefore(height) { (area, buffer) => ... }`, which
+inserts a drawn block instead of stripped text.
 
 ## Still stuck?
 

@@ -153,7 +153,9 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   only from the cursor down, or only the current line — what an app that does not own
   the whole screen needs), `requestFullRedraw()` (throw away the diff baseline, so the
   next frame repaints every cell — the recovery path when something other than this
-  app wrote to the terminal), `copyToClipboard`, `suspend` and `printAbove`. Each has
+  app wrote to the terminal), `copyToClipboard`, `suspend`, `printAbove` and
+  `insertBefore(height, widget)` (the same durable scrollback output, drawn by a widget
+  so that it keeps its styling). Each has
   a default body that succeeds and does nothing, so a backend can implement as much or
   as little of it as its device supports.
 - **`Backend`** — raw mode, alternate screen, cursor visibility **and position**,

@@ -1,6 +1,6 @@
 package io.worxbend.tui.runtime
 
-import io.worxbend.tui.core.Event
+import io.worxbend.tui.core.{Event, Widget}
 import io.worxbend.tui.terminal.BackendError
 
 import scala.concurrent.duration.FiniteDuration
@@ -115,6 +115,15 @@ trait RunnerHandle:
 
   /** Prints `lines` into the terminal scrollback above the live UI (durable log output). */
   def printAbove(lines: Seq[String]): Unit
+
+  /** [[printAbove]] with styling: renders `widget` into a block `height` rows tall and inserts *that* into the
+    * scrollback above the live UI, so an inserted line can carry colour, bold and hyperlinks.
+    *
+    * `printAbove` takes text, and the backend strips control sequences out of it before it reaches the terminal, so
+    * plain text is all it can ever emit. Here the caller draws: the widget is handed a buffer as wide as the terminal
+    * and `height` rows tall, and whatever it paints becomes durable output. A `height` of zero or less inserts nothing.
+    */
+  def insertBefore(height: Int, widget: Widget): Unit
 
 /** Every queued-body failure one run absorbed, collapsed into a single report.
   *

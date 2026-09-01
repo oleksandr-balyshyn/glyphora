@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Effect, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Size}
+import io.worxbend.tui.core.{Effect, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Size, Widget}
 import io.worxbend.tui.runtime.{
   Async,
   Cancelable,
@@ -380,6 +380,26 @@ trait TuiApp:
     */
   protected final def printAbove(lines: String*): Unit =
     activeHandle.get().foreach(_.printAbove(lines))
+
+  /** [[printAbove]] with styling: draws a block `height` rows tall and inserts *that* into the scrollback above the
+    * live UI, so a durable line can carry colour, bold and hyperlinks.
+    *
+    * `printAbove` emits plain text — the backend strips control sequences out of what it is given, which is the right
+    * thing to do with strings of unknown provenance and also means an inserted line can never be styled. Here the app
+    * draws instead: `widget` receives a buffer as wide as the terminal and `height` rows tall, and whatever it paints
+    * becomes permanent output above the UI. Call it from an event handler, like `printAbove`.
+    *
+    * Curried so the call site reads as a block:
+    * {{{
+    * insertBefore(1) { (area, buffer) =>
+    *   buffer.setString(area.x, area.y, "done: config written", Style.Default.withFg(Color.Green).bold)
+    * }
+    * }}}
+    *
+    * A `height` of zero or less inserts nothing.
+    */
+  protected final def insertBefore(height: Int)(widget: Widget): Unit =
+    activeHandle.get().foreach(_.insertBefore(height, widget))
 
   // ---- entry points ----
 

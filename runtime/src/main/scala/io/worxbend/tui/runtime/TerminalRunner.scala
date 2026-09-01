@@ -1,6 +1,6 @@
 package io.worxbend.tui.runtime
 
-import io.worxbend.tui.core.{Buffer, Event, Position}
+import io.worxbend.tui.core.{Buffer, Event, Position, Widget}
 import io.worxbend.tui.terminal.{Backend, BackendError}
 
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
@@ -399,6 +399,8 @@ private final class BackendHandle(backend: Backend, state: LoopState) extends Ru
   // the backend forces a full repaint once `body` hands the terminal back
   def suspend(body: => Unit): Unit         = state.record(backend.suspend(body))
   def printAbove(lines: Seq[String]): Unit = state.record(backend.printAbove(lines))
+
+  def insertBefore(height: Int, widget: Widget): Unit = state.record(backend.insertBefore(height, widget))
 
 /** Collects the failures of bodies queued onto the render thread during a single [[TerminalRunner.run]].
   *

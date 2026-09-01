@@ -569,6 +569,32 @@ printAbove("deployment finished", s"id: ${deployment.id}")
 These are no-ops or unavailable before a runner is active, so invoke them from event
 handlers or from `onStart()` — never from a constructor.
 
+### Styled scrollback with `insertBefore`
+
+`printAbove` takes plain strings, and the backend strips control sequences out of
+them before they reach the terminal. That is the right treatment for text of unknown
+provenance, and it also means a line written this way can carry no styling at all: no
+coloured log level, no bold prefix, no hyperlink.
+
+`insertBefore(height) { ... }` is the same durable output, drawn rather than printed.
+The block you are handed is a buffer as wide as the terminal and `height` rows tall,
+and whatever you paint into it is what lands in the scrollback:
+
+```scala
+insertBefore(1) { (area, buffer) =>
+  buffer.setString(area.x, area.y, "ERROR", Style.Default.withFg(Color.Red).bold)
+  buffer.setString(area.x + 6, area.y, message, Style.Default)
+}
+```
+
+Because the block is a plain `Widget`, any widget can render it — a `Paragraph`, a
+`Table` of results, a `Gauge` frozen at the moment a step finished.
+
+Two things to know. The block is emitted once, at the moment of the call: it is not
+part of any later frame and is not repainted when the window is resized, exactly like
+the shell output above it. And a `height` of zero or less inserts nothing and
+succeeds, so a caller computing a height from a list of messages needs no guard.
+
 ## Choose the terminal to draw on
 
 `run()` opens a terminal through `createBackend()`, which by default is JLine on the
