@@ -17,7 +17,8 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, LineBreaks, Measured, Rect
   * in half, and the blanks that sat at the break are dropped instead of becoming a stray indent on the next row. A word
   * longer than the whole width has nowhere to go, so that one is broken between grapheme clusters — never inside one,
   * so a wide character or emoji is never split. With [[Overflow.Clip]], the default, long lines are cut at the area
-  * edge.
+  * edge. [[Overflow.WrapTrimmed]] and [[Overflow.WrapPreserved]] wrap the same way and differ only in what becomes of
+  * the blanks at the head of a row — see [[Overflow]] for the three renderings side by side.
   *
   * A line that is still wider than the area — one that is clipped, or a single unbreakable word — loses the side away
   * from its `alignment`: a right-aligned line keeps its end, a centred one loses as much from each side, and a
@@ -61,9 +62,9 @@ final case class Paragraph(
       // frame, and the diff-based flush would lose its cheap path for the overwhelmingly common unstyled case.
       if style != Style.Default then buffer.mapStyle(area)(_.patch(style))
       // lazily: wrapping the whole document to draw one screenful makes render cost scale with the text, not the area
-      val lines     = overflow match
-        case Overflow.Wrap => text.lines.iterator.flatMap(Paragraph.wrapLine(_, area.width))
-        case Overflow.Clip => text.lines.iterator
+      val lines     = WrapBlanks.of(overflow) match
+        case Some(blanks) => text.lines.iterator.flatMap(Paragraph.wrapLine(_, area.width, blanks))
+        case None         => text.lines.iterator
       // resolved once for the whole paragraph rather than per row: the widget's style is the floor, the text's own
       // style is laid over it, and each line then lays its own over that inside `LineRenderer`
       val baseStyle = style.patch(text.style)
@@ -111,10 +112,11 @@ final case class Paragraph(
     * its area gives it.
     */
   override def heightAt(width: Int): Option[Int] =
-    val rows = overflow match
-      case Overflow.Clip               => text.lines.size
-      case Overflow.Wrap if width <= 0 => 0
-      case Overflow.Wrap => text.lines.map(line => math.max(1, Paragraph.wrappedRowCount(line, width))).sum
+    val rows = WrapBlanks.of(overflow) match
+      case None                  => text.lines.size
+      case Some(_) if width <= 0 => 0
+      case Some(blanks)          =>
+        text.lines.map(line => math.max(1, Paragraph.wrappedRowCount(line, width, blanks))).sum
     Some(rows)
 
   /** The columns this text needs so that no line is clipped and no line has to wrap — the width counterpart of
@@ -154,12 +156,12 @@ object Paragraph:
     * Span styles survive the reflow: each output row carries the spans it was built from, so bold or coloured runs from
     * [[Markdown]] keep their styling across a break.
     */
-  private[widgets] def wrapLine(line: Line, width: Int): Seq[Line] =
+  private[widgets] def wrapLine(line: Line, width: Int, blanks: WrapBlanks = WrapBlanks.KeepIndent): Seq[Line] =
     if width <= 0 then Seq.empty
-    else if line.width <= width then Seq(line)
+    else if line.width <= width && blanks != WrapBlanks.DropAll then Seq(line)
     else
       val sink = LineSink(line.alignment, line.style)
-      walkWrapped(line, width, sink)
+      walkWrapped(line, width, blanks, sink)
       sink.rows
 
   /** How many rows [[wrapLine]] would return for `line` at `width`, without building any of them.
@@ -170,12 +172,12 @@ object Paragraph:
     * collecting, so the number is still produced by the one algorithm `render` draws with; there is no second
     * implementation that could drift away from it.
     */
-  private[widgets] def wrappedRowCount(line: Line, width: Int): Int =
+  private[widgets] def wrappedRowCount(line: Line, width: Int, blanks: WrapBlanks = WrapBlanks.KeepIndent): Int =
     if width <= 0 then 0
     else if line.width <= width then 1
     else
       val sink = CountingSink()
-      walkWrapped(line, width, sink)
+      walkWrapped(line, width, blanks, sink)
       sink.rows
 
   /** Reads `line` cluster by cluster and tells `sink` where each row of at most `width` columns ends.
@@ -184,7 +186,7 @@ object Paragraph:
     * from two different algorithms; the sink only decides whether the text of a row is kept or discarded. The rules are
     * the ones documented on [[wrapLine]].
     */
-  private def walkWrapped(line: Line, width: Int, sink: RowSink): Unit =
+  private def walkWrapped(line: Line, width: Int, blanks: WrapBlanks, sink: RowSink): Unit =
     var rows           = 0
     // Widths of the row being filled, the run of blanks seen since the last word, and the word being read. A word is
     // only moved onto the row once the whole of it is known to fit, which is what makes the break land between words.
@@ -207,17 +209,25 @@ object Paragraph:
     def commitWord(): Unit =
       if wordHasContent then
         if !rowHasContent then
-          // A row that has nothing on it yet: the pending blanks are kept only when they are the line's own
-          // indentation, never when they are the blanks a break was taken on.
-          sink.takeWord(keepGap = atLineStart)
-          rowWidth = wordWidth + (if atLineStart then gapWidth else 0)
+          // A row that has nothing on it yet. Whether the pending blanks survive is the one thing the three wrapping
+          // modes disagree about, so it is read off `blanks` rather than decided here: keep only the line's own
+          // indentation, keep nothing, or keep everything that still leaves the word room on the row.
+          val keepGap = blanks match
+            case WrapBlanks.KeepIndent => atLineStart
+            case WrapBlanks.DropAll    => false
+            case WrapBlanks.KeepAll    => gapWidth + wordWidth <= width
+          sink.takeWord(keepGap)
+          rowWidth = wordWidth + (if keepGap then gapWidth else 0)
         else if rowWidth + gapWidth + wordWidth <= width then
           sink.takeWord(keepGap = true)
           rowWidth = rowWidth + gapWidth + wordWidth
         else
+          // The word does not fit after the pending blanks, so the row ends here. `KeepAll` carries those blanks onto
+          // the new row — that is the whole of what it means — but only while they still leave the word its columns.
           endRow()
-          sink.takeWord(keepGap = false)
-          rowWidth = wordWidth
+          val keepGap = blanks == WrapBlanks.KeepAll && gapWidth + wordWidth <= width
+          sink.takeWord(keepGap)
+          rowWidth = wordWidth + (if keepGap then gapWidth else 0)
         rowHasContent = true
         wordHasContent = false
         wordWidth = 0

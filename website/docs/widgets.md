@@ -439,6 +439,29 @@ Two Unicode characters exist purely to control this, and both are honoured:
 - `U+200B` ZERO WIDTH SPACE draws nothing but permits one, which is how Thai, Japanese and
   long URLs mark a place a wrapper may break.
 
+### Which blanks a wrapping mode keeps
+
+The three wrapping modes break lines identically and differ in one decision only: what
+happens to the blanks at the head of a row. That decision has no universal answer, because
+it depends on whether the caller's indentation carries meaning. Wrapping `"  * a long
+bullet"` at width 10 shows all three:
+
+| Mode | Rows drawn | Keeps |
+| --- | --- | --- |
+| `Overflow.Wrap` | `  * a long` / `bullet` | the line's own indent; drops the blank the break landed on |
+| `Overflow.WrapTrimmed` | `* a long` / `bullet` | nothing — every row starts flush against the left edge |
+| `Overflow.WrapPreserved` | `  * a long` / ` bullet` | everything, so the break's blank re-indents the next row |
+
+Pick `Overflow.Wrap` for a document whose indentation is structure and whose breaks are
+incidental, which is nearly always. Pick `Overflow.WrapTrimmed` for prose that arrived with
+an indent the layout, not the text, should decide. Pick `Overflow.WrapPreserved` when a
+blank is data rather than spacing and dropping one would misrepresent the source. A run of
+blanks that would leave the word after it no room on the row is dropped even under
+`Overflow.WrapPreserved`, because keeping it would cost a row that shows nothing.
+
+`Paragraph.heightAt(width)` counts the rows the chosen mode actually draws, so a wrapping
+paragraph and the layout that sized it never disagree.
+
 The classification lives in `io.worxbend.tui.core.LineBreaks` (`isBreakingSpace`,
 `isZeroWidthBreak`, `endsWithZeroWidthBreak`) next to `CharWidth`, so any code that wraps
 text agrees with the built-in widgets about where a break is allowed.

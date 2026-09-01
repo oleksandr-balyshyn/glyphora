@@ -58,11 +58,10 @@ final case class TextElement(
     * `Measured`, once a width exists).
     */
   private[dsl] override def claim: SizeClaim =
-    overflow match
-      case w.Overflow.Wrap => SizeClaim.Fill
-      case w.Overflow.Clip =>
-        val lines = content.split("\n", -1)
-        SizeClaim.box(lines.map(CharWidth.of).maxOption.getOrElse(0), lines.length)
+    if overflow.wraps then SizeClaim.Fill
+    else
+      val lines = content.split("\n", -1)
+      SizeClaim.box(lines.map(CharWidth.of).maxOption.getOrElse(0), lines.length)
 
 /** One terminal row of differently-styled runs — the mixed-style counterpart of [[TextElement]].
   *

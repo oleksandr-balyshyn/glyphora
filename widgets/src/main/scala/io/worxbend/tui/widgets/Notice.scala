@@ -34,21 +34,19 @@ final case class Notice(
       val cursor = RowCursor(buffer, area.y, area.x, area.right)
       timestamp.foreach(at => cursor.write(s"[${Notice.Clock.format(at)}] ", timestampStyle))
       cursor.write(s"${icon.getOrElse(level.icon)} ", accentStyle)
-      overflow match
-        case Overflow.Clip => cursor.write(message, style)
-        case Overflow.Wrap =>
-          // the body gets whatever the prefix left; an empty rect renders nothing, which is the "no room" case
-          body.render(Rect(cursor.at, area.y, cursor.remaining, area.height), buffer)
+      if overflow.wraps then
+        // the body gets whatever the prefix left; an empty rect renders nothing, which is the "no room" case
+        body.render(Rect(cursor.at, area.y, cursor.remaining, area.height), buffer)
+      else cursor.write(message, style)
 
   /** How many rows this notice needs at `width` — one unless it wraps, and then however many rows the message needs in
     * the columns the prefix leaves it. Always an answer: a notice always knows its own height.
     */
   override def heightAt(width: Int): Option[Int] =
-    overflow match
-      case Overflow.Clip => Some(1)
-      case Overflow.Wrap =>
-        val bodyWidth = width - CharWidth.of(prefixText)
-        if bodyWidth <= 0 then Some(1) else body.heightAt(bodyWidth)
+    if !overflow.wraps then Some(1)
+    else
+      val bodyWidth = width - CharWidth.of(prefixText)
+      if bodyWidth <= 0 then Some(1) else body.heightAt(bodyWidth)
 
   /** The message on its own, drawn the way this notice draws it — one owner for both the wrapped render and the
     * measurement of it, so they cannot disagree about how many rows the text takes.
