@@ -1100,6 +1100,28 @@ chart(
 A pane too narrow to spare the gutter drops the labels rather than the plot, so a chart
 squeezed into a small pane stays a chart instead of becoming a column of numbers.
 
+`xLabels` and `yLabels` name positions *along* an axis rather than the axis itself —
+timestamps, dates, category names. They are spread across the axis rather than placed at
+data coordinates: the first sits at the axis origin, the last at the far end, and any in
+between fall on their own even share of the extent, so three labels read as start, middle
+and end of the range.
+
+```scala
+chart(
+  Seq(Dataset("throughput", points)),
+  xBounds = (0.0, 60.0),
+  yBounds = (0.0, 100.0),
+  xLabels = Seq("0s", "30s", "60s"),
+  yLabels = Seq("0", "50", "100"),
+)
+```
+
+The x labels take one row from the plot, under the axis and above the x title if there is
+one. The y labels are right-aligned in the same gutter `showLabels` uses and *replace* its
+two bound numbers, because an axis labelled twice is an axis labelled neither way. A label
+with no room for it is left out rather than cut down — half of `2026-09-01T12:00` is not a
+shortened timestamp, it is a different one, and nothing on screen would say so.
+
 The numbers say how much; `xTitle` and `yTitle` say of what. Each takes a row of its own
 — the y title above the plot, the x title below the axis — rather than being written over
 the data, so a title can never hide a point. An area with no rows to spare for them draws

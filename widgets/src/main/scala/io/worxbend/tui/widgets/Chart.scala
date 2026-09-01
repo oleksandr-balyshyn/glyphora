@@ -69,6 +69,14 @@ final case class Dataset(
   * the range, which is what the two y bounds already do for the vertical axis. A label that does not fit, or that would
   * touch the label before it, is left out rather than truncated into a different-looking number.
   *
+  * `yLabels` does the same for the vertical axis, and where it is non-empty it replaces the pair of numbers
+  * `showLabels` prints rather than adding to them: an axis with two descriptions of itself has none. The labels are
+  * spread bottom-to-top — the first sits on the axis's own row, the last on the top row of the plot, and any in between
+  * fall on their own even share of the rows — and each is right-aligned against the vertical rule inside the same
+  * gutter `showLabels` uses, which grows to the widest of them. A label that would not leave at least two columns of
+  * plot is dropped along with the gutter, so a chart in a narrow pane stays a chart rather than becoming a column of
+  * numbers.
+  *
   * @param labelAlignment
   *   by the widget parameter-order convention this is placement and would belong before `axisStyle`; it sits last
   *   because `Chart` is a published 0.12.0 signature and inserting a parameter in the middle would silently repoint
@@ -91,6 +99,7 @@ final case class Chart(
     // Appended for the same reason `xTitle` and `yTitle` are: inserting a parameter mid-list would silently change
     // what every positional caller written against 0.12.0 means.
     xLabels: Seq[String] = Seq.empty,
+    yLabels: Seq[String] = Seq.empty,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -99,7 +108,12 @@ final case class Chart(
     val labelRows = if xLabels.isEmpty then 0 else 1
     val titleRows = xTitle.size + yTitle.size + labelRows
     if area.width >= 3 && area.height >= 3 + titleRows then
-      val labels   = if showLabels then Seq(formatBound(yBounds._2), formatBound(yBounds._1)) else Seq.empty
+      // Explicit labels win over the two auto-formatted bounds: `showLabels` is the shorthand for "label the axis
+      // with its own range", and a caller who has said what the rows mean has answered that already.
+      val labels   =
+        if yLabels.nonEmpty then yLabels
+        else if showLabels then Seq(formatBound(yBounds._2), formatBound(yBounds._1))
+        else Seq.empty
       val gutter   = labelGutter(area, labels)
       val axisX    = area.x + gutter
       val plotTop  = area.y + yTitle.size
@@ -112,8 +126,10 @@ final case class Chart(
         Canvas(xBounds, yBounds, group.map(shapeOf), groupMarker, groupResolution).render(plotArea, buffer)
       }
       if gutter > 0 then
-        drawLabel(buffer, area.x, gutter, plotTop, labels.head)
-        drawLabel(buffer, area.x, gutter, axisRow - 1, labels.last)
+        if yLabels.nonEmpty then drawYLabels(buffer, area.x, gutter, plotTop, axisRow)
+        else
+          drawLabel(buffer, area.x, gutter, plotTop, labels.head)
+          drawLabel(buffer, area.x, gutter, axisRow - 1, labels.last)
       if showLegend then drawLegend(plotArea, buffer)
       if labelRows > 0 then drawXLabels(buffer, axisX + 1, area.right, axisRow + 1)
       drawTitles(buffer, area, axisX)
@@ -183,6 +199,29 @@ final case class Chart(
             buffer.setString(start, row, label, axisStyle)
             // plus one, so two labels always have a blank column between them
             takenTo = start + span + 1
+      }
+
+  /** Writes the y labels down the gutter left of the vertical rule, first label at the bottom.
+    *
+    * Bottom-to-top is the direction the axis itself runs: the first label describes the axis origin, which is the row
+    * the horizontal rule sits on, and the last describes the top of the plot. Labels in between fall on their own even
+    * share of the rows, rounded to the nearest one, which is the vertical counterpart of how [[drawXLabels]] spreads
+    * its labels across the columns.
+    *
+    * Two labels asking for the same row is possible when there are more labels than rows; the later one wins, because
+    * scanning the axis from the bottom that is the label whose position the reader has not yet been told. Each label is
+    * truncated to the gutter rather than allowed to run into the plot: unlike an x label there is no neighbouring
+    * column to confuse it with, and a gutter is only ever as wide as the widest label asked for.
+    */
+  private def drawYLabels(buffer: Buffer, areaX: Int, gutter: Int, plotTop: Int, axisRow: Int): Unit =
+    val rows = axisRow - plotTop + 1
+    if rows > 0 then
+      yLabels.zipWithIndex.foreach { (label, index) =>
+        // the fraction of the axis this label sits at, measured from the origin row upward
+        val fromBottom =
+          if yLabels.sizeIs <= 1 then 0 else math.round(index.toDouble * (rows - 1) / (yLabels.size - 1)).toInt
+        val row        = axisRow - math.min(fromBottom, rows - 1)
+        drawLabel(buffer, areaX, gutter, row, CharWidth.substringByWidth(label, gutter))
       }
 
   /** Writes the axis titles on the rows reserved for them: the y title above the plot at the axis column, the x title

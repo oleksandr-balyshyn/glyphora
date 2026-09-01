@@ -284,6 +284,14 @@ private[dsl] trait ElementFactories:
     *
     * `xTitle` and `yTitle` name what the axes measure. Each takes one row from the plot — the y title above it, the x
     * title below the axis — rather than being written over the data, so a title never hides a point.
+    *
+    * `xLabels` and `yLabels` name positions *along* an axis — timestamps, dates, categories — rather than the axis
+    * itself. They are spread across the axis rather than placed at data coordinates: the first sits at the axis origin,
+    * the last at the far end, and any in between fall on their own even share of the extent, so three labels read as
+    * start, middle and end of the range. The x labels take a row from the plot, under the axis; the y labels are
+    * right-aligned in the same gutter `showLabels` uses and replace its two bound numbers, because an axis labelled
+    * twice is an axis labelled neither way. A label with no room is left out rather than cut down into a
+    * different-looking number.
     */
   def chart(
       datasets: Seq[w.Dataset],
@@ -294,6 +302,8 @@ private[dsl] trait ElementFactories:
       showLegend: Boolean = false,
       xTitle: Option[String] = None,
       yTitle: Option[String] = None,
+      xLabels: Seq[String] = Seq.empty,
+      yLabels: Seq[String] = Seq.empty,
   ): WidgetElement =
     WidgetElement(
       w.Chart(
@@ -305,6 +315,8 @@ private[dsl] trait ElementFactories:
         showLegend = showLegend,
         xTitle = xTitle,
         yTitle = yTitle,
+        xLabels = xLabels,
+        yLabels = yLabels,
       )
     )
 
