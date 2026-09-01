@@ -378,3 +378,61 @@ final class BufferSpec extends AnyFunSuite:
     assert(buf.get(Position(1, 1)) == Cell("z", Style.Default))
     assert(buf.get(1, 1) == buf.get(Position(1, 1)))
     assert(buf.get(Position(9, 9)) == Cell.Empty)
+
+  test("foreach visits every cell of the grid in row-major order"):
+    val buf     = buffer(2, 2)
+    buf.setString(0, 0, "ab", Style.Default)
+    val visited = Seq.newBuilder[(Int, Int, String)]
+    buf.foreach((x, y, cell) => visited += ((x, y, cell.symbol)))
+    assert(visited.result() == Seq((0, 0, "a"), (1, 0, "b"), (0, 1, " "), (1, 1, " ")))
+
+  test("foreachIn clips the region to the buffer and visits nothing when they do not overlap"):
+    val buf     = buffer(4, 4)
+    val visited = Seq.newBuilder[Position]
+    buf.foreachIn(Rect(2, 3, 10, 10))((x, y, _) => visited += Position(x, y))
+    assert(visited.result() == Seq(Position(2, 3), Position(3, 3)))
+    val none    = Seq.newBuilder[Position]
+    buf.foreachIn(Rect(20, 20, 2, 2))((x, y, _) => none += Position(x, y))
+    assert(none.result().isEmpty)
+
+  test("foreach shows continuation cells as blanks that isContinuation identifies"):
+    val buf     = buffer(3, 1)
+    buf.setString(0, 0, "漢", Style.Default)
+    val symbols = Seq.newBuilder[String]
+    buf.foreach((_, _, cell) => symbols += cell.symbol)
+    assert(symbols.result() == Seq("漢", " ", " "))
+    assert(buf.isContinuation(1, 0))
+    assert(!buf.isContinuation(2, 0))
+    assert(!buf.isContinuation(-1, 0)) // outside the area
+
+  test("merged grows to the union of both areas and lets the argument win the overlap"):
+    val base    = Buffer(Rect(0, 0, 3, 1))
+    base.setString(0, 0, "abc", Style.Default)
+    val overlay = Buffer(Rect(2, 0, 3, 2))
+    overlay.setString(2, 0, "XY", Style.Default.bold)
+    val merged  = base.merged(overlay)
+    assert(merged.area == Rect(0, 0, 5, 2))
+    assert(merged.get(0, 0) == Cell("a", Style.Default))
+    assert(merged.get(2, 0) == Cell("X", Style.Default.bold)) // the overlay wins where they overlap
+    assert(merged.get(4, 0) == Cell.Empty)                    // covered by the overlay's area but never written
+    assert(merged.get(0, 1) == Cell.Empty)                    // covered by neither input's content
+
+  test("merged leaves both inputs untouched"):
+    val base    = Buffer(Rect(0, 0, 2, 1))
+    base.setString(0, 0, "ab", Style.Default)
+    val overlay = Buffer(Rect(5, 5, 1, 1))
+    overlay.set(5, 5, Cell("z", Style.Default))
+    val before  = base.snapshot
+    val _       = base.merged(overlay)
+    assert(base == before)
+    assert(base.area == Rect(0, 0, 2, 1))
+
+  test("merged blanks a two-column grapheme cut by the seam rather than drawing half of it"):
+    val base    = Buffer(Rect(0, 0, 2, 1))
+    base.setString(0, 0, "漢", Style.Default)
+    val overlay = Buffer(Rect(1, 0, 2, 1))
+    overlay.setString(1, 0, "字", Style.Default)
+    val merged  = base.merged(overlay)
+    assert(merged.area == Rect(0, 0, 3, 1))
+    assert(merged.get(0, 0) == Cell.Empty) // 漢 lost the column 字 claimed
+    assert(merged.get(1, 0).symbol == "字")

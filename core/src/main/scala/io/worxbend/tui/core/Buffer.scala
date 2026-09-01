@@ -285,7 +285,7 @@ final class Buffer(val area: Rect):
             // different edge from the destination's own: `set` blanks a wide cell that does not fit the destination
             // row, but a window narrower than the destination would otherwise let the glyph spill one column past
             // the region the caller asked to copy.
-            if dx == 0 && source.isContinuationAt(clipped.x, y) then Cell.Empty
+            if dx == 0 && source.isContinuation(clipped.x, y) then Cell.Empty
             else if dx == clipped.width - 1 && CharWidth.ofCluster(cell.symbol) == 2 then Cell.Empty
             else cell
           set(originX + dx, originY + dy, safe)
@@ -295,6 +295,68 @@ final class Buffer(val area: Rect):
   /** Copies all of `source` into this buffer at `at`. */
   def blit(source: Buffer, at: Position): Unit =
     blit(source, at, source.area)
+
+  /** A new buffer covering the union of this buffer's area and `other`'s, holding this buffer's content with `other`'s
+    * composited on top.
+    *
+    * The difference from [[blit]] is who decides the size. `blit` writes into a destination whose bounds the caller
+    * already fixed and throws away whatever falls outside them; this grows the result to the smallest rectangle
+    * covering both inputs, so nothing is lost. That is the operation for composing offscreen fragments whose extent is
+    * only known once they have been produced — a tooltip measured from its own text, say, laid over a panel.
+    *
+    * Neither input is modified, and neither is resized: a `Buffer`'s `area` is fixed for its lifetime because
+    * [[snapshot]], [[diff]] and a backend's last-flushed frame all assume the grid they hold cannot change size
+    * underneath them. The result is a third buffer, owned by the caller.
+    *
+    * Coordinates are absolute (see the class documentation), so each input lands at the position it already claims.
+    * Cells of the union that neither input covers stay [[Cell.Empty]]. Where the two overlap, `other` wins, and it
+    * wins as a whole grapheme: the copy goes through [[blit]], so a two-column cluster cut by a seam is blanked rather
+    * than drawn torn.
+    *
+    * Both buffers must belong to the calling thread for the duration of the call, for the same reason [[blit]] does.
+    */
+  def merged(other: Buffer): Buffer =
+    val combined = Buffer(area.union(other.area))
+    combined.blit(this, area.position)
+    combined.blit(other, other.area.position)
+    combined
+
+  /** Applies `visit(x, y, cell)` to every cell of `region` that this buffer covers, in row-major order.
+    *
+    * The traversal every reader of a finished frame — a golden-frame writer, a test assertion, an alternative encoder
+    * — would otherwise write for itself as a nested loop over [[get]]. Two reasons to have it here rather than there:
+    * the bounds check happens once, on `region`, instead of once per cell; and nothing is allocated per cell, no
+    * `Position` and no tuple, which matters because a 200x50 frame is 10 000 cells.
+    *
+    * `visit` sees the raw grid, continuation cells included — they arrive as the [[Cell.Empty]] they hold. A caller
+    * rebuilding what a terminal displays must skip them with [[isContinuation]] rather than print their blank, or a
+    * row containing a two-column grapheme comes out one column too wide.
+    *
+    * Writing into this buffer from inside `visit` is not supported: a write can move a neighbouring cell (see [[set]])
+    * and the traversal has already decided which positions it will read.
+    */
+  def foreachIn(region: Rect)(visit: (Int, Int, Cell) => Unit): Unit =
+    val clipped = region.intersection(area)
+    var y       = clipped.y
+    while y < clipped.bottom do
+      var x = clipped.x
+      while x < clipped.right do
+        visit(x, y, cells(indexOf(x, y)))
+        x += 1
+      y += 1
+
+  /** [[foreachIn]] over the whole buffer. */
+  def foreach(visit: (Int, Int, Cell) => Unit): Unit =
+    foreachIn(area)(visit)
+
+  /** Whether `(x, y)` is the second column of a two-column grapheme — the half a terminal paints when it draws the
+    * cluster in the cell to the left, which therefore must not be drawn a second time.
+    *
+    * The state is *recorded* by [[set]], never re-measured here; see [[continuations]] for why measuring it was a bug.
+    * Coordinates outside `area` are never continuations.
+    */
+  def isContinuation(x: Int, y: Int): Boolean =
+    area.contains(x, y) && continuations(indexOf(x, y))
 
   /** An independent copy of this buffer. Backends snapshot the frame they just flushed so later mutation of the
     * caller's buffer cannot corrupt the next diff.
@@ -341,7 +403,7 @@ final class Buffer(val area: Rect):
         val candidate = next.cellAt(x, y)
         // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
         val changed   = emitAll || !sameCell(cellAt(x, y), candidate)
-        if changed && !next.isContinuationAt(x, y) then emit(x, y, candidate)
+        if changed && !next.isContinuation(x, y) then emit(x, y, candidate)
         x += 1
       y += 1
 
@@ -356,13 +418,6 @@ final class Buffer(val area: Rect):
     */
   private def cellAt(x: Int, y: Int): Cell =
     if area.contains(x, y) then cells(indexOf(x, y)) else Cell.Empty
-
-  /** Whether `(x, y)` is the second column of a two-column grapheme. The state is *recorded* by [[set]], never measured
-    * here: inferring it from the left neighbour's width is what made [[diff]] silently drop every cell written over a
-    * wide grapheme's second column. Out-of-area coordinates are never continuations.
-    */
-  private def isContinuationAt(x: Int, y: Int): Boolean =
-    area.contains(x, y) && continuations(indexOf(x, y))
 
   private def indexOf(x: Int, y: Int): Int =
     (y - area.y) * area.width + (x - area.x)

@@ -58,6 +58,14 @@ assert(cell.style.fg.contains(Color.Cyan))
 Keep style assertions focused on meaningful semantics; asserting every empty cell
 makes harmless renderer changes noisy.
 
+### Walk a frame
+
+`buffer.foreach((x, y, cell) => …)` visits every cell in row-major order, and
+`buffer.foreachIn(region)(…)` restricts that to a rectangle, clipped to the buffer. The
+callback sees the raw grid, so the second column of a wide grapheme arrives as the
+blank it holds; skip it with `buffer.isContinuation(x, y)` when rebuilding what a
+terminal displays.
+
 ## Snapshot a whole frame
 
 Asserting on individual rows stops scaling once a screen has a border, a header, and
