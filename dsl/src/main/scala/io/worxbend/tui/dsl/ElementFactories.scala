@@ -407,6 +407,33 @@ private[dsl] trait ElementFactories:
       w.Dialog(title, Text.raw(message), buttons, selected, style = theme.primary, highlightStyle = theme.focus)
     )
 
+  /** A dialog that answers its own keys: Left/Right (and Tab) move between the buttons, Space or Enter presses the
+    * selected one, Esc cancels.
+    *
+    * The controller counterpart of [[dialog]], which paints the same picture and answers nothing. Selection is
+    * caller-owned like every other control here — pass the index the view read and an `onSelect` to carry a new one
+    * back — and `onPress` is handed the index of the button that was pressed, button 0 being the confirming one because
+    * that is the order the labels are given in.
+    *
+    * For the common "really quit?" there is no need to own even that much: [[Screen.confirm]] wraps this node with its
+    * own selection state and gives back a modal screen to push.
+    */
+  def confirmDialog(title: String, message: String, buttons: Seq[String], selected: Int)(
+      onSelect: Int => Unit,
+      onPress: Int => Unit,
+      onCancel: () => Unit,
+  )(using theme: Theme): ConfirmDialogElement =
+    ConfirmDialogElement(
+      title,
+      message,
+      buttons,
+      selected,
+      onSelect,
+      onPress,
+      onCancel,
+      ElementProps(style = theme.primary, focusable = true, focusState = FocusState(focusStyle = theme.focus)),
+    )
+
   /** Two sparklines sharing one area — `upper` in the top half, `lower` in the bottom — for comparing a pair of series
     * such as ingress against egress. Each series is scaled independently, so the shapes are comparable but the heights
     * are not. `direction` anchors both halves to the same edge — pass `SparkDirection.RightToLeft` for a live pair, so

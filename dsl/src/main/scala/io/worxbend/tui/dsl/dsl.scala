@@ -16,6 +16,7 @@ export Element.{
   collapsible,
   checkbox,
   clear,
+  confirmDialog,
   dialog,
   dualSparkline,
   each,

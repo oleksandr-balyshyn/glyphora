@@ -1,7 +1,7 @@
 package io.worxbend.tui.dsl
 
 import io.worxbend.tui.core.Effect
-import io.worxbend.tui.runtime.ReactiveScope
+import io.worxbend.tui.runtime.{ReactiveScope, Signal}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
@@ -60,6 +60,37 @@ object Screen:
     */
   def apply(element: View, onEnter: () => Unit = () => (), onLeave: () => Unit = () => ()): Screen =
     build(element, Presentation.Modal, onEnter, onLeave)
+
+  /** A ready-made modal "are you sure?": Left/Right (and Tab) move between the two buttons, Space or Enter presses the
+    * selected one, Esc cancels.
+    *
+    * The screen owns the selection state, which is the last thing an application had to write by hand for this. Before
+    * it, a confirmation meant a `Signal` for the selected index, the Left/Right/Enter/Esc wiring, and a `Screen` to
+    * hold them, repeated per confirmation.
+    *
+    * Neither callback pops the screen: what should happen after a confirmation is the application's business, and a
+    * screen that popped itself would take away the choice. A confirmation that closes reads
+    * `pushScreen(Screen.confirm("Quit", "Discard unsaved changes?")({ popScreen(); quit() }, popScreen()))`. Both
+    * callbacks are by-name, so nothing runs when the screen is built.
+    *
+    * @param confirmLabel
+    *   the first button, and the one selected when the screen opens.
+    */
+  def confirm(
+      title: String,
+      message: String,
+      confirmLabel: String = "OK",
+      cancelLabel: String = "Cancel",
+  )(onConfirm: => Unit, onCancel: => Unit): Screen =
+    new Screen:
+      private val selected                                        = Signal(0)
+      private val labels                                          = Seq(confirmLabel, cancelLabel)
+      def view(using scope: ReactiveScope, theme: Theme): Element =
+        Element.confirmDialog(title, message, labels, selected.get)(
+          index => selected.set(index),
+          index => if index == 0 then onConfirm else onCancel,
+          () => onCancel,
+        )
 
   /** A screen that fully replaces the view beneath it. */
   def full(element: View, onEnter: () => Unit = () => (), onLeave: () => Unit = () => ()): Screen =

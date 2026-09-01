@@ -369,6 +369,48 @@ val settings = new Screen:
   override def presentation: Presentation = Presentation.Full
 ```
 
+## Ask "are you sure?"
+
+`dialog(...)` draws a dialog and answers nothing — it is a picture, so the selected
+button, the arrow keys, `Enter` and `Esc` are all yours to wire. Two pieces remove that
+work.
+
+`Screen.confirm` is the whole thing, selection state included:
+
+```scala
+private def askBeforeQuitting(): Unit =
+  pushScreen(
+    Screen.confirm("Quit", "Discard unsaved changes?")(
+      { popScreen(); quit() },   // OK
+      popScreen(),               // Cancel
+    )
+  )
+```
+
+`Left`/`Right` (and `Tab`) move between the buttons, `Space` or `Enter` presses the
+selected one, and `Esc` runs the cancel branch. Neither callback pops the screen for you:
+what happens after a confirmation is the application's business, and a screen that popped
+itself would take that choice away. Both are by-name, so nothing runs when the screen is
+built. `confirmLabel` and `cancelLabel` rename the two buttons; the first is the one
+selected when the screen opens.
+
+When the selection has to live somewhere you can see it — a dialog with three buttons, a
+choice that drives something else on screen — use the element directly.
+`confirmDialog(title, message, buttons, selected)` is the controller, with selection
+caller-owned as in every other control here:
+
+```scala
+confirmDialog("Deploy", "Deploy to production?", Seq("Deploy", "Dry run", "Cancel"), choice.get)(
+  index => choice.set(index),
+  index => run(index),
+  () => popScreen(),
+)
+```
+
+`onPress` is handed the index of the button that was pressed. A click presses the
+*selected* button rather than the one under the pointer: the widget centres its labels
+and publishes no per-button geometry, so there is nothing to hit-test against.
+
 ## Notify without interrupting flow
 
 ```scala

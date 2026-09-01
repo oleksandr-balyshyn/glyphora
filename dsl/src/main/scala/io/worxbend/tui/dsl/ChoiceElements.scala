@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{KeyCode, KeyEvent, MouseEventKind, Widget}
+import io.worxbend.tui.core.{KeyCode, KeyEvent, MouseEventKind, Text, Widget}
 import io.worxbend.tui.widgets as w
 
 /** A labelled checkbox. Space/Enter (or a click) flips it while focused.
@@ -148,3 +148,57 @@ final case class ButtonElement(
   private[dsl] override def claim: SizeClaim                                 = SizeClaim.OneRow
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     = Some(toggleOnActivate(action))
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] = Some(clickActivates(action))
+
+/** A dialog that owns its keys: Left/Right (and Tab) move between the buttons, Space or Enter presses the selected one,
+  * Esc cancels.
+  *
+  * [[Element.dialog]] draws the same picture and answers no keys at all — its own documentation calls it "a picture of
+  * a dialog, not a controller". That left every application writing the same three things by hand for a "really quit?":
+  * a selected-index signal, the Left/Right/Enter/Esc wiring, and the modal [[Screen]] to push it on. This node is the
+  * controller half; [[Screen.confirm]] is the whole thing, selection state included.
+  *
+  * Selection is caller-owned, like every other control in this package: the node holds the index the view read and an
+  * `onSelect` to carry a new one back. `onPress` is handed the index of the button that was pressed — button 0 is the
+  * confirming one by convention, because that is the order the labels are given in.
+  */
+final case class ConfirmDialogElement(
+    title: String,
+    message: String,
+    buttons: Seq[String],
+    selected: Int,
+    onSelect: Int => Unit,
+    onPress: Int => Unit,
+    onCancel: () => Unit,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  type Self = ConfirmDialogElement
+
+  def widget: Widget =
+    w.Dialog(title, Text.raw(message), buttons, selected, props.style, props.focusStyle)
+
+  private[dsl] def withProps(props: ElementProps): ConfirmDialogElement = copy(props = props)
+
+  /** Esc and Tab first, then Space/Enter to press, then Left/Right to move.
+    *
+    * The order is the layering rule the rest of this file follows: this node's own keys, then the shared vocabulary it
+    * falls through to. Tab is bound here rather than left to the app's focus traversal because a modal dialog is
+    * normally the only focusable on screen, where Tab would otherwise do nothing at all.
+    */
+  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
+    Some(
+      keys {
+        case KeyEvent(KeyCode.Escape, _) => onCancel()
+        case KeyEvent(KeyCode.Tab, _)    => onSelect(nextIndex)
+      }
+        .orElse(toggleOnActivate(() => onPress(selected)))
+        .orElse(stepsWrapping(buttons.size, selected, onSelect))
+    )
+
+  /** A click presses the selected button rather than the button under the pointer: the widget centres its labels and
+    * reports no per-button geometry, so there is nothing to hit-test against. Keyboard selection then a click is the
+    * gesture this supports; clicking a specific button needs geometry the widget does not publish.
+    */
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
+    Some(clickActivates(() => onPress(selected)))
+
+  private def nextIndex: Int = if buttons.isEmpty then 0 else (selected + 1) % buttons.size
