@@ -71,14 +71,14 @@ final case class TextElement(
   * counted display width in the source — wrong the moment the label is translated, and wrong today for any CJK or emoji
   * text, where one character is two columns. Here the widths are measured, not declared.
   *
-  * The element's own style is the base each span layers onto, so `line(...).dim` dims the whole row while a span that
-  * set its own colour keeps it.
+  * The element's own style is carried on the `Line` as its base layer and resolved by the renderer, so `line(...).dim`
+  * dims the whole row while a span that set its own colour keeps it.
   */
 final case class LineElement(spans: Seq[Span], align: Option[Alignment] = None, props: ElementProps = ElementProps())
     extends Element:
   type Self = LineElement
   def widget: Widget                                           =
-    w.Paragraph(Text(Seq(Line(spans.map(span => span.copy(style = props.style.patch(span.style))), align))))
+    w.Paragraph(Text(Seq(Line(spans, align, props.style))))
   private[dsl] def withProps(props: ElementProps): LineElement = copy(props = props)
 
   /** Places this row inside whatever width it is given; without one of these it sits at the left edge.
