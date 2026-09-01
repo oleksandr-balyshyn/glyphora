@@ -169,21 +169,25 @@ final class Buffer(val area: Rect):
   /** Writes `line`'s spans left to right from `(x, y)`, sharing one budget of `maxWidth` columns between them, and
     * answers how many columns were written in total.
     *
-    * Each span's style is layered over `baseStyle`, exactly as [[setSpan]] describes. The spans are written end to end
-    * with nothing inserted between them, and the budget is spent as it goes, so a line wider than its budget stops part
-    * way through whichever span reaches the edge instead of dropping that span and every one after it. Writing stops as
-    * soon as the budget is gone, so the tail of a very long line is never even measured.
+    * Three style layers resolve here, in the order [[Line.styledGraphemes]] defines: `baseStyle` underneath, then the
+    * line's own [[Line.style]], then each span's. That is the cascade a `Line` means everywhere else in the toolkit, so
+    * a line that carries a style of its own paints with it here too rather than only when a widget happens to patch it
+    * in by hand. The spans are written end to end with nothing inserted between them, and the budget is spent as it
+    * goes, so a line wider than its budget stops part way through whichever span reaches the edge instead of dropping
+    * that span and every one after it. Writing stops as soon as the budget is gone, so the tail of a very long line is
+    * never even measured.
     *
     * This places the line where it is told and nowhere else. Centring or right-aligning a row against a wider area is a
     * decision about layout rather than about writing cells, and belongs to the widget making it — see
     * `io.worxbend.tui.core.Alignment` for the arithmetic the widgets share.
     */
   def setLine(x: Int, y: Int, line: Line, maxWidth: Int, baseStyle: Style = Style.Default): Int =
-    val budget  = math.max(0, maxWidth)
-    var written = 0
-    val spans   = line.spans.iterator
+    val budget    = math.max(0, maxWidth)
+    val lineStyle = baseStyle.patch(line.style)
+    var written   = 0
+    val spans     = line.spans.iterator
     while spans.hasNext && written < budget do
-      written += setSpan(x + written, y, spans.next(), budget - written, baseStyle)
+      written += setSpan(x + written, y, spans.next(), budget - written, lineStyle)
     written
 
   /** The shared body of both [[setString]] overloads: writes clusters left to right while the write head stays below
@@ -826,7 +830,8 @@ object Buffer:
   /** A buffer as tall as `lines` and as wide as the widest of them, with each line's spans painted left to right at
     * their own styles, starting at the origin.
     *
-    * Column advance comes from `Span.width`, which measures display columns rather than characters, so a two-column
+    * Each row goes through [[Buffer.setLine]], so the style cascade and the column advance are the ones every other
+    * writer of a `Line` gets: the advance is the columns actually written rather than characters, so a two-column
     * grapheme takes two columns here exactly as it does when a widget draws it — an expectation written with CJK or
     * emoji in it lines up with the frame under test instead of drifting one column per wide cluster. Cells no line
     * reaches keep [[Cell.Empty]].
@@ -842,12 +847,7 @@ object Buffer:
     val height = lines.size
     val width  = if lines.isEmpty then 0 else lines.map(_.width).max
     val buffer = Buffer(Rect(0, 0, width, height))
-    lines.zipWithIndex.foreach { (line, y) =>
-      var x = 0
-      line.spans.foreach { span =>
-        x += buffer.setString(x, y, span.content, line.style.patch(span.style), width - x)
-      }
-    }
+    lines.zipWithIndex.foreach((line, y) => buffer.setLine(0, y, line, width))
     buffer
 
   /** [[withLines]] for a whole [[Text]] value, for a caller that already has one.

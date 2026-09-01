@@ -28,6 +28,16 @@ final class BufferLineSpec extends AnyFunSuite:
     assert(target.get(0, 0).style.fg.contains(Color.Red))
     assert(target.get(0, 0).style.bg.contains(Color.Blue))
 
+  test("the line's own style sits between the base style and the span's"):
+    // three layers: the base supplies the background, the line supplies the foreground, the span supplies the bold
+    val target = buffer(4)
+    val line   = Line(Seq(Span("x", Style.Default.bold)), style = Style.Default.withFg(Color.Red))
+    val _      = target.setLine(0, 0, line, 4, Style.Default.withBg(Color.Blue))
+    val style  = target.get(0, 0).style
+    assert(style.bg.contains(Color.Blue))
+    assert(style.fg.contains(Color.Red))
+    assert(style.modifiers.hasAny(Modifiers.Bold))
+
   test("a line wider than its budget stops part way through the span that reaches the edge"):
     val target  = buffer(8)
     val written = target.setLine(0, 0, Line(Seq(Span("abc", Style.Default), Span("defg", Style.Default))), 5)

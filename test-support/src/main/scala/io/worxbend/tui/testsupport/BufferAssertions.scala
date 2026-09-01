@@ -78,22 +78,17 @@ object BufferAssertions:
   def buffered(rows: String*): Buffer =
     buffered(rows.map(Line.raw), Style.Default)
 
-  /** An expected frame built from styled [[Line]]s: each span keeps its own style, patched onto `base`.
+  /** An expected frame built from styled [[Line]]s: each row is written with [[Buffer.setLine]], so the style cascade
+    * and the column advance are exactly the ones a widget drawing that `Line` would get.
     *
     * This is the shape [[assertEquals]] is for — an expected frame that carries colour and modifiers, which a golden
-    * fixture deliberately does not. `base` is the style the whole frame starts from (a theme's background, say) and
-    * each span's own style is applied on top of it, exactly as a widget would.
+    * fixture deliberately does not. `base` is the style the whole frame starts from (a theme's background, say); the
+    * line's own style goes over it and each span's over that.
     */
   def buffered(rows: Seq[Line], base: Style): Buffer =
     val width  = rows.map(_.width).maxOption.getOrElse(0)
     val buffer = Buffer(Rect(0, 0, width, rows.size))
-    rows.zipWithIndex.foreach { (line, y) =>
-      var x = 0
-      line.spans.foreach { span =>
-        buffer.setString(x, y, span.content, base.patch(span.style))
-        x += span.width
-      }
-    }
+    rows.zipWithIndex.foreach((line, y) => buffer.setLine(0, y, line, width, base))
     buffer
 
   /** Fails unless `actual` renders exactly like `expected`: the same area first, then the same symbol *and* the same
