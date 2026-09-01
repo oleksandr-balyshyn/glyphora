@@ -43,6 +43,13 @@ enum SparkDirection:
   *   marks the gap explicitly, which is the clearer choice when the trace has a visible track behind it.
   * @param absentStyle
   *   the style of that glyph, layered over `style`
+  *
+  * `styleFor` restyles individual columns — `(_, value) => Option.when(value > limit)(Style.Default.withFg(Color.Red))`
+  * paints a threshold breach red and leaves everything else alone. It is handed the point's index in `data` (not its
+  * screen column, which differs from it whenever a `RightToLeft` trace has scrolled) and the value, and what it returns
+  * is patched over the sparkline's own `style`, so an override setting only a colour keeps the rest. It sits in the
+  * last parameter slot rather than beside `style`, where the widget convention would put it, because inserting a
+  * parameter into a published 0.12.0 signature would silently repoint every positional call site. See [[BarStyling]].
   */
 final case class Sparkline(
     data: Seq[Long],
@@ -55,6 +62,7 @@ final case class Sparkline(
     absentColumns: Set[Int] = Set.empty,
     absentSymbol: Option[String] = None,
     absentStyle: Style = Style.Default,
+    styleFor: (Int, Long) => Option[Style] = BarStyling.NoOverride,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -64,7 +72,9 @@ final case class Sparkline(
       val readings = data.zipWithIndex.collect { case (value, index) if !absentColumns.contains(index) => value }
       val ceiling  = math.max(1L, max.getOrElse(if readings.isEmpty then 0L else readings.max))
       // Indices are carried alongside the values, because which points are absent is stated in terms of positions in
-      // `data` and a `takeRight` would otherwise renumber them.
+      // `data` and a `takeRight` would otherwise renumber them. That index is also exactly what `styleFor` is asked
+      // about: with `RightToLeft` the visible window starts part-way into the series, so the screen column and the
+      // data index are not the same number.
       val indexed  = data.zipWithIndex
       val visible  = direction match
         case SparkDirection.LeftToRight => indexed.take(area.width)
@@ -87,7 +97,7 @@ final case class Sparkline(
             top = area.y,
             value = value,
             ceiling = ceiling,
-            style = style,
+            style = BarStyling.styleAt(style, styleFor, index, value),
             set = barSet,
           )
       }

@@ -993,6 +993,35 @@ explicitly instead, which reads better when the bars have a visible track behind
 Absent points are also left out of the scale, so a placeholder value can never pull the
 whole trace out of shape.
 
+### Highlighting one sample
+
+A chart has one style for all of its bars, so marking the reading that broke a threshold
+used to mean splitting the series across two widgets and lining them up by hand.
+`.styleFor` asks a question about each column instead — given its index in the data and
+its value, return `Some(style)` for a column that should stand out and `None` for one
+that should not:
+
+```scala
+sparkline(latencies).max(500L).styleFor { (_, value) =>
+  Option.when(value > 250L)(Style.Default.withFg(Color.Red))
+}
+```
+
+The style is *patched over* the sparkline's own rather than replacing it, so an override
+that names only a foreground colour keeps the background and the text attributes the
+element already had. The index is the point's position in the data you passed, which is
+not the same as its screen column once a `.rightToLeft` trace has started scrolling.
+
+`barChart` takes the same function as a third argument, because it has no fluent builders
+of its own to hang it on:
+
+```scala
+barChart(load, 3, (_, value) => Option.when(value > limit)(Style.Default.withFg(Color.Red)), false)
+```
+
+Only the bars change colour. The label under a bar and the number beside it keep the
+chart's label and value styles, so they stay readable whatever the bar is doing.
+
 Each `Dataset` picks how it is drawn with `graphType`. `GraphType.Line` joins the points,
 `GraphType.Scatter` leaves them separate, `GraphType.Bar` drops an upright bar from each
 point to a baseline, and `GraphType.Area` fills everything between the line and that

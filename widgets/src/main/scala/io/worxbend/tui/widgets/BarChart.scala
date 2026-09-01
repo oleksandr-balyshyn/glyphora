@@ -27,6 +27,13 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Direction, Rect, Style, Widget}
   * `barSet` swaps the glyphs the bars are drawn from — [[BarSet.Ascii]] for a terminal with no block elements,
   * [[BarSet.Solid]] or [[BarSet.Halves]] for blunter bars, or a set of your own. Its `empty` glyph, if it has one, also
   * fills the cells above each bar, which is how the chart gets a visible track behind every bar.
+  *
+  * `barStyleFor` restyles individual bars — `(_, value) => Option.when(value > limit)(Style.Default.withFg(Color.Red))`
+  * paints the bars over a limit red and leaves the rest alone. It is handed the bar's index in `data` and its value,
+  * and what it returns is patched over `barStyle`, so an override setting only a colour keeps the rest. It colours the
+  * bar and nothing else: the label under it and the number beside it keep `labelStyle` and `valueStyle`, because those
+  * are text a reader has to be able to read whatever the bar is doing. Like `direction` above it sits at the end of the
+  * parameter list rather than beside the styles, so that no positional call site moves. See [[BarStyling]].
   */
 final case class BarChart(
     data: Seq[(String, Long)],
@@ -41,6 +48,7 @@ final case class BarChart(
     showValues: Boolean = false,
     valueStyle: Style = Style.Default,
     valueFormat: Long => String = _.toString,
+    barStyleFor: (Int, Long) => Option[Style] = BarStyling.NoOverride,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit = direction match
@@ -66,7 +74,7 @@ final case class BarChart(
             top = area.y,
             value = value,
             ceiling = ceiling,
-            style = barStyle,
+            style = BarStyling.styleAt(barStyle, barStyleFor, index, value),
             set = barSet,
           )
           if showLabels then ColumnChart.drawCentredLabel(buffer, area, barLeft, barWidth, label, labelStyle)
@@ -95,7 +103,7 @@ final case class BarChart(
             right = plotLeft + plotWidth - 1,
             value = value,
             ceiling = ceiling,
-            style = barStyle,
+            style = BarStyling.styleAt(barStyle, barStyleFor, index, value),
           )
           if gutter > 0 then RowChart.drawGutterLabel(buffer, area, barTop, gutter, label, labelStyle)
           if showValues then drawValueBeside(buffer, barTop, plotLeft, plotWidth, value, ceiling)

@@ -226,6 +226,31 @@ private[dsl] trait ElementFactories:
   def barChart(data: Seq[(String, Long)], barWidth: Int = 3, showValues: Boolean = false): WidgetElement =
     WidgetElement(w.BarChart(data, barWidth, showValues = showValues))
 
+  /** [[barChart(data:Seq*]] with one bar allowed to look different from the rest.
+    *
+    * `barStyleFor` is asked about each bar in turn — its index in `data` and its value — and answers `Some(style)` for
+    * a bar that should stand out, `None` for one that should not. The style is patched over the chart's own, so an
+    * override that sets only a colour keeps everything else:
+    *
+    * {{{
+    * barChart(load, barWidth = 3, (_, value) => Option.when(value > limit)(Style.Default.withFg(Color.Red)))
+    * }}}
+    *
+    * A separate overload rather than a further defaulted parameter on the one above, because `barChart` returns a bare
+    * `WidgetElement` with no fluent builders of its own to hang it on. Only the bars are restyled; the labels
+    * underneath keep the chart's label style, so they stay readable whatever a bar is doing.
+    *
+    * Every parameter is spelled out here, `showValues` included: Scala allows default arguments on only one of a set of
+    * overloads, and they belong to the shorter call above.
+    */
+  def barChart(
+      data: Seq[(String, Long)],
+      barWidth: Int,
+      barStyleFor: (Int, Long) => Option[Style],
+      showValues: Boolean,
+  ): WidgetElement =
+    WidgetElement(w.BarChart(data, barWidth, showValues = showValues, barStyleFor = barStyleFor))
+
   /** The same bars laid on their side: one per `(label, value)`, growing rightwards, `barHeight` rows thick, with the
     * labels right-aligned in a gutter down the left edge.
     *

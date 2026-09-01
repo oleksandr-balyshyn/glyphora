@@ -204,10 +204,11 @@ final case class SparklineElement(
     data: Seq[Long],
     max: Option[Long] = None,
     direction: w.SparkDirection = w.SparkDirection.LeftToRight,
+    styleFor: (Int, Long) => Option[Style] = w.BarStyling.NoOverride,
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = SparklineElement
-  def widget: Widget = w.Sparkline(data, max, direction, props.style)
+  def widget: Widget = w.Sparkline(data, max, direction, props.style, styleFor = styleFor)
 
   /** Pins the top of the scale instead of letting it float to the largest value present.
     *
@@ -227,6 +228,19 @@ final case class SparklineElement(
 
   /** Anchors the series to either edge — see [[rightToLeft]] for why that matters. */
   def direction(anchor: w.SparkDirection): SparklineElement = copy(direction = anchor)
+
+  /** Restyles individual columns: given a point's index in `data` and its value, return `Some(style)` to make that
+    * column look different and `None` to leave it as it is.
+    *
+    * The style is *patched over* the sparkline's own, so an override that sets only a foreground colour keeps
+    * everything else the element was given. This is how one reading is marked without splitting the series across two
+    * widgets:
+    *
+    * {{{
+    * sparkline(readings).styleFor((_, value) => Option.when(value > limit)(Style.Default.withFg(Color.Red)))
+    * }}}
+    */
+  def styleFor(restyle: (Int, Long) => Option[Style]): SparklineElement = copy(styleFor = restyle)
 
   private[dsl] def withProps(props: ElementProps): SparklineElement = copy(props = props)
   private[dsl] override def claim: SizeClaim                        = SizeClaim.OneRow
