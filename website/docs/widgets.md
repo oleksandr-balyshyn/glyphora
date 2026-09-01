@@ -735,6 +735,25 @@ private val deployments = DataTable(
 def tableView: Element = dataTable(deployments, tableState)
 ```
 
+A `DataTable` cell can carry a style of its own through `cellStyle`, which is asked
+about the row's cells and the column index and returns a patch:
+
+```scala
+DataTable(
+  columns = Seq("Service", "Status"),
+  rows = rows,
+  widths = Seq(Constraint.Fill(1), Constraint.Length(8)),
+  cellStyle = (row, column) =>
+    if column == 1 && row(1) == "FAILED" then Style.Default.withFg(Color.Red) else Style.Default,
+)
+```
+
+The patch goes on last, over the table style, the selection highlight and the column and
+cell cursors, so a red `FAILED` cell stays red under the selection bar. It is asked about
+the row's *contents* rather than its position because filtering, sorting and paging move
+rows around between frames — an index names a different record after every sort. The
+header and footer never consult it; `headerStyle` and `footerStyle` own those rows.
+
 `tableState.selected` indexes `deployments.visibleRows(tableState)`, not the original
 unsorted data. Use that method when opening the selected record.
 

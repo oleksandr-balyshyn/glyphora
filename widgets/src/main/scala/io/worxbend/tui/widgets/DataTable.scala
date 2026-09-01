@@ -191,6 +191,19 @@ object DataTableState:
   *   layered on last, over the cell where the selected row and the selected column meet. Painting it after both means
   *   the intersection can be told apart from the row and the column that cross there, which is the whole point of
   *   having three styles rather than one.
+  * @param cellStyle
+  *   the style of one body cell, given the row's own cells and the column index, layered over everything the widget
+  *   itself decided: the table style, the selection highlight if that row is selected, and the column and cell cursors
+  *   if they are on it. That ordering means a red `FAILED` cell stays red under the selection bar instead of the two
+  *   fighting over the same cell, and it is why this returns a patch rather than a whole style.
+  *
+  * It is asked about the row's *contents* rather than about the row's position because filtering, sorting and paging
+  * all move rows around between frames: an index identifies a different record after every sort, and a caller reading
+  * one would colour whatever record happened to land there. The header and footer never consult it — `headerStyle` and
+  * `footerStyle` own those rows — and neither does the reserved `highlightSymbol` gutter.
+  *
+  * The default returns an empty style, which patches nothing, so a table that does not set it renders exactly as it did
+  * before this parameter existed.
   * @param highlightSymbol
   *   text drawn to the left of the selected row, in a gutter reserved for it on *every* row so the columns do not jump
   *   as the selection moves. `highlightStyle` alone marks the selection by reversing the row's colours, which two kinds
@@ -240,6 +253,7 @@ final case class DataTable(
     highlightStyle: Style = Style.Default.reverse,
     columnHighlightStyle: Option[Style] = None,
     cellHighlightStyle: Option[Style] = None,
+    cellStyle: (Seq[String], Int) => Style = (_, _) => Style.Default,
     highlightSymbol: String = "",
 ) extends StatefulWidget[DataTableState]:
 
@@ -332,7 +346,7 @@ final case class DataTable(
           if symbolWidth > 0 then
             val prefix = if isSelected then highlightSymbol else padding
             buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, symbolWidth), rowStyle)
-          renderRow(buffer, segments, cells, y, cellStyle(rowStyle, isSelected, cursor, _))
+          renderRow(buffer, segments, cells, y, cursorStyle(rowStyle, isSelected, cursor, _), Some(cells))
         }
 
   private def renderHeader(buffer: Buffer, segments: Seq[Rect], state: DataTableState): Unit =
@@ -350,11 +364,11 @@ final case class DataTable(
       }
     }
 
-  /** The style one body cell is drawn in: the row's style, then the column cursor over it, then the cell cursor over
-    * both. Layering in that order is what lets the intersection of the selected row and the selected column look like
-    * neither of them.
+  /** The style one body cell is drawn in before the caller's own `cellStyle` has a say: the row's style, then the
+    * column cursor over it, then the cell cursor over both. Layering in that order is what lets the intersection of the
+    * selected row and the selected column look like neither of them.
     */
-  private def cellStyle(rowStyle: Style, isSelectedRow: Boolean, cursor: Option[Int], column: Int): Style =
+  private def cursorStyle(rowStyle: Style, isSelectedRow: Boolean, cursor: Option[Int], column: Int): Style =
     if !cursor.contains(column) then rowStyle
     else
       val withColumn = columnHighlightStyle.fold(rowStyle)(rowStyle.patch)
@@ -362,6 +376,9 @@ final case class DataTable(
 
   /** Draws one row's cells, asking `styleAt` for the style of each column so that a per-cell cursor can differ from the
     * row it sits on. Rows with no cursor pass a function that ignores the column.
+    *
+    * `source` is the row the caller's `cellStyle` is asked about, or `None` for a row it is never asked about at all —
+    * the header and the footer, whose styles are settled by `headerStyle` and `footerStyle`.
     */
   private def renderRow(
       buffer: Buffer,
@@ -369,11 +386,15 @@ final case class DataTable(
       cells: Seq[String],
       y: Int,
       styleAt: Int => Style,
+      source: Option[Seq[String]] = None,
   ): Unit =
     segments.zip(cells).zipWithIndex.foreach { case ((segment, cell), column) =>
       if !segment.isEmpty then
-        val line = Line.styled(cell, styleAt(column))
-        val _    = LineRenderer.render(buffer, segment.x, y, line, segment.width, Style.Default, alignmentOf(column))
+        // the caller's patch goes on last, over the selection and the cursors, so a cell it colours keeps that colour
+        // wherever the selection happens to be
+        val resolved = source.fold(styleAt(column))(row => styleAt(column).patch(cellStyle(row, column)))
+        val line     = Line.styled(cell, resolved)
+        val _ = LineRenderer.render(buffer, segment.x, y, line, segment.width, Style.Default, alignmentOf(column))
     }
 
   /** Where column `column`'s text sits, defaulting to the left edge for every column `alignments` does not reach —

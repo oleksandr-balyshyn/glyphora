@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Constraint, Flex, Modifiers, Style}
+import io.worxbend.tui.core.{Color, Constraint, Flex, Modifiers, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -228,3 +228,47 @@ final class DataTableSpec extends AnyFunSuite:
     state.selectCell(-1, -3)
     assert(state.selected.contains(0))
     assert(state.selectedColumn.contains(0))
+
+  test("cellStyle colours one column and leaves the rest of the row alone"):
+    val flagged = table.copy(cellStyle =
+      (row, column) => if column == 1 && row(1) == "3" then Style.Default.withFg(Color.Red) else Style.Default
+    )
+    val buffer  = rendered(flagged, DataTableState(), 15, 4)
+    // "gamma" sits on row 3 with size "3"; only its size cell is red, and its name cell is untouched
+    assert(buffer.get(9, 3).style.fg.contains(Color.Red))
+    assert(buffer.get(0, 3).style.fg.isEmpty)
+    assert(buffer.get(9, 1).style.fg.isEmpty)
+
+  test("cellStyle follows the record and not the row position when the sort reverses"):
+    // this is the whole reason it is asked about the row's contents. Sorting by name puts "gamma" last, sorting again
+    // puts it first, and the red cell has to travel with it.
+    val flagged   = table.copy(cellStyle =
+      (row, column) => if column == 1 && row(0) == "gamma" then Style.Default.withFg(Color.Red) else Style.Default
+    )
+    val ascending = DataTableState()
+    ascending.sortBy(0)
+    assert(rendered(flagged, ascending, 15, 4).get(9, 3).style.fg.contains(Color.Red))
+    ascending.sortBy(0) // the same column again flips the direction
+    assert(rendered(flagged, ascending, 15, 4).get(9, 1).style.fg.contains(Color.Red))
+
+  test("cellStyle is layered over the selection highlight rather than replacing it"):
+    val flagged =
+      table.copy(cellStyle = (_, column) => if column == 1 then Style.Default.withFg(Color.Red) else Style.Default)
+    val state   = DataTableState()
+    state.selected = Some(0)
+    val cell    = rendered(flagged, state, 15, 4).get(9, 1)
+    assert(cell.style.fg.contains(Color.Red))
+    assert(cell.style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("cellStyle is never asked about the header or the footer"):
+    val withFooter =
+      table.copy(footer = Some(Seq("total", "123")), cellStyle = (_, _) => Style.Default.withFg(Color.Red))
+    val buffer     = rendered(withFooter, DataTableState(), 15, 5)
+    assert(buffer.get(0, 0).style.fg.isEmpty) // the header caption
+    assert(buffer.get(0, 4).style.fg.isEmpty) // the footer, pinned to the bottom row
+    assert(buffer.get(0, 1).style.fg.contains(Color.Red))
+
+  test("the default cellStyle changes nothing about how a table renders"):
+    val plain   = rendered(table, DataTableState(), 15, 4)
+    val spelled = rendered(table.copy(cellStyle = (_, _) => Style.Default), DataTableState(), 15, 4)
+    assert(plain.diff(spelled).isEmpty)
