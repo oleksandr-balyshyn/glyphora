@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Constraint, Flex, Line, Modifiers}
+import io.worxbend.tui.core.{Constraint, Flex, Line, Modifiers, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -141,3 +141,68 @@ final class TableSpec extends AnyFunSuite:
     val buffer = rendered(table, 8, 2)
     assert(buffer.get(0, 1).symbol == "a")
     assert(buffer.get(4, 1).symbol == "b")
+
+  test("a bare Seq[Line] row and the TableRow it stands for draw the same thing"):
+    val widths = Seq(Constraint.Length(2), Constraint.Length(3))
+    val bare   = Table(rows = Seq(row("a", "one")), widths = widths, columnSpacing = 0)
+    val spelt  = Table(rows = Seq(TableRow(row("a", "one"))), widths = widths, columnSpacing = 0)
+    assert(trimmedLines(rendered(bare, 8, 2)) == trimmedLines(rendered(spelt, 8, 2)))
+
+  test("a bottom margin puts a blank line under a row"):
+    val table = Table(
+      rows = Seq(TableRow(row("a"), bottomMargin = 1), TableRow(row("b"))),
+      widths = Seq(Constraint.Length(2)),
+    )
+    assert(trimmedLines(rendered(table, 4, 3)) == Seq("a", "", "b"))
+
+  test("a top margin opens a gap above a row and the cells stay on the row's first content line"):
+    val table = Table(
+      rows = Seq(TableRow(row("a")), TableRow(row("b"), topMargin = 2)),
+      widths = Seq(Constraint.Length(2)),
+    )
+    assert(trimmedLines(rendered(table, 4, 4)) == Seq("a", "", "", "b"))
+
+  test("a taller row reserves the extra lines and draws its cells at the top of them"):
+    val table = Table(
+      rows = Seq(TableRow(row("a"), height = 3), TableRow(row("b"))),
+      widths = Seq(Constraint.Length(2)),
+    )
+    assert(trimmedLines(rendered(table, 4, 4)) == Seq("a", "", "", "b"))
+
+  test("a per-row style layers over the table style"):
+    val table  = Table(
+      rows = Seq(TableRow(row("a")), TableRow(row("b"), style = Some(Style.Default.bold))),
+      widths = Seq(Constraint.Length(2)),
+    )
+    val buffer = rendered(table, 4, 2)
+    assert(!buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Bold))
+    assert(buffer.get(0, 1).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("row height and margins clamp, so a zero-height row still occupies a line"):
+    val zero  = TableRow(row("a"), height = 0, topMargin = -4, bottomMargin = -1)
+    assert(zero.totalHeight == 1)
+    val table = Table(rows = Seq(zero, TableRow(row("b"))), widths = Seq(Constraint.Length(2)))
+    assert(trimmedLines(rendered(table, 4, 2)) == Seq("a", "b"))
+
+  test("a tall row that overruns the bottom edge is clipped rather than wrapping"):
+    val table = Table(rows = Seq(TableRow(row("a"), height = 9)), widths = Seq(Constraint.Length(2)))
+    assert(trimmedLines(rendered(table, 4, 2)) == Seq("a", ""))
+
+  test("a row starting past the bottom edge is never drawn"):
+    val table = Table(
+      rows = Seq(TableRow(row("a"), bottomMargin = 5), TableRow(row("b"))),
+      widths = Seq(Constraint.Length(2)),
+    )
+    assert(trimmedLines(rendered(table, 4, 3)) == Seq("a", "", ""))
+
+  test("tall rows still bound the walk by the area rather than the data"):
+    val many = (1 to 10000).map(n => TableRow(row(n.toString), height = 4))
+    assert(trimmedLines(rendered(Table(rows = many, widths = Seq(Constraint.Length(4))), 6, 6)).head == "1")
+
+  test("wide cells in a padded row are still measured in terminal columns"):
+    // "選択" is two characters and four terminal columns, so a three-column cell keeps only the first of them
+    val table = Table(
+      rows = Seq(TableRow(row("選択"), bottomMargin = 1)),
+      widths = Seq(Constraint.Length(3)),
+    )
+    assert(trimmedLines(rendered(table, 4, 2)) == Seq("選", ""))

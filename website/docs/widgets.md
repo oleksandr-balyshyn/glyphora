@@ -360,6 +360,29 @@ table(rows, Constraint.Length(18), Constraint.Fill(1), Constraint.Length(6))
   .header("Service", "Status", "Replicas")
 ```
 
+One step below the DSL, a `Table`'s rows accept either a bare `Seq[Line]` — one cell
+per column, one terminal line tall, which is all a row could be until now — or a
+`TableRow`, and the two can be mixed in the same table:
+
+```scala
+import io.worxbend.tui.widgets.{Table, TableRow}
+
+Table(
+  rows = Seq(
+    TableRow(Seq(Line.raw("api"), Line.raw("ready")), bottomMargin = 1),
+    Seq(Line.raw("worker"), Line.raw("scaling")),
+  ),
+  widths = Seq(Constraint.Length(10), Constraint.Fill(1)),
+)
+```
+
+`TableRow` carries a `height`, a `topMargin`, a `bottomMargin`, and an optional per-row
+`style` that layers over the table's own. The height and margins reserve vertical room —
+a blank line under a group, breathing space in a sparse table — they do not wrap text,
+because a cell is a single `Line`; the cells are drawn on the first line of the height
+and the rest is left blank. A height below one clamps to one, and negative margins clamp
+to zero, so a row always occupies at least the line it is drawn on.
+
 `.footer(...)` adds a bold summary row — totals, a record count — pinned to the
 *bottom* of the table's area rather than appended after the last data row:
 

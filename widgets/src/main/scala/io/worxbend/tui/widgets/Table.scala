@@ -4,8 +4,13 @@ import io.worxbend.tui.core.{Buffer, Constraint, Direction, Flex, Layout, Line, 
 
 /** Rows of cells laid out in columns sized by the core constraint solver.
   *
-  * Each row is one terminal row (no cell wrapping); rows past the area's bottom edge are clipped, matching the
-  * library-wide silent-clipping philosophy.
+  * Cells are never wrapped, and rows past the area's bottom edge are clipped, matching the library-wide silent-clipping
+  * philosophy.
+  *
+  * @param rows
+  *   each row is either a bare `Seq[Line]` — one cell per column, one terminal line tall — or a [[TableRow]], which
+  *   adds a height, top and bottom margins, and a per-row style. Both shapes may appear in the same table; see
+  *   [[TableRow]] for what the extra room is for.
   *
   * @param widths
   *   one [[Constraint]] per column. An empty sequence means "equal columns": the table counts the cells in the header
@@ -29,7 +34,7 @@ import io.worxbend.tui.core.{Buffer, Constraint, Direction, Flex, Layout, Line, 
   *   is already absorbing the leftover, because then there is none.
   */
 final case class Table(
-    rows: Seq[Seq[Line]],
+    rows: Seq[TableRow.Source],
     widths: Seq[Constraint],
     header: Option[Seq[Line]] = None,
     footer: Option[Seq[Line]] = None,
@@ -47,9 +52,9 @@ final case class Table(
       // already using: on a one-row area with a header, the header wins and the footer is dropped
       val footerRows  = if footer.isDefined && area.height > headerRows then 1 else 0
       // bounded by the area, not the data: drawing 50 visible rows must not walk a 10 000-row Seq
-      val body        = rows.iterator.take(math.max(0, area.height - headerRows - footerRows)).toSeq
+      val body        = TableRow.fitting(rows.iterator, math.max(0, area.height - headerRows - footerRows))
       // the fallback only walks the rows that are about to be drawn, which is why `body` is taken first
-      val cellCounts  = (header.iterator ++ body.iterator ++ footer.iterator).map(_.size)
+      val cellCounts  = (header.iterator ++ body.iterator.map(_.cells) ++ footer.iterator).map(_.size)
       val constraints = TableColumns.resolve(widths, cellCounts)
       val columns     = Layout(Direction.Horizontal, constraints, columnSpacing, flex).split(area)
       var y           = area.y
@@ -58,9 +63,11 @@ final case class Table(
           renderRow(buffer, columns, cells, y, headerStyle)
           y += 1
       }
-      body.foreach { cells =>
-        renderRow(buffer, columns, cells, y, style)
-        y += 1
+      body.foreach { row =>
+        // the cells sit on the first line of the row's height; the rest of it, and both margins, stay blank
+        val line = y + row.contentOffset
+        if line < area.bottom then renderRow(buffer, columns, row.cells, line, row.style.fold(style)(style.patch))
+        y += row.totalHeight
       }
       if footerRows == 1 then footer.foreach(cells => renderRow(buffer, columns, cells, area.bottom - 1, footerStyle))
 
