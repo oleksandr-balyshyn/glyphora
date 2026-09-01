@@ -375,7 +375,10 @@ private[terminal] final class InputDecoder(
       case 'D'                                            => key(KeyCode.Left, modifiers)
       case 'H'                                            => key(KeyCode.Home, modifiers)
       case 'F'                                            => key(KeyCode.End, modifiers)
-      case 'P' | 'Q' | 'S'                                => key(functionKey(finalByte), modifiers)
+      // kitty reports F1/F2/F4 as `CSI 1 P/Q/S`, and F3 as `CSI 1 R`, matching the SS3 forms in `decodeSs3`
+      case 'P'                                            => key(KeyCode.F(1), modifiers)
+      case 'Q'                                            => key(KeyCode.F(2), modifiers)
+      case 'S'                                            => key(KeyCode.F(4), modifiers)
       case 'R' if isFunctionKey3(numbers)                 => key(KeyCode.F(3), modifiers)
       case 'Z'                                            => key(KeyCode.Tab, modifiers | KeyModifiers.Shift)
       case 'I'                                            => Some(Event.FocusGained)
@@ -384,14 +387,6 @@ private[terminal] final class InputDecoder(
       case '~' if numbers.headOption.contains(PasteStart) => Some(decodePaste())
       case '~'                                            => decodeTilde(numbers, modifiers)
       case _                                              => None
-
-  /** kitty reports F1/F2/F4 as `CSI 1 P/Q/S` (and F3 as `CSI 1 R`), matching the SS3 forms. */
-  private def functionKey(finalByte: Int): KeyCode =
-    finalByte match
-      case 'P' => KeyCode.F(1)
-      case 'Q' => KeyCode.F(2)
-      case 'S' => KeyCode.F(4)
-      case _   => KeyCode.F(3)
 
   /** Records a cursor-position report and reports no event for it.
     *
