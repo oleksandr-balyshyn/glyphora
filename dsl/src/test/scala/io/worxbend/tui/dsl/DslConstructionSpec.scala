@@ -222,6 +222,7 @@ final class DslConstructionSpec extends AnyFunSuite:
       3,
     )
     assert(trimmedLines(frame) == Seq("┌──┬───┐", "│  │   │", "└──┴───┘"))
+
   /** `table` is a `FlexContainer`, so the alignment and gap builders every `row` and `column` has apply to its columns
     * too. Before that, fixed-width columns could only ever pack at the left of the area they were given.
     */

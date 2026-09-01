@@ -168,6 +168,7 @@ extension (panel: PanelElement)
     * user preference, a `match` on some state. The three named builders above are shorthands for this.
     */
   def borderType(glyphs: w.BorderType): PanelElement = panel.copy(borderType = glyphs)
+
   /** Joins this panel's border to any border already drawn where it lands, instead of overwriting it.
     *
     * Two panels laid side by side share a column. By default the second one drawn simply wins there, which gives one

@@ -26,7 +26,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   @volatile private var caret: Option[Position]                = None
   @volatile private var inlineRows                             = 0
   private val caretMoveCounter                                 = AtomicLong(0)
-  private val appendedLineCounter                             = AtomicLong(0)
+  private val appendedLineCounter                              = AtomicLong(0)
   private val drawCounter                                      = AtomicLong(0)
   private val idleReadCounter                                  = AtomicLong(0)
   private val suspendCounter                                   = AtomicLong(0)

@@ -1,6 +1,16 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position, Size}
+import io.worxbend.tui.core.{
+  Event,
+  KeyCode,
+  KeyEvent,
+  KeyModifiers,
+  MouseButton,
+  MouseEvent,
+  MouseEventKind,
+  Position,
+  Size,
+}
 
 import org.scalatest.funsuite.AnyFunSuite
 

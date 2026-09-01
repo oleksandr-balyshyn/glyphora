@@ -56,8 +56,8 @@ private[dsl] final class FocusTracker:
   /** The focus keys of the tree the last [[reconcile]] saw, in tab order (`None` for an unkeyed focusable). Kept so
     * [[focusToKey]] can answer "which index is the element named `email`?" without walking the tree again.
     */
-  private var focusKeysSeen              = Vector.empty[Option[String]]
-  private var lastAutofocus              = Option.empty[AutofocusRequest]
+  private var focusKeysSeen = Vector.empty[Option[String]]
+  private var lastAutofocus = Option.empty[AutofocusRequest]
   private val areas         = mutable.Map[Int, Rect]()
   private val pointerAreas  = mutable.Map[Int, Rect]()
   private var viewports     = List.empty[ViewportTransform]
