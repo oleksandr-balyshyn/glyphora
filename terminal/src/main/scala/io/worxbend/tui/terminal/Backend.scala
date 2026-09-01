@@ -311,8 +311,7 @@ trait Backend:
     */
   def insertBefore(height: Int, widget: Widget): Either[BackendError, Unit] =
     if height <= 0 then Right(())
-    else
-      size.flatMap(sz => printAbove(Backend.plainRows(Backend.renderBlock(sz.width, height, widget))))
+    else size.flatMap(sz => printAbove(Backend.plainRows(Backend.renderBlock(sz.width, height, widget))))
 
   /** Erases part of the screen, as `kind` describes.
     *

@@ -28,8 +28,8 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     *
     * Style is written in two forms. The first painted cell of a frame gets the absolute sequence, which begins with a
     * reset, so nothing the terminal was left holding can leak into this frame. Every later style change on the same
-    * frame gets only the attributes that moved (see [[Sgr.sgrDelta]]) — a run that differs from its
-    * predecessor in the bold flag alone costs a few bytes rather than a restatement of both colours.
+    * frame gets only the attributes that moved (see [[Sgr.sgrDelta]]) — a run that differs from its predecessor in the
+    * bold flag alone costs a few bytes rather than a restatement of both colours.
     */
   def encode(previous: Buffer, next: Buffer): String =
     val body                            = StringBuilder()

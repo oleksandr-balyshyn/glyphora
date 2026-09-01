@@ -24,13 +24,15 @@ private[terminal] object Sgr:
     val codes     = StringBuilder(Esc).append("[0")
     val effective = if depth == ColorDepth.Monochrome then monochromeStyle(style) else style
     if depth != ColorDepth.NoColor then
-      effective.fg.foreach(color => append(codes, foregroundCode(ColorDepth.downsample(color, depth))))
-      effective.bg.foreach(color => append(codes, backgroundCode(ColorDepth.downsample(color, depth))))
-    ModifierCodes.foreach((flag, code) => if style.modifiers.hasAny(flag) then append(codes, code))
+      effective.fg.foreach(color => appendParam(codes, foregroundCode(ColorDepth.downsample(color, depth))))
+      effective.bg.foreach(color => appendParam(codes, backgroundCode(ColorDepth.downsample(color, depth))))
+    ModifierCodes.foreach((flag, code) => if style.modifiers.hasAny(flag) then appendParam(codes, code))
     // the styled-underline selector is a text attribute (kept under NoColor); the underline color is a color (dropped)
-    underlineStyleCode(style.underlineStyle).foreach(code => append(codes, code))
+    underlineStyleCode(style.underlineStyle).foreach(code => appendParam(codes, code))
     if depth != ColorDepth.NoColor then
-      effective.underlineColor.foreach(color => append(codes, underlineColorCode(ColorDepth.downsample(color, depth))))
+      effective.underlineColor.foreach(color =>
+        appendParam(codes, underlineColorCode(ColorDepth.downsample(color, depth)))
+      )
     codes.append('m').result()
 
   /** The SGR that moves a terminal already showing `from` to showing `to`, writing only what actually changed.
@@ -107,7 +109,11 @@ private[terminal] object Sgr:
         to.underlineColor.foreach(color => appendParam(codes, underlineColorCode(ColorDepth.downsample(color, depth))))
     if codes.isEmpty then "" else s"$Esc[${codes.result()}m"
 
-  /** Adds one parameter to a delta sequence, which — unlike the absolute form — has no leading `0` to separate from. */
+  /** Adds one SGR parameter, writing the `;` separator only when the builder already holds something.
+    *
+    * That covers both callers: [[sgr]] seeds its builder with the leading `ESC[0` reset, so the separator is always
+    * needed, while `buildDelta` starts empty and the first parameter must not be preceded by one.
+    */
   private def appendParam(codes: StringBuilder, code: String): Unit =
     val _ = if codes.isEmpty then codes.append(code) else codes.append(';').append(code)
 
@@ -149,10 +155,6 @@ private[terminal] object Sgr:
           case Some(underline) if ColorDepth.isLight(underline) == ColorDepth.isLight(bg) =>
             recolored.withUnderlineColor(contrast)
           case _                                                                          => recolored
-
-  /** Adds one more SGR parameter to a sequence that already holds at least the leading reset. */
-  private def append(codes: StringBuilder, code: String): Unit =
-    val _ = codes.append(';').append(code)
 
   /** SGR 4:n styled-underline selectors; `None`/`Straight` defer to the plain `4` from [[ModifierCodes]]. */
   private def underlineStyleCode(style: UnderlineStyle): Option[String] =
