@@ -399,6 +399,13 @@ final class Buffer(val area: Rect):
     *
     * This is what backends use on the hot path — it allocates nothing per cell (no `Position`, no tuple, no iterator
     * state), which matters because a 200x50 frame is 10 000 cells and runs at the tick rate.
+    *
+    * Both frames are walked by array index rather than by coordinate. `require` above has already established that they
+    * are the same width and start at the same column, which is exactly the condition under which one index names the
+    * same position in both grids, so the bounds check `get(x, y)` performs per read has nothing left to discover. A
+    * coordinate is computed only for a cell that is actually emitted. Each row is compared as a whole first: on a
+    * typical frame almost every row is untouched, and one scan that stops at the first difference is cheaper than
+    * running the per-cell emit machinery across it.
     */
   def diff(next: Buffer, emit: (Int, Int, Cell) => Unit): Unit =
     require(
@@ -408,17 +415,43 @@ final class Buffer(val area: Rect):
     )
     // a next frame one row shorter is diffed over the rows the two share, the way ratatui does; the rows only `next`
     // has are the caller's to paint, because this buffer has nothing to compare them against
-    val bottom = math.min(area.bottom, next.area.bottom)
-    var y      = next.area.y
-    while y < bottom do
-      var x = next.area.x
-      while x < next.area.right do
-        val candidate = next.cellAt(x, y)
-        // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
-        val changed   = !sameCell(cellAt(x, y), candidate) || vacatedTrailing(next, x, y)
-        if changed && !next.isContinuation(x, y) then emit(x, y, candidate)
-        x += 1
-      y += 1
+    val rows       = math.min(area.height, next.area.height)
+    val width      = area.width
+    val originX    = area.x
+    val originY    = area.y
+    // `next.cells` and `next.continuations` are readable from here because Scala's `private` is private to the class,
+    // not to the instance: no accessor is added, and neither array escapes the method
+    val nextCells  = next.cells
+    val nextFiller = next.continuations
+    var row        = 0
+    while row < rows do
+      val start = row * width
+      val end   = start + width
+      if !rowUnchanged(nextCells, nextFiller, start, end) then
+        val y     = originY + row
+        var index = start
+        while index < end do
+          val candidate = nextCells(index)
+          // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
+          val changed   = !sameCell(cells(index), candidate) || vacatedTrailing(nextFiller, index, start)
+          if changed && !nextFiller(index) then emit(originX + index - start, y, candidate)
+          index += 1
+      row += 1
+
+  /** Whether the row spanning `[from, until)` of the flat grids is identical in both frames — the same cells and the
+    * same wide-grapheme filler flags.
+    *
+    * The flags are part of the comparison and not an afterthought: [[vacatedTrailing]] emits a column whose cell did
+    * not change but whose filler flag did, and a scan that looked only at cells would skip the row it lives in.
+    *
+    * `previous` is this buffer; the arrays are index-aligned because [[diff]] has already required both frames to be
+    * the same width and to start at the same column.
+    */
+  private def rowUnchanged(nextCells: Array[Cell], nextFiller: Array[Boolean], from: Int, until: Int): Boolean =
+    var index = from
+    while index < until && sameCell(cells(index), nextCells(index)) && continuations(index) == nextFiller(index) do
+      index += 1
+    index == until
 
   /** Emits every cell of this buffer, in the same row-major order and with the same continuation rule as [[diff]] — the
     * full repaint the first frame after a resize or a resume from suspend needs.
@@ -564,11 +597,15 @@ final class Buffer(val area: Rect):
     * skipped it. On screen the terminal was still painting the right half of the old glyph: replace a red-backed `漢`
     * with a plain `a` and the red block to its right stayed. Emitting the new (blank) cell repaints it.
     *
-    * The `x - 1` read is the grapheme that owned the filler; [[cellAt]] bounds-checks, so a column at the row's left
-    * edge reads [[Cell.Empty]] rather than the previous row's last cell.
+    * The `index - 1` read is the grapheme that owned the filler. `rowStart` is where the row begins in the flat grid,
+    * and a filler flag can never sit in the row's first column — a wide grapheme reserves the cell to its *right* — so
+    * the guard against reading the previous row's last cell is the flag itself, checked first.
+    *
+    * `nextFiller` is `next`'s flag array and `index` is the position in both grids, which [[diff]] may pass directly
+    * because it has required the two frames to be the same width and to start at the same column.
     */
-  private def vacatedTrailing(next: Buffer, x: Int, y: Int): Boolean =
-    isContinuation(x, y) && !next.isContinuation(x, y) && visibleOnBlank(cellAt(x - 1, y).style)
+  private def vacatedTrailing(nextFiller: Array[Boolean], index: Int, rowStart: Int): Boolean =
+    continuations(index) && !nextFiller(index) && index > rowStart && visibleOnBlank(cells(index - 1).style)
 
   /** The single bounds-check-and-index site behind [[get]]. Kept separate from [[get]] so the hot diff loop reads a
     * `private` method the compiler can inline freely.

@@ -202,3 +202,38 @@ final class BufferDiffSpec extends AnyFunSuite:
     val next     = Buffer(Rect(0, 0, 4, 2))
     next.setString(3, 0, "X", Style.Default.withBg(Color.Red))
     assert(collected(next, previous).map(_._1) == Seq(Position(0, 1)))
+
+  test("a change in the last row is found even though every earlier row is skipped whole"):
+    // the diff compares a row at a time and moves on at the first difference, so a frame whose only change is in the
+    // final row is the case that catches an off-by-one in the row walk
+    val previous = Buffer(Rect(0, 0, 4, 3))
+    val next     = previous.snapshot
+    next.setString(0, 2, "last", Style.Default)
+    assert(collected(previous, next).map(_._1) == Seq(Position(0, 2), Position(1, 2), Position(2, 2), Position(3, 2)))
+
+  test("changed cells report absolute coordinates in a buffer that does not start at the origin"):
+    // the walk is by array index; the column it reports is that index mapped back through the area's own offset, and
+    // a buffer placed at (5, 3) is what shows the mapping is applied rather than assumed to be zero
+    val previous = Buffer(Rect(5, 3, 3, 2))
+    val next     = previous.snapshot
+    next.setString(6, 4, "x", Style.Default)
+    assert(collected(previous, next).map(_._1) == Seq(Position(6, 4)))
+
+  test("a vacated wide-grapheme column is still emitted when its row is otherwise unchanged"):
+    // the previous frame drew a red-backed `漢` whose right half painted column 1; the next frame drew nothing there.
+    // Both frames hold a blank at column 1, so only the filler flag differs — a row scan that compared cells alone
+    // would skip the row and leave the red half-block on screen.
+    val previous = Buffer(Rect(0, 0, 3, 1))
+    previous.setString(0, 0, "漢", Style.Default.withBg(Color.Red))
+    val next     = Buffer(Rect(0, 0, 3, 1))
+    assert(collected(previous, next).map(_._1.x) == Seq(0, 1))
+
+  test("the first column of a row is never mistaken for a vacated column of the row above"):
+    // the flat walk makes `index - 1` at a row's first column point at the last cell of the row before it. A wide
+    // grapheme reserves the cell to its right and so can never leave a filler in column 0, and this pins that: a red
+    // wide glyph at the end of row 0 must not make column 0 of row 1 look vacated.
+    val previous = Buffer(Rect(0, 0, 4, 2))
+    previous.setString(2, 0, "漢", Style.Default.withBg(Color.Red))
+    val next     = previous.snapshot
+    next.setString(0, 1, "a", Style.Default)
+    assert(collected(previous, next).map(_._1) == Seq(Position(0, 1)))
