@@ -67,7 +67,7 @@ export const docsNavigation = [
     type: 'category',
     label: 'Ship with confidence',
     collapsed: false,
-    items: ['testing', 'native-image', 'troubleshooting', 'faq'],
+    items: ['testing', 'performance', 'native-image', 'troubleshooting', 'faq'],
   },
   {
     type: 'category',

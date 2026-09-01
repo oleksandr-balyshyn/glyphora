@@ -28,5 +28,7 @@ object `package` extends build.TuiPublishModule {
     mvn"org.jline:jline-terminal-jni:3.30.13",
   )
 
-  object test extends TuiTests
+  // `TuiPilotTests` rather than `TuiTests` for the `test-support` dependency alone: `FramePipelineBench` uses the
+  // shared `Bench` harness. No suite here drives a `Pilot`.
+  object test extends TuiPilotTests
 }
