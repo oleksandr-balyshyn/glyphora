@@ -504,9 +504,40 @@ this already-styled line italic without disturbing its colours" is one call:
 line.patchStyle(Style.Default.italic)
 ```
 
-A `Line` and a `Text` hold no style of their own — a line is its spans — so all three
-methods are a fold over the spans rather than a field being set. That is why they compose
-the way plain `Style` calls do.
+All three methods reach into the *spans*, rewriting each one's `Style`, rather than
+setting a field. That is why they compose the way plain `Style` calls do.
+
+### Tint a whole row without touching its spans
+
+A `Line` also carries a base style of its own, which every span in it is drawn on top of.
+Setting it is one field replacement, no matter how many spans the line has:
+
+```scala
+val row = Line(Seq(Span.raw("cpu "), Span("94%", Style.Default.withFg(Color.Red))))
+row.withStyle(Style.Default.dim)   // the whole row is dim; "94%" is still red
+row.withStyleOf(_.bold)            // edit the base layer instead of replacing it
+Line.styled(spans, theme.muted)    // the same thing at construction time
+```
+
+Every character is resolved in three layers, each one laid over the last with
+`Style.patch`, so the innermost layer wins wherever it speaks and the outer layers show
+through wherever it says nothing:
+
+1. the widget's own style — `Paragraph`'s `style` argument, a table's cell style, and so on,
+2. then the `Line`'s `style`,
+3. then the `Span`'s `style`.
+
+In the example above the `"cpu "` span chose no colour, so it takes the line's dim; the
+`"94%"` span chose red and keeps it, while still picking up the dim the line set, because
+dim and a foreground colour are different settings and neither overrules the other. A
+line that never sets a base style has `Style.Default`, which sets nothing, so it renders
+exactly as it did before the layer existed.
+
+The difference from `patchStyle` is what gets changed. `withStyle` leaves the spans as
+they are and adds a layer beneath them, which is what you want for "this whole row is
+dim". `patchStyle` rewrites every span, which is what you want when the spans themselves
+must come out of the call carrying the new style — for example before handing them to
+something that reads `span.style` directly.
 
 ### Show a secret without showing it
 

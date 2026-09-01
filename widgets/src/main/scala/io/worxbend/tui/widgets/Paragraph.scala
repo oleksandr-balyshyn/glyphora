@@ -113,7 +113,7 @@ object Paragraph:
     if width <= 0 then Seq.empty
     else if line.width <= width then Seq(line)
     else
-      val sink = LineSink(line.alignment)
+      val sink = LineSink(line.alignment, line.style)
       walkWrapped(line, width, sink)
       sink.rows
 
@@ -232,7 +232,7 @@ object Paragraph:
   /** The sink [[wrapLine]] uses: collects the spans of each row and merges neighbouring clusters of the same style back
     * into one span, so a row read one cluster at a time comes out as the few spans it was written as.
     */
-  private final class LineSink(alignment: Option[Alignment]) extends RowSink:
+  private final class LineSink(alignment: Option[Alignment], style: Style) extends RowSink:
     private val wrapped = List.newBuilder[Line]
     private var row     = Vector.empty[Span]
     private var gap     = Vector.empty[Span]
@@ -248,7 +248,7 @@ object Paragraph:
     def clearGap(): Unit = gap = Vector.empty
 
     def endRow(): Unit =
-      wrapped += Line(row, alignment)
+      wrapped += Line(row, alignment, style)
       row = Vector.empty
 
     /** The rows read so far, in order. */

@@ -738,7 +738,7 @@ object Buffer:
     lines.zipWithIndex.foreach { (line, y) =>
       var x = 0
       line.spans.foreach { span =>
-        x += buffer.setString(x, y, span.content, span.style, width - x)
+        x += buffer.setString(x, y, span.content, line.style.patch(span.style), width - x)
       }
     }
     buffer

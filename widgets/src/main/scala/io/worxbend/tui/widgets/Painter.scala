@@ -292,6 +292,6 @@ final class Painter private[widgets] (
       val room = area.right - column
       if room > 0 then
         val text = CharWidth.substringByWidth(span.content, room)
-        buffer.setString(column, y, text, span.style)
+        buffer.setString(column, y, text, line.style.patch(span.style))
         column += CharWidth.of(text)
     }

@@ -9,8 +9,11 @@ private[widgets] object LineRenderer:
 
   /** Renders `line` starting at `(x, y)`, using at most `maxWidth` columns. Returns the columns written.
     *
-    * The clipping rule itself belongs to [[RowCursor]]; this only knows that a line is spans laid end to end and that
-    * each span's style layers over `baseStyle`.
+    * The clipping rule itself belongs to [[RowCursor]]; this only knows that a line is spans laid end to end and how
+    * the three style layers stack. Every character is drawn with `baseStyle`, then the line's own
+    * [[io.worxbend.tui.core.Line.style]] layered on top of it, then the span's style on top of that — each step is a
+    * [[io.worxbend.tui.core.Style.patch]], so the more specific layer wins wherever it speaks and the outer one shows
+    * through wherever it says nothing.
     *
     * `skipWidth` throws the first `skipWidth` columns of the line away before drawing, which is how a caller shows the
     * *end* of a line too wide for the space it has instead of its beginning. A span that falls entirely inside the
@@ -42,14 +45,15 @@ private[widgets] object LineRenderer:
     val drawnWidth = math.max(0, line.width - math.max(0, skipWidth))
     val start      = alignment.originAt(x, maxWidth, drawnWidth)
     val cursor     = RowCursor(buffer, y, start, x + maxWidth)
+    val lineStyle  = baseStyle.patch(line.style)
     var remaining  = math.max(0, skipWidth)
     line.spans.foreach { span =>
-      if remaining <= 0 then cursor.write(span.content, baseStyle.patch(span.style))
+      if remaining <= 0 then cursor.write(span.content, lineStyle.patch(span.style))
       else
         val spanWidth = CharWidth.of(span.content)
         if spanWidth <= remaining then remaining -= spanWidth
         else
-          cursor.write(CharWidth.dropByWidth(span.content, remaining), baseStyle.patch(span.style))
+          cursor.write(CharWidth.dropByWidth(span.content, remaining), lineStyle.patch(span.style))
           remaining = 0
     }
     cursor.at - x
