@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Constraint, Direction, KeyCode, KeyEvent, Line, MouseEventKind, Size, Widget}
+import io.worxbend.tui.core.{Constraint, Direction, KeyCode, KeyEvent, Line, MouseEventKind, Size, Style, Widget}
 import io.worxbend.tui.widgets as w
 
 /** A subtree chosen by the terminal's size — a media query, not a container query.
@@ -187,3 +187,71 @@ final case class SplitPaneElement(
         case KeyEvent(KeyCode.Char(']'), _) => onSplit(clampSplit(splitPercent + SplitStep))
       }
     )
+
+/** A scrollbar strip on its own, for content this package does not scroll for you.
+  *
+  * [[ScrollViewElement]] draws its own scrollbar, so the common case needs nothing here. This node is for the case
+  * where the thing being scrolled is not a `scrollView` — a list whose offset the application keeps, a log tailing in
+  * a pane, a table with more rows than fit — and the view wants to show how far through it the reader is. Before it,
+  * the only way to put a scrollbar on such a pane from the DSL was `widget(Scrollbar(...))`, which meant importing
+  * `io.worxbend.tui.widgets` into a view for one type.
+  *
+  * The widget underneath is stateless: where the thumb sits is a pure function of `contentLength`, `position` and the
+  * area, so this node holds two plain numbers and nothing that has to be kept in step with anything. An out-of-range
+  * `position` pins the thumb to an end rather than drawing it off the track, and when the content already fits the
+  * area only the track is drawn.
+  *
+  * A vertical scrollbar paints on the *right* edge of the area it is given and a horizontal one on the *bottom* edge,
+  * which is why it is usually given a one-column or one-row slice next to the content rather than laid over it.
+  */
+final case class ScrollbarElement(
+    contentLength: Int,
+    position: Int,
+    orientation: Direction,
+    trackStyle: Style,
+    thumbStyle: Style,
+    trackSymbol: String,
+    thumbSymbol: String,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  type Self = ScrollbarElement
+
+  def widget: Widget =
+    w.Scrollbar(
+      contentLength,
+      position,
+      orientation,
+      trackStyle.patch(props.style),
+      thumbStyle.patch(props.style),
+      trackSymbol,
+      thumbSymbol,
+    )
+
+  /** Runs the bar down the right edge of its area — the default, and what a scrolling pane of text wants. */
+  def vertical: ScrollbarElement = copy(orientation = Direction.Vertical)
+
+  /** Runs the bar along the bottom edge of its area, for content that is too wide rather than too tall. */
+  def horizontal: ScrollbarElement = copy(orientation = Direction.Horizontal)
+
+  /** Moves the thumb to `offset`, in the same units as `contentLength`: rows for a vertical bar, columns for a
+    * horizontal one. Values outside the content are clamped rather than rejected.
+    */
+  def at(offset: Int): ScrollbarElement = copy(position = offset)
+
+  /** Styles the thumb — the moving part — independently of the track it runs in. */
+  def thumbStyle(transform: Style => Style): ScrollbarElement = copy(thumbStyle = transform(thumbStyle))
+
+  /** Replaces the two glyphs the bar is drawn from: the track cell first, then the thumb cell. Both must be a single
+    * terminal column wide, or the bar will not line up with the content beside it.
+    */
+  def symbols(track: String, thumb: String): ScrollbarElement = copy(trackSymbol = track, thumbSymbol = thumb)
+
+  private[dsl] def withProps(props: ElementProps): ScrollbarElement = copy(props = props)
+
+  /** One cell across the short axis, everything available along the long one — a vertical bar is one column wide and
+    * as tall as it is offered, and a horizontal bar the other way round.
+    */
+  private[dsl] override def claim: SizeClaim =
+    orientation match
+      case Direction.Vertical   => SizeClaim(Constraint.Fill(1), Constraint.Length(1))
+      case Direction.Horizontal => SizeClaim(Constraint.Length(1), Constraint.Fill(1))

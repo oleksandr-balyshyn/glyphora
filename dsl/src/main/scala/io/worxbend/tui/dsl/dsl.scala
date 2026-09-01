@@ -60,6 +60,7 @@ export Element.{
   responsive,
   row,
   rule,
+  scrollbar,
   scrollView,
   select,
   selectionList,

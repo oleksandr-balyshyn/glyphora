@@ -127,28 +127,36 @@ that is when the state first learns how tall the content and the viewport are.
 
 `scrollView` draws its own scrollbar. For the rarer case of a scroll indicator beside
 something the DSL is not scrolling — a custom render loop, a pane whose offset your own
-code owns — reach past the DSL for the raw `Scrollbar` widget. It has no DSL element and
-owns no state: where the thumb sits is a pure function of the two numbers you pass, so
-the offset stays wherever you already keep it.
+code owns — use `scrollbar(contentLength, position)`. It owns no state: where the thumb
+sits is a pure function of the two numbers you pass, so the offset stays wherever you
+already keep it.
 
 ```scala
-import io.worxbend.tui.core.Direction
-import io.worxbend.tui.widgets.Scrollbar
-
 // 200 rows of content, currently showing from row 40
-widget(Scrollbar(contentLength = 200, position = 40)).rows(1)
+row(
+  panel("Log")(logLines).fill,
+  scrollbar(contentLength = 200, position = 40),
+)
 
 // along the bottom edge instead
 Scrollbar(200, 40, orientation = Direction.Horizontal)
 
 // a left-hand gutter instead of the right edge
 Scrollbar(200, 40, side = ScrollbarSide.Near)
+
+// the same bar as a DSL element
+scrollbar(200).at(40).horizontal
 ```
 
 `side` picks which of the axis's two edges the strip lands on. `Far`, the default, is the
 right edge for a vertical bar and the bottom edge for a horizontal one; `Near` is the left
 edge and the top edge. The thumb sits in the same place along the strip either way — only
 the lane it is drawn in moves.
+
+The element claims one cell across the short axis, so give it a slice next to the content
+rather than laying it over the content. `.at(offset)` moves the thumb, `.thumbStyle(...)`
+recolours the moving part on its own, and `.symbols(track, thumb)` replaces the two glyphs
+(both must be one column wide).
 
 The thumb's length is proportional to how much of the content the viewport covers, and a
 `position` past the end pins it to the end rather than drawing it off the track. When the
