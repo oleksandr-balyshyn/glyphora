@@ -60,11 +60,12 @@ private final class RunState(val splash: SplashPlayer):
   *
   * App services: [[pushScreen]]/[[popScreen]]/[[replaceScreen]]/[[resetScreens]] for modal or full-screen navigation
   * (layers below a modal leave the tab order), with [[currentScreen]]/[[screenDepth]] as reactive reads of where
-  * navigation stands, [[notify]] for timed toasts, [[openPalette]] for the fuzzy command palette over the declared bindings. Call
-  * [[quit]] from any handler to exit cleanly.
+  * navigation stands, [[notify]] for timed toasts, [[openPalette]] for the fuzzy command palette over the declared
+  * bindings. Call [[quit]] from any handler to exit cleanly.
   *
   * Lifecycle: [[onStart]] runs on the render thread before the first frame — start pollers and timers there — and
-  * [[onStop]] runs on every exit path, which is where they are cancelled. Between the two, [[requestRedraw]] schedules
+  * [[onStop]] runs on every exit path, which is where they are cancelled. A screen has the same pair of its own,
+  * `Screen.onEnter`/`Screen.onLeave`, for work that belongs to a subtree rather than to the whole app. Between the two, [[requestRedraw]] schedules
   * a frame for state the reactive layer cannot see, such as a mutable widget state filled in by a background result.
   *
   * Running it: the trait supplies `main`, so `object MyApp extends TuiApp` is already a runnable program. Reach for
@@ -187,15 +188,23 @@ trait TuiApp:
     */
   protected final def runEffect(effect: Effect): Unit = effects.start(effect)
 
-  /** Pushes a screen; modal screens layer over the current view, full screens replace it. */
+  /** Pushes a screen; modal screens layer over the current view, full screens replace it.
+    *
+    * The screen's `Screen.onEnter` runs immediately afterwards, on the render thread, before the frame that first
+    * shows it — after the stack has been written, so a callback that reads [[screenDepthNow]] sees itself on it.
+    */
   protected final def pushScreen(screen: Screen): Unit =
     screenStack.update(screen :: _)
+    screen.onEnter()
 
+  /** Pops the top screen and runs its `Screen.onLeave`. No-op on an empty stack. */
   protected final def popScreen(): Unit =
+    val popped = screenStack.peek.headOption
     screenStack.update {
       case _ :: tail => tail
       case Nil       => Nil
     }
+    popped.foreach(_.onLeave())
 
   /** Swaps the screen on top for `screen` in a single update.
     *
@@ -204,18 +213,25 @@ trait TuiApp:
     * On an empty stack it does the same thing as [[pushScreen]].
     */
   protected final def replaceScreen(screen: Screen): Unit =
+    val replaced = screenStack.peek.headOption
     screenStack.update {
       case _ :: tail => screen :: tail
       case Nil       => screen :: Nil
     }
+    replaced.foreach(_.onLeave())
+    screen.onEnter()
 
   /** Unwinds every pushed screen at once, so the app's own [[view]] is what shows again.
     *
     * The one-call way out of a deep drill-down ("home" from four levels in). Already-empty is a silent no-op: a
     * `Signal` set to a value equal to the one it holds notifies nobody, so no redundant frame is scheduled.
+    *
+    * Every unwound screen's `Screen.onLeave` runs, innermost first — the same order as popping them one at a time.
     */
   protected final def resetScreens(): Unit =
+    val unwound = screenStack.peek
     screenStack.set(Nil)
+    unwound.foreach(_.onLeave())
 
   /** The screen on top, as a reactive read — `None` means the app's own [[view]] is showing.
     *
@@ -424,6 +440,10 @@ trait TuiApp:
       // than talking to a backend the runner has already closed
       activeHandle.set(None)
       activeFocus.set(None)
+      // a screen still on the stack when the run ends gets its `onLeave`, innermost first, *before* the app's own
+      // `onStop`: a screen's cleanup runs while whatever the app opened for it is still there, and every `onEnter` on
+      // every exit path — a quit, a Ctrl+C, a handler that threw — is matched by exactly one `onLeave`
+      resetScreens()
       onStop()
       // after `onStop`, so an app cancelling timers there still animates whatever its last frames show
       run.renderLoop.foreach(AnimationClock.releaseLoop)

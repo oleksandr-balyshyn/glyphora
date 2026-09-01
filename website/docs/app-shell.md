@@ -330,6 +330,36 @@ same depth read without subscribing, for a handler. That last binding is the usu
 reason to want it: one `Esc` that means "go back a level" while anything is pushed and
 "quit" at the top, without the app keeping a parallel counter of its own.
 
+### Start and stop work with a screen
+
+`TuiApp.onStart`/`onStop` cover the whole app. A screen has the same pair of its own, for
+work that belongs to a subtree that comes and goes:
+
+```scala
+val liveMetrics = new Screen:
+  private var poller: Option[Cancelable] = None
+  def view(using ReactiveScope, Theme): Element = metricsPage
+  override def onEnter(): Unit = poller = Some(Async.every(5.seconds)(refresh()))
+  override def onLeave(): Unit = poller.foreach(_.cancel())
+```
+
+`onEnter` runs on the render thread the moment the screen goes on the stack, before the
+frame that first shows it. `onLeave` runs when it leaves — popped, replaced, reset away,
+or still on the stack when the run ends, in which case it runs before the app's own
+`onStop`, so the screen releases what it holds while the app's resources are still
+there. Every `onEnter` is matched by exactly one `onLeave`, on every exit path including
+a `Ctrl+C` or a handler that threw, because the run's teardown is in a `finally`.
+
+Before these existed, a screen that polls had to arm its poller in the app's `onStart`
+and cancel it in the app's `onStop` — so it kept polling for a screen the user had
+closed long ago.
+
+A screen small enough not to want a class of its own passes the hooks to the factory:
+
+```scala
+pushScreen(Screen.full(metricsPage, onEnter = () => startPolling(), onLeave = () => stopPolling()))
+```
+
 Which of the two a screen is, is its `presentation`: `Presentation.Modal` (the default)
 or `Presentation.Full`. A hand-written `Screen` overrides it directly:
 
