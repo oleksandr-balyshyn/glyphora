@@ -4,7 +4,7 @@ import io.worxbend.tui.core.{Color, Modifiers, Style, UnderlineStyle}
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** Pins [[AnsiSequences.sgrDelta]], the form that writes only the attributes that changed between two styles.
+/** Pins [[Sgr.sgrDelta]], the form that writes only the attributes that changed between two styles.
   *
   * The absolute form (`sgr`) opens with a reset, so no attribute of whatever came before it can survive into the run it
   * introduces. The delta form has no such safety net: a forgotten "off" code leaves, say, bold switched on for the rest
@@ -17,7 +17,7 @@ final class SgrDeltaSpec extends AnyFunSuite:
   private val Esc = ""
 
   private def delta(from: Style, to: Style, depth: ColorDepth = ColorDepth.TrueColor): String =
-    AnsiSequences.sgrDelta(from, to, depth)
+    Sgr.sgrDelta(from, to, depth)
 
   private val orange = Color.Rgb(220, 160, 40)
   private val navy   = Color.Rgb(10, 20, 60)
@@ -37,7 +37,7 @@ final class SgrDeltaSpec extends AnyFunSuite:
     assert(delta(before, after) == s"$Esc[1m")
     // the headline claim of the whole change: the truecolour selector appears nowhere in the sequence
     assert(!delta(before, after).contains("38;2"))
-    assert(AnsiSequences.sgr(after, ColorDepth.TrueColor).contains("38;2"))
+    assert(Sgr.sgr(after, ColorDepth.TrueColor).contains("38;2"))
 
   test("removing bold while dim survives re-asserts the dim, because SGR 22 clears both"):
     assert(delta(Style.Default.bold.dim, Style.Default.dim) == s"$Esc[22;2m")
@@ -64,7 +64,7 @@ final class SgrDeltaSpec extends AnyFunSuite:
     val before  = Style.Default.withFg(navy)
     val after   = Style.Default.withFg(Color.Rgb(200, 30, 30))
     // the absolute form for `after` at this depth is a reset plus the one colour; the delta is that colour alone
-    val colours = AnsiSequences.sgr(after, ColorDepth.Ansi16).stripPrefix(s"$Esc[0;")
+    val colours = Sgr.sgr(after, ColorDepth.Ansi16).stripPrefix(s"$Esc[0;")
     assert(delta(before, after, ColorDepth.Ansi16) == s"$Esc[$colours")
 
   test("under NoColor a pure colour change is not a change at all, but a flag change still is"):
@@ -76,10 +76,10 @@ final class SgrDeltaSpec extends AnyFunSuite:
     // SGR 4:0 (back to a plain underline) and SGR 59 (back to the default underline colour) are missing from several
     // terminal emulators, so any step that would need one is written the long way instead
     val curly = Style.Default.curlyUnderline
-    assert(delta(curly, Style.Default) == AnsiSequences.sgr(Style.Default, ColorDepth.TrueColor))
-    assert(delta(Style.Default.withUnderlineColor(orange), Style.Default) == AnsiSequences.sgr(Style.Default))
+    assert(delta(curly, Style.Default) == Sgr.sgr(Style.Default, ColorDepth.TrueColor))
+    assert(delta(Style.Default.withUnderlineColor(orange), Style.Default) == Sgr.sgr(Style.Default))
     // toggling the plain underline flag under a styled underline would take the style with it: SGR 24 clears both
-    assert(delta(curly, curly.underline) == AnsiSequences.sgr(curly.underline, ColorDepth.TrueColor))
+    assert(delta(curly, curly.underline) == Sgr.sgr(curly.underline, ColorDepth.TrueColor))
 
   // ---------------------------------------------------------------- the model check
 
@@ -160,10 +160,10 @@ final class SgrDeltaSpec extends AnyFunSuite:
         else state.copy(bg = Some(s"named $named"))
 
   private def absolute(style: Style, depth: ColorDepth): TerminalState =
-    applySgr(TerminalState(), AnsiSequences.sgr(style, depth))
+    applySgr(TerminalState(), Sgr.sgr(style, depth))
 
   private def applied(from: Style, to: Style, depth: ColorDepth): TerminalState =
-    applySgr(absolute(from, depth), AnsiSequences.sgrDelta(from, to, depth))
+    applySgr(absolute(from, depth), Sgr.sgrDelta(from, to, depth))
 
   private val representative: List[Style] =
     List(
@@ -216,6 +216,6 @@ final class SgrDeltaSpec extends AnyFunSuite:
       List(Style.Default, Style.Default.bold, Style.Default.italic, Style.Default.bold.reverse)
         .map(_.withFg(orange).withBg(navy))
     for from <- themed; to <- themed if from != to do
-      val short = AnsiSequences.sgrDelta(from, to, ColorDepth.TrueColor)
-      val long  = AnsiSequences.sgr(to, ColorDepth.TrueColor)
+      val short = Sgr.sgrDelta(from, to, ColorDepth.TrueColor)
+      val long  = Sgr.sgr(to, ColorDepth.TrueColor)
       assert(short.length * 3 < long.length, s"delta from $from to $to was $short, barely shorter than $long")

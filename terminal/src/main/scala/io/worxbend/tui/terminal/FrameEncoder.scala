@@ -28,7 +28,7 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     *
     * Style is written in two forms. The first painted cell of a frame gets the absolute sequence, which begins with a
     * reset, so nothing the terminal was left holding can leak into this frame. Every later style change on the same
-    * frame gets only the attributes that moved (see [[AnsiSequences.sgrDelta]]) — a run that differs from its
+    * frame gets only the attributes that moved (see [[Sgr.sgrDelta]]) — a run that differs from its
     * predecessor in the bold flag alone costs a few bytes rather than a restatement of both colours.
     */
   def encode(previous: Buffer, next: Buffer): String =
@@ -38,7 +38,7 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     var currentStyle: Style             = Style.Default
     var currentLink: Option[String]     = None
     // Whether this frame has emitted an SGR sequence yet. The first one is written in the absolute form
-    // ([[AnsiSequences.sgr]], which opens with a reset), because the encoder cannot know what state the terminal was
+    // ([[Sgr.sgr]], which opens with a reset), because the encoder cannot know what state the terminal was
     // left in by whatever was drawn before — a previous frame, the shell, a subprocess. After that anchor every style
     // change on the frame is written as a delta against the style the encoder itself last emitted, which is a handful
     // of bytes instead of a full restatement of every colour and flag.
@@ -53,11 +53,11 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
         // which hand every cell a freshly allocated but usually equal `Style`. Either way a run of same-styled cells
         // builds no sequence at all.
         if !frameOpened then
-          body ++= AnsiSequences.sgr(cell.style, colorDepth)
+          body ++= Sgr.sgr(cell.style, colorDepth)
           currentStyle = cell.style
           frameOpened = true
         else if !((cell.style eq currentStyle) || cell.style == currentStyle) then
-          body ++= AnsiSequences.sgrDelta(currentStyle, cell.style, colorDepth)
+          body ++= Sgr.sgrDelta(currentStyle, cell.style, colorDepth)
           currentStyle = cell.style
         currentLink = carryLink(body, currentLink, cell.style.link)
         body ++= cell.symbol
@@ -95,7 +95,7 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
       while x <= end do
         if !buffer.isContinuation(x, y) then
           val cell = buffer.get(x, y)
-          val sgr  = AnsiSequences.sgr(cell.style, colorDepth)
+          val sgr  = Sgr.sgr(cell.style, colorDepth)
           if sgr != currentStyle then
             body ++= sgr
             currentStyle = sgr

@@ -128,43 +128,43 @@ final class ColorDepthSpec extends AnyFunSuite:
     */
   test("Monochrome still emits color codes, unlike NoColor"):
     val style = Style.Default.withFg(Color.Rgb(200, 0, 0)).withBg(Color.Rgb(20, 20, 20))
-    val codes = AnsiSequences.sgr(style, ColorDepth.Monochrome)
+    val codes = Sgr.sgr(style, ColorDepth.Monochrome)
     assert(codes.contains("37")) // white foreground
     assert(codes.contains("40")) // black background
-    assert(AnsiSequences.sgr(style, ColorDepth.NoColor) == "\u001b[0m")
+    assert(Sgr.sgr(style, ColorDepth.NoColor) == "\u001b[0m")
 
   test("Monochrome flips a foreground that would land on the same tone as its background"):
     val bothLight = Style.Default.withFg(Color.White).withBg(Color.BrightYellow)
-    assert(AnsiSequences.sgr(bothLight, ColorDepth.Monochrome) == "\u001b[0;30;47m")
+    assert(Sgr.sgr(bothLight, ColorDepth.Monochrome) == "\u001b[0;30;47m")
     val bothDark  = Style.Default.withFg(Color.Blue).withBg(Color.Black)
-    assert(AnsiSequences.sgr(bothDark, ColorDepth.Monochrome) == "\u001b[0;37;40m")
+    assert(Sgr.sgr(bothDark, ColorDepth.Monochrome) == "\u001b[0;37;40m")
     // a style with no background is left alone: the terminal's own background is unknowable here
-    assert(AnsiSequences.sgr(Style.Default.withFg(Color.Blue), ColorDepth.Monochrome) == "\u001b[0;30m")
+    assert(Sgr.sgr(Style.Default.withFg(Color.Blue), ColorDepth.Monochrome) == "\u001b[0;30m")
 
   test("Monochrome names a contrasting foreground for a background-only style"):
     // the ordinary selection highlight sets a background and lets the text inherit the terminal's foreground. That
     // foreground can threshold to the background's own tone, and the selected row would then be a solid block.
     val lightSelection = Style.Default.withBg(Color.BrightWhite)
-    assert(AnsiSequences.sgr(lightSelection, ColorDepth.Monochrome) == "[0;30;47m")
+    assert(Sgr.sgr(lightSelection, ColorDepth.Monochrome) == "[0;30;47m")
     val darkSelection  = Style.Default.withBg(Color.Black)
-    assert(AnsiSequences.sgr(darkSelection, ColorDepth.Monochrome) == "[0;37;40m")
+    assert(Sgr.sgr(darkSelection, ColorDepth.Monochrome) == "[0;37;40m")
 
   test("Monochrome lifts an underline color off the background tone"):
     val onDark  = Style.Default.withBg(Color.Black).curlyUnderline.withUnderlineColor(Color.Rgb(10, 10, 10))
     // the underline thresholds dark, exactly like the background, so it is flipped to the contrasting tone
-    assert(AnsiSequences.sgr(onDark, ColorDepth.Monochrome).contains("58:2::229:229:229"))
+    assert(Sgr.sgr(onDark, ColorDepth.Monochrome).contains("58:2::229:229:229"))
     val onLight = Style.Default.withBg(Color.BrightWhite).curlyUnderline.withUnderlineColor(Color.Rgb(240, 240, 240))
     // same collision on a light background, flipped the other way
-    assert(AnsiSequences.sgr(onLight, ColorDepth.Monochrome).contains("58:2::0:0:0"))
+    assert(Sgr.sgr(onLight, ColorDepth.Monochrome).contains("58:2::0:0:0"))
 
   test("NoColor drops color codes from SGR but keeps text attributes"):
     val style = Style.Default.withFg(Color.Rgb(255, 0, 0)).withBg(Color.Blue).bold.underline
-    assert(AnsiSequences.sgr(style, ColorDepth.NoColor) == "[0;1;4m")
+    assert(Sgr.sgr(style, ColorDepth.NoColor) == "[0;1;4m")
 
   test("NoColor keeps the styled-underline attribute but drops the underline color"):
     val style = Style.Default.curlyUnderline.withUnderlineColor(Color.Rgb(255, 0, 0))
-    assert(AnsiSequences.sgr(style, ColorDepth.NoColor) == "[0;4:3m") // 4:3 attr kept, 58 color gone
-    assert(AnsiSequences.sgr(style, ColorDepth.TrueColor) == "[0;4:3;58:2::255:0:0m")
+    assert(Sgr.sgr(style, ColorDepth.NoColor) == "[0;4:3m") // 4:3 attr kept, 58 color gone
+    assert(Sgr.sgr(style, ColorDepth.TrueColor) == "[0;4:3;58:2::255:0:0m")
 
   test("truecolor passes rgb through; 256 maps rgb into the palette"):
     val red = Color.Rgb(255, 0, 0)
@@ -186,10 +186,10 @@ final class ColorDepthSpec extends AnyFunSuite:
     assert(ColorDepth.downsample(Color.Indexed(196), ColorDepth.Ansi16) == Color.BrightRed)
     // and the bright codes really are what a 16-color terminal receives
     val bright = Style.Default.withFg(Color.Rgb(255, 0, 0))
-    assert(AnsiSequences.sgr(bright, ColorDepth.Ansi16).contains("91"))
+    assert(Sgr.sgr(bright, ColorDepth.Ansi16).contains("91"))
 
   test("sgr downsampling changes the emitted codes"):
     val style = Style.Default.withFg(Color.Rgb(255, 0, 0))
-    assert(AnsiSequences.sgr(style, ColorDepth.TrueColor).contains("38;2;255;0;0"))
-    assert(AnsiSequences.sgr(style, ColorDepth.Ansi256).contains("38;5;196"))
-    assert(AnsiSequences.sgr(style, ColorDepth.Ansi16).contains("91"))
+    assert(Sgr.sgr(style, ColorDepth.TrueColor).contains("38;2;255;0;0"))
+    assert(Sgr.sgr(style, ColorDepth.Ansi256).contains("38;5;196"))
+    assert(Sgr.sgr(style, ColorDepth.Ansi16).contains("91"))

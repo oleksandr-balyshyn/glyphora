@@ -13,7 +13,7 @@ final class FrameEncoderSpec extends AnyFunSuite:
 
   private val encoder = FrameEncoder(ColorDepth.TrueColor)
 
-  private def sgr(style: Style): String = AnsiSequences.sgr(style, ColorDepth.TrueColor)
+  private def sgr(style: Style): String = Sgr.sgr(style, ColorDepth.TrueColor)
 
   private def frame(write: Buffer => Unit): Buffer =
     val buffer = Buffer(Rect(0, 0, 10, 2))
@@ -49,7 +49,7 @@ final class FrameEncoderSpec extends AnyFunSuite:
       buffer.setString(2, 0, "cd", muted)
     }
     // the first style on a frame is written in full, the second as the difference from it
-    val second   = AnsiSequences.sgrDelta(warning, muted, ColorDepth.TrueColor)
+    val second   = Sgr.sgrDelta(warning, muted, ColorDepth.TrueColor)
     assert(encoder.encode(previous, next) == AnsiSequences.moveTo(0, 0) + sgr(warning) + "ab" + second + "cd")
 
   test("a later style change on a frame writes only what moved, not a fresh reset"):
