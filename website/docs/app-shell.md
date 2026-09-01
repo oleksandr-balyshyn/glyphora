@@ -330,6 +330,57 @@ same depth read without subscribing, for a handler. That last binding is the usu
 reason to want it: one `Esc` that means "go back a level" while anything is pushed and
 "quit" at the top, without the app keeping a parallel counter of its own.
 
+### Keys that belong to one screen
+
+A shortcut often belongs to the screen showing it, not to the whole application. Before
+`Screen` could declare its own keys there were two ways to write that, and neither was
+good: putting the key on a root element handler made it fire from whatever the tree was
+showing, including screens it had nothing to do with, and putting it in `TuiApp.bindings`
+made it a permanent app key that had to check the navigation depth itself before deciding
+whether it meant anything.
+
+A screen declares its keys with the `keys` parameter, in exactly the form `TuiApp.bindings`
+takes:
+
+```scala
+pushScreen(
+  Screen(
+    editorBody,
+    keys = KeyBindings(
+      binding("esc", "close the editor")(popScreen()),
+      binding("ctrl+s", "save the draft")(saveDraft()),
+    ),
+  )
+)
+```
+
+Those keys exist while that screen is on top of the stack and are gone the moment it is
+popped. They are consulted *before* the app's own bindings, so a screen key shadows an app
+key that answers to the same spec — the app's other keys keep working underneath. A screen
+written as a class overrides `bindings` directly instead:
+
+```scala
+val editor = new Screen:
+  def view(using ReactiveScope, Theme): Element = editorBody
+  override def bindings: KeyBindings = KeyBindings(binding("esc", "close")(popScreen()))
+```
+
+Hand `activeBindings` — not `bindings` — to anything that *shows* the keys:
+
+```scala
+def view(using ReactiveScope, Theme): Element =
+  scaffold(statusBar = Some(statusBar(activeBindings)))(body)
+```
+
+`activeBindings` is the merged list: the top screen's keys followed by the app's, with any
+app binding the screen has completely taken over left out, because it can no longer fire.
+Passing `bindings` instead would advertise keys the screen shadowed and omit the ones it
+added, so the hints would disagree with what pressing them does. Dispatch, the status-bar
+hints, the help overlay and the command palette all read this same list, so they cannot
+drift apart. It is a reactive read, so a `view` that uses it repaints when a screen is
+pushed or popped; the event path reads it without subscribing, which is why there is no
+handler-facing spelling to remember.
+
 ### Start and stop work with a screen
 
 `TuiApp.onStart`/`onStop` cover the whole app. A screen has the same pair of its own, for

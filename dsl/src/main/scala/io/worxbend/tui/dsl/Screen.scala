@@ -25,6 +25,21 @@ trait Screen:
   def view(using ReactiveScope, Theme): Element
   def presentation: Presentation = Presentation.Modal
 
+  /** The keys this screen declares for as long as it is the top of the app's stack, in the same form as
+    * `TuiApp.bindings` — see [[binding]].
+    *
+    * Before this existed, a screen that wanted its own shortcut had two unhappy options. Putting it on a root element
+    * handler made it fire from wherever the tree was showing, including screens it had nothing to do with; putting it
+    * in `TuiApp.bindings` made it a permanent app key that had to test the navigation depth itself before deciding
+    * whether it meant anything. Declaring it here scopes it: `TuiApp` merges these over the app's own bindings while
+    * this screen is on top, and they are gone the moment it is popped.
+    *
+    * They are merged *first*, so a screen key shadows an app key that answers to the same spec — `KeyBindings.handle`
+    * runs the first binding that matches. They feed the status-bar hints, the help overlay and the command palette too,
+    * through `TuiApp.activeBindings`, so the chrome advertises exactly the keys that will actually fire.
+    */
+  def bindings: KeyBindings = KeyBindings.empty
+
   /** Runs on the render thread the moment this screen goes on the stack, before the frame that first shows it.
     *
     * This is a screen's own "now I am running", the counterpart of `TuiApp.onStart` for a subtree that comes and goes.
@@ -57,9 +72,18 @@ object Screen:
     *
     * `onEnter`/`onLeave` are the same hooks the trait declares, for a screen small enough not to want a class of its
     * own: `Screen(detailView, onEnter = () => startPolling(), onLeave = () => stopPolling())`.
+    *
+    * `keys` declares the shortcuts that exist only while this screen is on top — see [[Screen.bindings]] — so a dialog
+    * can own its `Esc` without the app having to test the navigation depth:
+    * `Screen(body, keys = KeyBindings(binding("esc", "close")(popScreen())))`.
     */
-  def apply(element: View, onEnter: () => Unit = () => (), onLeave: () => Unit = () => ()): Screen =
-    build(element, Presentation.Modal, onEnter, onLeave)
+  def apply(
+      element: View,
+      onEnter: () => Unit = () => (),
+      onLeave: () => Unit = () => (),
+      keys: KeyBindings = KeyBindings.empty,
+  ): Screen =
+    build(element, Presentation.Modal, onEnter, onLeave, keys)
 
   /** A ready-made modal "are you sure?": Left/Right (and Tab) move between the two buttons, Space or Enter presses the
     * selected one, Esc cancels.
@@ -92,16 +116,30 @@ object Screen:
           () => onCancel,
         )
 
-  /** A screen that fully replaces the view beneath it. */
-  def full(element: View, onEnter: () => Unit = () => (), onLeave: () => Unit = () => ()): Screen =
-    build(element, Presentation.Full, onEnter, onLeave)
+  /** A screen that fully replaces the view beneath it. Takes the same `onEnter`/`onLeave` hooks and screen-scoped
+    * `keys` as the modal form above.
+    */
+  def full(
+      element: View,
+      onEnter: () => Unit = () => (),
+      onLeave: () => Unit = () => (),
+      keys: KeyBindings = KeyBindings.empty,
+  ): Screen =
+    build(element, Presentation.Full, onEnter, onLeave, keys)
 
-  private def build(element: View, how: Presentation, entering: () => Unit, leaving: () => Unit): Screen =
+  private def build(
+      element: View,
+      how: Presentation,
+      entering: () => Unit,
+      leaving: () => Unit,
+      keys: KeyBindings,
+  ): Screen =
     new Screen:
       def view(using ReactiveScope, Theme): Element = element
       override def presentation: Presentation       = how
       override def onEnter(): Unit                  = entering()
       override def onLeave(): Unit                  = leaving()
+      override def bindings: KeyBindings            = keys
 
 /** An intro shown before the first view render: `content` (typically a `bigText` logo composition) plays `effect` and
   * holds for at least `minimumDuration`; any key skips it. Wire via `TuiApp.splash`.

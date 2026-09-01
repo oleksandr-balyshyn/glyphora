@@ -77,8 +77,9 @@ private final class RunState(val splash: SplashPlayer):
   *
   * Focus and events: focusable elements form a tab order in depth-first view order; `Tab` / `Shift+Tab` cycle focus and
   * a mouse press focuses the innermost focusable under the pointer; [[focusTo]] and [[clearFocus]] move it from code.
-  * Key events start at the focused element and bubble to its ancestors (`true` consumes), then the app's [[bindings]]
-  * run; an unconsumed `Ctrl+P` opens the command palette (when bindings exist) and `Ctrl+C` quits.
+  * Key events start at the focused element and bubble to its ancestors (`true` consumes), then the top screen's
+  * `Screen.bindings` merged over the app's [[bindings]] run — see [[activeBindings]]; an unconsumed `Ctrl+P` opens the
+  * command palette (when bindings exist) and `Ctrl+C` quits.
   *
   * App services: [[pushScreen]]/[[popScreen]]/[[replaceScreen]]/[[resetScreens]] for modal or full-screen navigation
   * (layers below a modal leave the tab order), with [[currentScreen]]/[[screenDepth]] as reactive reads of where
@@ -200,6 +201,40 @@ trait TuiApp:
     * `statusBar(bindings)` hints, [[helpOverlay]], and the command palette.
     */
   def bindings: KeyBindings = KeyBindings.empty
+
+  /** The keys that will actually fire right now: the top screen's `Screen.bindings` followed by the app's own
+    * [[bindings]] — as a reactive read, so a `view` that shows them recomputes when a screen is pushed or popped.
+    *
+    * This is what a `view` should hand to the chrome — `statusBar(activeBindings)`, `helpOverlay(activeBindings)` —
+    * rather than [[bindings]]. Passing the app's own list advertises keys the screen on top may have shadowed and omits
+    * the ones that screen added, so the hints disagree with what pressing them does.
+    *
+    * The screen comes first because `KeyBindings.handle` runs the first binding that matches: a screen key wins over an
+    * app key that answers to the same spec, and the app's other keys are still there. When nothing is pushed, this is
+    * exactly [[bindings]].
+    */
+  protected final def activeBindings(using scope: ReactiveScope): KeyBindings =
+    merged(screenStack.get(using scope).headOption)
+
+  /** [[activeBindings]] read without subscribing: the spelling for the event path, which must not add a dependency to
+    * whatever view happens to be recomputing. Dispatch, the `Ctrl+P` gate and the command palette all read this one
+    * accessor, so they cannot disagree about which keys exist.
+    */
+  private def activeBindingsNow: KeyBindings = merged(screenStack.peek.headOption)
+
+  /** The screen's bindings followed by the app's, minus any app binding the screen has completely taken over.
+    *
+    * Dropping the shadowed ones matters because this one list feeds three different consumers. `KeyBindings.handle`
+    * runs the first binding that matches, so an app binding every one of whose triggers the screen also declares can
+    * never fire while that screen is up. Left in the list it would still be drawn as a status-bar hint and offered as a
+    * command-palette row — advertising a key that does nothing, or worse, does the screen's thing instead. An app
+    * binding that answers to two keys of which the screen claims only one survives, because its other key still works.
+    */
+  private def merged(top: Option[Screen]): KeyBindings =
+    top.fold(bindings) { screen =>
+      val claimed = screen.bindings.bindings.flatMap(_.triggers).toSet
+      screen.bindings ++ KeyBindings(bindings.bindings.filterNot(_.triggers.forall(claimed.contains))*)
+    }
 
   /** An intro screen shown before the first `view` render — see [[SplashScreen]]. Any key skips it. */
   def splash: Option[SplashScreen] = None
@@ -744,10 +779,12 @@ trait TuiApp:
       true
     else routeKey(key, run, handle)
 
-  /** Focused element first, then its ancestors, then the app bindings, then the framework's own keys. */
+  /** Focused element first, then its ancestors, then the top screen's bindings merged over the app's, then the
+    * framework's own keys.
+    */
   private def routeKey(key: KeyEvent, run: RunState, handle: RunnerHandle): Boolean =
     val consumed = run.lastTree.exists(EventRouter.dispatchKey(_, key))
-    val bound    = !consumed && !palette.isOpenNow && bindings.handle(key)
+    val bound    = !consumed && !palette.isOpenNow && activeBindingsNow.handle(key)
     if consumed || bound then true else handleFrameworkKey(key, run.tracker, handle)
 
   /** The last stage: the keys the framework reserves for itself once nothing else claimed the event — `Tab` /
@@ -761,7 +798,7 @@ trait TuiApp:
       case KeyEvent(KeyCode.Tab, modifiers) if modifiers.hasAny(KeyModifiers.Shift)      => tracker.focusPrevious()
       case KeyEvent(KeyCode.Tab, _)                                                      => tracker.focusNext()
       case KeyEvent(KeyCode.Char('p'), modifiers)
-          if modifiers.hasAny(KeyModifiers.Ctrl) && bindings.bindings.nonEmpty && !palette.isOpenNow =>
+          if modifiers.hasAny(KeyModifiers.Ctrl) && activeBindingsNow.bindings.nonEmpty && !palette.isOpenNow =>
         openPalette()
         false
       case KeyEvent(KeyCode.Char('c'), modifiers) if modifiers.hasAny(KeyModifiers.Ctrl) =>
@@ -815,7 +852,7 @@ trait TuiApp:
   // time keeps whatever the first run left behind — a screen still on the stack, an effect still running.
   private val screenStack: Signal[List[Screen]] = Signal(Nil)
   private val toasts: ToastStack                = ToastStack()
-  private val palette: CommandPalette           = CommandPalette(() => bindings)
+  private val palette: CommandPalette           = CommandPalette(() => activeBindingsNow)
   private val effects: EffectStack              = EffectStack(() => System.nanoTime())
   private val activeHandle                      = AtomicReference[Option[RunnerHandle]](None)
 
