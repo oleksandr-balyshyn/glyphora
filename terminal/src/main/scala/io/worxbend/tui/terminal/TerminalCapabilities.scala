@@ -11,6 +11,10 @@ enum Support:
 
   /** Whether a feature in this state should be used. Everything except an explicit [[No]] is a yes — see
     * [[TerminalCapabilities]] for why silence means "carry on".
+    *
+    * It lives on the state rather than on [[TerminalCapabilities]] so that reading a field says what it means at the
+    * point of use — `probed.bracketedPaste.usable` — and so that a capability field added later carries the rule
+    * without anyone having to remember to give it one.
     */
   def usable: Boolean = this != Support.No
 
