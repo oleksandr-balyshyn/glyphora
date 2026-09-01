@@ -433,6 +433,27 @@ def tableView: Element = dataTable(deployments, tableState)
 `tableState.selected` indexes `deployments.visibleRows(tableState)`, not the original
 unsorted data. Use that method when opening the selected record.
 
+`DataTableState` also carries a `selectedColumn`, the horizontal half of a
+spreadsheet-style cursor. It is independent of `selected`: a column on its own
+highlights a whole column, a row on its own highlights a whole row, and the two
+together identify one cell. `selectNextColumn(n)` and `selectPreviousColumn(n)` walk it
+and clamp at the ends the same way row selection does, and `selectCell(row, column)`
+moves both halves at once.
+
+Nothing is drawn for a column cursor unless the widget is given a style for it, so a
+table that only selects rows behaves exactly as before:
+
+```scala
+DataTable(
+  columns, rows, widths,
+  columnHighlightStyle = Some(theme.focus),
+  cellHighlightStyle = Some(theme.focus.bold),
+)
+```
+
+The three styles are layered in that order — row, then column, then the cell where the
+two cross — which is what lets the crossing cell look like neither of them.
+
 By default the selected row is marked only by `highlightStyle`, which reverses its
 foreground and background. Two kinds of terminal do not show that: one that ignores
 reverse video, and one where the row already carries a background colour the reversal

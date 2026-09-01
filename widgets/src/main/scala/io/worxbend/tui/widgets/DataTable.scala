@@ -54,6 +54,15 @@ final class DataTableState:
   var offset: Int              = 0
   var paging: Option[Paging]   = None
 
+  /** The selected column, or `None` for no column cursor — the horizontal half of a spreadsheet-style cursor.
+    *
+    * Independent of [[selected]] on purpose. A column selection with no row selection highlights a whole column, a row
+    * selection with no column selection highlights a whole row (which is all a `DataTable` could do before), and the
+    * two together identify one cell. Nothing is drawn for it unless the widget was given a `columnHighlightStyle` or a
+    * `cellHighlightStyle`, so a table that does not want a column cursor is unaffected by its existence.
+    */
+  var selectedColumn: Option[Int] = None
+
   /** The substring rows are filtered by, or `""` for no filter. Read-only: change it through [[setFilter]], which is
     * the only place that also resets the selection and the scroll to match the new result set.
     */
@@ -121,6 +130,26 @@ final class DataTableState:
   def selectPrevious(visibleCount: Int): Unit =
     if visibleCount > 0 then selected = Selection.previous(selected, visibleCount)
 
+  /** Moves the column cursor right/left, clamping at the ends the same way row selection does — see [[Selection]] for
+    * why these clamp rather than wrap. With no column selected yet, the first move lands on the first column.
+    */
+  def selectNextColumn(columnCount: Int): Unit =
+    if columnCount > 0 then selectedColumn = Selection.next(selectedColumn, columnCount)
+
+  def selectPreviousColumn(columnCount: Int): Unit =
+    if columnCount > 0 then selectedColumn = Selection.previous(selectedColumn, columnCount)
+
+  /** Puts the cursor on one cell: row `row` of the current view, column `column`.
+    *
+    * The pair is set together because a caller placing a cell cursor — a mouse click, a "jump to this field" command —
+    * wants both halves to move at once, and setting them one at a time draws an intermediate frame with the cursor on a
+    * cell nobody asked for. Negative indices clamp to zero; an index past the end is left for [[DataTable.render]] to
+    * clamp, because only the render knows how many rows survived the filter.
+    */
+  def selectCell(row: Int, column: Int): Unit =
+    selected = Some(math.max(0, row))
+    selectedColumn = Some(math.max(0, column))
+
 object DataTableState:
   /** Everything that can change the filtered/sorted view, used as the memoization key. */
   private[widgets] final case class ViewKey(
@@ -134,6 +163,14 @@ object DataTableState:
   * The header shows a `▲`/`▼` indicator on the sorted column; the filter keeps rows where *any* cell contains the text
   * (case-insensitive); sorting compares numerically when both cells parse as numbers, else as text.
   *
+  * @param columnHighlightStyle
+  *   layered over the row's style for every body cell in the selected column, or `None` — the default — to draw no
+  *   column cursor at all. Together with `cellHighlightStyle` this is what turns a row-selecting table into a
+  *   spreadsheet-style grid cursor; a table that sets neither renders exactly as it did before they existed.
+  * @param cellHighlightStyle
+  *   layered on last, over the cell where the selected row and the selected column meet. Painting it after both means
+  *   the intersection can be told apart from the row and the column that cross there, which is the whole point of
+  *   having three styles rather than one.
   * @param highlightSymbol
   *   text drawn to the left of the selected row, in a gutter reserved for it on *every* row so the columns do not jump
   *   as the selection moves. `highlightStyle` alone marks the selection by reversing the row's colours, which two kinds
@@ -166,6 +203,8 @@ final case class DataTable(
     headerStyle: Style = Style.Default.bold,
     footerStyle: Style = Style.Default.bold,
     highlightStyle: Style = Style.Default.reverse,
+    columnHighlightStyle: Option[Style] = None,
+    cellHighlightStyle: Option[Style] = None,
     highlightSymbol: String = "",
 ) extends StatefulWidget[DataTableState]:
 
@@ -240,12 +279,16 @@ final case class DataTable(
       renderHeader(buffer, segments, state)
       val footerRows  = if footer.isDefined && area.height > 1 then 1 else 0
       val bodyHeight  = area.height - 1 - footerRows
-      if footerRows == 1 then footer.foreach(cells => renderRow(buffer, segments, cells, area.bottom - 1, footerStyle))
+      if footerRows == 1 then
+        footer.foreach(cells => renderRow(buffer, segments, cells, area.bottom - 1, _ => footerStyle))
       if bodyHeight > 0 && view.nonEmpty then
         val selected = state.selected.map(index => math.max(0, math.min(index, view.size - 1)))
         state.selected = selected
         state.offset = ScrollWindow.offsetFor(state.offset, selected, view.size, bodyHeight)
         val padding  = " ".repeat(symbolWidth)
+        // a column index past the last column would highlight nothing and hide the fact that it was set wrong
+        val cursor   = state.selectedColumn.map(index => math.max(0, math.min(index, segments.size - 1)))
+        state.selectedColumn = cursor
         view.slice(state.offset, state.offset + bodyHeight).zipWithIndex.foreach { (cells, row) =>
           val index      = state.offset + row
           val isSelected = selected.contains(index)
@@ -254,7 +297,7 @@ final case class DataTable(
           if symbolWidth > 0 then
             val prefix = if isSelected then highlightSymbol else padding
             buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, symbolWidth), rowStyle)
-          renderRow(buffer, segments, cells, y, rowStyle)
+          renderRow(buffer, segments, cells, y, cellStyle(rowStyle, isSelected, cursor, _))
         }
 
   private def renderHeader(buffer: Buffer, segments: Seq[Rect], state: DataTableState): Unit =
@@ -269,10 +312,29 @@ final case class DataTable(
       }
     }
 
-  private def renderRow(buffer: Buffer, segments: Seq[Rect], cells: Seq[String], y: Int, rowStyle: Style): Unit =
-    segments.zip(cells).foreach { (segment, cell) =>
+  /** The style one body cell is drawn in: the row's style, then the column cursor over it, then the cell cursor over
+    * both. Layering in that order is what lets the intersection of the selected row and the selected column look like
+    * neither of them.
+    */
+  private def cellStyle(rowStyle: Style, isSelectedRow: Boolean, cursor: Option[Int], column: Int): Style =
+    if !cursor.contains(column) then rowStyle
+    else
+      val withColumn = columnHighlightStyle.fold(rowStyle)(rowStyle.patch)
+      if isSelectedRow then cellHighlightStyle.fold(withColumn)(withColumn.patch) else withColumn
+
+  /** Draws one row's cells, asking `styleAt` for the style of each column so that a per-cell cursor can differ from the
+    * row it sits on. Rows with no cursor pass a function that ignores the column.
+    */
+  private def renderRow(
+      buffer: Buffer,
+      segments: Seq[Rect],
+      cells: Seq[String],
+      y: Int,
+      styleAt: Int => Style,
+  ): Unit =
+    segments.zip(cells).zipWithIndex.foreach { case ((segment, cell), column) =>
       if !segment.isEmpty then
-        val _ = LineRenderer.render(buffer, segment.x, y, Line.styled(cell, rowStyle), segment.width)
+        val _ = LineRenderer.render(buffer, segment.x, y, Line.styled(cell, styleAt(column)), segment.width)
     }
 
   /** Numeric-aware ordering, chosen once for the whole column rather than per comparison.

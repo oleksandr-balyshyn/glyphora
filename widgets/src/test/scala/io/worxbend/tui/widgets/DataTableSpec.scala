@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Constraint, Flex, Modifiers}
+import io.worxbend.tui.core.{Constraint, Flex, Modifiers, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -170,3 +170,61 @@ final class DataTableSpec extends AnyFunSuite:
   test("a one-row area drops the footer rather than overwriting the header"):
     val totals = table.copy(footer = Some(Seq("total", "123")))
     assert(trimmedLines(rendered(totals, DataTableState(), 15, 1)) == Seq("name     size"))
+
+  test("a column cursor draws nothing until the table is given a column highlight style"):
+    val state = DataTableState()
+    state.selectedColumn = Some(1)
+    val plain = rendered(table, state, 15, 4)
+    assert(!plain.get(9, 1).style.modifiers.hasAny(Modifiers.Underline))
+    assert(trimmedLines(plain) == Seq("name     size", "beta     20", "alpha    100", "gamma    3"))
+
+  test("the column highlight style paints every body cell in the selected column"):
+    val state  = DataTableState()
+    state.selectedColumn = Some(1)
+    val cursor = table.copy(columnHighlightStyle = Some(Style.Default.underline))
+    val buffer = rendered(cursor, state, 15, 4)
+    assert(buffer.get(9, 1).style.modifiers.hasAny(Modifiers.Underline))
+    assert(!buffer.get(0, 1).style.modifiers.hasAny(Modifiers.Underline)) // the unselected column is untouched
+    assert(!buffer.get(9, 0).style.modifiers.hasAny(Modifiers.Underline)) // the header keeps its own style
+
+  test("the cell highlight style is layered last, over the crossing of the selected row and column"):
+    val state  = DataTableState()
+    state.selectCell(1, 1)
+    val cursor = table.copy(
+      columnHighlightStyle = Some(Style.Default.underline),
+      cellHighlightStyle = Some(Style.Default.bold),
+    )
+    val buffer = rendered(cursor, state, 15, 4)
+    assert(buffer.get(9, 2).style.modifiers.hasAny(Modifiers.Bold))      // the crossing cell
+    assert(buffer.get(9, 1).style.modifiers.hasAny(Modifiers.Underline)) // same column, different row
+    assert(!buffer.get(9, 1).style.modifiers.hasAny(Modifiers.Bold))
+    assert(buffer.get(0, 2).style.modifiers.hasAny(Modifiers.Reverse))   // same row, different column
+    assert(!buffer.get(0, 2).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("the column cursor clamps to the last column rather than pointing past it"):
+    val state = DataTableState()
+    state.selectedColumn = Some(9)
+    val _     = rendered(table.copy(columnHighlightStyle = Some(Style.Default.underline)), state, 15, 4)
+    assert(state.selectedColumn.contains(1))
+
+  test("column navigation clamps at both ends the way row navigation does"):
+    val state = DataTableState()
+    state.selectPreviousColumn(2)
+    assert(state.selectedColumn.contains(0)) // nothing selected yet: the first move lands on the first column
+    state.selectNextColumn(2)
+    state.selectNextColumn(2)
+    assert(state.selectedColumn.contains(1)) // clamped at the last column
+    state.selectPreviousColumn(2)
+    state.selectPreviousColumn(2)
+    assert(state.selectedColumn.contains(0))
+
+  test("column navigation with no columns leaves the cursor alone"):
+    val state = DataTableState()
+    state.selectNextColumn(0)
+    assert(state.selectedColumn.isEmpty)
+
+  test("selectCell moves both halves of the cursor at once and clamps negatives"):
+    val state = DataTableState()
+    state.selectCell(-1, -3)
+    assert(state.selected.contains(0))
+    assert(state.selectedColumn.contains(0))
