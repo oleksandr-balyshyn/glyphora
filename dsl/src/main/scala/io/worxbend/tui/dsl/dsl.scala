@@ -15,6 +15,7 @@ export Element.{
   chart,
   collapsible,
   checkbox,
+  clear,
   dialog,
   dualSparkline,
   filePicker,

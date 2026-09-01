@@ -90,7 +90,29 @@ Core structural elements:
   [Overlay at an exact offset](./layout-and-style#overlay-at-an-exact-offset));
 - `menu`, `tooltip`, and `dialog` — transient interaction surfaces. A `tooltip` sizes
   itself to its text and has no anchor of its own, so it is `positioned` over a
-  `layers` base at the cell it should point at.
+  `layers` base at the cell it should point at;
+- `clear(style)` — blanks its area so a popup drawn after it starts from a clean
+  background.
+
+### Blanking the area under a popup
+
+A dropdown, toast or autocomplete list drawn over an already-composed frame shows the
+page underneath wherever the popup itself does not paint: to the right of a menu row
+narrower than the popup, or in the gap between two of them. `clear()` blanks the region
+first, and the popup then paints onto empty cells.
+
+```scala
+layers(
+  page,
+  positioned(10, 4, 24, 6)(
+    layers(clear(), menu(items, menuState)(onPick)),
+  ),
+)
+```
+
+With no argument the cells are erased to the terminal's own background. Passing a style
+that carries a background colour — `clear(theme.surface)` — paints an opaque panel
+instead. `dialog` already does this for its own box, so it needs no `clear()` of its own.
 
 While a `scrollView` is focused, Up/Down scroll a row, PageUp/PageDown ten rows, and
 Home/End jump to the top and bottom of the content. `ScrollViewState` exposes the same
@@ -1448,7 +1470,7 @@ tests. See [Architecture](./architecture) and [Testing](./testing).
 
 The internal tiers document dependency order, not quality:
 
-1. **Foundation** — block, row/column, spacer, rule, paragraph, list view, table,
+1. **Foundation** — block, row/column, spacer, rule, clear, paragraph, list view, table,
    tabs, gauge, line gauge, sparkline, scrollbar, button, checkbox, toggle, select,
    radio group, slider, text input, tree.
 2. **Visualization** — canvas, chart, bar chart, column chart, stacked bar chart,

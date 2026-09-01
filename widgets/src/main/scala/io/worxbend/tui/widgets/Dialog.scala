@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Line, Rect, Style, Text, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Line, Rect, Style, Text, Widget}
 
 /** A modal-style dialog drawn over existing content: clears a centered box, borders it, renders the message and a row
   * of buttons with one highlighted.
@@ -22,7 +22,7 @@ final case class Dialog(
   def render(area: Rect, buffer: Buffer): Unit =
     val box = area.centered(math.min(area.width, math.max(message.width + 4, 20)), message.height + 4)
     if box.width >= 4 && box.height >= 4 then
-      buffer.fill(box, Cell(" ", style))
+      Clear(style).render(box, buffer)
       Block(Seq(BlockTitle.top(Line.styled(title, style))), borderStyle = style, borderType = borderType)
         .render(box, buffer)
       val inner = box.inset(1)

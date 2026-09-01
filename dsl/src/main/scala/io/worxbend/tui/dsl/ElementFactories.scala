@@ -338,6 +338,16 @@ private[dsl] trait ElementFactories:
       case w.NoticeLevel.Warning => theme.warning
       case w.NoticeLevel.Error   => theme.error
 
+  /** Blanks its area so a popup drawn over it starts from a clean background.
+    *
+    * The overlay recipe is `layers(page, positioned(x, y, w, h)(layers(clear(), menu(items, state)(onPick))))`: without
+    * the `clear()` the page underneath stays visible wherever the popup does not paint — to the right of a short menu
+    * row, or in the gap between two of them. Pass a style with a background colour to paint an opaque panel instead of
+    * erasing to the terminal's own background. See [[w.Clear]].
+    */
+  def clear(style: Style = Style.Default): WidgetElement =
+    WidgetElement(w.Clear(style))
+
   /** A centered modal box: a title, a message, and a row of buttons with `selected` highlighted.
     *
     * A picture of a dialog, not a controller — it has no keys and no callbacks of its own. Drive `selected` from the

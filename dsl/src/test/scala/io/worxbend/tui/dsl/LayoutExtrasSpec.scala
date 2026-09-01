@@ -37,3 +37,20 @@ final class LayoutExtrasSpec extends AnyFunSuite:
   test("panel .gap inserts blank rows between children inside the border"):
     val out = render(panel(text("A").length(1), text("B").length(1)).gap(1), 3, 5)
     assert(out == Seq("┌─┐", "│A│", "│ │", "│B│", "└─┘"))
+
+  /** The popup idiom: without the `clear()` the base text shows through the overlay's own gaps. */
+  test("clear blanks the region an overlay is placed in"):
+    val base    = column(text("aaaaa").length(1), text("bbbbb").length(1), text("ccccc").length(1))
+    val overlay = positioned(1, 1, 3, 1)(layers(clear(), text("Z")))
+    assert(render(layers(base, overlay), 5, 3) == Seq("aaaaa", "bZ  b", "ccccc"))
+
+  test("clear without an overlay leaves the rest of the frame alone"):
+    val base = column(text("aaaaa").length(1), text("bbbbb").length(1))
+    assert(render(layers(base, positioned(0, 0, 2, 1)(clear())), 5, 2) == Seq("  aaa", "bbbbb"))
+
+  test("clear paints its style over every cell it blanks"):
+    val buffer = BufferAssertions.rendered(clear(Style.Default.withBg(Color.Blue)).widget, 2, 1)
+    assert((0 until 2).forall(x => buffer.get(x, 0).style == Style.Default.withBg(Color.Blue)))
+
+  test("clear builds a widget element wrapping the Clear widget"):
+    assert(clear().widget == io.worxbend.tui.widgets.Clear(Style.Default))
