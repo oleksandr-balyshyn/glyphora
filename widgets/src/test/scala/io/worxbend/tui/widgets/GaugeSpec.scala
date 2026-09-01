@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Cell, Modifiers, Rect}
+import io.worxbend.tui.core.{Cell, Modifiers, Rect, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{line, rendered, renderedInto, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -60,3 +60,46 @@ final class GaugeSpec extends AnyFunSuite:
     // begin at a negative column
     val buffer = rendered(Gauge(0.0, label = ProgressLabel.Text("far too long for this")), 4, 1)
     assert(line(buffer, 0) == "far ")
+
+  test("a preset draws the bar as glyphs instead of blank cells"):
+    val buffer = rendered(Gauge(0.5, label = ProgressLabel.Hidden, preset = Some(ProgressPreset.Ascii)), 10, 1)
+    assert(line(buffer, 0) == "#####-----")
+
+  test("a sub-cell preset paints the boundary cell with a partial block"):
+    // 0.37 of 10 cells is 3.7: three full blocks, then seven tenths of a cell, which rounds down to five eighths
+    val buffer = rendered(Gauge(0.37, label = ProgressLabel.Hidden, preset = Some(ProgressPreset.Blocks)), 10, 1)
+    assert(line(buffer, 0) == "███▋      ")
+
+  test("a sub-cell preset shows progress a whole-cell bar cannot"):
+    val cell = (ratio: Double) =>
+      line(rendered(Gauge(ratio, label = ProgressLabel.Hidden, preset = Some(ProgressPreset.Blocks)), 1, 1), 0)
+    // on a one-cell bar the rounded gauge only has "empty" and "full"; the eighths give six more steps in between
+    assert(cell(0.2) == "▏")
+    assert(cell(0.5) == "▌")
+    assert(cell(0.9) == "▉")
+    assert(cell(1.0) == "█")
+
+  test("a preset bar is drawn on every row of the area"):
+    val buffer = rendered(Gauge(1.0, label = ProgressLabel.Hidden, preset = Some(ProgressPreset.Ascii)), 4, 3)
+    assert(trimmedLines(buffer) == Seq("####", "####", "####"))
+
+  test("the filled glyphs carry the filled style and the track does not"):
+    val gauge  = Gauge(0.5, label = ProgressLabel.Hidden, filledStyle = Style.Default.bold, preset = Some(ProgressPreset.Ascii))
+    val buffer = rendered(gauge, 10, 1)
+    assert(buffer.get(4, 0).style.modifiers.hasAny(Modifiers.Bold))
+    assert(!buffer.get(5, 0).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("a preset drops Reverse from the fill style, because a reversed full block is invisible"):
+    val buffer = rendered(Gauge(1.0, label = ProgressLabel.Hidden, preset = Some(ProgressPreset.Blocks)), 4, 1)
+    assert(!buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("without a preset the bar is still blank cells rounded to whole columns"):
+    val buffer = rendered(Gauge(0.37, label = ProgressLabel.Hidden), 10, 1)
+    assert(line(buffer, 0) == "          ")
+    // 0.37 of 10 rounds to 4 filled columns
+    assert(buffer.get(3, 0).style.modifiers.hasAny(Modifiers.Reverse))
+    assert(!buffer.get(4, 0).style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("a preset bar clipped to no columns draws nothing and does not throw"):
+    val buffer = renderedInto(Gauge(0.5, preset = Some(ProgressPreset.Blocks)), Rect(0, 0, 0, 1), 4, 1)
+    assert(trimmedLines(buffer) == Seq(""))

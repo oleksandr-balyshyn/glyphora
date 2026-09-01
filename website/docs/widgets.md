@@ -1112,6 +1112,24 @@ rounding, deliberately: sub-cell presets **floor** the fill and render the remai
 the boundary glyph, so the bar never claims progress that has not happened, while
 whole-cell presets round to nearest because that is the closest a cell can get.
 
+The block gauge draws from the same vocabulary. By default `Gauge` fills whole cells
+with a reversed blank, which rounds to the nearest column — a 20-column gauge has 21
+distinguishable states. Hand it a preset and it draws that preset's glyphs instead,
+so the same bar gets the eighth-block boundary cell (161 states) or an ASCII `#`
+bar for a terminal with no Block Elements font:
+
+```scala
+import io.worxbend.tui.widgets.{Gauge, ProgressPreset}
+
+widget(Gauge(0.37, preset = Some(ProgressPreset.Blocks)))  // ███▋
+widget(Gauge(0.37, preset = Some(ProgressPreset.Ascii)))   // ####------
+```
+
+With a preset the glyph carries the colour rather than the cell background, so
+`fillRamp` tints the foreground and `Reverse` is dropped from `filledStyle` — a
+reversed full block paints the cell's background colour over the whole cell, which
+would be an invisible bar.
+
 `indeterminateBar` draws from the same vocabulary and adds `.motion(...)`:
 
 | Motion | Behaviour |

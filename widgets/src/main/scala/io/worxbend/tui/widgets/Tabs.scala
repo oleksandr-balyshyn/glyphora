@@ -41,8 +41,8 @@ final case class Tabs(
     * neighbours. A tab bar is always one row and its width never depends on how many rows it is given, so `height` is
     * ignored.
     *
-    * Answering this lets a `row(...)` size a tab bar from its own content instead of the caller hardcoding a
-    * constraint that has to be edited every time a tab is renamed.
+    * Answering this lets a `row(...)` size a tab bar from its own content instead of the caller hardcoding a constraint
+    * that has to be edited every time a tab is renamed.
     */
   override def widthAt(height: Int): Option[Int] =
     val padding  = CharWidth.of(paddingLeft) + CharWidth.of(paddingRight)
