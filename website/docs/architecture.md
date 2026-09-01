@@ -183,6 +183,18 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   cell instead. Splitting the two apart matters because `diff` used to answer a
   shape mismatch by quietly repainting, which meant a caller who really had passed
   the wrong buffer got a full repaint on every frame rather than an error.
+
+  `Buffer.diff` also takes an optional third argument, `clearEmojiTrailingCell`. A
+  cluster containing U+FE0F — the variation selector that asks for a character's
+  colourful emoji form, as in `❤️` — is two columns wide by the Unicode rules
+  glyphora measures with, so the buffer reserves the column to its right and never
+  repaints it on its own: drawing the glyph covers both halves. Terminals that draw
+  such a sequence in a single column leave whatever an earlier frame put in that
+  reserved column on screen beside the emoji. Setting the flag emits a blank into
+  it, in the emoji's own style so a background fill stays continuous. It is off by
+  default and belongs to a backend rather than to the buffer, because the opposite
+  artifact is equally real: on a terminal that does draw both columns, that blank
+  clips the glyph's right half.
 - **`HeadlessBackend`** — in-memory backend for the `Pilot` end-to-end test harness.
 
 The trait is deliberately JLine-free: a fake backend can implement it without

@@ -408,6 +408,27 @@ final class Buffer(val area: Rect):
     * running the per-cell emit machinery across it.
     */
   def diff(next: Buffer, emit: (Int, Int, Cell) => Unit): Unit =
+    diff(next, emit, clearEmojiTrailingCell = false)
+
+  /** [[diff]] with a workaround for terminals that draw an emoji presentation sequence in one column.
+    *
+    * A cluster containing U+FE0F — the variation selector that asks for a character's colourful emoji form — is two
+    * columns wide by the Unicode rules this toolkit measures with, so the buffer reserves the column to its right as
+    * filler and never emits that column: painting the glyph paints both halves. Several terminals draw such a sequence
+    * in a single column anyway, and then the second column is never repainted at all, so whatever stood there in an
+    * earlier frame stays on screen next to the emoji.
+    *
+    * With `clearEmojiTrailingCell` set, a changed cell holding such a cluster is followed by a blank emitted into its
+    * reserved column, carrying the owning cell's style so a background fill stays continuous across the pair.
+    *
+    * It is off by default, and it is a backend's decision rather than the buffer's, because the opposite artifact is
+    * just as real: on a terminal that does draw both columns, that blank lands on the right half of the glyph and clips
+    * it. Only the code that knows which terminal it is talking to can pick the lesser of the two.
+    *
+    * The extra emission costs a boolean test per changed cell — the reserved-column flag is an array read and is
+    * checked before the cluster is scanned for the selector — so a frame with no emoji in it pays nothing measurable.
+    */
+  def diff(next: Buffer, emit: (Int, Int, Cell) => Unit, clearEmojiTrailingCell: Boolean): Unit =
     require(
       area.x == next.area.x && area.y == next.area.y && area.width == next.area.width,
       s"diff expects two buffers with the same origin and width, got $area and ${next.area}; " +
@@ -434,7 +455,12 @@ final class Buffer(val area: Rect):
           val candidate = nextCells(index)
           // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
           val changed   = !sameCell(cells(index), candidate) || vacatedTrailing(nextFiller, index, start)
-          if changed && !nextFiller(index) then emit(originX + index - start, y, candidate)
+          if changed && !nextFiller(index) then
+            emit(originX + index - start, y, candidate)
+            // the reserved column exists only for a two-column cluster, so this is the pair the workaround is about
+            if clearEmojiTrailingCell && index + 1 < end && nextFiller(index + 1)
+              && CharWidth.hasEmojiPresentationSelector(candidate.symbol)
+            then emit(originX + index + 1 - start, y, Cell(" ", candidate.style))
           index += 1
       row += 1
 

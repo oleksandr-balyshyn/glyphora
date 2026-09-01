@@ -209,6 +209,16 @@ object CharWidth:
       else if isWideCodePoint(base) then 2
       else 1
 
+  /** Whether `cluster` contains U+FE0F, the variation selector that asks for a character's emoji presentation.
+    *
+    * This says nothing about how wide the cluster is — [[ofCluster]] answers that — only that the terminal was asked to
+    * draw a colourful two-column glyph where a one-column text glyph also exists. Terminals disagree about whether they
+    * honour that request, and a backend uses this to decide whether the column to the right of such a cluster is one it
+    * had better repaint rather than trust.
+    */
+  def hasEmojiPresentationSelector(cluster: String): Boolean =
+    containsCodePoint(cluster, EmojiPresentationSelector)
+
   /** The width of an emoji-capable `base` once its variation selector has had its say: VS15 forces text presentation
     * (one column), VS16 forces emoji presentation (two). With neither, the base's own width stands.
     */
