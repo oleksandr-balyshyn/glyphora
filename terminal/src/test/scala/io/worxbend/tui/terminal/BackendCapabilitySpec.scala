@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Event, Size}
+import io.worxbend.tui.core.{Buffer, Event, Rect, Size}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -39,6 +39,7 @@ final class BackendCapabilitySpec extends AnyFunSuite:
   test("a backend that overrides nothing still answers every optional operation"):
     val backend: Backend = MinimalBackend()
     assert(backend.setTitle("anything") == Right(()))
+    assert(backend.requestFullRedraw() == ())
 
   test("the headless backend records the last title it was given"):
     val backend = HeadlessBackend(Size(10, 2))
@@ -48,3 +49,14 @@ final class BackendCapabilitySpec extends AnyFunSuite:
     // the *last* one wins: an app that retitles per document must not leave the first title observable
     assert(backend.setTitle("").isRight)
     assert(backend.titleContents.contains(""))
+
+  test("the headless backend counts full-repaint requests and a plain draw raises none"):
+    val backend = HeadlessBackend(Size(10, 2))
+    assert(backend.fullRedrawCount == 0L)
+    assert(backend.draw(Buffer(Rect(0, 0, 10, 2))).isRight)
+    assert(backend.fullRedrawCount == 0L, "drawing is not itself a request to repaint everything")
+    backend.requestFullRedraw()
+    backend.requestFullRedraw()
+    // counted rather than collapsed: the headless backend keeps whole frames instead of a diff baseline, so there is
+    // nothing here to invalidate, and how often the app asked is the only honest thing it can report
+    assert(backend.fullRedrawCount == 2L)

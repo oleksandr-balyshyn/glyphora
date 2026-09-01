@@ -96,12 +96,15 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   /** Asks the next [[draw]] to repaint every cell. Safe to call from any thread.
     *
+    * Public through [[Backend.requestFullRedraw]] so an app whose screen was disturbed by something this backend did
+    * not do — a subprocess it started itself rather than through [[suspend]] — has a supported way to recover.
+    *
     * Raised whenever the screen stops showing what `lastFlushed` describes: the alternate screen was just cleared, or
     * something else owned the terminal in between (the shell, between SIGTSTP and SIGCONT). A flag rather than a reset
     * of the baseline keeps `lastFlushed` render-thread-private, so a request raised while a `draw` is in flight is
     * consumed by the *following* frame instead of being overwritten by that frame's snapshot.
     */
-  private[terminal] def requestFullRedraw(): Unit = fullRedrawRequested.raise()
+  override def requestFullRedraw(): Unit = fullRedrawRequested.raise()
 
   def enableRawMode(): Either[BackendError, Unit] =
     attempt {

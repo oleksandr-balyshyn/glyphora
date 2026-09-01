@@ -27,6 +27,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val idleReadCounter                         = AtomicLong(0)
   private val suspendCounter                          = AtomicLong(0)
   private val wakeCounter                             = AtomicLong(0)
+  private val fullRedrawCounter                       = AtomicLong(0)
   private val printedLines                            = scala.collection.mutable.ArrayBuffer.empty[String]
 
   def size: Either[BackendError, Size] = Right(terminalSize)
@@ -87,6 +88,13 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   override def wake(): Unit =
     val _ = wakeCounter.incrementAndGet()
 
+  /** Counts the request rather than acting on it: this backend keeps whole frames instead of diffing against a
+    * baseline, so there is nothing here to invalidate — but a test above `terminal` still needs to see that the app
+    * asked.
+    */
+  override def requestFullRedraw(): Unit =
+    val _ = fullRedrawCounter.incrementAndGet()
+
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     lastClipboard = Some(text)
     Right(())
@@ -146,6 +154,9 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** How many times [[wake]] was called — i.e. how often background work asked the render thread to look again. */
   def wakeCount: Long = wakeCounter.get()
+
+  /** How many times a full repaint was requested via [[requestFullRedraw]]. */
+  def fullRedrawCount: Long = fullRedrawCounter.get()
 
   /** The lines emitted above the app via [[printAbove]], in order. */
   def printedAbove: Seq[String] = printedLines.synchronized(printedLines.toSeq)

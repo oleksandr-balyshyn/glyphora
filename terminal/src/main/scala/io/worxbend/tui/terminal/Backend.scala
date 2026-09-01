@@ -94,6 +94,21 @@ trait Backend:
     val _ = lines
     Right(())
 
+  /** Discards what this backend believes is currently on screen, so the next [[draw]] writes every cell again.
+    *
+    * `draw` is diff-based: it emits only the cells that differ from the frame it last flushed. That is correct for
+    * exactly as long as nothing but this backend writes to the terminal. When something else does — a subprocess
+    * started outside [[suspend]], a library that printed to the real stdout, a terminal that dropped its screen on its
+    * own — the picture on screen and the backend's baseline disagree, and every cell the app would have redrawn to the
+    * value it already holds stays unwritten. The corruption then survives until the app happens to change that exact
+    * cell. Calling this says "assume nothing on screen survived", and the next frame repaints in full.
+    *
+    * Safe to call from any thread, and idempotent: two calls before the next frame are one repaint, not two. It does
+    * not itself schedule a frame — a caller that is not already drawing every tick must ask for one. The default is a
+    * no-op for backends that keep no such baseline.
+    */
+  def requestFullRedraw(): Unit = ()
+
   /** Restores the terminal and releases everything this backend owns.
     *
     * Fallible like every other operation here, because the failure it can report is the most user-visible one the
