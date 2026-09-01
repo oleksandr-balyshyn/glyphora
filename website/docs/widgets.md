@@ -478,6 +478,25 @@ def browser: Element =
   panel("Files")(directoryTree(files)).rounded
 ```
 
+### Tab bars
+
+`tabs(titles, selected)` draws a one-row bar of titles with the chosen one
+highlighted. The underlying `Tabs` widget lets you decide where the blank columns
+between titles come from, and that choice is visible: padding belongs to the tab, so
+`highlightStyle` covers it, while a divider sits *between* tabs and is never
+highlighted. The default `divider` (`" │ "`) carries its own blanks, which means the
+first and last titles sit flush against the edges of the bar. `Tabs.padded(titles)`
+is the other arrangement — a bare `"│"` divider plus one blank column of
+`paddingLeft` and `paddingRight` inside every tab — so a reversed highlight paints a
+solid block a column wider than the title on each side:
+
+```scala
+import io.worxbend.tui.core.Line
+import io.worxbend.tui.widgets.Tabs
+
+widget(Tabs.padded(Seq("Overview", "Detail").map(Line.raw), selected = 1))
+```
+
 ## Tables: simple and interactive
 
 Use `table` for static rows:
