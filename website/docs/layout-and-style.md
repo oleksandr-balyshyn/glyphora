@@ -455,6 +455,34 @@ lightness, so generated palettes cannot produce an out-of-range color. `Color.to
 is the inverse, and it answers for named and 256-color values too by going through their
 RGB approximation.
 
+## Reach for a ready-made palette
+
+The sixteen named colors (`Color.Red`, `Color.BrightBlue`, …) are whatever the user's
+terminal theme says they are. That is usually the right choice for chrome, because it
+follows the user's taste — but it means you cannot know what a chart series will
+actually look like, or whether the label on it will be readable. The alternative used to
+be picking hex literals by hand, which is design work.
+
+`tui-core` ships the Tailwind CSS default palette for exactly that gap: 22 hue ramps of
+eleven shades each, as fixed 24-bit colors that no terminal theme can change.
+
+```scala
+import io.worxbend.tui.core.palette.Tailwind
+
+val ok    = Tailwind.Emerald.c500
+val warn  = Tailwind.Amber.c500
+val panel = Tailwind.Slate.c800
+```
+
+The step numbers — `c50`, `c100`, `c200` … `c900`, `c950`, lightest to darkest — mean
+the same visual weight in every ramp, so swapping `Blue.c500` for `Amber.c500` keeps a
+design balanced. `shades.all` gives the eleven in order when the step is computed rather
+than written down, `shades.shade(500)` looks one up by its number (returning `None` for
+a step that is not in the ramp, rather than guessing a neighbour), and
+`Tailwind.ramp("emerald")` finds a ramp by its published lower-case name.
+`Tailwind.Black` and `Tailwind.White` are true black and white, again independent of the
+terminal theme.
+
 ## Build with themes, not scattered colors
 
 For application chrome and reusable components, take the `Theme` as a context
