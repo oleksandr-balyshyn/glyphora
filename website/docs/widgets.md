@@ -1132,6 +1132,29 @@ chart(
 )
 ```
 
+A `Dataset` can also pick its own drawing surface. `resolution` and `marker` on a dataset
+override the chart-wide pair for that one series, so a braille line and a cell-resolution
+scatter can share one plot — a difference that survives a monochrome terminal, which colour
+alone does not:
+
+```scala
+chart(
+  Seq(
+    Dataset("signal", signal, resolution = Some(CanvasResolution.Braille)),
+    Dataset("samples", samples, graphType = GraphType.Scatter, marker = Some("*")),
+  ),
+  xBounds = (0.0, 80.0),
+  yBounds = (0.0, 100.0),
+)
+```
+
+Series that end up on the same surface are drawn together in one pass; series on different
+surfaces are drawn in separate passes, in the order those surfaces first appear in the
+sequence, so where two of them claim the same cell the later one wins. That order is fixed
+rather than left to a hash, because two runs of the same chart disagreeing about which
+series is on top would be a frame no test could pin down. A chart whose datasets override
+nothing is still exactly one pass, drawing exactly what it always drew.
+
 The key is painted over the plot, so it costs the data no space — but only while it
 stays small. The widget-level `Chart` carries `hiddenLegendConstraints`, a pair of
 `Constraint`s for `(width, height)`, and the key is dropped entirely unless it satisfies

@@ -23,6 +23,13 @@ enum GraphType:
   * zero, which is what a count or a rate is measured against; set it when the meaningful floor is elsewhere — a
   * temperature series against 20.0, say — so the filled region shows the departure from that level rather than from an
   * origin the reader does not care about. The other graph types ignore it.
+  *
+  * `resolution` and `marker` override the chart-wide pair for this one series; `None`, the default, means "whatever the
+  * chart says". That is how a braille line and a cell-resolution scatter share one plot, a difference colour alone
+  * cannot make on a monochrome terminal. Series that end up with the same pair are drawn together in one pass; series
+  * with different pairs are drawn in separate passes, in the order those pairs first appear in `datasets`, so where two
+  * groups claim the same cell the later one wins. That order is fixed rather than left to a hash, because two runs of
+  * the same chart disagreeing about which series is on top would be a frame nobody could pin down.
   */
 final case class Dataset(
     name: String,
@@ -30,6 +37,10 @@ final case class Dataset(
     style: Style = Style.Default,
     graphType: GraphType = GraphType.Line,
     fillToY: Double = 0.0,
+    // Appended rather than placed in their conventional slots: inserting a parameter mid-list would silently change
+    // what every positional caller written against an earlier release means.
+    resolution: Option[CanvasResolution] = None,
+    marker: Option[String] = None,
 )
 
 /** An x/y chart with drawn axes; the plot region is a [[Canvas]] over the datasets' shapes.
@@ -95,24 +106,49 @@ final case class Chart(
       val axisRow  = area.bottom - 1 - xTitle.size - labelRows
       drawAxes(axisX, plotTop, axisRow, area.right, buffer)
       val plotArea = Rect(axisX + 1, plotTop, area.width - gutter - 1, axisRow - plotTop)
-      val shapes   = datasets.map { dataset =>
-        dataset.graphType match
-          case GraphType.Line    => Shape.Polyline(dataset.points, dataset.style)
-          case GraphType.Scatter => Shape.Points(dataset.points, dataset.style)
-          case GraphType.Bar     => Shape.Bars(dataset.points, dataset.fillToY, dataset.style)
-          // a span needs two ends, so a one-point series has nothing to fill; it still deserves its single bar,
-          // which is what the reader sees on the first tick of a live series
-          case GraphType.Area if dataset.points.sizeIs == 1 =>
-            Shape.Bars(dataset.points, dataset.fillToY, dataset.style)
-          case GraphType.Area => Shape.FilledPolyline(dataset.points, dataset.fillToY, dataset.style)
+      // One canvas pass per distinct (resolution, marker) pair, in the order those pairs first appear, so a chart
+      // whose datasets override nothing is still exactly one pass drawing exactly the frame it always drew.
+      groupedBySurface.foreach { case ((groupResolution, groupMarker), group) =>
+        Canvas(xBounds, yBounds, group.map(shapeOf), groupMarker, groupResolution).render(plotArea, buffer)
       }
-      Canvas(xBounds, yBounds, shapes, marker, resolution).render(plotArea, buffer)
       if gutter > 0 then
         drawLabel(buffer, area.x, gutter, plotTop, labels.head)
         drawLabel(buffer, area.x, gutter, axisRow - 1, labels.last)
       if showLegend then drawLegend(plotArea, buffer)
       if labelRows > 0 then drawXLabels(buffer, axisX + 1, area.right, axisRow + 1)
       drawTitles(buffer, area, axisX)
+
+  /** The drawing surface `dataset` ends up on: its own overrides where it has them, the chart's pair where it does not.
+    */
+  private def surfaceOf(dataset: Dataset): (CanvasResolution, String) =
+    (dataset.resolution.getOrElse(resolution), dataset.marker.getOrElse(marker))
+
+  /** The shape that draws `dataset` the way its `graphType` asks. */
+  private def shapeOf(dataset: Dataset): Shape =
+    dataset.graphType match
+      case GraphType.Line                               => Shape.Polyline(dataset.points, dataset.style)
+      case GraphType.Scatter                            => Shape.Points(dataset.points, dataset.style)
+      case GraphType.Bar                                => Shape.Bars(dataset.points, dataset.fillToY, dataset.style)
+      // a span needs two ends, so a one-point series has nothing to fill; it still deserves its single bar,
+      // which is what the reader sees on the first tick of a live series
+      case GraphType.Area if dataset.points.sizeIs == 1 =>
+        Shape.Bars(dataset.points, dataset.fillToY, dataset.style)
+      case GraphType.Area => Shape.FilledPolyline(dataset.points, dataset.fillToY, dataset.style)
+
+  /** The datasets bundled by the surface they draw on, in the order those surfaces first appear in `datasets`.
+    *
+    * A `groupBy` would be shorter and wrong: its result is a `Map`, whose iteration order is a hash order, and the
+    * order decides which series overdraws which where two of them claim the same cell. A frame that changes between
+    * runs of the same program would make every golden-frame test of a multi-surface chart flaky. Charts carry a handful
+    * of datasets, so the linear scan this fold costs is not worth avoiding.
+    */
+  private def groupedBySurface: Seq[((CanvasResolution, String), Seq[Dataset])] =
+    datasets.foldLeft(Vector.empty[((CanvasResolution, String), Vector[Dataset])]) { (groups, dataset) =>
+      val surface = surfaceOf(dataset)
+      groups.indexWhere((key, _) => key == surface) match
+        case -1    => groups :+ (surface, Vector(dataset))
+        case index => groups.updated(index, (surface, groups(index)._2 :+ dataset))
+    }
 
   /** Writes the x labels along the row under the horizontal axis, spread across the plot's columns.
     *
