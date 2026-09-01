@@ -663,6 +663,47 @@ to repeat the width constraints and drifted the moment they changed. Like the he
 costs one row of the area; `DataTable` takes the same `footer` and `footerStyle`, and
 gives up one row of its scrollable body for it.
 
+A cell that says where it wants to sit gets its way. A `Line` carries its own optional
+alignment — `Line.raw("42").rightAligned`, and likewise `.centered` and `.leftAligned` —
+and a `Table` places that cell inside its own column accordingly instead of writing it
+flush against the column's left edge. That is how a column of numbers lines up on its
+last digit:
+
+```scala
+Table(
+  rows = amounts.map(amount => Seq(Line.raw(amount.name), Line.raw(amount.total).rightAligned)),
+  widths = Seq(Constraint.Fill(1), Constraint.Length(9)),
+  header = Some(Seq(Line.raw("Service"), Line.raw("Total").rightAligned)),
+)
+```
+
+A cell that says nothing about alignment is left-aligned, which is what every cell did
+before. The placement is per cell rather than per column so a header caption can be
+centred over figures that are right-aligned. Content wider than its column is still
+clipped from the right whatever the alignment says, and the arithmetic is in terminal
+columns, so a CJK or emoji cell lines up on the width it actually occupies rather than
+on its character count.
+
+`DataTable` cells are plain `String`s — they have to be, because the widget sorts and
+filters on the text — so there is no `Line` to carry a placement and the widget takes an
+`alignments` sequence instead, one entry per column by position:
+
+```scala
+DataTable(
+  columns = Seq("Service", "Replicas"),
+  rows = rows,
+  widths = Seq(Constraint.Fill(1), Constraint.Length(8)),
+  alignments = Seq(Alignment.Left, Alignment.Right),
+)
+```
+
+It places the header caption, the body cells and the footer of that column alike, so a
+right-aligned column's title — sort indicator included — stays over its figures. The
+sequence may be shorter than the column list, or left empty, and every column it does
+not reach stays left-aligned; entries past the last column are ignored. A short sequence
+is allowed on purpose, because a table gains a column far more often than it changes an
+alignment.
+
 A `table` is a flex container, like `row` and `column`: `.gap(n)` sets the blank
 columns between neighbouring cells, and `.center` / `.flexEnd` / `.spaceBetween` place
 the block of columns inside the area when fixed widths leave space over. Without one of

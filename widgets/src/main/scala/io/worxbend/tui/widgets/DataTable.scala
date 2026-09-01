@@ -211,6 +211,20 @@ object DataTableState:
   * @param flex
   *   where the columns sit when they do not fill the area — see [[Table]] for the full explanation. The reserved
   *   `highlightSymbol` gutter is taken off the left first, so the flex distributes only what is left over after it.
+  * @param alignments
+  *   where each column's text sits inside its own column, by position: `alignments(0)` places column 0, `alignments(1)`
+  *   column 1, and so on. This is how a numeric column lines up on its last digit instead of on its first. It applies
+  *   to the header caption, the body cells and the footer alike, so a right-aligned column's title stays over its
+  *   figures.
+  *
+  * The sequence may be shorter than the column list, or empty — the default — and every column it does not reach is
+  * left-aligned, which is what every column did before this parameter existed. A short sequence is allowed on purpose:
+  * a table gains a column far more often than it changes an alignment, and a length check that threw from inside the
+  * render loop would be the worst way to find that out. Entries past the last column are ignored.
+  *
+  * A [[Table]] takes no such parameter because its cells are [[io.worxbend.tui.core.Line]]s, which carry their own
+  * alignment (`Line.raw("42").rightAligned`). A `DataTable` cell is a bare `String` — it has to be, because the widget
+  * sorts and filters on the text — so the placement has nowhere to live except here.
   */
 final case class DataTable(
     columns: Seq[String],
@@ -219,6 +233,7 @@ final case class DataTable(
     footer: Option[Seq[String]] = None,
     columnSpacing: Int = 1,
     flex: Flex = Flex.Start,
+    alignments: Seq[Alignment] = Seq.empty,
     style: Style = Style.Default,
     headerStyle: Style = Style.Default.bold,
     footerStyle: Style = Style.Default.bold,
@@ -328,7 +343,10 @@ final case class DataTable(
           case Some(ColumnSort(`index`, SortDirection.Descending)) => " ▼"
           case _                                                   => ""
         val line      = Line(Seq(Span(title + indicator, headerStyle)))
-        val _         = LineRenderer.render(buffer, segment.x, segment.y, line, segment.width)
+        // the sort indicator is part of the caption before it is placed, so a right-aligned column's arrow sits at the
+        // column's right edge rather than floating away from the title it belongs to
+        val _         =
+          LineRenderer.render(buffer, segment.x, segment.y, line, segment.width, Style.Default, alignmentOf(index))
       }
     }
 
@@ -354,8 +372,14 @@ final case class DataTable(
   ): Unit =
     segments.zip(cells).zipWithIndex.foreach { case ((segment, cell), column) =>
       if !segment.isEmpty then
-        val _ = LineRenderer.render(buffer, segment.x, y, Line.styled(cell, styleAt(column)), segment.width)
+        val line = Line.styled(cell, styleAt(column))
+        val _    = LineRenderer.render(buffer, segment.x, y, line, segment.width, Style.Default, alignmentOf(column))
     }
+
+  /** Where column `column`'s text sits, defaulting to the left edge for every column `alignments` does not reach —
+    * including every column when it is empty, which is the default.
+    */
+  private def alignmentOf(column: Int): Alignment = alignments.lift(column).getOrElse(Alignment.Left)
 
   /** Numeric-aware ordering, chosen once for the whole column rather than per comparison.
     *

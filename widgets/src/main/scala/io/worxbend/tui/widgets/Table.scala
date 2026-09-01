@@ -7,6 +7,12 @@ import io.worxbend.tui.core.{Buffer, Constraint, Direction, Flex, Layout, Line, 
   * Cells are never wrapped, and rows past the area's bottom edge are clipped, matching the library-wide silent-clipping
   * philosophy.
   *
+  * A cell carrying an alignment of its own — `Line.raw("42").rightAligned`, and likewise `centered` — is placed that
+  * way inside its own column instead of being written flush against the column's left edge. That is how a column of
+  * numbers lines up on its last digit. A cell that says nothing about alignment is left-aligned, which is what every
+  * cell did before. The placement is per cell rather than per column because a `Line` already had somewhere to record
+  * it, and a header caption often wants a different placement from the figures underneath it.
+  *
   * @param rows
   *   each row is either a bare sequence of cells — one terminal line tall — or a [[TableRow]], which adds a height, top
   *   and bottom margins, and a per-row style. A cell in either shape is a [[Line]] covering one column, or a
@@ -91,7 +97,10 @@ final case class Table(
         val span = math.max(1, math.min(cell.columnSpan, columns.size - column))
         val area = TableCell.merge(columns, column, span)
         if !area.isEmpty then
-          val _ = LineRenderer.render(buffer, area.x, y, cell.content, area.width, rowStyle)
+          // a cell that says where it wants to sit gets its way; a cell that says nothing sits on the left, which is
+          // where every cell sat before a `Line` could carry an alignment
+          val placement = cell.content.alignment.getOrElse(Alignment.Left)
+          val _         = LineRenderer.render(buffer, area.x, y, cell.content, area.width, rowStyle, placement)
         column += span
     }
 

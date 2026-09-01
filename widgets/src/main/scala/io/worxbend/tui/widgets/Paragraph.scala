@@ -48,7 +48,10 @@ final case class Paragraph(
           case Alignment.Left   => 0
           case Alignment.Center => tooWideBy / 2
           case Alignment.Right  => tooWideBy
-        val _         = LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, style, skipWidth)
+        // the paragraph has already placed the line itself, by choosing `startX`, so the renderer is told to draw from
+        // there and not to align a second time
+        val _         =
+          LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, style, skipWidth = skipWidth)
       }
 
   /** The rows this text occupies at `width` — the measurement counterpart of [[render]], and always an answer: a
