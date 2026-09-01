@@ -28,6 +28,24 @@ trait Backend:
   def hideCursor(): Either[BackendError, Unit]
   def showCursor(): Either[BackendError, Unit]
 
+  /** The window in character cells *and*, when the terminal will say, in device pixels.
+    *
+    * What it is for: anything that has to know the *shape* of a cell rather than how many there are. A picture drawn
+    * with half-block glyphs assumes a cell is twice as tall as it is wide, and on a terminal where that is not true the
+    * picture comes out stretched; `windowSize().map(_.cellAspectRatio)` is how an application finds out instead of
+    * assuming.
+    *
+    * The default answers cells only, with `pixels` empty. That is deliberately not a fabricated geometry: a backend
+    * that cannot ask its terminal has to say "unknown" so the caller falls back to its own assumption rather than
+    * trusting a number nobody measured. Every backend written before this method existed keeps compiling and keeps
+    * behaving exactly as it did.
+    *
+    * A backend that does ask pays for a round trip on the input stream, with all the constraints
+    * [[queryCursorPosition]] documents — render thread only, and a terminal that does not implement the query simply
+    * never answers. Callers that draw every frame should ask once and hold the answer, refreshing it on a resize.
+    */
+  def windowSize: Either[BackendError, WindowSize] = size.map(cells => WindowSize(cells, None))
+
   /** Starts mouse capture in `mode`, which decides whether pointer motion with no button held is reported at all.
     *
     * The no-argument [[enableMouseCapture]] is `MouseCaptureMode.Buttons`. Overriding this one is what lets an app ask

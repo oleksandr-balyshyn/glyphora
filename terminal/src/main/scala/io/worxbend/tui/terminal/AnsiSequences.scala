@@ -201,6 +201,18 @@ private[terminal] object AnsiSequences:
     */
   val RequestCursorPosition: String = s"$Esc[6n"
 
+  /** XTWINOPS 14 — asks the terminal how large its text area is *in pixels* (`CSI 14 t`).
+    *
+    * The terminal answers on the input stream as `CSI 4 ; height ; width t`, in that order: height first, which is the
+    * opposite of the column-then-row order [[io.worxbend.tui.core.Size]] uses, so the two are swapped once in
+    * [[InputDecoder]] and nowhere else.
+    *
+    * Unlike a cursor-position report, this reply is unambiguous — no key is encoded with a `t` final byte — so the
+    * decoder can recognise it whether or not a query is outstanding. A terminal that does not implement it never
+    * answers at all, which is the common case, so every caller needs a timeout.
+    */
+  val RequestTextAreaPixels: String = s"$Esc[14t"
+
   /** Moves the cursor to an absolute zero-based position (ANSI rows/columns are one-based). */
   def moveTo(x: Int, y: Int): String =
     s"$Esc[${y + 1};${x + 1}H"

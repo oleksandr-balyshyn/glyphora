@@ -16,6 +16,8 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   private val events                                           = LinkedBlockingQueue[Event]()
   @volatile private var terminalSize                           = initialSize
+  // no device to ask, so nothing is known about pixels until a test says otherwise — see `pixelsTo`
+  @volatile private var pixelSize: Option[Size]                = None
   @volatile private var lastFrame: Option[Buffer]              = None
   @volatile private var rawMode                                = false
   @volatile private var alternateScreen                        = false
@@ -45,6 +47,11 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     scala.collection.mutable.ArrayBuffer.empty[(RowRange, Int, ScrollDirection)]
 
   def size: Either[BackendError, Size] = Right(terminalSize)
+
+  /** The cell size, plus whatever [[pixelsTo]] was last told. `pixels` is empty until a test sets one, which is what a
+    * real terminal that does not answer `CSI 14 t` also reports.
+    */
+  override def windowSize: Either[BackendError, WindowSize] = Right(WindowSize(terminalSize, pixelSize))
 
   def draw(buffer: Buffer): Either[BackendError, Unit] =
     lastFrame = Some(buffer.snapshot)
@@ -282,6 +289,14 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
         // there is any left; the decoder may also be holding a pushed-back character, which is why a decoded event
         // does not end the loop either
         case None        => draining = remaining.hasNext
+
+  /** Sets the pixel size [[windowSize]] reports, or clears it with `None`.
+    *
+    * The seam that makes the pixel half of [[WindowSize]] testable at all: no headless backend has a device to ask, so
+    * a test states the answer a terminal would have given. Posts no event — pixel geometry is not a resize, and a test
+    * that wants both calls [[resizeTo]] as well.
+    */
+  def pixelsTo(pixels: Option[Size]): Unit = pixelSize = pixels
 
   /** Changes the reported terminal size and posts the matching resize event. */
   def resizeTo(size: Size): Unit =

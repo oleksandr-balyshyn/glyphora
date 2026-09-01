@@ -259,6 +259,23 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   which row the prompt left the cursor on, or it paints over the user's scrollback. It
   too defaults to a failure rather than a guess, because a guessed origin is precisely
   the wrong answer.
+  `windowSize` reports the window in character cells *and*, when the terminal will
+  say, in device pixels. It answers a `WindowSize(cells, pixels)`, where `pixels` is an
+  `Option[Size]` that is empty on the many terminals — most of the Windows ones
+  included — that do not implement the query. What it is for is the *shape* of a cell
+  rather than the number of them: a picture drawn with half-block glyphs assumes a cell
+  is twice as tall as it is wide, and `windowSize.map(_.cellAspectRatio)` is how an
+  application finds out instead of assuming. `cellPixels` and `cellAspectRatio` both
+  report `None` for a window that reported no pixels, a zero-sized window, or a
+  zero-sized cell grid; none of the three is distinguished, because a caller can do
+  nothing different about any of them, and all three mean "assume a cell shape rather
+  than measuring one". The trait's default answers cells with no pixels, which is
+  deliberately not a fabricated geometry. `JLine3Backend` writes `ESC[14t` and reads
+  the `CSI 4 ; height ; width t` reply, under exactly the constraints
+  `queryCursorPosition` documents — render thread only, keys typed during the round
+  trip queued rather than dropped — and caches the answer, re-asking only after a
+  resize. `HeadlessBackend.pixelsTo(...)` is the seam that makes any of this testable
+  without a terminal.
   All the others are defaulted no-ops on the trait, so a backend written before they
   existed still compiles.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`

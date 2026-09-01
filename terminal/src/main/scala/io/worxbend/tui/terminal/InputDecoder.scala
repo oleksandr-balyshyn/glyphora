@@ -1,6 +1,16 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
+import io.worxbend.tui.core.{
+  Event,
+  KeyCode,
+  KeyEvent,
+  KeyModifiers,
+  MouseButton,
+  MouseEvent,
+  MouseEventKind,
+  Position,
+  Size,
+}
 
 /** Decodes terminal input bytes into [[Event]]s: printable keys, control keys, ANSI CSI/SS3 escape sequences for
   * navigation and function keys, kitty-protocol keys, bracketed paste, and both SGR and legacy X10 mouse reports.
@@ -49,6 +59,13 @@ private[terminal] final class InputDecoder(
   /** Where the report that [[readCursorReport]] is waiting for said the cursor was, once one arrives. */
   private var reportedCursor: Option[Position] = None
 
+  /** How large the terminal said its text area was in pixels, once a `CSI 4 ; h ; w t` reply arrives.
+    *
+    * No companion flag, unlike [[awaitingCursorReport]]: a `t` final byte encodes no key, so this reply is unambiguous
+    * whether or not a query is outstanding and can be recognised at any moment.
+    */
+  private var reportedTextArea: Option[Size] = None
+
   /** Decodes the next event, blocking up to `timeoutMillis` for the first character.
     *
     * `None` means "no event": either the timeout elapsed or the bytes read were a sequence with no glyphora meaning.
@@ -82,23 +99,42 @@ private[terminal] final class InputDecoder(
   private[terminal] def readCursorReport(timeoutMillis: Long): Option[Position] =
     awaitingCursorReport = true
     reportedCursor = None
-    // An infinite timeout arrives here as `Long.MaxValue` milliseconds, and `Long.MaxValue * 1_000_000` does not fit
-    // in a `Long`: it wraps round to a small negative number. The deadline was then a moment about a millisecond in
-    // the *past*, the loop below never ran a single time, and the query answered "the terminal cannot report its
-    // cursor position" without ever having waited for the answer. So a wait too large to express in nanoseconds is
-    // treated as what it means — wait until the reply arrives — rather than converted into a negative one.
+    try awaitReply(timeoutMillis, () => reportedCursor)
+    finally awaitingCursorReport = false
+
+  /** Reads the terminal's reply to [[AnsiSequences.RequestTextAreaPixels]], giving up after `timeoutMillis`.
+    *
+    * Called only by [[JLine3Backend.windowSize]], immediately after it has written `ESC[14t`. Everything
+    * [[readCursorReport]] says about ordering applies unchanged: it must run on the render thread, a key typed while
+    * the reply is in flight is queued rather than dropped, and `None` means the terminal did not answer — which is the
+    * ordinary outcome on the many terminals that do not implement the report.
+    */
+  private[terminal] def readTextAreaSize(timeoutMillis: Long): Option[Size] =
+    reportedTextArea = None
+    awaitReply(timeoutMillis, () => reportedTextArea)
+
+  /** Pumps the decoder until `arrived` answers or `timeoutMillis` runs out, queueing every real event it meets.
+    *
+    * Shared by the two reply round trips so there is one loop, and therefore one place where the ordering guarantee
+    * they both make — nothing the user typed is lost, it is only deferred — is actually implemented.
+    *
+    * An infinite timeout arrives here as `Long.MaxValue` milliseconds, and `Long.MaxValue * 1_000_000` does not fit in
+    * a `Long`: it wraps round to a small negative number. The deadline was then a moment about a millisecond in the
+    * *past*, the loop below never ran a single time, and the query answered "the terminal cannot say" without ever
+    * having waited for the answer. So a wait too large to express in nanoseconds is treated as what it means — wait
+    * until the reply arrives — rather than converted into a negative one.
+    */
+  private def awaitReply[A](timeoutMillis: Long, arrived: () => Option[A]): Option[A] =
     val unbounded = timeoutMillis >= InputDecoder.MaxWaitMillis
     val deadline  = if unbounded then Long.MaxValue else System.nanoTime() + timeoutMillis * NanosPerMilli
-    try
-      while reportedCursor.isEmpty && (unbounded || System.nanoTime() < deadline) do
-        // an unbounded wait still reads in bounded steps, so the loop keeps its shape and each read has a sane
-        // timeout to hand the terminal
-        val remaining =
-          if unbounded then InputDecoder.UnboundedPollMillis
-          else math.max(1L, (deadline - System.nanoTime()) / NanosPerMilli)
-        decodeOnce(remaining).foreach(event => deferred.enqueue(event))
-      reportedCursor
-    finally awaitingCursorReport = false
+    while arrived().isEmpty && (unbounded || System.nanoTime() < deadline) do
+      // an unbounded wait still reads in bounded steps, so the loop keeps its shape and each read has a sane timeout
+      // to hand the terminal
+      val remaining =
+        if unbounded then InputDecoder.UnboundedPollMillis
+        else math.max(1L, (deadline - System.nanoTime()) / NanosPerMilli)
+      decodeOnce(remaining).foreach(event => deferred.enqueue(event))
+    arrived()
 
   private def decodeFirst(first: Int): Option[Event] =
     if first == 0x1b then decodeEscape() else decodeControl(first, KeyModifiers.None)
@@ -266,6 +302,9 @@ private[terminal] final class InputDecoder(
     // *column*, and the modifier extraction below rejects any second parameter above 16 — so a report from anywhere
     // right of column 16 would never have reached a case at all.
     else if awaitingCursorReport && finalByte == 'R' then captureCursorReport(parameterNumbers(params))
+    // XTWINOPS answers `CSI 4 ; height ; width t`. Caught here, before the key path, because `t` is not a key on any
+    // terminal and a reply must never be dispatched into whatever has focus.
+    else if finalByte == 't' then captureTextAreaReport(parameterNumbers(params))
     else
       val numbers = parameterNumbers(params)
       numbers.drop(1).headOption match
@@ -326,6 +365,22 @@ private[terminal] final class InputDecoder(
         reportedCursor = Some(Position(column - 1, row - 1))
         None
       case _                                           => None
+
+  /** Records the terminal's text-area size in pixels and reports no event for it.
+    *
+    * Deliberately not an [[Event]], for the reason [[captureCursorReport]] gives: a reply to something this library
+    * asked is not something the user did, and a case for it in the event ADT would put a branch no application ever
+    * writes into every exhaustive `match` over `Event`.
+    *
+    * The wire order is `4 ; height ; width`, height first; [[Size]] is width first. The swap happens here, once. A
+    * reply with a different leading parameter is some other XTWINOPS answer and is dropped rather than misread.
+    */
+  private def captureTextAreaReport(numbers: Seq[Int]): Option[Event] =
+    numbers match
+      case Seq(TextAreaReport, height, width) if height >= 0 && width >= 0 =>
+        reportedTextArea = Some(Size(width, height))
+        None
+      case _                                                               => None
 
   /** Whether a `CSI … R` is F3 rather than a cursor-position report.
     *
@@ -648,6 +703,12 @@ private[terminal] object InputDecoder:
   private val PasteStart         = 200
   private val PasteEnd           = "\u001b[201~"
   private val MaxParamLength     = 64
+
+  /** The leading parameter of the XTWINOPS reply that carries the text area's pixel size (`CSI 4 ; h ; w t`). Every
+    * other leading value is a different XTWINOPS answer — `8` is the size in characters, `9` the screen size — and is
+    * dropped rather than misread as pixels.
+    */
+  private val TextAreaReport = 4
 
   /** How far a mouse report's shift/alt/ctrl bits sit above the CSI modifier parameter's: mouse uses 4/8/16 where a CSI
     * modifier bitmask uses 1/2/4.

@@ -42,6 +42,14 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   @volatile private var suspendedState = TerminalState.Undressed
   @volatile private var inlineRows     = 0
 
+  /** The terminal's last reported text-area size in pixels, and whether it has been asked at all.
+    *
+    * Cached because the answer only changes when the window does, and because the query costs a round trip on the
+    * stream the event loop reads from. `onResize` clears both, so the next `windowSize` asks again.
+    */
+  @volatile private var textAreaPixels: Option[Size] = None
+  @volatile private var pixelsAsked                  = false
+
   // What the terminal is believed to be showing: the frame `draw` last flushed, kept so the next frame can be sent as
   // a diff against it. Owned by the render thread alone — no other thread may read or write it. A thread that takes the
   // screen away (the SIGCONT handler re-entering the alternate screen) raises `fullRedrawRequested` instead: a reset
@@ -90,6 +98,33 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   terminal.handle(Terminal.Signal.CONT, _ => onContinue())
 
   def size: Either[BackendError, Size] = attempt(currentSize)
+
+  /** The window in cells, plus its pixel size when this terminal will report one.
+    *
+    * The pixel half costs a round trip on the input stream — `ESC[14t` out, `CSI 4 ; height ; width t` back — so it is
+    * asked at most once and then cached, and re-asked only after a resize has invalidated the answer. Everything
+    * [[queryCursorPosition]] documents applies: it must run on the render thread, a key typed while the reply is in
+    * flight is queued rather than dropped, and a terminal that does not implement the query simply never answers.
+    *
+    * A terminal that never answers is not a failure. The query is attempted once, the wait is short, and the cells are
+    * returned with no pixels — which is what most terminals, including most of the Windows ones, will produce. Asked
+    * outside raw mode there is no reader to receive a reply at all, so the query is skipped entirely rather than
+    * spending the timeout.
+    */
+  override def windowSize: Either[BackendError, WindowSize] =
+    attempt {
+      if pixelsAsked then WindowSize(currentSize, textAreaPixels)
+      else
+        pixelsAsked = true
+        textAreaPixels =
+          if cookedAttributes.isEmpty then None
+          else
+            screenOwnership.synchronized {
+              write(AnsiSequences.RequestTextAreaPixels)
+            }
+            decoder.readTextAreaSize(JLine3Backend.PixelQueryTimeoutMillis)
+        WindowSize(currentSize, textAreaPixels)
+    }
 
   def draw(buffer: Buffer): Either[BackendError, Unit] =
     // claimed before the frame is composed, so a request raised while this frame is in flight survives for the next one
@@ -615,6 +650,9 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     requestFullRedraw() // whatever ran in between owned the screen: repaint everything
 
   private def onResize(): Unit =
+    // the window moved, so a cached pixel size describes a window that no longer exists; the next `windowSize` re-asks
+    pixelsAsked = false
+    textAreaPixels = None
     pendingResize.set(Some(currentSize))
     wake()
 
@@ -677,6 +715,15 @@ private[terminal] object TerminalState:
 private[terminal] final case class TerminalRelease(state: TerminalState, failure: Option[BackendError])
 
 object JLine3Backend:
+
+  /** How long [[JLine3Backend.windowSize]] waits for a `CSI 14 t` reply before concluding the terminal has none.
+    *
+    * Short on purpose. A terminal that implements the report answers within one round trip of the pty, so a longer wait
+    * buys nothing; a terminal that does not implement it never answers, and the whole wait is dead time in front of the
+    * user. A tenth of a second, paid once per window size, is under the threshold at which a start-up stutter is
+    * noticed.
+    */
+  private val PixelQueryTimeoutMillis = 100L
 
   /** Wraps an already-built JLine terminal.
     *
