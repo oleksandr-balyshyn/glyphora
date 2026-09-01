@@ -30,8 +30,7 @@ final class FrameCountSpec extends AnyFunSuite:
         quitOnQ,
         frame =>
           counts.synchronized { val _ = counts += frame.count }
-          frame.renderWidget((_, _) => (), frame.area)
-        ,
+          frame.renderWidget((_, _) => (), frame.area),
       )
     }
     pilot.waitForIdle()

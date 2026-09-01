@@ -1,6 +1,6 @@
 package io.worxbend.tui.runtime
 
-import io.worxbend.tui.core.{Buffer, Effect, Rect, StatefulWidget, Widget}
+import io.worxbend.tui.core.{Buffer, Effect, Position, Rect, StatefulWidget, Widget}
 import scala.concurrent.duration.FiniteDuration
 
 /** One frame being rendered: the drawable `area` plus the buffer widgets write into.
@@ -34,3 +34,25 @@ final class Frame(val area: Rect, private[runtime] val buffer: Buffer, val count
     */
   def applyEffect(effect: Effect, elapsed: FiniteDuration): Unit =
     effect.process(elapsed, buffer, area)
+
+  private var requestedCursor: Option[Position] = None
+
+  /** Asks for the terminal's own cursor to be parked at `position` once this frame has been flushed.
+    *
+    * Text fields paint their own block cursor into a cell, which looks right but is not the same thing: the *physical*
+    * cursor is what a terminal input method anchors its composition popup to, what a screen reader tracks, and what
+    * blinks the way the platform blinks. Declaring it here is how a frame asks for that.
+    *
+    * One frame has one caret. A later call in the same frame replaces an earlier one, so the innermost element to claim
+    * the cursor is the one that gets it, and a frame that never calls this leaves the cursor hidden. Coordinates are
+    * buffer coordinates — the same space [[area]] and mouse events use, not an offset inside some widget.
+    *
+    * Called on the render thread, from inside the render function, like everything else on a frame.
+    */
+  def setCursorPosition(position: Position): Unit = requestedCursor = Some(position)
+
+  /** Withdraws a cursor position declared earlier in this same frame. */
+  def clearCursorPosition(): Unit = requestedCursor = None
+
+  /** What the composer honours after the flush: the position the frame asked for, or `None` for "keep it hidden". */
+  private[runtime] def declaredCursor: Option[Position] = requestedCursor

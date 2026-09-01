@@ -1,6 +1,6 @@
 package io.worxbend.tui.runtime
 
-import io.worxbend.tui.core.{Buffer, Event, Rect}
+import io.worxbend.tui.core.{Buffer, Event, Position, Rect}
 import io.worxbend.tui.terminal.{Backend, BackendError}
 
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
@@ -270,6 +270,9 @@ private final class FrameComposer(backend: Backend, render: Frame => Unit):
   private var frameBuffer: Option[Buffer] = None
   private var composed: Long              = 0L
 
+  /** Where the cursor was left after the previous frame; `None` means hidden, which is how `setup()` leaves it. */
+  private var shownCursor: Option[Position] = None
+
   /** Asks the backend for the current size, composes the frame into the (reused or freshly sized) buffer and flushes
     * it. A failure at either backend call is returned rather than thrown, for the loop to record.
     */
@@ -279,13 +282,32 @@ private final class FrameComposer(backend: Backend, render: Frame => Unit):
       val buffer = frameBuffer.filter(_.area == area).getOrElse(Buffer(area))
       buffer.reset()
       frameBuffer = Some(buffer)
-      render(Frame(area, buffer, composed))
+      val frame  = Frame(area, buffer, composed)
+      render(frame)
       // The number is spent here, before the flush: the first frame an app sees is 0, and a frame whose `draw` fails
       // still used its number. Rolling it back on a failed draw would hand two different frames the same number, which
       // is worse for a debug label than a gap in the sequence.
       composed = if composed == Long.MaxValue then 0L else composed + 1L
-      backend.draw(buffer)
+      backend.draw(buffer).flatMap(_ => placeCursor(frame.declaredCursor))
     }
+
+  /** Puts the physical cursor where the frame asked for it, or hides it when the frame asked for nothing.
+    *
+    * Runs after the flush, never before: the diff leaves the cursor wherever the last changed cell was, so placing it
+    * first would place it and then move it away again. Position first and *then* show, so the cursor is never briefly
+    * visible at its stale spot.
+    *
+    * Nothing is emitted when the request has not changed since the previous frame. Without that comparison a static
+    * frame with a caret in it would emit a move and a show on every tick, which is a visible flicker on a terminal that
+    * blinks its cursor.
+    */
+  private def placeCursor(requested: Option[Position]): Either[BackendError, Unit] =
+    if requested == shownCursor then Right(())
+    else
+      shownCursor = requested
+      requested match
+        case Some(position) => backend.setCursorPosition(position).flatMap(_ => backend.showCursor())
+        case None           => backend.hideCursor()
 
 /** Why a [[TerminalRunner]] loop stopped early, when it did.
   *
