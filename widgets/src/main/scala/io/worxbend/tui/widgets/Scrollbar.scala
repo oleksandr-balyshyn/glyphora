@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Direction, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Direction, Rect, Style, Widget}
 
 /** A scrollbar strip: a vertical bar on the area's right edge or a horizontal bar on its bottom edge.
   *
@@ -23,6 +23,15 @@ import io.worxbend.tui.core.{Buffer, Cell, Direction, Rect, Style, Widget}
   *   describes. Pass a value when it does not: a bar drawn beside a bordered pane covers two rows more than the pane
   *   shows, and a bar sharing its column with a header covers one row more. Getting this wrong makes the thumb the
   *   wrong length and stops it reaching the end of the track.
+  * @param capStyle
+  *   the style of the two arrow caps, when there are any
+  * @param beginSymbol
+  *   an arrow cap drawn in the strip's first cell — the top of a vertical bar, the left end of a horizontal one. Each
+  *   cap takes a cell away from the track, so a 10-row bar with both caps places its thumb in 8 rows. `None`, the
+  *   default, means no cap and a whole strip of track, which is what this widget has always drawn. [[ScrollbarSymbols]]
+  *   collects the conventional glyph sets, and [[Scrollbar.withSymbols]] builds a bar from one of them.
+  * @param endSymbol
+  *   an arrow cap drawn in the strip's last cell, or `None`
   */
 final case class Scrollbar(
     contentLength: Int,
@@ -33,23 +42,45 @@ final case class Scrollbar(
     trackSymbol: String = "│",
     thumbSymbol: String = "█",
     viewportLength: Option[Int] = None,
+    capStyle: Style = Style.Default,
+    beginSymbol: Option[String] = None,
+    endSymbol: Option[String] = None,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val trackLength = orientation match
+      // `extent` is the whole strip; the track is what is left of it once the arrow caps have taken their cells
+      val extent                                               = orientation match
         case Direction.Vertical   => area.height
         case Direction.Horizontal => area.width
-      val thumb       = thumbRange(trackLength, visibleLength(trackLength))
-      var along       = 0
+      // a cap is measured, not counted: a double-width glyph such as an emoji arrow takes two cells of the strip, and
+      // starting the track one cell later would let the track's first character land on the cap's right half
+      val trackStart                                           = beginSymbol.fold(0)(capCells)
+      val endCells                                             = endSymbol.fold(0)(capCells)
+      val trackLength                                          = math.max(0, extent - trackStart - endCells)
+      val thumb                                                = thumbRange(trackLength, visibleLength(trackLength))
+      // paint one cell `at` cells along the strip, ignoring anything that would fall outside it
+      def put(at: Int, symbol: String, cellStyle: Style): Unit =
+        if at >= 0 && at < extent then
+          orientation match
+            case Direction.Vertical   => buffer.set(area.right - 1, area.y + at, Cell(symbol, cellStyle))
+            case Direction.Horizontal => buffer.set(area.x + at, area.bottom - 1, Cell(symbol, cellStyle))
+      // the end cap goes down first so that on a one-cell strip, where both caps want the same cell, the begin cap
+      // is the one left visible rather than whichever happened to be written last
+      endSymbol.foreach(symbol => put(extent - capCells(symbol), symbol, capStyle))
+      beginSymbol.foreach(symbol => put(0, symbol, capStyle))
+      var along                                                = 0
       while along < trackLength do
-        val inThumb   = thumb.exists((start, size) => along >= start && along < start + size)
-        val symbol    = if inThumb then thumbSymbol else trackSymbol
-        val cellStyle = if inThumb then thumbStyle else style
-        orientation match
-          case Direction.Vertical   => buffer.set(area.right - 1, area.y + along, Cell(symbol, cellStyle))
-          case Direction.Horizontal => buffer.set(area.x + along, area.bottom - 1, Cell(symbol, cellStyle))
+        val inThumb = thumb.exists((start, size) => along >= start && along < start + size)
+        put(trackStart + along, if inThumb then thumbSymbol else trackSymbol, if inThumb then thumbStyle else style)
         along += 1
+
+  /** How many cells of the strip a cap glyph occupies: two for a double-width character, one for everything else. A
+    * zero-width cluster — a lone combining mark, say — would otherwise reserve nothing and be painted over, so it is
+    * charged one cell like any ordinary character.
+    */
+  private def capCells(symbol: String): Int =
+    math.max(1, CharWidth.of(symbol))
 
   /** How much of the content is on screen: whatever the caller declared, or the length of the track when it declared
     * nothing. A declared value of zero or less would make the thumb arithmetic meaningless, so it is raised to one.
@@ -73,3 +104,35 @@ final case class Scrollbar(
       val clampedPosition = math.max(0, math.min(position, maxPosition))
       val start           = math.round(clampedPosition.toDouble / maxPosition * (trackLength - size)).toInt
       Some((start, size))
+
+object Scrollbar:
+
+  /** A scrollbar drawn with one of the named glyph sets, e.g. `Scrollbar.withSymbols(200, 40,
+    * ScrollbarSymbols.DoubleVertical)`.
+    *
+    * This is the same widget the constructor builds; it exists so a caller picking a whole look does not have to unpack
+    * the set's four fields into four arguments by hand.
+    */
+  def withSymbols(
+      contentLength: Int,
+      position: Int,
+      symbols: ScrollbarSymbols,
+      orientation: Direction = Direction.Vertical,
+      viewportLength: Option[Int] = None,
+      style: Style = Style.Default,
+      thumbStyle: Style = Style.Default,
+      capStyle: Style = Style.Default,
+  ): Scrollbar =
+    Scrollbar(
+      contentLength = contentLength,
+      position = position,
+      orientation = orientation,
+      style = style,
+      thumbStyle = thumbStyle,
+      trackSymbol = symbols.track,
+      thumbSymbol = symbols.thumb,
+      viewportLength = viewportLength,
+      capStyle = capStyle,
+      beginSymbol = symbols.begin,
+      endSymbol = symbols.end,
+    )

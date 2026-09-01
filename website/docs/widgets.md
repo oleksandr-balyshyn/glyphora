@@ -132,6 +132,33 @@ out the wrong length and stops short of the end of the track:
 Scrollbar(contentLength = 200, position = 40, viewportLength = Some(8))
 ```
 
+Arrow caps mark the two ends of the strip, which is how a reader tells a scrollbar from a
+plain border line in a screenshot. Each cap takes one cell away from the track — two for a
+double-width glyph — so a 10-row bar with both caps places its thumb in the 8 rows between
+them. `ScrollbarSymbols` collects the conventional glyph sets and `Scrollbar.withSymbols`
+builds a bar from one:
+
+| Set | Track | Thumb | Caps |
+|---|---|---|---|
+| `ScrollbarSymbols.Plain` | `│` | `█` | none — the default |
+| `ScrollbarSymbols.Vertical` | `│` | `█` | `↑` `↓` |
+| `ScrollbarSymbols.Horizontal` | `─` | `█` | `←` `→` |
+| `ScrollbarSymbols.DoubleVertical` | `║` | `█` | `▲` `▼` |
+| `ScrollbarSymbols.DoubleHorizontal` | `═` | `█` | `◄` `►` |
+| `ScrollbarSymbols.Ascii` | `\|` | `#` | `^` `v` |
+
+```scala
+import io.worxbend.tui.widgets.{Scrollbar, ScrollbarSymbols}
+
+Scrollbar.withSymbols(200, 40, ScrollbarSymbols.DoubleVertical)
+
+// nothing outside printable ASCII, for a terminal whose font has no box drawing
+Scrollbar.withSymbols(200, 40, ScrollbarSymbols.Ascii)
+```
+
+The caps are also available one at a time as `beginSymbol` and `endSymbol`, with
+`capStyle` colouring both; leaving either as `None` gives that end plain track.
+
 ### Panel padding and captions
 
 A panel reserves blank cells between its border and its children with `.padding(cells)`
