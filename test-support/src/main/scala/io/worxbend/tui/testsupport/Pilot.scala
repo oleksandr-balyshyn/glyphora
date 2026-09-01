@@ -348,6 +348,61 @@ final class Pilot private (
   /** The cell at `(x, y)` of the last rendered frame. */
   def cellAt(x: Int, y: Int): Cell = lastFrame.get(x, y)
 
+  /** Where the terminal's *hardware* caret was last parked, or `None` if the app never asked for one.
+    *
+    * This is not the highlighted cell a text widget paints into the frame. It is the caret the operating system knows
+    * about: an input method editor (IME — the software that turns a run of keystrokes into a Chinese, Japanese or
+    * Korean character) anchors its candidate popup to it, and a screen reader reports it as the insertion point. A
+    * focused text field normally wants both, because the painted block is what a sighted user sees and this is what
+    * everything else follows.
+    *
+    * A view asks for it with `Frame.setCursorPosition`, and the runner passes that on to the backend after the frame is
+    * flushed. Reading it here is therefore the only way a test can tell a caret that moves from a caret that is merely
+    * drawn: a frame snapshot records the styled cell and knows nothing about the terminal's own cursor.
+    *
+    * `None` covers both halves of "there is no caret to follow": a frame that asked for no position, and a frame that
+    * withdrew one it had asked for earlier. A withdrawal is a `hideCursor` rather than a move — the runner has nowhere
+    * to move a caret *to* — so the last position the backend was handed survives underneath, and reporting it here
+    * would say a text field still owns the caret after the user has tabbed away from it. A test that genuinely wants
+    * the stale value can read `pilot.backend.cursorPosition`.
+    */
+  def cursorPosition: Option[Position] =
+    rethrowAppFailure()
+    if backend.isCursorVisible then backend.cursorPosition else None
+
+  /** Asserts the hardware caret sits on `(x, y)`, and returns `this` so the check sits in a chain of interactions:
+    *
+    * {{{
+    * pilot.typeText("ab").waitForIdle().assertCursorAt(2, 0)
+    * }}}
+    *
+    * Fails with the position the caret actually holds, or with "no cursor position was requested" when the app never
+    * asked for one at all. Those two failures have different causes — a caret in the wrong place, versus a view that
+    * never calls `Frame.setCursorPosition` — and telling them apart from the message saves a debugging round.
+    */
+  def assertCursorAt(x: Int, y: Int): Pilot =
+    val expected = Position(x, y)
+    cursorPosition match
+      case Some(`expected`) => this
+      case Some(actual)     =>
+        throw CallSite.attribute(AssertionError(s"expected the cursor at $expected, but it is at $actual"))
+      case None             =>
+        throw CallSite.attribute(
+          AssertionError(s"expected the cursor at $expected, but no cursor position was requested")
+        )
+
+  /** Asserts the app asked for no hardware caret at all — the state a view showing no text field should be in.
+    *
+    * The complement of [[assertCursorAt]], and the half that catches a caret left behind: a field that parks the caret
+    * while it has focus and never withdraws it leaves the terminal's own cursor in a pane the user has since navigated
+    * away from, where a screen reader still reports it as the insertion point.
+    */
+  def assertNoCursor(): Pilot =
+    cursorPosition match
+      case None         => this
+      case Some(actual) =>
+        throw CallSite.attribute(AssertionError(s"expected no cursor position, but the cursor is at $actual"))
+
   /** Whether the app thread is still running. A thread that died from a throwable is not merely stopped: this fails
     * with that throwable as the cause.
     */

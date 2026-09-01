@@ -399,6 +399,30 @@ assert(pilot.cellAt(2, 0).style.modifiers.hasAny(Modifiers.Bold))
 single cell. Both fail the test if nothing has been drawn yet, rather than returning
 an empty frame that an assertion would pass against for the wrong reason.
 
+## Assert where the hardware caret went
+
+A terminal application has two things it might call a cursor, and they are checked in
+different places. One is a *styled cell* — the reversed block a text field paints
+where the caret sits. That is part of the drawn frame, so `cellAt` sees it. The other
+is the terminal's own **hardware caret**, the one the operating system knows about: an
+input method editor (the software that turns a run of keystrokes into a Chinese,
+Japanese or Korean character) anchors its candidate popup to it, and a screen reader
+reports it as the insertion point. A view asks for that one with
+`frame.setCursorPosition(position)`, and it appears nowhere in the drawn frame at all.
+
+```scala
+pilot.typeText("ab").waitForIdle().assertCursorAt(2, 0)
+pilot.press("escape").waitForIdle().assertNoCursor()
+```
+
+`assertCursorAt(x, y)` and `assertNoCursor()` both return the pilot, so they chain like
+every other assertion here; `pilot.cursorPosition` is the raw `Option[Position]` behind
+them. `assertNoCursor()` is the half worth writing even when nothing seems to need it:
+a field that parks the caret while it has focus and never withdraws it leaves the
+terminal's own cursor sitting in a pane the user has since tabbed away from, and a
+screen reader goes on reporting that pane as the insertion point. Nothing in the drawn
+frame shows that, which is exactly why it needs its own assertion.
+
 The block hands back whatever the runner returned — `runWith` already returns
 `Either[RunnerError, Unit]`, so nothing has to be written to discard it. The pilot
 watches both ways a run can be wrong:
