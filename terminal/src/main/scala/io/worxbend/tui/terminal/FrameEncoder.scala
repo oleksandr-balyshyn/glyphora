@@ -59,17 +59,14 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
         else if !((cell.style eq currentStyle) || cell.style == currentStyle) then
           body ++= AnsiSequences.sgrDelta(currentStyle, cell.style, colorDepth)
           currentStyle = cell.style
-        if cell.style.link != currentLink then
-          if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
-          cell.style.link.foreach(url => body ++= AnsiSequences.linkOpen(url))
-          currentLink = cell.style.link
+        currentLink = carryLink(body, currentLink, cell.style.link)
         body ++= cell.symbol
         currentY = y
         expectedX = x + advanceOf(next, x, y)
       }
     if previous.area == next.area then previous.diff(next, paint) else next.emitAll(paint)
     // a link left open would swallow everything drawn after this frame
-    if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
+    carryLink(body, currentLink, None)
     body.result()
 
   /** One row of `buffer` as styled ANSI text, with no cursor movement in it at all.
@@ -102,13 +99,10 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
           if sgr != currentStyle then
             body ++= sgr
             currentStyle = sgr
-          if cell.style.link != currentLink then
-            if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
-            cell.style.link.foreach(url => body ++= AnsiSequences.linkOpen(url))
-            currentLink = cell.style.link
+          currentLink = carryLink(body, currentLink, cell.style.link)
           body ++= cell.symbol
         x += 1
-      if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
+      carryLink(body, currentLink, None)
       body ++= AnsiSequences.ResetStyle
       body.result()
 
@@ -145,3 +139,15 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     */
   private def advanceOf(next: Buffer, x: Int, y: Int): Int =
     if next.isContinuation(x + 1, y) then 2 else 1
+
+  /** Emits the OSC-8 transitions that carry the hyperlink state from `open` to `next`, and answers `next`.
+    *
+    * A link is closed only when one was open, and opened only when the new cell has one, so a run of cells sharing a
+    * link (or sharing no link) writes nothing. Passing `None` for `next` is how both encoders close the frame or row: a
+    * link left open would swallow everything drawn afterwards.
+    */
+  private def carryLink(body: StringBuilder, open: Option[String], next: Option[String]): Option[String] =
+    if next != open then
+      if open.nonEmpty then body ++= AnsiSequences.LinkClose
+      next.foreach(url => body ++= AnsiSequences.linkOpen(url))
+    next
