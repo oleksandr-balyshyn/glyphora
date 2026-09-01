@@ -130,6 +130,22 @@ final class KeySpecRoundTripSpec extends AnyFunSuite:
     case KeyCode.PrintScreen => Some("printscreen")
     case KeyCode.Pause       => Some("pause")
     case KeyCode.Menu        => Some("menu")
+    // the media block; `"pause"` names the Pause/Break key, so the transport pause is spelled `"mediapause"`
+    case KeyCode.Media(key)  =>
+      key match
+        case MediaKey.Play          => Some("play")
+        case MediaKey.Pause         => Some("mediapause")
+        case MediaKey.PlayPause     => Some("playpause")
+        case MediaKey.Reverse       => Some("reverse")
+        case MediaKey.Stop          => Some("stop")
+        case MediaKey.FastForward   => Some("fastforward")
+        case MediaKey.Rewind        => Some("rewind")
+        case MediaKey.TrackNext     => Some("tracknext")
+        case MediaKey.TrackPrevious => Some("trackprevious")
+        case MediaKey.Record        => Some("record")
+        case MediaKey.LowerVolume   => Some("volumedown")
+        case MediaKey.RaiseVolume   => Some("volumeup")
+        case MediaKey.MuteVolume    => Some("mute")
 
   test("every named KeyCode the decoder can emit is nameable in a spec"):
     val named = Seq(
@@ -153,7 +169,7 @@ final class KeySpecRoundTripSpec extends AnyFunSuite:
       KeyCode.PrintScreen,
       KeyCode.Pause,
       KeyCode.Menu,
-    )
+    ) ++ MediaKey.values.map(KeyCode.Media.apply)
     named.foreach: code =>
       val spec = specNameFor(code).getOrElse(fail(s"no spec name for $code"))
       assert(KeyEvent.parse(spec) == Right(KeyEvent.of(code)), s"spec '$spec' does not name $code")

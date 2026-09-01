@@ -13,6 +13,10 @@ package io.worxbend.tui.core
   * command, because on an ordinary terminal they never arrive at all. The lock keys report the key *being pressed*;
   * glyphora has no notion of whether Caps Lock is currently on, and there is no event when the light changes on its
   * own. `text` is empty for all six, as it is for every other named key.
+  *
+  * `Media` is the hardware transport and volume block — play, pause, next track, volume up — and carries which one in a
+  * [[MediaKey]]. It has the same caveat and one more: see [[MediaKey]] for why a desktop environment often takes these
+  * keys before an application ever sees them.
   */
 enum KeyCode:
   case Char(codePoint: Int)
@@ -20,6 +24,7 @@ enum KeyCode:
   case Up, Down, Left, Right
   case F(n: Int)
   case CapsLock, ScrollLock, NumLock, PrintScreen, Pause, Menu
+  case Media(key: MediaKey)
 
   /** The text this key produces: the code point as a string for [[Char]], empty for every named key. */
   def text: String = this match

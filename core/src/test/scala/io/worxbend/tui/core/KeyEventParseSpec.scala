@@ -179,3 +179,40 @@ final class KeyEventParseSpec extends AnyFunSuite:
   test("'backtab' is an alias, not a new key: nothing else changes about tab"):
     assert(KeyEvent.parse("tab") == Right(KeyEvent(KeyCode.Tab, KeyModifiers.None)))
     assert(KeyEvent.parse("backtabx").isLeft)
+
+  test("every media key has a spec name"):
+    val expected = Seq(
+      "play"          -> MediaKey.Play,
+      "mediapause"    -> MediaKey.Pause,
+      "playpause"     -> MediaKey.PlayPause,
+      "reverse"       -> MediaKey.Reverse,
+      "stop"          -> MediaKey.Stop,
+      "fastforward"   -> MediaKey.FastForward,
+      "rewind"        -> MediaKey.Rewind,
+      "tracknext"     -> MediaKey.TrackNext,
+      "next"          -> MediaKey.TrackNext,
+      "trackprevious" -> MediaKey.TrackPrevious,
+      "trackprev"     -> MediaKey.TrackPrevious,
+      "prev"          -> MediaKey.TrackPrevious,
+      "record"        -> MediaKey.Record,
+      "volumedown"    -> MediaKey.LowerVolume,
+      "voldown"       -> MediaKey.LowerVolume,
+      "volumeup"      -> MediaKey.RaiseVolume,
+      "volup"         -> MediaKey.RaiseVolume,
+      "mute"          -> MediaKey.MuteVolume,
+    )
+    for (spec, key) <- expected do
+      assert(KeyEvent.parse(spec) == Right(KeyEvent(KeyCode.Media(key), KeyModifiers.None)), s"spec '$spec'")
+
+  test("media key names are case-insensitive and take modifiers"):
+    assert(KeyEvent.parse("PlayPause") == KeyEvent.parse("playpause"))
+    assert(KeyEvent.parse("ctrl+mute") == Right(KeyEvent(KeyCode.Media(MediaKey.MuteVolume), KeyModifiers.Ctrl)))
+
+  test("'pause' stays the Pause/Break key, and the transport pause is a different spec"):
+    // two physically different keys: Pause/Break above the arrows, and the transport pause on the media row
+    assert(KeyEvent.parse("pause") == Right(KeyEvent.of(KeyCode.Pause)))
+    assert(KeyEvent.parse("mediapause") == Right(KeyEvent.of(KeyCode.Media(MediaKey.Pause))))
+    assert(KeyEvent.parse("pause") != KeyEvent.parse("mediapause"))
+
+  test("a media key produces no text"):
+    assert(KeyCode.Media(MediaKey.PlayPause).text.isEmpty)

@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.KeyCode
+import io.worxbend.tui.core.{KeyCode, MediaKey}
 
 /** The kitty keyboard protocol's key vocabulary, mapped onto glyphora's [[KeyCode]] vocabulary.
   *
@@ -33,7 +33,8 @@ private[terminal] object KittyKeys:
     *
     * The lock and system keys (`CAPS_LOCK` through `MENU`) *are* reported, as the [[KeyCode]] cases of the same names.
     * A lock key reports the press itself, not the state it leaves behind — glyphora never claims to know whether Caps
-    * Lock is currently on.
+    * Lock is currently on. So are the media keys, as `KeyCode.Media`. What is still dropped is the modifier-only keys —
+    * a bare Shift press is not a key event in this model — and the unassigned code points.
     */
   private def functionalKey(codePoint: Int): Option[KeyCode] =
     codePoint match
@@ -65,7 +66,8 @@ private[terminal] object KittyKeys:
       case KeypadEnd                                                  => Some(KeyCode.End)
       case KeypadInsert                                               => Some(KeyCode.Insert)
       case KeypadDelete                                               => Some(KeyCode.Delete)
-      case _ => None // media keys, modifier-only keys, unassigned
+      case cp if MediaKeys.contains(cp)                               => MediaKeys.get(cp).map(KeyCode.Media.apply)
+      case _                                                          => None // modifier-only keys, unassigned
 
   /** Whether `codePoint` is a character a string can actually hold.
     *
@@ -107,6 +109,23 @@ private[terminal] object KittyKeys:
   private val KeypadEnd            = 57424
   private val KeypadInsert         = 57425
   private val KeypadDelete         = 57426
+
+  /** The media block, 57428-57440, by the names the kitty keyboard-protocol spec gives these code points. */
+  private val MediaKeys: Map[Int, MediaKey] = Map(
+    57428 -> MediaKey.Play,
+    57429 -> MediaKey.Pause,
+    57430 -> MediaKey.PlayPause,
+    57431 -> MediaKey.Reverse,
+    57432 -> MediaKey.Stop,
+    57433 -> MediaKey.FastForward,
+    57434 -> MediaKey.Rewind,
+    57435 -> MediaKey.TrackNext,
+    57436 -> MediaKey.TrackPrevious,
+    57437 -> MediaKey.Record,
+    57438 -> MediaKey.LowerVolume,
+    57439 -> MediaKey.RaiseVolume,
+    57440 -> MediaKey.MuteVolume,
+  )
 
   /** The first code point that is text rather than a C0 control; below it the byte is a control the decoder names. */
   private val FirstPrintable = 32

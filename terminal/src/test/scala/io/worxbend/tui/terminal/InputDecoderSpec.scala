@@ -1,6 +1,16 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
+import io.worxbend.tui.core.{
+  Event,
+  KeyCode,
+  KeyEvent,
+  KeyModifiers,
+  MediaKey,
+  MouseButton,
+  MouseEvent,
+  MouseEventKind,
+  Position,
+}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -185,9 +195,32 @@ final class InputDecoderSpec extends AnyFunSuite:
   test("xterm's CSI 29~ is the menu key, so it works without the kitty protocol"):
     assert(decoded(csi("29~")*) == Event.Key(KeyEvent.of(KeyCode.Menu)))
 
-  test("the functional-key block is still deliberately partial"):
-    // a media key: glyphora has no name for it, so no event is reported rather than a garbage character
-    assert(decoderFor(csi("57428u")*).decode(10).isEmpty)
+  test("the kitty media block decodes to transport and volume keys"):
+    val expected = Seq(
+      57428 -> MediaKey.Play,
+      57429 -> MediaKey.Pause,
+      57430 -> MediaKey.PlayPause,
+      57431 -> MediaKey.Reverse,
+      57432 -> MediaKey.Stop,
+      57433 -> MediaKey.FastForward,
+      57434 -> MediaKey.Rewind,
+      57435 -> MediaKey.TrackNext,
+      57436 -> MediaKey.TrackPrevious,
+      57437 -> MediaKey.Record,
+      57438 -> MediaKey.LowerVolume,
+      57439 -> MediaKey.RaiseVolume,
+      57440 -> MediaKey.MuteVolume,
+    )
+    for (codePoint, key) <- expected do
+      assert(decoded(csi(s"${codePoint}u")*) == Event.Key(KeyEvent.of(KeyCode.Media(key))))
+
+  test("the code points on either side of the media block are still unmapped"):
+    // the boundary is the part of a transcribed table that rots, so it is asserted rather than assumed
+    assert(decoderFor(csi("57427u")*).decode(10).isEmpty)
+    assert(decoderFor(csi("57441u")*).decode(10).isEmpty)
+
+  test("a media key carries its modifiers like any other key"):
+    assert(decoded(csi("57438;2u")*) == Event.Key(KeyEvent(KeyCode.Media(MediaKey.LowerVolume), KeyModifiers.Shift)))
 
   test("kitty keypad keys decode to their non-keypad equivalents"):
     assert(decoded(csi("57399u")*) == Event.Key(KeyEvent.of(KeyCode.Char('0')))) // KP_0

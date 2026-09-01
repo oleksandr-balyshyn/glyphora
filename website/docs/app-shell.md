@@ -172,6 +172,33 @@ status bar shows one `down next item` hint, the help overlay lists one row, and 
 palette offers one command. Two separate `binding(…)` declarations would fire
 correctly but advertise the same command twice everywhere it is listed.
 
+### Media and transport keys
+
+The play, pause, next-track and volume buttons have spec names too:
+
+| Spec | Key |
+|---|---|
+| `"play"`, `"mediapause"`, `"playpause"` | play, pause, and the single play/pause toggle |
+| `"stop"`, `"record"`, `"reverse"` | stop, record, reverse |
+| `"fastforward"`, `"rewind"` | fast forward, rewind |
+| `"tracknext"` (`"next"`), `"trackprevious"` (`"trackprev"`, `"prev"`) | skip forward, skip back |
+| `"volumeup"` (`"volup"`), `"volumedown"` (`"voldown"`), `"mute"` | volume |
+
+Note `"mediapause"`, not `"pause"`: `"pause"` names the Pause/Break key above the arrow
+cluster, which is a different physical key.
+
+Two things have to go right for one of these to reach your app. The terminal has to
+speak the kitty keyboard protocol, and the desktop environment has to not take the key
+first — many take the volume and transport keys before any application sees them. So
+pair every media binding with an ordinary key, using the several-keys form above:
+
+```scala
+override def bindings = KeyBindings(
+  binding(Seq("playpause", "space"), "play or pause")(togglePlayback()),
+  binding(Seq("tracknext", "n"), "next track")(skipForward()),
+)
+```
+
 Focused/local handlers run before global bindings. Use local `.onKey(...)` for
 behavior owned by one element, and app bindings for commands meaningful everywhere.
 

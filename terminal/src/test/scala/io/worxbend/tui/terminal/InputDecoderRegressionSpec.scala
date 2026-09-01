@@ -159,9 +159,9 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     assert(decoded(csi("57376u")*) == Event.Key(KeyEvent.of(KeyCode.F(13))))     // F13
     assert(decoded(csi("57398u")*) == Event.Key(KeyEvent.of(KeyCode.F(35)))) // F35
 
-  test("kitty modifier-only and media keys are not reported as keys"):
+  test("kitty modifier-only keys are not reported as keys"):
     dropped(csi("57441u")*) // LEFT_SHIFT: holding a modifier is not a key event in this model
-    dropped(csi("57428u")*) // MEDIA_PLAY: glyphora has no name for the transport keys
+    dropped(csi("57344u")*) // an unassigned code point at the foot of the functional block
 
   test("a kitty lock or system key is reported, and reports the press rather than the resulting state"):
     // these used to be dropped along with the modifier-only keys. Menu and Pause in particular are keys applications
