@@ -404,6 +404,29 @@ final class Buffer(val area: Rect):
     Array.copy(continuations, 0, copied.continuations, 0, continuations.length)
     copied
 
+  /** Overwrites this buffer's contents with `source`'s, allocating nothing.
+    *
+    * The in-place counterpart of [[snapshot]]. A backend that keeps a baseline of the frame it last flushed needs a
+    * private copy of it, and taking that copy with `snapshot` allocates a fresh `Buffer` plus two grid-sized arrays on
+    * every frame — 10 000 cells on a 200x50 screen, at the tick rate. Recycling one buffer with this method gives the
+    * same private copy and allocates nothing at all.
+    *
+    * Both buffers must cover the same `area` and be owned by the calling thread, for the same reason [[snapshot]] must
+    * be taken on the owning thread: the copy is unsynchronized, so another thread writing into `source` part-way
+    * through leaves this buffer holding half of one frame and half of the next. Copying a buffer onto itself is a no-op
+    * rather than an error.
+    *
+    * @throws IllegalArgumentException
+    *   if `source.area != area`. That is a programmer error, not a condition to recover from: the grids have different
+    *   shapes, so there is no correct thing to copy. A caller that can be handed a differently sized buffer — anything
+    *   that survives a terminal resize — must allocate a new buffer for the new area instead.
+    */
+  def copyFrom(source: Buffer): Unit =
+    require(source.area == area, s"cannot copy a buffer covering ${source.area} into one covering $area")
+    if source ne this then
+      Array.copy(source.cells, 0, cells, 0, cells.length)
+      Array.copy(source.continuations, 0, continuations, 0, continuations.length)
+
   /** Resets every cell to [[Cell.Empty]], recycling the buffer for the next frame. */
   def reset(): Unit =
     var index = 0
