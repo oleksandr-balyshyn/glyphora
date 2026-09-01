@@ -19,7 +19,8 @@ final case class SpinnerElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = SpinnerElement
-  def widget: Widget = w.Spinner(elapsed, label, preset, glyphStyle.patch(props.style), Some(labelStyle))
+  def widget: Widget =
+    w.Spinner(elapsed, label, preset.degraded(props.glyphs), glyphStyle.patch(props.style), Some(labelStyle))
 
   /** Swaps the animation — see [[io.worxbend.tui.widgets.SpinnerPreset]] for the catalogue. */
   def preset(chosen: w.SpinnerPreset): SpinnerElement = copy(preset = chosen)
@@ -56,7 +57,14 @@ final case class ProgressBarElement(
 ) extends Element:
   type Self = ProgressBarElement
   def widget: Widget =
-    w.LineGauge(ratio, label, trackStyle.patch(props.style), fillStyle.patch(props.style), preset, ramp)
+    w.LineGauge(
+      ratio,
+      label,
+      trackStyle.patch(props.style),
+      fillStyle.patch(props.style),
+      preset.degraded(props.glyphs),
+      ramp,
+    )
 
   /** Swaps the glyph vocabulary — see [[io.worxbend.tui.widgets.ProgressPreset]] for the catalogue. */
   def preset(chosen: w.ProgressPreset): ProgressBarElement = copy(preset = chosen)
@@ -95,7 +103,7 @@ final case class IndeterminateElement(
       elapsed,
       trackStyle.patch(props.style),
       fillStyle.patch(props.style),
-      preset,
+      preset.degraded(props.glyphs),
       motion,
       period = period,
     )
@@ -313,7 +321,8 @@ final case class SpinnerGridElement(
 ) extends Element:
   type Self = SpinnerGridElement
 
-  def widget: Widget = w.SpinnerGrid(elapsed, preset, phase, glyphStyle.patch(props.style), ramp)
+  def widget: Widget =
+    w.SpinnerGrid(elapsed, preset.degraded(props.glyphs), phase, glyphStyle.patch(props.style), ramp)
 
   /** Swaps the animation each slot runs — see [[io.worxbend.tui.widgets.SpinnerPreset]] for the catalogue. */
   def preset(chosen: w.SpinnerPreset): SpinnerGridElement = copy(preset = chosen)

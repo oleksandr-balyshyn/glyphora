@@ -58,11 +58,16 @@ private[dsl] trait ElementFactories:
     * `.titleStyle(...)` recolours only the caption.
     */
   def panel(title: String)(children: Element*)(using theme: Theme): PanelElement =
-    PanelElement(Some(title), children, titleStyle = Some(theme.primary), props = ElementProps(style = theme.border))
+    PanelElement(
+      Some(title),
+      children,
+      titleStyle = Some(theme.primary),
+      props = ElementProps(style = theme.border, glyphs = theme.glyphs),
+    )
 
   /** An untitled bordered box — see [[panel(title:String)*]] for the styling. */
   def panel(children: Element*)(using theme: Theme): PanelElement =
-    PanelElement(None, children, props = ElementProps(style = theme.border))
+    PanelElement(None, children, props = ElementProps(style = theme.border, glyphs = theme.glyphs))
 
   /** Lays `children` out left to right, splitting the width between them.
     *
@@ -391,7 +396,14 @@ private[dsl] trait ElementFactories:
 
   /** A spinner on a clock the caller drives, for a progress animation tied to something other than wall time. */
   def spinnerAt(elapsed: FiniteDuration, label: String = "")(using theme: Theme): SpinnerElement =
-    SpinnerElement(elapsed, label, w.SpinnerPreset.Dots, theme.loading.spinner, theme.loading.label)
+    SpinnerElement(
+      elapsed,
+      label,
+      w.SpinnerPreset.Dots,
+      theme.loading.spinner,
+      theme.loading.label,
+      props = ElementProps(glyphs = theme.glyphs),
+    )
 
   /** Text carrying a time-based effect, on the ambient [[AnimationClock]].
     *
@@ -527,7 +539,13 @@ private[dsl] trait ElementFactories:
 
   /** A spinner grid on a clock the caller drives. */
   def spinnerGridAt(elapsed: FiniteDuration)(using theme: Theme): SpinnerGridElement =
-    SpinnerGridElement(elapsed, w.SpinnerPreset.DotsRing, w.GridPhase.Diagonal(), theme.loading.spinner)
+    SpinnerGridElement(
+      elapsed,
+      w.SpinnerPreset.DotsRing,
+      w.GridPhase.Diagonal(),
+      theme.loading.spinner,
+      props = ElementProps(glyphs = theme.glyphs),
+    )
 
   /** A progress bar for work of unknown length, on the ambient [[AnimationClock]].
     *
@@ -544,6 +562,7 @@ private[dsl] trait ElementFactories:
       w.ProgressPreset.Line,
       theme.loading.track,
       theme.loading.fill,
+      props = ElementProps(glyphs = theme.glyphs),
     )
 
   /** A one-row determinate progress bar: a caption then a filled track.
@@ -559,6 +578,7 @@ private[dsl] trait ElementFactories:
       theme.loading.track,
       theme.loading.fill,
       theme.loading.fillRamp,
+      props = ElementProps(glyphs = theme.glyphs),
     )
 
   /** `progressBar` for counts rather than a fraction: `progressBar(3, 10)` is a 30% bar. */
@@ -794,7 +814,7 @@ private[dsl] trait ElementFactories:
         Option(label).filter(_.nonEmpty),
         style = theme.border,
         labelStyle = theme.muted,
-        borderType = borderType,
+        borderType = borderType.degraded(theme.glyphs),
       ),
       rows = Some(1),
     )

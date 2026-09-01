@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.Symbols
+import io.worxbend.tui.core.{GlyphSupport, Symbols}
 
 /** The glyph vocabulary a progress bar draws with: what a filled cell looks like, what an empty one looks like, and
   * optionally how to draw the cell the boundary falls inside.
@@ -22,6 +22,22 @@ final case class ProgressPreset(
     partials: Vector[String] = Vector.empty,
     head: Option[String] = None,
 ):
+
+  /** This vocabulary, or [[ProgressPreset.Ascii]] when `support` does not reach what its glyphs need.
+    *
+    * A vocabulary whose glyphs are already ASCII — `Ascii` and `Arrow` — comes back untouched at every rung; the check
+    * is on the glyphs themselves rather than on a list of names, so a preset added later is covered without anyone
+    * remembering to add it.
+    *
+    * Only [[io.worxbend.tui.core.GlyphSupport.Full]] keeps a non-ASCII vocabulary. The block-element and braille fills
+    * are the whole non-ASCII catalogue and they sit above the box-drawing rung, so `BoxDrawing` has nothing to keep
+    * that `Ascii` would not also have to drop.
+    */
+  def degraded(support: GlyphSupport): ProgressPreset =
+    if support == GlyphSupport.Full || GlyphFloor.allAscii(glyphVocabulary) then this else ProgressPreset.Ascii
+
+  /** Every glyph this preset can draw, in no particular order — what [[degraded]] inspects. */
+  private def glyphVocabulary: Iterable[String] = Seq(fill, track) ++ partials ++ head
 
   /** Whether this vocabulary can draw progress finer than one cell. */
   def isSubCell: Boolean = partials.nonEmpty

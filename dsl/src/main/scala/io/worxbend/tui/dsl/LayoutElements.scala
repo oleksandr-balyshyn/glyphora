@@ -62,7 +62,7 @@ final case class PanelElement(
       borders,
       padding,
       borderStyle = props.style,
-      borderType = borderType,
+      borderType = borderType.degraded(props.glyphs),
       mergeBorders = mergeBorders,
     )
 

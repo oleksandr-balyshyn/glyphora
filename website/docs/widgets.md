@@ -358,6 +358,10 @@ The dashed sets keep the solid corners of their weight, because a dashed corner 
 not exist and the eye only reads a broken run of dashes as a line when its ends are pinned
 down.
 
+You do not have to pick `Ascii` by hand for a terminal that needs it. `BorderType.Ascii`
+is what every other set degrades to under a theme whose glyph ceiling has been lowered —
+see [Degrading to ASCII](./unicode-and-accessibility#degrading-to-ascii).
+
 When none of those is the frame you want, `borderSet` takes the eight glyphs directly and
 wins over `borderType`:
 

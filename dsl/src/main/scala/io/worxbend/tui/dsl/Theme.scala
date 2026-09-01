@@ -1,7 +1,8 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.Style
+import io.worxbend.tui.core.{GlyphSupport, Style}
 import io.worxbend.tui.core.Color
+import io.worxbend.tui.terminal.TerminalGlyphs
 import io.worxbend.tui.widgets.{ColorRamp, MarkdownTheme, SyntaxTheme}
 
 /** The styles the loading and progress animations draw from.
@@ -45,6 +46,11 @@ object LoadingTheme:
   *   the frame style `panel` and `rule` draw with when the caller sets no style of their own.
   * @param focus
   *   the cue the focus pass paints on the focused element, and the selection highlight of the scrollable widgets.
+  * @param glyphs
+  *   the ceiling every themed factory keeps its glyphs under. The three built-in themes stay at
+  *   [[io.worxbend.tui.core.GlyphSupport.Full]], which is what a modern terminal emulator can draw. An application that
+  *   has to run somewhere less certain writes `theme = Theme.detected()` and every panel border, spinner and progress
+  *   bar in the tree follows, with no other call site changing.
   */
 final case class Theme(
     name: String,
@@ -60,6 +66,7 @@ final case class Theme(
     loading: LoadingTheme,
     markdown: MarkdownTheme,
     syntax: SyntaxTheme,
+    glyphs: GlyphSupport = GlyphSupport.Full,
 )
 
 object Theme:
@@ -200,3 +207,15 @@ object Theme:
     * here without saying so.
     */
   given default: Theme = Dark
+
+  /** `base` with its glyph ceiling lowered to whatever the environment justifies — see
+    * [[io.worxbend.tui.terminal.TerminalGlyphs.detect]] for the rules and for the `GLYPHORA_ASCII` override.
+    *
+    * The one place the pure value in `tui-core` meets the environment reading in `tui-terminal`, so that an application
+    * writing `theme = Theme.detected()` needs no import beyond `io.worxbend.tui.dsl.*`.
+    *
+    * Only the ceiling moves; every colour in `base` is kept. Call it once, at start-up, and hold the result: it reads
+    * the process environment, which does not change under a running application.
+    */
+  def detected(base: Theme = Dark, env: Map[String, String] = sys.env): Theme =
+    base.copy(glyphs = TerminalGlyphs.detect(env))

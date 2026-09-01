@@ -211,6 +211,90 @@ but it cannot install fonts or change an emulator's width policy.
 When a glyph is decorative, include a text fallback. When exact alignment is
 mission-critical, prefer stable box-drawing and text symbols over very new emoji.
 
+## Degrading to ASCII
+
+Not every terminal can draw every glyph glyphora knows how to draw. A Linux virtual
+console has box-drawing characters but no braille and no emoji; a session whose locale
+is `C` cannot carry a non-ASCII byte at all. Rather than have you find out from a
+screenful of replacement boxes, the toolkit carries a *glyph ceiling* and every themed
+factory stays under it.
+
+The ceiling is `GlyphSupport`, three rungs running floor to ceiling:
+
+| Rung | What it permits |
+|---|---|
+| `GlyphSupport.Ascii` | Nothing above `U+007E`. Survives a `C` locale, a serial console, or a log file. |
+| `GlyphSupport.BoxDrawing` | The `U+2500` box-drawing block on top of that — present in every fixed-width font, including the Linux console's built-in one. |
+| `GlyphSupport.Full` | Everything, braille spinners and emoji included. The default. |
+
+It is a ceiling, not a measurement. Nothing can interrogate the font your terminal is
+drawing with, so a rung says "do not go above this", never "this is definitely
+renderable".
+
+### Let the environment choose it
+
+```scala
+object Main extends TuiApp:
+  override val theme: Theme = Theme.detected()
+```
+
+`Theme.detected(base, env)` keeps every color in `base` — `Theme.Dark` unless you say
+otherwise — and lowers only its `glyphs` field to whatever `TerminalGlyphs.detect()`
+justifies. Call it once at start-up and hold the result: it reads the process
+environment, which does not change under a running application.
+
+`TerminalGlyphs.detect()` decides in this order:
+
+1. **`GLYPHORA_ASCII`** set to anything other than empty or `0` forces
+   `GlyphSupport.Ascii`. This is the escape hatch for a terminal that claims more than
+   it can draw — a font with no braille coverage, where the spinner comes out as a row
+   of boxes. There is deliberately no variable that forces the ceiling *up*: `Full` is
+   already what any UTF-8 environment resolves to.
+2. **The locale's encoding**, read from `LC_ALL`, then `LC_CTYPE`, then `LANG` — the
+   ordering POSIX defines. Anything that is not UTF-8, and an environment with none of
+   the three set, resolves to `GlyphSupport.Ascii`: the bytes could not survive the
+   trip anyway.
+3. **`TERM`** naming a built-in console font — `linux`, the `vt` family, `dumb`, or an
+   empty value — resolves to `GlyphSupport.BoxDrawing`.
+4. Everything else resolves to `GlyphSupport.Full`.
+
+### What follows the ceiling
+
+Setting it on the theme is the whole call site. Every element built by a themed factory
+carries the ceiling and degrades on the way to the screen:
+
+- **Borders.** Any `BorderType` degrades to `BorderType.Ascii` — `+`, `-`, `|` — below
+  the box-drawing rung. `BorderType.Ascii` and `BorderType.Blank` need nothing and are
+  never swapped out. Every glyph in every set is one column wide, so a degraded frame
+  leaves the interior in exactly the same place.
+- **Spinners.** Any `SpinnerPreset` whose frames are not already ASCII degrades to
+  `SpinnerPreset.Line`, the `|/-\` spinner, below `Full`.
+- **Progress bars.** Any `ProgressPreset` whose glyphs are not already ASCII degrades
+  to `ProgressPreset.Ascii`, `#` over `-`, below `Full`.
+
+The ceiling belongs to the terminal, not to the border you picked, so an explicit
+choice degrades too:
+
+```scala
+panel(text("x")).thick   // ┏━┓ under Full, +-+ under Ascii
+```
+
+Whether a preset is kept is decided by looking at its own glyphs, not by a list of safe
+names, so a preset added later is covered without anyone remembering to add it.
+
+### Test it without a terminal
+
+`TerminalGlyphs.detect` takes the environment as an argument, so a test names one
+rather than mutating the process's:
+
+```scala
+assert(TerminalGlyphs.detect(Map("TERM" -> "xterm", "LANG" -> "C")) == GlyphSupport.Ascii)
+```
+
+And a rendering test pins the frame the way any other one does — render the tree under
+`Theme.Dark.copy(glyphs = GlyphSupport.Ascii)` and assert no character above `~`
+survives.
+
 ## Color depth: what is detected, and how to test it
 
 You never pick colors twice. Write the color you mean — including 24-bit

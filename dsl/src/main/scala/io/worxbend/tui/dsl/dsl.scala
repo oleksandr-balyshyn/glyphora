@@ -104,6 +104,7 @@ export io.worxbend.tui.core.{
   Easing,
   Effect,
   Flex,
+  GlyphSupport,
   KeyCode,
   KeyEvent,
   Line,
@@ -208,7 +209,7 @@ export io.worxbend.tui.runtime.{
 // import. `JLine3Backend` and `HeadlessBackend` are deliberately left out: neither is named by a signature this
 // package exposes, and the code that constructs one (a `main` wiring a custom terminal, a test wiring `Pilot`) is
 // already reaching into `tui-terminal` or `tui-test` on purpose.
-export io.worxbend.tui.terminal.{Backend, BackendError, ColorDepth}
+export io.worxbend.tui.terminal.{Backend, BackendError, ColorDepth, TerminalGlyphs}
 // The widget-level vocabulary an application names directly, in two groups:
 //   * the enums and presets a call site passes by name (severities, animation presets, badge variants), and
 //   * every caller-owned `*State` and content value a DSL factory *requires* — `list(items, state)` cannot be called

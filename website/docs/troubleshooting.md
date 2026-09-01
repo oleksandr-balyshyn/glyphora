@@ -201,6 +201,15 @@ than being swallowed.
 When launching an external interactive program, use `TuiApp.suspend { ... }` so the
 terminal is deliberately handed over and restored.
 
+## Borders and spinners come out as boxes or question marks
+
+The terminal's font has no glyph for what was drawn. Set `GLYPHORA_ASCII=1` in the
+environment and run again: with `theme = Theme.detected()` the whole tree falls back to
+`+`, `-`, `|` borders and a `|/-\` spinner. If that fixes it, the terminal cannot draw
+the Unicode set and the application should be shipping `Theme.detected()` — see
+[Degrading to ASCII](./unicode-and-accessibility#degrading-to-ascii) for what is
+detected and what follows the ceiling.
+
 ## Debug output destroys the live UI
 
 Ordinary `println` writes into the terminal glyphora is repainting. Use a `Log`

@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Line, Rect, Span, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, GlyphSupport, Line, Rect, Span, Style, Widget}
 
 /** The named frame a [[Block]] draws itself with — the box-drawing set, the dashed set, or the block-element set that
   * picks its corner and edge glyphs. [[BorderGlyphs.of]] turns one of these into the eight glyphs it stands for, and
@@ -34,6 +34,22 @@ enum BorderType:
   case OneEighthWide, OneEighthTall
   case ProportionalWide, ProportionalTall
   case Full, Blank
+
+  /** This border set, or [[Ascii]] when `support` does not reach the rung this set needs.
+    *
+    * What lets an application pick a frame once and still run on a terminal that cannot draw it. Every set above needs
+    * at least [[io.worxbend.tui.core.GlyphSupport.BoxDrawing]] except [[Ascii]] and [[Blank]], which need nothing, so
+    * the question is only ever "is box drawing available?" — the quadrant, one-eighth and proportional sets are all
+    * box-drawing-block or block-element glyphs and travel together.
+    *
+    * Degrading never changes geometry: every glyph in every set is one column wide, so `Block.inner` is the same
+    * rectangle before and after.
+    */
+  def degraded(support: GlyphSupport): BorderType =
+    this match
+      case BorderType.Ascii | BorderType.Blank           => this
+      case _ if support.permits(GlyphSupport.BoxDrawing) => this
+      case _                                             => BorderType.Ascii
 
 /** Which horizontal border a [[BlockTitle]] is written into. */
 enum TitlePosition:

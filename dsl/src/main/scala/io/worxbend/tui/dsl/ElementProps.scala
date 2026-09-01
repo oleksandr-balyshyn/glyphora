@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Constraint, KeyEvent, MouseEvent, Style}
+import io.worxbend.tui.core.{Constraint, GlyphSupport, KeyEvent, MouseEvent, Style}
 
 /** The focus bookkeeping the framework writes and an application only reads.
   *
@@ -27,6 +27,12 @@ final case class FocusState private[dsl] (
   * `focusable` opts the element into tab-order traversal, and `autofocus` asks for the keyboard the frame the element
   * first appears in — see [[AutofocusRequest]] for why "first appears" and not "every frame". Everything the framework
   * itself sets each render lives in [[focusState]], which user code can read but not build.
+  *
+  * `glyphs` is the glyph ceiling the themed factory that built this element read off the [[Theme]] — see
+  * [[io.worxbend.tui.core.GlyphSupport]]. It rides on the props rather than on each node so that a fluent builder such
+  * as `panel(...).borderType(BorderType.Thick)` keeps it: the ceiling belongs to the terminal the app is running on,
+  * not to the border the author picked, so an explicit choice still degrades on a terminal that cannot draw it. An
+  * element built outside a themed factory keeps the permissive default and degrades nothing.
   */
 final case class ElementProps(
     style: Style = Style.Default,
@@ -37,6 +43,7 @@ final case class ElementProps(
     autofocus: Boolean = false,
     focusKey: Option[String] = None,
     focusState: FocusState = FocusState(),
+    glyphs: GlyphSupport = GlyphSupport.Full,
 ):
 
   /** Whether this element is the one the focus pass marked — where keystrokes go this frame. */

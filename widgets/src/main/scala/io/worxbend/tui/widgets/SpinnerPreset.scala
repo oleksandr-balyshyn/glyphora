@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.CharWidth
+import io.worxbend.tui.core.{CharWidth, GlyphSupport}
 
 import scala.concurrent.duration.{Duration, DurationDouble, DurationInt, FiniteDuration}
 
@@ -58,6 +58,19 @@ final case class SpinnerPreset(
   def atFps(fps: Double): SpinnerPreset =
     require(fps > 0, s"atFps needs a positive rate, got $fps")
     copy(frameDuration = (1000.0 / fps).millis)
+
+  /** This animation, or a plain ASCII one when `support` does not reach what its frames need.
+    *
+    * A preset whose frames are already ASCII is returned untouched, whatever the rung — that is checked rather than
+    * looked up in a list, so a preset added later cannot quietly escape the check. Everything else falls back to
+    * [[SpinnerPreset.Line]], the `|/-\` spinner, which is the animation every terminal ever built can draw.
+    *
+    * Only [[io.worxbend.tui.core.GlyphSupport.Full]] keeps a non-ASCII preset: the braille, block and emoji catalogues
+    * are all above the box-drawing rung, so there is nothing for `BoxDrawing` to keep that `Ascii` would not also have
+    * to drop.
+    */
+  def degraded(support: GlyphSupport): SpinnerPreset =
+    if support == GlyphSupport.Full || GlyphFloor.allAscii(frames) then this else SpinnerPreset.Line
 
   private def padded(index: Int): String =
     val frame   = frames(index)
