@@ -141,6 +141,18 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   app wrote to the terminal), `copyToClipboard`, `suspend` and `printAbove`. Each has
   a default body that succeeds and does nothing, so a backend can implement as much or
   as little of it as its device supports.
+- **`Backend`** — raw mode, alternate screen, cursor visibility **and position**,
+  mouse capture, diff-based `draw(buffer)`, `readEvent(timeout)`. All fallible
+  operations return `Either[BackendError, A]`.
+  `setCursorPosition(position)` parks the terminal's *own* caret on a cell. That
+  caret is not the highlighted block a text widget paints: it is the one an input
+  method editor (the software that turns keystrokes into a Chinese, Japanese or
+  Korean character) anchors its candidate popup to, and the one a screen reader
+  reports as the insertion point. Position and visibility are separate calls, so a
+  repaint can move the caret without flashing it. Call it *after* `draw` — a frame
+  flush is a stream of cursor moves and would walk away from a caret parked before
+  it. It is a defaulted no-op on the trait, so a backend written before it existed
+  still compiles.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`
   and `org.jline:jline-terminal-jni` 3.30.x, pinned. Those two rather than the
   `org.jline:jline` bundle: this layer uses four JLine types and never asks JLine to

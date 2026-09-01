@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Event, Size}
+import io.worxbend.tui.core.{Buffer, Event, Position, Size}
 
 import org.jline.terminal.{Attributes, Terminal, TerminalBuilder}
 import org.jline.utils.InfoCmp
@@ -192,6 +192,22 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     attempt {
       write(AnsiSequences.ShowCursor)
       cursorHidden = false
+    }
+
+  /** Writes CUP (`CSI row ; column H`) to park the terminal's own caret on `position`.
+    *
+    * Taken under `screenOwnership` for the same reason the frame write in [[draw]] is: a Ctrl+Z landing between leaving
+    * the alternate screen and this write would move the cursor around in the user's shell instead.
+    *
+    * Nothing has to be done to the frame diff afterwards. [[FrameEncoder.encode]] starts every frame with
+    * `expectedX = -1`, so it emits an absolute move before its first cell and cannot be misled about where the caret
+    * was left by the previous frame.
+    */
+  override def setCursorPosition(position: Position): Either[BackendError, Unit] =
+    attempt {
+      screenOwnership.synchronized {
+        write(AnsiSequences.moveTo(position.x, position.y))
+      }
     }
 
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =

@@ -38,6 +38,21 @@ Built-in widgets already route their width calculations through generated Unicod
 Character Database tables. `TextInput` and `TextArea` edit by grapheme cluster, so
 Backspace does not split combining sequences or emoji families.
 
+## The terminal's own caret
+
+A widget's caret is a styled cell: visible to someone looking at the screen, and
+invisible to everything else. A screen reader announces the insertion point from the
+*terminal's* cursor, and an input method editor (the software that turns a run of
+keystrokes into a Chinese, Japanese or Korean character) anchors its candidate popup
+to the same place. Those two follow the terminal, not the paint.
+
+`Backend.setCursorPosition(position)` moves that terminal cursor, and
+`showCursor()` / `hideCursor()` decide whether it is drawn. They are separate calls
+on purpose: a background repaint can move the caret without flashing one at a user
+who is not typing. A backend that has no real terminal — `HeadlessBackend`, or a
+custom one — inherits a no-op default and records the request instead, which is what
+a test asserts against.
+
 ## Test the hard strings
 
 Include a small width corpus in custom widget tests:

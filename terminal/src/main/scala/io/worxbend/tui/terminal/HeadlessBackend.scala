@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Event, Size}
+import io.worxbend.tui.core.{Buffer, Event, Position, Size}
 
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
@@ -23,6 +23,8 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   @volatile private var cursorVisible                          = true
   @volatile private var lastClipboard: Option[String]          = None
   @volatile private var lastTitle: Option[String]              = None
+  @volatile private var caret: Option[Position]                = None
+  private val caretMoveCounter                                 = AtomicLong(0)
   private val drawCounter                                      = AtomicLong(0)
   private val idleReadCounter                                  = AtomicLong(0)
   private val suspendCounter                                   = AtomicLong(0)
@@ -72,6 +74,15 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   def showCursor(): Either[BackendError, Unit] =
     cursorVisible = true
+    Right(())
+
+  /** Records where the hardware caret was asked to go, so a test can assert on it exactly as it asserts on a drawn
+    * cell. Nothing is validated here: the real terminal clamps an out-of-range position and a test that expects
+    * clamping should be asserting against the position the caller computed, not one this class invented.
+    */
+  override def setCursorPosition(position: Position): Either[BackendError, Unit] =
+    caret = Some(position)
+    val _ = caretMoveCounter.incrementAndGet()
     Right(())
 
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
@@ -133,6 +144,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     cursorVisible = true
     alternateScreen = false
     rawMode = false
+    caret = None
     Right(())
 
   // ---- test-driver surface ----
@@ -170,6 +182,16 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** The lines emitted above the app via [[printAbove]], in order. */
   def printedAbove: Seq[String] = printedLines.synchronized(printedLines.toSeq)
+
+  /** Where the hardware caret was last parked by [[setCursorPosition]], or `None` if it never was (or the backend has
+    * been closed).
+    */
+  def cursorPosition: Option[Position] = caret
+
+  /** How many times the caret was moved. A frame that repaints nothing should move it at most once, so this is what
+    * catches a render loop emitting a needless cursor move on every tick.
+    */
+  def cursorMoveCount: Long = caretMoveCounter.get()
 
   def isRawMode: Boolean         = rawMode
   def isAlternateScreen: Boolean = alternateScreen

@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Event, Size}
+import io.worxbend.tui.core.{Buffer, Event, Position, Size}
 
 import scala.concurrent.duration.Duration
 
@@ -38,6 +38,29 @@ trait Backend:
   def enableMouseCapture(mode: MouseCaptureMode): Either[BackendError, Unit] =
     val _ = mode
     enableMouseCapture()
+
+  /** Parks the terminal's own cursor — the hardware caret — on the zero-based cell `position`.
+    *
+    * This is the caret the operating system knows about: an input method editor (IME, the software that turns a
+    * sequence of keystrokes into a Chinese, Japanese or Korean character) anchors its candidate popup to it, and a
+    * screen reader reports it as the insertion point. It is *not* the highlighted cell a text widget paints into the
+    * [[Buffer]]; a focused text field normally wants both, because the painted block is what a sighted user sees and
+    * the hardware caret is what everything else follows.
+    *
+    * Position only: visibility stays with [[hideCursor]] and [[showCursor]]. Before this method existed the caret was
+    * hidden once at start-up and then left wherever the last cell of the frame diff happened to leave it; now a caller
+    * that wants a visible caret moves it here and calls `showCursor()`, and one that wants none calls `hideCursor()`
+    * without having to move anything.
+    *
+    * Call it *after* [[draw]], on the render thread: a frame flush is a stream of cursor moves, so a caret parked
+    * before the flush is walked away from by the flush itself. A position outside the terminal is clamped by the device
+    * rather than rejected here, so callers that care must bound it against [[size]] themselves.
+    *
+    * The default is a no-op for backends with no real terminal.
+    */
+  def setCursorPosition(position: Position): Either[BackendError, Unit] =
+    val _ = position
+    Right(())
 
   /** Blocks up to `timeout` for the next input event; `Right(None)` means nothing arrived.
     *
