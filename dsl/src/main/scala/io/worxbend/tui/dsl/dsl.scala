@@ -152,11 +152,14 @@ val Modifiers: io.worxbend.tui.core.Modifiers.type = io.worxbend.tui.core.Modifi
 // named by signatures this package already exports. `Async.run`'s `onError` parameter takes an `AsyncErrorHandler`, and
 // installing a `given` one is the documented way to decide where a background failure is reported;
 // `RunnerError.QueuedTask(failures)` and `RunnerError.Backend(_, queuedTasks)` both carry a `QueuedTaskFailures`, so an
-// app that pattern-matches the error `run()` hands back has to be able to name the payload.
+// app that pattern-matches the error `run()` hands back has to be able to name the payload. `CompletedFrame` is here for
+// the same reason: an app that installs `RunnerConfig(onFrame = ...)` writes the type of that lambda's parameter in its
+// own source.
 export io.worxbend.tui.runtime.{
   Async,
   AsyncErrorHandler,
   Cancelable,
+  CompletedFrame,
   Computed,
   Derived,
   QueuedTaskFailures,

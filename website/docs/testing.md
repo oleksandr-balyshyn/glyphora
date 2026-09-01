@@ -302,6 +302,33 @@ dot masks so the ring never erodes, which means its **glyphs are identical at ev
 moment** and the entire animation lives in the per-cell style — a glyph-only assertion
 would call it static.
 
+## Capture frames outside tests
+
+Everything above reads frames through `Pilot` and `HeadlessBackend`, which exist for
+tests. A shipped application can watch its own frames too, through
+`RunnerConfig.onFrame`:
+
+```scala
+override def config: RunnerConfig =
+  RunnerConfig(onFrame = Some { frame =>
+    if frame.count % 100 == 0 then log.debug(frame.text)
+  })
+```
+
+The callback is handed a `CompletedFrame` — the cells that actually reached the
+terminal, the `area` they covered, and the same `count` the `Frame` carried. Its
+`buffer` is a snapshot, so keeping it is safe: the runner reuses one buffer between
+frames, and handing out the live one would give you a value that changes underneath
+you on the next frame. `frame.lines` and `frame.text` render it as plain text, with a
+wide grapheme taking one entry rather than one per column — that is the "export what
+is on screen" command, or the screen dump attached to a bug report.
+
+Two constraints. The body runs on the render thread, inside the frame it describes,
+so keep it short and do not block: no input is being read while it runs. And a body
+that throws is not absorbed — the run ends as `RunnerError.Handler`, exactly as a
+throwing `view` does. Leaving `onFrame` unset (the default) costs nothing at all: no
+snapshot is taken.
+
 ## Assert an animated frame
 
 Every animated widget is a pure function of elapsed time, so pin the clock and the

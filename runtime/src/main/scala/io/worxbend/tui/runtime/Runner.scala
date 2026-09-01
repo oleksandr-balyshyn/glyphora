@@ -21,11 +21,19 @@ import scala.concurrent.duration.FiniteDuration
   * the failing body and the bodies queued behind it still run — but only as long as the reporting itself does not
   * throw. A handler that throws is not isolated: it unwinds out of the drain, abandoning the bodies queued behind it,
   * and out of [[Runner.run]]. Keep a handler total.
+  *
+  * `onFrame`, when set, is called on the render thread immediately after each frame has been flushed, with a snapshot
+  * of what was flushed — see [[CompletedFrame]]. It is what gives a *production* app the frame capture that until now
+  * only tests could get through `HeadlessBackend.lastDrawn`: an "export the screen" command, a frame attached to a bug
+  * report, a periodic sample. `None`, the default, costs nothing at all — no snapshot is taken. A body that throws is
+  * not absorbed: like the render function it ends the loop as [[RunnerError.Handler]], because a second isolation
+  * policy for frame observers would be one policy too many to reason about.
   */
 final case class RunnerConfig(
     tickRate: Option[FiniteDuration] = None,
     mouseCapture: Boolean = false,
     onTaskError: Option[RenderTaskErrorHandler] = None,
+    onFrame: Option[CompletedFrame => Unit] = None,
 )
 
 /** An event handler's answer to one question: does this event change what is on screen?

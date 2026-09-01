@@ -160,7 +160,7 @@ final class TerminalRunner(
     var lastTick = nanoTime()
 
     val handle   = BackendHandle(backend, state)
-    val composer = FrameComposer(backend, render)
+    val composer = FrameComposer(backend, render, config.onFrame)
 
     /** Composes and flushes one frame.
       *
@@ -265,7 +265,11 @@ final class TerminalRunner(
   *
   * Confined to the render thread, which is where the loop calls it; the cached buffer needs no synchronisation.
   */
-private final class FrameComposer(backend: Backend, render: Frame => Unit):
+private final class FrameComposer(
+    backend: Backend,
+    render: Frame => Unit,
+    onFrame: Option[CompletedFrame => Unit],
+):
 
   private var frameBuffer: Option[Buffer] = None
   private var composed: Long              = 0L
@@ -288,7 +292,11 @@ private final class FrameComposer(backend: Backend, render: Frame => Unit):
       // still used its number. Rolling it back on a failed draw would hand two different frames the same number, which
       // is worse for a debug label than a gap in the sequence.
       composed = if composed == Long.MaxValue then 0L else composed + 1L
-      backend.draw(buffer).flatMap(_ => placeCursor(frame.declaredCursor))
+      backend.draw(buffer).flatMap { _ =>
+        // Only a flushed frame is a completed one, so the observer runs after a successful draw and never before it.
+        onFrame.foreach(observe => observe(CompletedFrame(buffer.snapshot, area, frame.count)))
+        placeCursor(frame.declaredCursor)
+      }
     }
 
   /** Puts the physical cursor where the frame asked for it, or hides it when the frame asked for nothing.
