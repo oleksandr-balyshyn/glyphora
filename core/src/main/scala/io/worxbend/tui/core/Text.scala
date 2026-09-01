@@ -8,8 +8,8 @@ final case class Text(lines: Seq[Line]):
 
   /** Every line's [[Line.plainText]] joined with `\n`, with no trailing newline added.
     *
-    * The inverse of [[Text.raw]] up to styling: `Text.raw(s).plainText == s` for any `s` that contains no `\r`,
-    * because `raw` splits on `\n` keeping empty trailing lines and this joins them back the same way. As with
+    * The inverse of [[Text.raw]] up to styling: `Text.raw(s).plainText == s` for any `s` that contains no `\r`, because
+    * `raw` splits on `\n` keeping empty trailing lines and this joins them back the same way. As with
     * [[Line.plainText]], the result is for logging, clipboard payloads and test assertions — not for measuring, which
     * is what [[width]] and [[height]] are for.
     */
@@ -36,11 +36,11 @@ final case class Text(lines: Seq[Line]):
     *
     * When the text has no lines at all there is no last line to extend, so one is started holding just `span` and the
     * result is a one-line text. That empty case is the whole reason this method exists: code that accumulates a text
-    * span by span otherwise has to test `lines.isEmpty` itself at every call site, and the two branches are easy to
-    * get the wrong way round.
+    * span by span otherwise has to test `lines.isEmpty` itself at every call site, and the two branches are easy to get
+    * the wrong way round.
     *
-    * A text whose last line is present but has no spans is *not* the empty case — `span` becomes that line's only
-    * span, and the line count does not change.
+    * A text whose last line is present but has no spans is *not* the empty case — `span` becomes that line's only span,
+    * and the line count does not change.
     */
   def appendedToLast(span: Span): Text =
     if lines.isEmpty then Text(Seq(Line(Seq(span))))

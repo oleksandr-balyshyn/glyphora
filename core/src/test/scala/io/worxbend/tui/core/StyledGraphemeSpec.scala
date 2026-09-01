@@ -8,7 +8,12 @@ final class StyledGraphemeSpec extends AnyFunSuite:
   private val bold = Style.Default.bold
 
   test("an ASCII span yields one element per character, each carrying the resolved style"):
-    assert(Span("ab", bold).styledGraphemes(Style.Default).toList == List(StyledGrapheme("a", bold), StyledGrapheme("b", bold)))
+    assert(
+      Span("ab", bold).styledGraphemes(Style.Default).toList == List(
+        StyledGrapheme("a", bold),
+        StyledGrapheme("b", bold),
+      )
+    )
 
   test("the base style is resolved under the span's own"):
     val base    = Style.Default.withFg(Color.Blue)

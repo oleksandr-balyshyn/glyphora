@@ -12,16 +12,16 @@ final case class Span(content: String, style: Style):
     */
   def styled(transform: Style => Style): Span = copy(style = transform(style))
 
-  /** This span drawn over `base`: `base.patch(style)`, so the span's own settings win and `base` fills in only what
-    * the span leaves unset.
+  /** This span drawn over `base`: `base.patch(style)`, so the span's own settings win and `base` fills in only what the
+    * span leaves unset.
     *
     * This is the direction a theme colour travels — the theme is the floor, and a span that already chose a colour of
     * its own keeps it. For the opposite direction, where the argument overrules the span, see [[Style.patch]].
     */
   def under(base: Style): Span = copy(style = base.patch(style))
 
-  /** This span with `style` layered on top of its own: the argument's explicit choices win, and everything the
-    * argument stays silent about survives.
+  /** This span with `style` layered on top of its own: the argument's explicit choices win, and everything the argument
+    * stays silent about survives.
     *
     * "Make this already-styled span italic without disturbing its colour" used to be
     * `span.copy(style = span.style.patch(Style.Default.italic))` at every call site. This is that expression under a
@@ -34,11 +34,11 @@ final case class Span(content: String, style: Style):
     */
   infix def +(that: Span): Line = Line(Seq(this, that))
 
-  /** Steps this span one terminal cell-unit at a time, every cluster carrying `base` with this span's own style
-    * layered on top — the resolution [[Style.patch]] does, done once here instead of at each consumer.
+  /** Steps this span one terminal cell-unit at a time, every cluster carrying `base` with this span's own style layered
+    * on top — the resolution [[Style.patch]] does, done once here instead of at each consumer.
     *
-    * This is the primitive for anything that has to reason about text cell by cell: custom reflow, hit-testing a
-    * mouse column against the character under it, or measuring a prefix.
+    * This is the primitive for anything that has to reason about text cell by cell: custom reflow, hit-testing a mouse
+    * column against the character under it, or measuring a prefix.
     *
     * '''The returned iterator is stateful, single-use and owned by the calling thread.''' It wraps
     * [[CharWidth.graphemeClusters]] and inherits that ownership rule exactly: walk it once, never store one across

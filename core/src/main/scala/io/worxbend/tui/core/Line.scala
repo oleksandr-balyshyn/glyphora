@@ -32,19 +32,19 @@ final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None):
 
   /** Every span's [[Style]] put through `transform`, the spans and their content unchanged.
     *
-    * A `Line` holds no style of its own — it is its spans — so this is a fold over them rather than a field being
-    * set. That makes the calls compose exactly as two `Style` calls would: `line.styled(_.bold).styled(_.withFg(c))`
-    * gives every span a style that is both bold and coloured.
+    * A `Line` holds no style of its own — it is its spans — so this is a fold over them rather than a field being set.
+    * That makes the calls compose exactly as two `Style` calls would: `line.styled(_.bold).styled(_.withFg(c))` gives
+    * every span a style that is both bold and coloured.
     */
   def styled(transform: Style => Style): Line = Line(spans.map(_.styled(transform)))
 
-  /** `base` laid underneath every span's own style — see [[Span.under]]. The way a theme colour reaches a line built
-    * by a helper that already set a few attributes of its own, without overruling them.
+  /** `base` laid underneath every span's own style — see [[Span.under]]. The way a theme colour reaches a line built by
+    * a helper that already set a few attributes of its own, without overruling them.
     */
   def under(base: Style): Line = Line(spans.map(_.under(base)))
 
-  /** `style` layered on top of every span's own — see [[Span.patchStyle]]. The argument wins where it speaks, and
-    * each span keeps whatever the argument says nothing about, so the spans stay different from one another.
+  /** `style` layered on top of every span's own — see [[Span.patchStyle]]. The argument wins where it speaks, and each
+    * span keeps whatever the argument says nothing about, so the spans stay different from one another.
     */
   def patchStyle(style: Style): Line = Line(spans.map(_.patchStyle(style)))
 
@@ -64,17 +64,17 @@ final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None):
   /** [[appendedAll]] as an operator: the two rows laid end to end, every span keeping its own style.
     *
     * There is deliberately no operator for stacking two lines vertically. ratatui gives `+` both jobs and picks the
-    * axis from the argument's type, so the same symbol means "further right" or "further down" depending on what is
-    * on its right-hand side — which is not something a reader can see at a glance. Stacking is spelled out instead,
-    * as `Text(Seq(first, second))` or `Text.Empty.appended(first).appended(second)`.
+    * axis from the argument's type, so the same symbol means "further right" or "further down" depending on what is on
+    * its right-hand side — which is not something a reader can see at a glance. Stacking is spelled out instead, as
+    * `Text(Seq(first, second))` or `Text.Empty.appended(first).appended(second)`.
     */
   infix def ++(other: Line): Line = appendedAll(other)
 
   /** The whole row as one stream of cell-units, the spans walked in order — see [[Span.styledGraphemes]] for what a
     * cluster is and for the iterator's ownership rules, which this inherits unchanged.
     *
-    * Each span resolves its own style against `base`, so a cluster always arrives carrying the style it will really
-    * be drawn in. The spans are visited lazily, so taking a screenful off the front never walks the tail.
+    * Each span resolves its own style against `base`, so a cluster always arrives carrying the style it will really be
+    * drawn in. The spans are visited lazily, so taking a screenful off the front never walks the tail.
     */
   def styledGraphemes(base: Style): Iterator[StyledGrapheme] =
     spans.iterator.flatMap(_.styledGraphemes(base))

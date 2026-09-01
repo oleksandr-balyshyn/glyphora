@@ -53,7 +53,7 @@ final class TextBuildingSpec extends AnyFunSuite:
     assert(Text.Empty.width == 0)
 
   test("a text folded up span by span equals the same text written out"):
-    val spans = Seq(Span.raw("你"), Span("好", Style.Default.bold))
+    val spans  = Seq(Span.raw("你"), Span("好", Style.Default.bold))
     val folded = spans.foldLeft(Text.Empty)((text, span) => text.appendedToLast(span))
     assert(folded == Text(Seq(Line(spans))))
     assert(folded.width == 4)

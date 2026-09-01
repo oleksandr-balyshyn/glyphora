@@ -6,10 +6,10 @@ package io.worxbend.tui.core
   * memory, in this very value, and anything that can read the object can read [[content]]. It exists so that the
   * *display* of a secret is correct and done in one place.
   *
-  * "Correct" is the whole point. The obvious hand-rolled version, `"*" * secret.length`, counts UTF-16 code units, so
-  * a secret containing an emoji or an accented letter written as a base plus a combining mark produces more mask
-  * characters than there are characters to hide — which leaks the shape of the secret and misaligns the row it is
-  * drawn in. [[value]] emits exactly one mask per grapheme cluster, the unit a terminal actually draws.
+  * "Correct" is the whole point. The obvious hand-rolled version, `"*" * secret.length`, counts UTF-16 code units, so a
+  * secret containing an emoji or an accented letter written as a base plus a combining mark produces more mask
+  * characters than there are characters to hide — which leaks the shape of the secret and misaligns the row it is drawn
+  * in. [[value]] emits exactly one mask per grapheme cluster, the unit a terminal actually draws.
   *
   * The editable counterpart is the DSL's masked text input, which hides what the user is typing. Use this one wherever
   * a secret is merely displayed: a paragraph, a table cell, a list row, a log line.
@@ -27,8 +27,8 @@ final case class Masked(content: String, maskChar: String):
     * multi-code-point emoji is hidden by exactly one mask glyph rather than by two or four.
     */
   def value: String =
-    val glyph = CharWidth.graphemeClusters(maskChar).nextOption().getOrElse(Masked.DefaultMaskChar)
-    val masked = StringBuilder()
+    val glyph    = CharWidth.graphemeClusters(maskChar).nextOption().getOrElse(Masked.DefaultMaskChar)
+    val masked   = StringBuilder()
     val clusters = CharWidth.graphemeClusters(content)
     while clusters.hasNext do
       val _ = clusters.next()

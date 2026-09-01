@@ -36,7 +36,8 @@ final class TextStylingSpec extends AnyFunSuite:
     assert(Line(Seq.empty).styled(_.bold) == Line(Seq.empty))
 
   test("Line.under preserves the per-span differences under one base"):
-    val line = Line(Seq(Span("a", Style.Default.withFg(Color.Red)), Span.raw("b"))).under(Style.Default.withFg(Color.Blue))
+    val line =
+      Line(Seq(Span("a", Style.Default.withFg(Color.Red)), Span.raw("b"))).under(Style.Default.withFg(Color.Blue))
     assert(line.spans.head.style.fg.contains(Color.Red))
     assert(line.spans(1).style.fg.contains(Color.Blue))
 

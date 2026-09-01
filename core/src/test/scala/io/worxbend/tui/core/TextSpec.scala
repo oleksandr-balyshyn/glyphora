@@ -53,7 +53,7 @@ final class TextSpec extends AnyFunSuite:
     // "e" followed by U+0301 COMBINING ACUTE ACCENT: two code units, one grapheme cluster, one column
     val line = Line(Seq(Span.raw("👍"), Span.raw("é")))
     assert(line.plainText.length == 4) // a surrogate pair, then the letter and its combining mark
-    assert(line.width == 3)            // two columns for the emoji, one for the accented letter
+    assert(line.width == 3) // two columns for the emoji, one for the accented letter
 
   test("styled text carries the style on every line"):
     val text = Text.styled("a\nb", Style.Default.bold)
