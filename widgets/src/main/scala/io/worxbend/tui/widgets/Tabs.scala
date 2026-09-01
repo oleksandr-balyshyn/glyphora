@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Line, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Line, Measured, Rect, Style, Widget}
 
 /** A single-row tab bar: titles separated by a divider, the selected title highlighted.
   *
@@ -22,7 +22,8 @@ final case class Tabs(
     divider: String = " │ ",
     paddingLeft: String = "",
     paddingRight: String = "",
-) extends Widget:
+) extends Widget
+    with Measured:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
@@ -35,6 +36,18 @@ final case class Tabs(
         val isLast   = index == titles.size - 1
         if !isLast then cursor.write(divider, style)
       }
+
+  /** The columns this bar needs to draw every tab in full: each title inside its padding, plus one divider between
+    * neighbours. A tab bar is always one row and its width never depends on how many rows it is given, so `height` is
+    * ignored.
+    *
+    * Answering this lets a `row(...)` size a tab bar from its own content instead of the caller hardcoding a
+    * constraint that has to be edited every time a tab is renamed.
+    */
+  override def widthAt(height: Int): Option[Int] =
+    val padding  = CharWidth.of(paddingLeft) + CharWidth.of(paddingRight)
+    val dividers = math.max(0, titles.size - 1) * CharWidth.of(divider)
+    Some(titles.map(title => title.width + padding).sum + dividers)
 
 object Tabs:
 

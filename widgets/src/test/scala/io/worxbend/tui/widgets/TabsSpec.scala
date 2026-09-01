@@ -39,3 +39,16 @@ final class TabsSpec extends AnyFunSuite:
     // " one │ tw" would need 9 columns; 8 stop the second title one cluster short and drop its right pad
     assert(trimmedLines(rendered(Tabs.padded(Seq("one", "two").map(Line.raw)), 8, 1)) == Seq(" one │ t"))
 
+  test("the measured width counts titles, padding and dividers"):
+    // " one " + "│" + " two " = 5 + 1 + 5
+    assert(Tabs.padded(Seq("one", "two").map(Line.raw)).widthAt(1) == Some(11))
+    // the unpadded default: "one" + " │ " + "two" + " │ " + "three"
+    assert(tabs.widthAt(1) == Some(17))
+
+  test("a wide title is measured by its display width, not its character count"):
+    // each of the two CJK clusters occupies two columns
+    assert(Tabs(Seq(Line.raw("日本"))).widthAt(1) == Some(4))
+
+  test("a single tab is measured with no divider, and no tabs at all measure as nothing"):
+    assert(Tabs(Seq(Line.raw("solo"))).widthAt(1) == Some(4))
+    assert(Tabs(Seq.empty).widthAt(1) == Some(0))

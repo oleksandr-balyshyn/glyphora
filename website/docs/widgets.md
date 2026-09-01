@@ -497,6 +497,11 @@ import io.worxbend.tui.widgets.Tabs
 widget(Tabs.padded(Seq("Overview", "Detail").map(Line.raw), selected = 1))
 ```
 
+`Tabs` also answers `widthAt(height)` from `core.Measured`, reporting the exact
+columns it needs — every title, its padding, and one divider per gap. A `row` can
+therefore size a tab bar from its own content instead of you maintaining a
+`Constraint.Length` that has to be edited every time a tab is renamed.
+
 ## Tables: simple and interactive
 
 Use `table` for static rows:
