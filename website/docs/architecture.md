@@ -56,7 +56,8 @@ maximum-stability tier everything else builds on:
   Database by `tools/generate-width-table.py`.
 - **Layout**: `Constraint` (`Length`/`Percentage`/`Ratio`/`Min`/`Max`/`Fill`) and the
   `Layout.split` solver, plus `split2`…`split5`, which hand back a tuple so a
-  statically known arity is destructured instead of indexed.
+  statically known arity is destructured instead of indexed, and `splitWithSpacers`,
+  which additionally returns the gap rectangles between and around the segments.
 - **Widget traits**: `Widget`, `StatefulWidget[S]`. `Widget` has exactly one abstract
   method, `render(area: Rect, buffer: Buffer): Unit`, so Scala's SAM conversion means a
   **plain lambda is a complete widget** — there is no trait to implement, no base class,

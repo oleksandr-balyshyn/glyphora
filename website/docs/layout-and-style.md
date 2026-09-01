@@ -203,6 +203,35 @@ children out along an axis. (A `panel` stacks its children with the same widget 
 that quietly does nothing. `.rounded` and `.doubleBorder` are typed the same way: they
 exist only on `panel`.
 
+## Paint the gaps a split leaves
+
+`Layout.split(area)` hands back one rectangle per constraint. `splitWithSpacers(area)`
+hands back those same rectangles *and* the empty rectangles between and around them —
+one more spacer than there are segments, in the order "space before the first segment,
+space between each pair, space after the last":
+
+```scala
+import io.worxbend.tui.core.*
+import io.worxbend.tui.widgets.{Block, Borders, Rule}
+
+val (panes, gaps) = Layout.horizontal(0.5, 0.5).copy(spacing = 1).splitWithSpacers(buffer.area)
+Block(borders = Borders.All).render(panes(0), buffer)
+Block(borders = Borders.All).render(panes(1), buffer)
+// gaps(1) is exactly the one-cell channel `spacing` opened between the two panes
+Rule(orientation = Direction.Vertical).render(gaps(1), buffer)
+```
+
+This is the primitive behind a draggable splitter, a ruled grid, or a drop shadow: the
+solver already worked out where the gap is, so a caller no longer redoes that arithmetic
+and no longer risks disagreeing with it. The gaps come from the segments *after* they
+were placed and clipped, so a layout whose constraints overrun the area reports the room
+that is really on screen rather than the room it wished for.
+
+A zero-extent spacer is normal, not an error — it is what adjacent segments with no
+spacing produce, and every widget renders an empty rectangle as nothing, so there is
+nothing to special-case. A layout with no constraints returns no segments and no
+spacers.
+
 ## Style elements fluently
 
 Styling calls return a new element, so they chain naturally and never mutate a

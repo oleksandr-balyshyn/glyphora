@@ -31,6 +31,45 @@ final case class Layout(
       val sizes     = LayoutSolver.solve(constraints, available)
       layOutSegments(area, sizes, total)
 
+  /** [[split]], plus the `segments.size + 1` *spacer* rectangles the layout left between and around those segments.
+    *
+    * `spacers(0)` is the room before the first segment, `spacers(i)` the room between segment `i - 1` and segment `i`,
+    * and the last spacer the room after the final segment. Before this existed a caller who wanted to paint something
+    * into a gap — a rule between two panes, the grab handle of a draggable splitter, a drop shadow — had to redo the
+    * arithmetic `spacing` and [[flex]] had already done, and could get a different answer from the solver. Now the
+    * solver hands the gaps back, so the two cannot disagree.
+    *
+    * The spacers are derived from the segments *after* they were placed and clamped, not from the intended offsets. If
+    * the constraints demand more room than `area` has, the trailing segments are squeezed to nothing and the gaps
+    * between them are reported as nothing too, rather than as room that is not on screen.
+    *
+    * A zero-extent spacer is normal and needs no special case at the call site: it is what adjacent segments with no
+    * spacing produce, and every widget renders an empty rectangle as nothing. When `constraints` is empty both results
+    * are empty — there are no segments, so there is nothing for a gap to sit between.
+    *
+    * @return
+    *   the segments, then the spacers.
+    */
+  def splitWithSpacers(area: Rect): (Seq[Rect], Seq[Rect]) =
+    val segments = split(area)
+    if segments.isEmpty then (Seq.empty, Seq.empty) else (segments, spacersBetween(area, segments))
+
+  /** The gaps around and between already-placed `segments`, in the order [[splitWithSpacers]] documents.
+    *
+    * Walks the axis: the first gap runs from the area's near edge to the first segment's start, each middle gap from
+    * one segment's end to the next one's start, and the last from the final segment's end to the area's far edge. Each
+    * bound is clamped into the area and each extent floored at zero, so a segment that was itself clamped cannot
+    * produce a gap that starts outside `area` or has a negative width.
+    */
+  private def spacersBetween(area: Rect, segments: Seq[Rect]): Seq[Rect] =
+    val (axisStart, axisEnd) = axisBounds(area)
+    val starts               = segments.map(axisOffsetOf)
+    val ends                 = segments.map(segment => axisOffsetOf(segment) + axisExtent(segment))
+    (axisStart +: ends).zip(starts :+ axisEnd).map { (from, to) =>
+      val begin = math.max(axisStart, math.min(from, axisEnd))
+      segmentRect(area, begin, math.max(0, math.min(to, axisEnd) - begin))
+    }
+
   /** [[split]] for a layout whose constraint count is known while writing the code: the segments come back as a tuple,
     * so `val (left, right) = layout.split2(area)` binds two names the compiler checked instead of two `apply` calls it
     * did not.
@@ -61,13 +100,19 @@ final case class Layout(
     val parts = split(area).toIndexedSeq
     parts ++ IndexedSeq.fill(math.max(0, count - parts.size))(Rect(0, 0, 0, 0))
 
-  /** How many cells `area` offers along [[direction]] — its width when horizontal, its height when vertical. The three
+  /** How many cells `area` offers along [[direction]] — its width when horizontal, its height when vertical. The four
     * axis helpers are the only place in this file that knows which `Rect` fields the direction selects.
     */
   private def axisExtent(area: Rect): Int =
     direction match
       case Direction.Horizontal => area.width
       case Direction.Vertical   => area.height
+
+  /** Where `area` starts along [[direction]] — its `x` when horizontal, its `y` when vertical. */
+  private def axisOffsetOf(area: Rect): Int =
+    direction match
+      case Direction.Horizontal => area.x
+      case Direction.Vertical   => area.y
 
   /** The first coordinate along [[direction]] and the one past the last. */
   private def axisBounds(area: Rect): (Int, Int) =
