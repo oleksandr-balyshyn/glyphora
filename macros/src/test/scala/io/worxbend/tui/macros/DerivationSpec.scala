@@ -2,10 +2,12 @@ package io.worxbend.tui.macros
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** Top level so the snippet compiled by `typeCheckErrors` can name it. `shippedOn` is a `java.time.LocalDate`, a type
-  * that brings no `FormFieldType` of its own, so the derivation must refuse it.
+/** Top level so the snippet compiled by `typeCheckErrors` can name it. `route` is a `java.net.URI`, a type that brings
+  * no `FormFieldType` of its own, so the derivation must refuse it. A URI is chosen over a date or an identifier on
+  * purpose: those are types the library could reasonably grow an instance for one day, and the moment it did, this test
+  * would stop testing the diagnostic and start failing for an unrelated reason.
   */
-private final case class Parcel(label: String, shippedOn: java.time.LocalDate)
+private final case class Parcel(label: String, route: java.net.URI)
 
 /** A domain type of the application's own, with its own instance next to it — the extension point that keeps the set of
   * derivable types open. `deriveForm` has no branch for `Email`; it finds this given by implicit search.
@@ -100,7 +102,7 @@ final class DerivationSpec extends AnyFunSuite:
   test("deriveForm refuses a field type with no FormFieldType and says how to add one"):
     val errors  = scala.compiletime.testing.typeCheckErrors("deriveForm[Parcel]")
     val message = errors.map(_.message).mkString("; ")
-    assert(message.contains("LocalDate"), message)
+    assert(message.contains("URI"), message)
     assert(message.contains("FormFieldType"), s"the message should say what to define: $message")
 
   test("a wide case class derives — no inline-depth ceiling"):
