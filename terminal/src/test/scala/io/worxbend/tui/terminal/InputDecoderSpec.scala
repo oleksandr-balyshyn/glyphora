@@ -15,13 +15,15 @@ import io.worxbend.tui.core.{
 
 import org.scalatest.funsuite.AnyFunSuite
 
-final class InputDecoderSpec extends AnyFunSuite with DecoderFixtures:
+import io.worxbend.tui.terminal.ScriptedInput.{csi, decoder}
+
+final class InputDecoderSpec extends AnyFunSuite:
 
   private def decoded(chars: Int*): Event =
-    decoderFor(chars*).decode(10).getOrElse(fail("expected an event"))
+    decoder(chars*).decode(10).getOrElse(fail("expected an event"))
 
   test("a timeout with no input decodes to no event"):
-    assert(decoderFor().decode(10).isEmpty)
+    assert(decoder().decode(10).isEmpty)
 
   test("a printable character decodes to its key"):
     assert(decoded('q') == Event.Key(KeyEvent(KeyCode.Char('q'), KeyModifiers.None)))
@@ -84,7 +86,7 @@ final class InputDecoderSpec extends AnyFunSuite with DecoderFixtures:
 
   test("the tilde numbers xterm leaves unassigned still decode to no key"):
     Seq(27, 30, 35).foreach: tilde =>
-      assert(decoderFor(csi(s"$tilde~")*).decode(10).isEmpty, s"CSI $tilde~ should name no key")
+      assert(decoder(csi(s"$tilde~")*).decode(10).isEmpty, s"CSI $tilde~ should name no key")
 
   test("a shifted function key carries the xterm modifier parameter"):
     assert(decoded(csi("25;2~")*) == Event.Key(KeyEvent(KeyCode.F(13), KeyModifiers.Shift)))
@@ -237,7 +239,7 @@ final class InputDecoderSpec extends AnyFunSuite with DecoderFixtures:
   test("the code points bounding the media block decode as their own blocks, not as media keys"):
     // the boundary is the part of a transcribed table that rots, so it is asserted rather than assumed. 57427 is
     // unassigned; 57441 is LEFT_SHIFT, the first code point of the modifier-only block that sits directly above.
-    assert(decoderFor(csi("57427u")*).decode(10).isEmpty)
+    assert(decoder(csi("57427u")*).decode(10).isEmpty)
     assert(decoded(csi("57441u")*) == Event.Key(KeyEvent.of(KeyCode.Modifier(ModifierKey.LeftShift))))
 
   test("a media key carries its modifiers like any other key"):
@@ -283,13 +285,13 @@ final class InputDecoderSpec extends AnyFunSuite with DecoderFixtures:
 
   test("an unknown SS3 final is dropped rather than reported as Escape"):
     // 'z' sits just past the keypad digit range, which is where an off-by-one in the guard would show up
-    assert(decoderFor(0x1b, 'O', 'z').decode(10).isEmpty)
-    assert(decoderFor(0x1b, 'O', 'a').decode(10).isEmpty)
+    assert(decoder(0x1b, 'O', 'z').decode(10).isEmpty)
+    assert(decoder(0x1b, 'O', 'a').decode(10).isEmpty)
 
   test("a torn escape sequence is dropped rather than reported as a key"):
     // reporting Escape here would mean a half-arrived arrow key silently closes the user's dialog
-    assert(decoderFor(0x1b, '[').decode(10).isEmpty)
-    assert(decoderFor(csi("1;5")*).decode(10).isEmpty)
+    assert(decoder(0x1b, '[').decode(10).isEmpty)
+    assert(decoder(csi("1;5")*).decode(10).isEmpty)
 
   test("kitty CSI-u sequences decode without the escape timeout heuristic"):
     assert(decoded(csi("27u")*) == Event.Key(KeyEvent.of(KeyCode.Escape)))
@@ -314,9 +316,9 @@ final class InputDecoderSpec extends AnyFunSuite with DecoderFixtures:
 
   test("an 8-bit C1 control decodes to no event"):
     // C1 names no key; reporting one as an unmodified Char inserts it into whatever text field has focus
-    assert(decoderFor(0x85).decode(10).isEmpty)
-    assert(decoderFor(0x9b).decode(10).isEmpty)
-    assert(decoderFor(0x1b, 0x9b).decode(10).isEmpty)
+    assert(decoder(0x85).decode(10).isEmpty)
+    assert(decoder(0x9b).decode(10).isEmpty)
+    assert(decoder(0x1b, 0x9b).decode(10).isEmpty)
 
   test("a printable Latin-1 character just above the C1 range still decodes"):
     assert(decoded(0xe9) == Event.Key(KeyEvent(KeyCode.Char(0xe9), KeyModifiers.None)))

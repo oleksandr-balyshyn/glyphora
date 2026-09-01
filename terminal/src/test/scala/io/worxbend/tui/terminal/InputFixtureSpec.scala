@@ -14,6 +14,8 @@ import io.worxbend.tui.core.{
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import io.worxbend.tui.terminal.ScriptedInput.{Esc, NothingAvailable, csi, ss3}
+
 /** Whole-session replay: many sequences back to back through one decoder, asserting the *entire* event list.
   *
   * Single-sequence tests cannot catch the failure mode that matters most here — a sequence that consumes bytes
@@ -25,26 +27,23 @@ import org.scalatest.funsuite.AnyFunSuite
   * add a real capture: run `script -f trace.raw`, press the keys, then paste the bytes here with the terminal and key
   * names recorded alongside, so a future reader can tell a captured fixture from a derived one.
   */
-final class InputFixtureSpec extends AnyFunSuite with DecoderFixtures:
-
-  private val Esc = 0x1b
+final class InputFixtureSpec extends AnyFunSuite:
 
   /** Replays `bytes` through a single decoder until it stops producing events. */
   private def replay(bytes: Seq[Int]): List[Event] =
     var index    = 0
-    val decoder  = InputDecoder(_ =>
+    val input = InputDecoder(_ =>
       if index < bytes.length then { val c = bytes(index); index += 1; c }
-      else -2
+      else NothingAvailable
     )
     val events   = List.newBuilder[Event]
     var draining = true
     while draining do
-      decoder.decode(10L) match
+      input.decode(10L) match
         case Some(event) => events += event
         case None        => if index >= bytes.length then draining = false
     events.result()
 
-  private def ss3(body: String): Seq[Int] = Esc +: 'O'.toInt +: body.map(_.toInt)
   private def text(s: String): Seq[Int]   = s.map(_.toInt)
 
   private def key(code: KeyCode): Event                  = Event.Key(KeyEvent.of(code))

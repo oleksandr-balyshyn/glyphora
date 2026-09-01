@@ -6,7 +6,9 @@ import scala.concurrent.duration.{Duration, DurationInt}
 
 import org.scalatest.funsuite.AnyFunSuite
 
-final class WindowSizeSpec extends AnyFunSuite with DecoderFixtures:
+import io.worxbend.tui.terminal.ScriptedInput.{csi, decoder}
+
+final class WindowSizeSpec extends AnyFunSuite:
 
   // ------------------------------------------------------------------ the value
 
@@ -82,44 +84,44 @@ final class WindowSizeSpec extends AnyFunSuite with DecoderFixtures:
   // ------------------------------------------------------------------ the reply
 
   test("a text-area report is captured and never surfaces as a keypress"):
-    val decoder = decoderFor(csi("4;480;800t")*)
-    assert(decoder.readTextAreaSize(10.millis).contains(Size(800, 480)))
+    val input = decoder(csi("4;480;800t")*)
+    assert(input.readTextAreaSize(10.millis).contains(Size(800, 480)))
 
   test("the reply's height-then-width wire order is swapped exactly once"):
-    val decoder = decoderFor(csi("4;1080;1920t")*)
-    assert(decoder.readTextAreaSize(10.millis).contains(Size(1920, 1080)))
+    val input = decoder(csi("4;1080;1920t")*)
+    assert(input.readTextAreaSize(10.millis).contains(Size(1920, 1080)))
 
   test("a report that arrives unasked is still dropped rather than dispatched as a key"):
-    assert(decoderFor(csi("4;480;800t")*).decode(10).isEmpty)
+    assert(decoder(csi("4;480;800t")*).decode(10).isEmpty)
 
   /** `CSI 8 ; rows ; cols t` is the *character* size report and `CSI 9 ; …` the screen size. Reading either as pixels
     * would hand a caller a cell geometry off by an order of magnitude.
     */
   test("a different XTWINOPS answer is dropped instead of being read as pixels"):
-    assert(decoderFor(csi("8;24;80t")*).readTextAreaSize(10.millis).isEmpty)
-    assert(decoderFor(csi("9;1080;1920t")*).readTextAreaSize(10.millis).isEmpty)
-    assert(decoderFor(csi("t")*).readTextAreaSize(10.millis).isEmpty)
+    assert(decoder(csi("8;24;80t")*).readTextAreaSize(10.millis).isEmpty)
+    assert(decoder(csi("9;1080;1920t")*).readTextAreaSize(10.millis).isEmpty)
+    assert(decoder(csi("t")*).readTextAreaSize(10.millis).isEmpty)
 
   test("a truncated report yields nothing and leaves the decoder usable"):
-    val decoder = decoderFor((csi("4;480") ++ Seq('q'.toInt))*)
-    assert(decoder.readTextAreaSize(10.millis).isEmpty)
+    val input = decoder((csi("4;480") ++ Seq('q'.toInt))*)
+    assert(input.readTextAreaSize(10.millis).isEmpty)
 
   /** The ordering guarantee both reply round trips make: a key typed while the query is in flight is queued, not
     * dropped, and comes back out in the order it was typed.
     */
   test("keys typed while the query is in flight are delivered afterwards, in order"):
-    val decoder = decoderFor((Seq('a'.toInt, 'b'.toInt) ++ csi("4;480;800t"))*)
-    assert(decoder.readTextAreaSize(50.millis).contains(Size(800, 480)))
-    assert(decoder.decode(10).contains(Event.Key(KeyEvent.char('a'))))
-    assert(decoder.decode(10).contains(Event.Key(KeyEvent.char('b'))))
+    val input = decoder((Seq('a'.toInt, 'b'.toInt) ++ csi("4;480;800t"))*)
+    assert(input.readTextAreaSize(50.millis).contains(Size(800, 480)))
+    assert(input.decode(10).contains(Event.Key(KeyEvent.char('a'))))
+    assert(input.decode(10).contains(Event.Key(KeyEvent.char('b'))))
 
   test("a terminal that never answers times out rather than blocking forever"):
-    assert(decoderFor().readTextAreaSize(5.millis).isEmpty)
+    assert(decoder().readTextAreaSize(5.millis).isEmpty)
 
   /** F3 and a cursor report collide on their contents; a text-area report does not collide with anything, so it must
     * not disturb the sequences around it.
     */
   test("capturing a report leaves the following key intact"):
-    val decoder = decoderFor((csi("4;480;800t") ++ csi("A"))*)
-    assert(decoder.readTextAreaSize(10.millis).contains(Size(800, 480)))
-    assert(decoder.decode(10).contains(Event.Key(KeyEvent.of(KeyCode.Up))))
+    val input = decoder((csi("4;480;800t") ++ csi("A"))*)
+    assert(input.readTextAreaSize(10.millis).contains(Size(800, 480)))
+    assert(input.decode(10).contains(Event.Key(KeyEvent.of(KeyCode.Up))))

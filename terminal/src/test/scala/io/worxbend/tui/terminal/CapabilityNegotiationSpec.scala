@@ -6,13 +6,15 @@ import scala.concurrent.duration.DurationInt
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import io.worxbend.tui.terminal.ScriptedInput.{csi, decoder}
+
 /** Asking the terminal what it supports, and — the part that matters — what is done with silence. */
-final class CapabilityNegotiationSpec extends AnyFunSuite with DecoderFixtures:
+final class CapabilityNegotiationSpec extends AnyFunSuite:
 
   private val Da1 = csi("?62;1;4c")
 
   private def probed(replies: Seq[Int]*): TerminalCapabilities =
-    decoderFor((replies.flatten ++ Da1)*).readCapabilityReport(50.millis)
+    decoder((replies.flatten ++ Da1)*).readCapabilityReport(50.millis)
 
   // ------------------------------------------------------------------ the value
 
@@ -72,7 +74,7 @@ final class CapabilityNegotiationSpec extends AnyFunSuite with DecoderFixtures:
     assert(probed() == TerminalCapabilities.unknown)
 
   test("a terminal that answers nothing at all times out and establishes nothing"):
-    assert(decoderFor().readCapabilityReport(5.millis) == TerminalCapabilities.unknown)
+    assert(decoder().readCapabilityReport(5.millis) == TerminalCapabilities.unknown)
 
   test("a kitty reply is the answer whatever flags it carries"):
     assert(probed(csi("?0u")).kittyKeyboard == Support.Yes)
@@ -85,17 +87,17 @@ final class CapabilityNegotiationSpec extends AnyFunSuite with DecoderFixtures:
     assert(probed(csi("?1049;2$y")) == TerminalCapabilities.unknown)
 
   test("a key typed during the probe is delivered afterwards rather than eaten"):
-    val decoder = decoderFor(('a'.toInt +: (csi("?2026;2$y") ++ Da1))*)
-    assert(decoder.readCapabilityReport(50.millis).synchronizedOutput == Support.Yes)
-    assert(decoder.decode(10).contains(Event.Key(KeyEvent.char('a'))))
+    val input = decoder(('a'.toInt +: (csi("?2026;2$y") ++ Da1))*)
+    assert(input.readCapabilityReport(50.millis).synchronizedOutput == Support.Yes)
+    assert(input.decode(10).contains(Event.Key(KeyEvent.char('a'))))
 
   /** Outside a probe a stray reply is still dropped unread. A device-attributes answer arriving mid-session — because
     * something else in the process asked — must not rewrite what was established at start-up.
     */
   test("a reply arriving outside a probe is dropped and changes nothing"):
-    val decoder = decoderFor((csi("?2026;0$y") ++ csi("?62;1;4c"))*)
-    assert(decoder.decode(10).isEmpty)
-    assert(decoder.readCapabilityReport(5.millis) == TerminalCapabilities.unknown)
+    val input = decoder((csi("?2026;0$y") ++ csi("?62;1;4c"))*)
+    assert(input.decode(10).isEmpty)
+    assert(input.readCapabilityReport(5.millis) == TerminalCapabilities.unknown)
 
   // ------------------------------------------------------------------ acting on the answer
 

@@ -14,6 +14,8 @@ import io.worxbend.tui.core.{
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import io.worxbend.tui.terminal.ScriptedInput.{csi, decoder}
+
 /** Hover — pointer motion with no button held — end to end: the request the backend sends, and the report the decoder
   * turns back into a [[MouseEventKind.Moved]].
   *
@@ -22,12 +24,12 @@ import org.scalatest.funsuite.AnyFunSuite
   * down. Both halves of that are covered here: that `MouseCaptureMode.AllMotion` really does add mode 1003, and that a
   * motion report naming no button really does decode to `Moved` rather than to a phantom `Drag`.
   */
-final class MouseCaptureModeSpec extends AnyFunSuite with DecoderFixtures:
+final class MouseCaptureModeSpec extends AnyFunSuite:
 
   private val Esc = ''
 
   private def decoded(chars: Int*): Event =
-    decoderFor(chars*).decode(10).getOrElse(fail("expected an event"))
+    decoder(chars*).decode(10).getOrElse(fail("expected an event"))
 
   test("only all-motion capture asks the terminal for mode 1003"):
     assert(!AnsiSequences.enableMouseCapture(MouseCaptureMode.Buttons).contains(s"$Esc[?1003h"))
@@ -145,12 +147,11 @@ final class MouseCaptureModeSpec extends AnyFunSuite with DecoderFixtures:
   test("a three-parameter sequence that is not a mouse report is not read as a click"):
     // every real report carries the +32 bias, so a smaller first parameter cannot be one — without that guard an
     // unrelated CSI sequence ending in M would arrive as a phantom click somewhere on screen
-    val iterator = (csi("1;2;3M") ++ Seq('q'.toInt)).iterator
-    val decoder  = InputDecoder(_ => if iterator.hasNext then iterator.next() else -2)
+    val input = decoder((csi("1;2;3M") ++ Seq('q'.toInt))*)
     // the sequence is swallowed whole and produces nothing, and the keystroke behind it still arrives intact —
     // a sequence read as a click would have surfaced as a mouse event here instead
-    assert(decoder.decode(10).isEmpty)
-    assert(decoder.decode(10) == Some(Event.Key(KeyEvent(KeyCode.Char('q'), KeyModifiers.None))))
+    assert(input.decode(10).isEmpty)
+    assert(input.decode(10) == Some(Event.Key(KeyEvent(KeyCode.Char('q'), KeyModifiers.None))))
 
   test("the SGR form is still decoded as SGR, not stolen by the urxvt branch"):
     assert(

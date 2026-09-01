@@ -15,21 +15,21 @@ import io.worxbend.tui.core.{
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import io.worxbend.tui.terminal.ScriptedInput.{Esc, csi, decoder}
+
 /** Regressions for input-decoding defects found by terminal-level audit.
   *
   * The common thread: a sequence the decoder does not understand must be *dropped*, never reported as a keypress.
   * Synthesizing an `Escape` from unparsed bytes means a capability probe or a mouse click silently closes whatever
   * dialog the user had open.
   */
-final class InputDecoderRegressionSpec extends AnyFunSuite with DecoderFixtures:
-
-  private val Esc = 0x1b
+final class InputDecoderRegressionSpec extends AnyFunSuite:
 
   private def decoded(chars: Int*): Event =
-    decoderFor(chars*).decode(10).getOrElse(fail("expected an event"))
+    decoder(chars*).decode(10).getOrElse(fail("expected an event"))
 
   private def dropped(chars: Int*): Unit =
-    assert(decoderFor(chars*).decode(10).isEmpty)
+    assert(decoder(chars*).decode(10).isEmpty)
 
   /** What a scripted stream produces over `calls` successive `decode` calls, `None` entries included.
     *
@@ -37,8 +37,8 @@ final class InputDecoderRegressionSpec extends AnyFunSuite with DecoderFixtures:
     * after it decoded correctly" is only checkable by looking at both results in order.
     */
   private def decodedAll(calls: Int)(chars: Int*): List[Option[Event]] =
-    val decoder = decoderFor(chars*)
-    List.fill(calls)(decoder.decode(10))
+    val input = decoder(chars*)
+    List.fill(calls)(input.decode(10))
 
   /** The two vocabularies in one assertion: what an application writes as a key spec, and what the terminal actually
     * sends for that key. `KeyEvent.parse` lives in `tui-core`, so this side of the contract is now checkable from here
@@ -292,12 +292,12 @@ final class InputDecoderRegressionSpec extends AnyFunSuite with DecoderFixtures:
 
   test("an unpaired surrogate is dropped rather than delivered as half a character"):
     // a lone surrogate corrupts every string it is appended to, which is what `printable` exists to prevent
-    assert(decoderFor(0xd83d, 'a'.toInt).decode(10).isEmpty)
+    assert(decoder(0xd83d, 'a'.toInt).decode(10).isEmpty)
     dropped(csi("55357u")*) // kitty reporting a high surrogate as a code point
 
   test("a high surrogate not followed by a low one does not swallow the next key"):
-    val decoder = decoderFor(0xd83d, 'a'.toInt)
-    val events  = List(decoder.decode(10), decoder.decode(10)).flatten
+    val input = decoder(0xd83d, 'a'.toInt)
+    val events  = List(input.decode(10), input.decode(10)).flatten
     assert(events == List(Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.None))))
 
   test("kitty super/hyper/meta keys are dropped rather than delivered unmodified"):
