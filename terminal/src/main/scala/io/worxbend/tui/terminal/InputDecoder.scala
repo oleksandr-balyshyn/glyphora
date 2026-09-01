@@ -1,16 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{
-  Event,
-  KeyCode,
-  KeyEvent,
-  KeyModifiers,
-  MouseButton,
-  MouseEvent,
-  MouseEventKind,
-  Position,
-  Size,
-}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, Position, Size}
 
 import scala.concurrent.duration.Duration
 
@@ -605,108 +595,26 @@ private[terminal] final class InputDecoder(
       case digit if digit >= 'p' && digit <= 'y' => key(KeyCode.Char(('0' + (digit - 'p')).toChar))
       case _                                     => None
 
-  /** SGR mouse report `CSI < b ; x ; y (M|m)`: button bits carry drag/scroll/modifier flags, coordinates are one-based.
+  /** SGR mouse report `CSI < b ; x ; y (M|m)`. The parameters are parsed here so that [[parameterNumbers]] stays the
+    * decoder's one reading of a CSI parameter string; what the numbers mean is [[MouseReports]]'s.
     */
   private def decodeSgrMouse(params: String, isPress: Boolean): Option[Event] =
-    parameterNumbers(params) match
-      case Seq(button, column, row) => mouseEvent(button, column - 1, row - 1, isPress)
-      case _                        => None
+    MouseReports.sgr(parameterNumbers(params), isPress)
 
-  /** urxvt mouse report `CSI b ; x ; y M` (DEC mode 1015).
-    *
-    * The same button byte X10 uses, biased by 32, but with the coordinates written as decimal text rather than as raw
-    * bytes — so it is readable past the column 95 where [[decodeX10Mouse]] has to give up. It exists for a terminal
-    * that ignores the SGR request (mode 1006); a terminal that honours SGR never sends this form, because 1006 is
-    * requested after 1015 and wins.
-    *
-    * Like X10, and unlike SGR, it has no per-button release code — button bits `3` mean "some button came up" — so
-    * whether this is a press is derived from the bits, not from the final byte, which is always `M`.
-    *
-    * The `button >= 32` guard is what keeps some other three-parameter CSI sequence ending in `M` from being read as a
-    * click: every real report carries the +32 bias, so a smaller first parameter cannot be one.
-    */
+  /** urxvt mouse report `CSI b ; x ; y M` (DEC mode 1015); see [[MouseReports.urxvt]] for the format. */
   private def decodeUrxvtMouse(params: String): Option[Event] =
-    parameterNumbers(params) match
-      case Seq(button, column, row) if button >= X10Bias =>
-        val bits    = button - X10Bias
-        val isPress = (bits & ButtonMask) != NoButtonHeld
-        mouseEvent(bits, column - 1, row - 1, isPress)
-      case _                                             => None
+    MouseReports.urxvt(parameterNumbers(params))
 
-  /** Legacy X10 mouse report `CSI M b x y`: three raw bytes, each the value biased by 32.
-    *
-    * This branch exists only for a terminal that ignores [[AnsiSequences.EnableMouseCapture]]'s request for SGR 1006
-    * and keeps sending X10 — otherwise those three bytes are decoded as text and injected as keystrokes. SGR 1006 is
-    * unaffected by everything below, because its coordinates are decimal *text* and go through [[decodeSgrMouse]].
-    *
-    * X10's effective ceiling here is column/row 95, not the protocol's own 223. The decoder reads through a reader that
-    * UTF-8-decodes the stream (`JLine3Backend` builds its terminal with `stdinEncoding(UTF_8)`), and a coordinate byte
-    * at or above 0x80 is not valid UTF-8 on its own: it comes back as U+FFFD, which the range check below rejects so
-    * the click is dropped rather than reported at an invented position such as `Position(65500, 9)`. Worse, when two
-    * coordinate bytes happen to form a legal UTF-8 sequence (0xC3 0xA0, say) they collapse into one character, and the
-    * byte after the report is then consumed as the missing coordinate — damage one character of lookahead cannot
-    * repair. Reading raw bytes instead is not an option: the same reader's UTF-16 code units are what
-    * [[decodeControl]]'s C1 branch and [[printable]]'s surrogate recombination are built on.
+  /** Legacy X10 mouse report `CSI M b x y`: three raw bytes read straight off the wire, which is why this half stays in
+    * the decoder — [[MouseReports.x10]] owns the arithmetic on them, including the range check that rejects a
+    * replacement character standing in for a coordinate byte.
     */
   private def decodeX10Mouse(): Option[Event] =
     val button = next(escapeTimeoutMillis)
     val column = next(escapeTimeoutMillis)
     val row    = next(escapeTimeoutMillis)
     if button < 0 || column < 0 || row < 0 then None
-    else if button > 0xff || column > 0xff || row > 0xff then None // a replacement character, not a coordinate byte
-    else
-      val bits    = button - X10Bias
-      // X10 has no separate release code: button 3 means "some button came up"
-      val isPress = (bits & ButtonMask) != NoButtonHeld
-      mouseEvent(bits, column - X10Bias - 1, row - X10Bias - 1, isPress)
-
-  private def mouseEvent(button: Int, x: Int, y: Int, isPress: Boolean): Option[Event] =
-    val kind      =
-      if (button & 64) != 0 then wheelKind(button)
-      else if (button & MotionBit) != 0 then
-        // bit 5 says "this report is motion". The low two bits then name the button that is held, and the value 3
-        // means "none" — so 3 is the pointer moving over the window with nothing pressed, which is a hover, and
-        // anything else is a drag. Only a terminal asked for `MouseCaptureMode.AllMotion` sends the hover form; under
-        // buttons-only tracking this branch never sees a 3, which is why `Moved` used to be unreachable.
-        if (button & ButtonMask) == NoButtonHeld then MouseEventKind.Moved else MouseEventKind.Drag
-      else if isPress then MouseEventKind.Down
-      else MouseEventKind.Up
-    // a mouse report carries the same shift/alt/ctrl bitmask as a CSI modifier parameter, shifted up by two positions
-    val modifiers = modifiersFromBits(button >> MouseModifierShift)
-    val pressed   = pressedButton(button)
-    Some(Event.Mouse(MouseEvent(Position(math.max(0, x), math.max(0, y)), kind, modifiers, pressed)))
-
-  /** Which button the report names.
-    *
-    * The low two bits are the button number: 0 left, 1 middle, 2 right. The fourth value, 3, is X10's "some button came
-    * up" release, which genuinely does not say which one — it becomes [[MouseButton.Unknown]] rather than an invented
-    * guess. A wheel report (bit 64) reuses those same two bits for the scroll direction, so it names no button either.
-    *
-    * SGR 1006, unlike X10, keeps the button number on the release as well as the press, which is what makes a
-    * right-button drag-and-release usable.
-    */
-  private def pressedButton(button: Int): MouseButton =
-    if (button & 64) != 0 then MouseButton.Unknown
-    else
-      button & 3 match
-        case 0 => MouseButton.Left
-        case 1 => MouseButton.Middle
-        case 2 => MouseButton.Right
-        case _ => MouseButton.Unknown
-
-  /** Wheel buttons 64 and 65 are wheel-up and wheel-down; 66 and 67 are wheel-left and wheel-right, the horizontal
-    * wheel a sideways trackpad swipe sends.
-    *
-    * All four are distinct kinds rather than the low bit folded onto the vertical pair: reading the low bit alone
-    * turned every sideways swipe into a scroll of the focused list. They used to be dropped instead, which was the
-    * honest answer only while [[MouseEventKind]] had no horizontal vocabulary — it has one now.
-    */
-  private def wheelKind(button: Int): MouseEventKind =
-    button & 3 match
-      case 0 => MouseEventKind.ScrollUp
-      case 1 => MouseEventKind.ScrollDown
-      case 2 => MouseEventKind.ScrollLeft
-      case _ => MouseEventKind.ScrollRight
+    else MouseReports.x10(button, column, row)
 
   /** xterm modifier parameter: `code - 1` is a bitmask of shift/alt/ctrl.
     *
@@ -718,18 +626,6 @@ private[terminal] final class InputDecoder(
   private def modifiersFromCode(code: Int): Option[KeyModifiers] =
     val bits = code - 1
     if (bits & UnrepresentableModifiers) != 0 then None else Some(modifiersFromBits(bits))
-
-  /** The xterm shift/alt/ctrl bitmask (bit 0 shift, bit 1 alt, bit 2 ctrl) as a [[KeyModifiers]] set.
-    *
-    * Bits above those three are ignored here; a caller that must reject them — [[modifiersFromCode]], because a key
-    * held with a modifier glyphora cannot express must not be delivered bare — checks for them before calling.
-    */
-  private def modifiersFromBits(bits: Int): KeyModifiers =
-    var modifiers = KeyModifiers.None
-    if (bits & 1) != 0 then modifiers = modifiers | KeyModifiers.Shift
-    if (bits & 2) != 0 then modifiers = modifiers | KeyModifiers.Alt
-    if (bits & 4) != 0 then modifiers = modifiers | KeyModifiers.Ctrl
-    modifiers
 
   private def key(code: KeyCode, modifiers: KeyModifiers = KeyModifiers.None): Option[Event] =
     Some(Event.Key(KeyEvent(code, modifiers)))
@@ -745,6 +641,22 @@ private[terminal] final class InputDecoder(
     if c >= 0 then pushedBack = c
 
 private[terminal] object InputDecoder:
+
+  /** The xterm shift/alt/ctrl bitmask (bit 0 shift, bit 1 alt, bit 2 ctrl) as a [[KeyModifiers]] set.
+    *
+    * Bits above those three are ignored here; a caller that must reject them — `modifiersFromCode`, because a key held
+    * with a modifier glyphora cannot express must not be delivered bare — checks for them before calling.
+    *
+    * It lives on the companion, rather than on the decoder that reads the bits off the wire, because [[MouseReports]]
+    * needs the same reading: a mouse report's modifier bits are the CSI ones shifted up by two, and one owner is what
+    * keeps a Ctrl+click and a Ctrl+arrow from disagreeing about which bit is Ctrl.
+    */
+  private[terminal] def modifiersFromBits(bits: Int): KeyModifiers =
+    var modifiers = KeyModifiers.None
+    if (bits & 1) != 0 then modifiers = modifiers | KeyModifiers.Shift
+    if (bits & 2) != 0 then modifiers = modifiers | KeyModifiers.Alt
+    if (bits & 4) != 0 then modifiers = modifiers | KeyModifiers.Ctrl
+    modifiers
 
   /** How long to wait for the rest of an escape sequence — and therefore how long a lone `ESC` takes to report. */
   val DefaultEscapeTimeoutMillis: Long = 50L
@@ -783,23 +695,6 @@ private[terminal] object InputDecoder:
     */
   private val KittyPress   = 1
   private val KittyRelease = 3
-
-  /** How far a mouse report's shift/alt/ctrl bits sit above the CSI modifier parameter's: mouse uses 4/8/16 where a CSI
-    * modifier bitmask uses 1/2/4.
-    */
-  private val MouseModifierShift = 2
-
-  /** Every coordinate and button value in an X10-derived mouse report is written biased by this much. */
-  private val X10Bias = 32
-
-  /** Bit 5 of a mouse report's button byte: set when the report describes motion rather than a press or a release. */
-  private val MotionBit = 32
-
-  /** The low two bits of a mouse report's button byte, which name the button involved. */
-  private val ButtonMask = 3
-
-  /** The button-bits value that means "no button" — a motion report carrying it is a hover, not a drag. */
-  private val NoButtonHeld = 3
 
   /** How much of an oversized paste is read (and discarded) while looking for the terminator, so that a payload whose
     * terminator never arrives cannot hold the event loop indefinitely.
