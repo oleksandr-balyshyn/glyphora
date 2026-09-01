@@ -230,6 +230,41 @@ final class InputDecoderSpec extends AnyFunSuite:
     assert(decoded(csi("57376u")*) == Event.Key(KeyEvent.of(KeyCode.F(13))))
     assert(decoded(csi("57398u")*) == Event.Key(KeyEvent.of(KeyCode.F(35))))
 
+  test("SS3 application-keypad keys decode to the characters they print"):
+    // a terminal in DECKPAM mode sends `ESC O <final>` for the numeric keypad; before these arms the whole keypad
+    // decoded to nothing, so pressing keypad 4 typed no character at all
+    assert(decoded(0x1b, 'O', 'p') == Event.Key(KeyEvent.of(KeyCode.Char('0'))))
+    assert(decoded(0x1b, 'O', 't') == Event.Key(KeyEvent.of(KeyCode.Char('4'))))
+    assert(decoded(0x1b, 'O', 'y') == Event.Key(KeyEvent.of(KeyCode.Char('9'))))
+    assert(decoded(0x1b, 'O', 'M') == Event.Key(KeyEvent.of(KeyCode.Enter)))
+    assert(decoded(0x1b, 'O', 'j') == Event.Key(KeyEvent.of(KeyCode.Char('*'))))
+    assert(decoded(0x1b, 'O', 'k') == Event.Key(KeyEvent.of(KeyCode.Char('+'))))
+    assert(decoded(0x1b, 'O', 'l') == Event.Key(KeyEvent.of(KeyCode.Char(','))))
+    assert(decoded(0x1b, 'O', 'm') == Event.Key(KeyEvent.of(KeyCode.Char('-'))))
+    assert(decoded(0x1b, 'O', 'n') == Event.Key(KeyEvent.of(KeyCode.Char('.'))))
+    assert(decoded(0x1b, 'O', 'o') == Event.Key(KeyEvent.of(KeyCode.Char('/'))))
+    assert(decoded(0x1b, 'O', 'X') == Event.Key(KeyEvent.of(KeyCode.Char('='))))
+    assert(decoded(0x1b, 'O', ' ') == Event.Key(KeyEvent.of(KeyCode.Char(' '))))
+    assert(decoded(0x1b, 'O', 'I') == Event.Key(KeyEvent.of(KeyCode.Tab)))
+
+  test("an SS3 keypad key decodes to the same event as its kitty counterpart"):
+    // one physical key, one event, whichever protocol the terminal speaks: `ESC O n` and kitty's KP_DECIMAL both
+    // have to produce '.', or a binding written against one terminal stops firing on the other
+    assert(decoded(0x1b, 'O', 'n') == decoded(csi("57409u")*))
+    assert(decoded(0x1b, 'O', 'M') == decoded(csi("57414u")*))
+    assert(decoded(0x1b, 'O', 'p') == decoded(csi("57399u")*))
+
+  test("the SS3 arms that are not keypad keys keep their existing meaning"):
+    // `p`..`y` must not swallow the function-key and cursor finals that share the SS3 introducer
+    assert(decoded(0x1b, 'O', 'P') == Event.Key(KeyEvent.of(KeyCode.F(1))))
+    assert(decoded(0x1b, 'O', 'A') == Event.Key(KeyEvent.of(KeyCode.Up)))
+    assert(decoded(0x1b, 'O', 'H') == Event.Key(KeyEvent.of(KeyCode.Home)))
+
+  test("an unknown SS3 final is dropped rather than reported as Escape"):
+    // 'z' sits just past the keypad digit range, which is where an off-by-one in the guard would show up
+    assert(decoderFor(0x1b, 'O', 'z').decode(10).isEmpty)
+    assert(decoderFor(0x1b, 'O', 'a').decode(10).isEmpty)
+
   test("a torn escape sequence is dropped rather than reported as a key"):
     // reporting Escape here would mean a half-arrived arrow key silently closes the user's dialog
     assert(decoderFor(0x1b, '[').decode(10).isEmpty)

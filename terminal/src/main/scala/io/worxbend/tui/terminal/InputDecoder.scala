@@ -365,7 +365,18 @@ private[terminal] final class InputDecoder(
       same
     }
 
-  /** SS3 sequences (`ESC O x`): F1-F4, Home/End, and the DECCKM application-mode cursor keys. */
+  /** SS3 sequences (`ESC O x`): F1-F4, Home/End, the DECCKM application-mode cursor keys, and the DECKPAM application
+    * keypad.
+    *
+    * The keypad block is what a terminal sends for the numeric keypad once DECKPAM (`ESC =`, "application keypad mode")
+    * is on — the same tmux `xterm-keys` setting that motivates the DECCKM cursor arms below turns it on too. Before
+    * these arms existed every one of those finals fell through to `None`, so on such a terminal the whole numeric
+    * keypad was dead: pressing keypad `4` typed nothing at all rather than a `4`.
+    *
+    * Keypad finals fold onto the plain keys they print, exactly as [[KittyKeys]] folds its `KP_*` code points. glyphora
+    * has no separate keypad concept, so the same physical key must produce the same event whichever protocol the
+    * terminal happens to speak.
+    */
   private def decodeSs3(): Option[Event] =
     next(escapeTimeoutMillis) match
       case 'P' => key(KeyCode.F(1))
@@ -379,7 +390,21 @@ private[terminal] final class InputDecoder(
       case 'B' => key(KeyCode.Down)
       case 'C' => key(KeyCode.Right)
       case 'D' => key(KeyCode.Left)
-      case _   => None
+      // application keypad (DECKPAM). The finals are those in XTerm's `ctlseqs.ms`, "PC-Style Function Keys".
+      case 'M' => key(KeyCode.Enter)     // keypad Enter
+      case 'j' => key(KeyCode.Char('*'))
+      case 'k' => key(KeyCode.Char('+'))
+      case 'l' => key(KeyCode.Char(',')) // keypad separator, a comma on the layouts that have one
+      case 'm' => key(KeyCode.Char('-'))
+      case 'n' => key(KeyCode.Char('.')) // keypad Delete doubles as the decimal point
+      case 'o' => key(KeyCode.Char('/'))
+      case 'X' => key(KeyCode.Char('='))
+      case ' ' => key(KeyCode.Char(' '))
+      case 'I' => key(KeyCode.Tab)
+      // `p` through `y` are the digits 0 through 9, in order. Placed after the letter arms above so that the guard
+      // cannot shadow one of them if a final is ever added inside the range.
+      case digit if digit >= 'p' && digit <= 'y' => key(KeyCode.Char(('0' + (digit - 'p')).toChar))
+      case _                                     => None
 
   /** SGR mouse report `CSI < b ; x ; y (M|m)`: button bits carry drag/scroll/modifier flags, coordinates are one-based.
     */

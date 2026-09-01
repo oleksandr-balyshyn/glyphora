@@ -148,7 +148,9 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   weight in every downstream POM and every native image.
   Keeps a snapshot of the last flushed frame and writes only changed cells,
   batched into one ANSI string per frame, with OSC 8 hyperlink transitions.
-- **`InputDecoder`** — ANSI/CSI/SS3/SGR-mouse decoder, injected with a plain
+- **`InputDecoder`** — ANSI/CSI/SS3/SGR-mouse decoder, including the DECKPAM
+  application keypad (`ESC O p`…`ESC O y` and friends, which is what the numeric
+  keypad sends under tmux's `xterm-keys`), injected with a plain
   `read(timeoutMillis) => Int` function so it is fully unit-tested without a TTY.
   The two key vocabularies it decodes into — the kitty keyboard protocol's code
   points (`KittyKeys`) and the legacy `CSI n ~` numbers (`CsiKeys`) — are separate
