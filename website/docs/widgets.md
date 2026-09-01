@@ -1545,6 +1545,10 @@ zero, and scrolling past the end leaves the area blank instead of failing. The n
 hand a `scrollbar` beside it is `heightAt(width)`: the height of the whole text, which
 the scroll offset deliberately does not reduce.
 
+A `Paragraph`'s `style` is painted across its whole area, so a background color covers the
+blank columns after a short line and the rows below the last line, not only the cells that
+have a character in them.
+
 A widget that knows how much room its content needs says so by implementing
 `io.worxbend.tui.core.Measured` — `heightAt(width)` for content whose height depends on
 the width it wraps at, `widthAt(height)` for content sized the other way. Returning

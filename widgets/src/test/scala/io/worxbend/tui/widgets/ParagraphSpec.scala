@@ -246,3 +246,20 @@ final class ParagraphSpec extends AnyFunSuite:
   test("a short line scrolled past its own end draws nothing and does not misplace the rest"):
     val buffer = rendered(Paragraph(Text.raw("ab\nlonger"), scrollX = 4), 6, 2)
     assert(trimmedLines(buffer) == Seq("", "er"))
+
+  test("the paragraph style paints the whole area, not only the cells with text in them"):
+    val buffer = rendered(Paragraph(Text.raw("hi"), style = Style.Default.withBg(Color.Blue)), 4, 2)
+    assert(buffer.get(0, 0).style.bg.contains(Color.Blue)) // under the text
+    assert(buffer.get(3, 0).style.bg.contains(Color.Blue)) // the blank tail of a short line
+    assert(buffer.get(1, 1).style.bg.contains(Color.Blue)) // a row past the end of the text
+    assert(buffer.get(3, 0).symbol == " ") // the fill changes styles, never glyphs
+
+  test("a span's own style layers over the paragraph fill rather than replacing it"):
+    val text   = Text(Seq(Line(Seq(Span("x", Style.Default.withFg(Color.Red))))))
+    val buffer = rendered(Paragraph(text, style = Style.Default.withBg(Color.Blue)), 3, 1)
+    assert(buffer.get(0, 0).style.fg.contains(Color.Red))
+    assert(buffer.get(0, 0).style.bg.contains(Color.Blue))
+
+  test("a paragraph left at the default style touches no cell it did not write to"):
+    val buffer = rendered(Paragraph(Text.raw("hi")), 4, 2)
+    assert(buffer.get(3, 1).style == Style.Default)

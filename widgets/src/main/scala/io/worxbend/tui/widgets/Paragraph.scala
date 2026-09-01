@@ -32,6 +32,10 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, LineBreaks, Measured, Rect
   * [[Overflow.Clip]]: wrapped rows are never wider than the area. Both are clamped at zero, and scrolling past the end
   * of the text leaves the area blank rather than failing.
   *
+  * `style` is the paragraph's own style, and it is painted over the whole area — not only the cells that carry a
+  * character. A paragraph given a background colour therefore reads as a block of colour with text in it, which is what
+  * a caller sets a background for; each span's style is then layered on top of it for the text itself.
+  *
   * [[heightAt]] reports the rows the paragraph needs from the same `overflow` field `render` draws with, so the two
   * cannot disagree about whether the text wraps.
   */
@@ -49,6 +53,13 @@ final case class Paragraph(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
+      // The paragraph's own style is painted across the *whole* area before any text is drawn, so a background colour
+      // covers the blank columns after a short line and the rows below the last one, instead of showing up as ragged
+      // coloured text on whatever was behind it. `mapStyle` with `patch`, not `setStyle`: it layers onto what is
+      // already there, keeping each cell's glyph and foreground, the same rule `Block` follows for its panel fill.
+      // The `Style.Default` guard matters: without it every paragraph would touch every cell of its area on every
+      // frame, and the diff-based flush would lose its cheap path for the overwhelmingly common unstyled case.
+      if style != Style.Default then buffer.mapStyle(area)(_.patch(style))
       // lazily: wrapping the whole document to draw one screenful makes render cost scale with the text, not the area
       val lines     = overflow match
         case Overflow.Wrap => text.lines.iterator.flatMap(Paragraph.wrapLine(_, area.width))
