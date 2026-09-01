@@ -5,8 +5,8 @@ import io.worxbend.tui.widgets as w
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** A `panel` used to be all four border sides or nothing, with its top caption pinned to the left and its bottom one
-  * to the right, both in a single style. These tests pin the sides, the alignments, and the extra captions.
+/** A `panel` used to be all four border sides or nothing, with its top caption pinned to the left and its bottom one to
+  * the right, both in a single style. These tests pin the sides, the alignments, and the extra captions.
   */
 final class PanelChromeSpec extends AnyFunSuite:
 
@@ -36,7 +36,7 @@ final class PanelChromeSpec extends AnyFunSuite:
   test("the measured width available to a child drops with the vertical sides"):
     // The child wraps, so the rows it reports reveal how many columns the panel left it.
     val prose = text("abcdefgh").wrapped
-    assert(panel(prose).intrinsicHeight(6) == Some(4))     // 4 columns inside, 2 wrapped rows, 2 border rows
+    assert(panel(prose).intrinsicHeight(6) == Some(4)) // 4 columns inside, 2 wrapped rows, 2 border rows
     assert(panel(prose).borderless.intrinsicHeight(6) == Some(2))
 
   test("titleAligned and titleBottomAligned move the captions along their borders"):

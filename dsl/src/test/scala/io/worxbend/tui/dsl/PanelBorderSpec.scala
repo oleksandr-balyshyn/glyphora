@@ -5,8 +5,8 @@ import io.worxbend.tui.widgets as w
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** `w.BorderType` has had four members for a while, but only three of them were reachable from the DSL and none of
-  * them could be chosen from a value. These tests pin the top-left corner glyph each builder produces.
+/** `w.BorderType` has had four members for a while, but only three of them were reachable from the DSL and none of them
+  * could be chosen from a value. These tests pin the top-left corner glyph each builder produces.
   */
 final class PanelBorderSpec extends AnyFunSuite:
 

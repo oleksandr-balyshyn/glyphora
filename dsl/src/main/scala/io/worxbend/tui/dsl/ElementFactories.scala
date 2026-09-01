@@ -24,9 +24,9 @@ private[dsl] trait ElementFactories:
     * extensions: `text("hi").bold.fg(Color.Cyan)`. For a single row assembled from differently-styled runs, use
     * [[line]] instead — it measures in display columns rather than needing hand-counted widths.
     *
-    * `.wrapped` breaks over-long lines onto further rows instead of cutting them off, and `.centered` /
-    * `.rightAligned` / `.aligned(...)` position each line inside the area — see [[TextElement]]. For text taller than
-    * the space it is given, put it in a [[scrollView]]: this node paints what fits and nothing more.
+    * `.wrapped` breaks over-long lines onto further rows instead of cutting them off, and `.centered` / `.rightAligned`
+    * / `.aligned(...)` position each line inside the area — see [[TextElement]]. For text taller than the space it is
+    * given, put it in a [[scrollView]]: this node paints what fits and nothing more.
     */
   def text(content: String): TextElement = TextElement(content)
 
@@ -90,15 +90,15 @@ private[dsl] trait ElementFactories:
     * It returns a `Seq[Element]`, not a container, so it splices into whichever container the call site wants:
     * `column(each(…)*)`, `row(each(…)*)`, `panel("Processes")(each(…)*)`.
     *
-    * Keys must be unique within one frame — use something that identifies the item (a database id, a process id, a
-    * file path), not its index, which is the positional identity this exists to replace. Two children sharing a key
+    * Keys must be unique within one frame — use something that identifies the item (a database id, a process id, a file
+    * path), not its index, which is the positional identity this exists to replace. Two children sharing a key
     * re-anchor focus to the first of them.
     */
   def each[A](items: Seq[A])(keyOf: A => String)(render: A => Element): Seq[Element] =
     items.map(item => render(item).key(keyOf(item)))
 
-  /** [[each]] with a `prefix` on every key, for two keyed lists in one view whose key functions would otherwise
-    * collide — two panes both keyed by a row number, say. The prefix and the key are joined with a colon.
+  /** [[each]] with a `prefix` on every key, for two keyed lists in one view whose key functions would otherwise collide
+    * — two panes both keyed by a row number, say. The prefix and the key are joined with a colon.
     */
   def each[A](items: Seq[A], prefix: String)(keyOf: A => String)(render: A => Element): Seq[Element] =
     items.map(item => render(item).key(s"$prefix:${keyOf(item)}"))
@@ -292,14 +292,14 @@ private[dsl] trait ElementFactories:
 
   /** A scrollbar strip showing how far through `contentLength` units of content the viewport at `position` sits.
     *
-    * Vertical by default: the bar is drawn down the *right* edge of the area it is given, so give it a one-column
-    * slice beside the content rather than laying it over the content. `.horizontal` runs it along the bottom edge
-    * instead, and `.at(offset)` moves the thumb.
+    * Vertical by default: the bar is drawn down the *right* edge of the area it is given, so give it a one-column slice
+    * beside the content rather than laying it over the content. `.horizontal` runs it along the bottom edge instead,
+    * and `.at(offset)` moves the thumb.
     *
     * A [[scrollView]] draws its own scrollbar and needs none of this. Reach for this factory when the application owns
     * the scroll offset itself — a hand-scrolled list, a tailing log, a table with more rows than fit. The track takes
-    * the ambient [[Theme]]'s `border` style and the thumb its `primary` style, so a scrollbar matches the frame it
-    * sits next to without being told to; `.thumbStyle(...)` overrides the moving part on its own.
+    * the ambient [[Theme]]'s `border` style and the thumb its `primary` style, so a scrollbar matches the frame it sits
+    * next to without being told to; `.thumbStyle(...)` overrides the moving part on its own.
     */
   def scrollbar(contentLength: Int, position: Int = 0)(using theme: Theme): ScrollbarElement =
     ScrollbarElement(contentLength, position, Direction.Vertical, theme.border, theme.primary, "│", "█")

@@ -191,15 +191,15 @@ final case class SplitPaneElement(
 /** A scrollbar strip on its own, for content this package does not scroll for you.
   *
   * [[ScrollViewElement]] draws its own scrollbar, so the common case needs nothing here. This node is for the case
-  * where the thing being scrolled is not a `scrollView` — a list whose offset the application keeps, a log tailing in
-  * a pane, a table with more rows than fit — and the view wants to show how far through it the reader is. Before it,
-  * the only way to put a scrollbar on such a pane from the DSL was `widget(Scrollbar(...))`, which meant importing
+  * where the thing being scrolled is not a `scrollView` — a list whose offset the application keeps, a log tailing in a
+  * pane, a table with more rows than fit — and the view wants to show how far through it the reader is. Before it, the
+  * only way to put a scrollbar on such a pane from the DSL was `widget(Scrollbar(...))`, which meant importing
   * `io.worxbend.tui.widgets` into a view for one type.
   *
   * The widget underneath is stateless: where the thumb sits is a pure function of `contentLength`, `position` and the
   * area, so this node holds two plain numbers and nothing that has to be kept in step with anything. An out-of-range
-  * `position` pins the thumb to an end rather than drawing it off the track, and when the content already fits the
-  * area only the track is drawn.
+  * `position` pins the thumb to an end rather than drawing it off the track, and when the content already fits the area
+  * only the track is drawn.
   *
   * A vertical scrollbar paints on the *right* edge of the area it is given and a horizontal one on the *bottom* edge,
   * which is why it is usually given a one-column or one-row slice next to the content rather than laid over it.
@@ -248,8 +248,8 @@ final case class ScrollbarElement(
 
   private[dsl] def withProps(props: ElementProps): ScrollbarElement = copy(props = props)
 
-  /** One cell across the short axis, everything available along the long one — a vertical bar is one column wide and
-    * as tall as it is offered, and a horizontal bar the other way round.
+  /** One cell across the short axis, everything available along the long one — a vertical bar is one column wide and as
+    * tall as it is offered, and a horizontal bar the other way round.
     */
   private[dsl] override def claim: SizeClaim =
     orientation match

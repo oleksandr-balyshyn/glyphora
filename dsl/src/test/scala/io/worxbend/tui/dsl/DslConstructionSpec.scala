@@ -23,7 +23,7 @@ final class DslConstructionSpec extends AnyFunSuite:
         assert(children.size == 3)
         children(0) match
           case node: TextElement => assert(node.content == "Welcome!")
-          case other                   => fail(s"expected the first child to be a TextElement, got $other")
+          case other             => fail(s"expected the first child to be a TextElement, got $other")
         children(1) match
           case _: SpacerElement => ()
           case other            => fail(s"expected the second child to be a SpacerElement, got $other")
@@ -132,13 +132,13 @@ final class DslConstructionSpec extends AnyFunSuite:
     assert(ticker.claim.vertical == Constraint.Length(1))
 
   test("onKeyEvent attaches a handler without disturbing the rest of the props"):
-    // the stored handler is not the one passed in: `onKeyEvent` composes with whatever the element already carried,
-    // so what is asserted is that the handler runs, not that the same function object is in the slot
     var ran                          = false
     val handler: KeyEvent => Boolean = _ =>
       ran = true
       true
     val element                      = text("x").bold.onKeyEvent(handler)
+    // The stored handler wraps the one passed in, so that a second `onKeyEvent` composes rather than replacing it;
+    // asserting on behaviour rather than identity is what makes the test independent of that wrapping.
     assert(element.props.onKey.exists(_(Key.Enter)))
     assert(ran)
     assert(element.style.modifiers.hasAny(Modifiers.Bold))

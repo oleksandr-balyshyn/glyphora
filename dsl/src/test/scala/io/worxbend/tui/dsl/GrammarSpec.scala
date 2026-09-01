@@ -114,7 +114,7 @@ final class GrammarSpec extends AnyFunSuite:
     val el: Element     = v // applies the context function with the given scope and theme
     el match
       case node: TextElement => assert(node.content == "from a view alias")
-      case other                   => fail(s"expected a TextElement, got $other")
+      case other             => fail(s"expected a TextElement, got $other")
 
   /** The point of the spec overload is that one key has one spelling. Every spec below is bound both ways and the two
     * handlers must agree about which event fires them.

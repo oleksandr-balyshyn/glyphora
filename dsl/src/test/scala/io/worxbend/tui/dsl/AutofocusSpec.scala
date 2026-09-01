@@ -83,7 +83,7 @@ final class AutofocusSpec extends AnyFunSuite:
     assert(FocusPass.autofocusRequest(tree).contains(AutofocusRequest(0, Some("a"))))
 
   test("a request counts only focusables, so its index is a tab-order position"):
-    val tree = column(text("plain"), text("also plain"), text("wants focus").autofocus.key("k"))
+    val tree  = column(text("plain"), text("also plain"), text("wants focus").autofocus.key("k"))
     assert(FocusPass.autofocusRequest(tree).contains(AutofocusRequest(0, Some("k"))))
     val mixed = column(text("first").focusable, text("wants focus").autofocus.key("k"))
     assert(FocusPass.autofocusRequest(mixed).contains(AutofocusRequest(1, Some("k"))))

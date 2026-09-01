@@ -13,9 +13,9 @@ import java.time.LocalTime
   * the area sits: at the left edge by default, or in the middle with `.centered`, or against the right edge with
   * `.rightAligned`.
   *
-  * Both were already parameters of the `widgets.Paragraph` this node renders through, but the node built that
-  * paragraph with the defaults and offered no way to say otherwise, so a paragraph of prose in the DSL was clipped at
-  * the first screen column it ran past and every heading had to be centred by hand with padding.
+  * Both were already parameters of the `widgets.Paragraph` this node renders through, but the node built that paragraph
+  * with the defaults and offered no way to say otherwise, so a paragraph of prose in the DSL was clipped at the first
+  * screen column it ran past and every heading had to be centred by hand with padding.
   *
   * Wrapping also changes what the node claims from its container, and it has to: a wrapping paragraph does not want a
   * column per character of its longest line — it wants whatever width it is given and however many rows that width
@@ -33,8 +33,8 @@ final case class TextElement(
 
   /** Breaks lines that do not fit onto further rows instead of cutting them off at the right edge.
     *
-    * The break happens at a grapheme-cluster boundary — never inside a wide character, an emoji or a combining
-    * sequence — rather than at a word boundary, so a long word is split across rows rather than moved down whole.
+    * The break happens at a grapheme-cluster boundary — never inside a wide character, an emoji or a combining sequence
+    * — rather than at a word boundary, so a long word is split across rows rather than moved down whole.
     */
   def wrapped: TextElement = copy(overflow = w.Overflow.Wrap)
 

@@ -27,8 +27,8 @@ trait FlexContainer extends Element:
   *
   * `borders` chooses which sides are drawn. The default is all four, but a pane can be a horizontal rule above its
   * content (`Borders.Top`), a column separated from its neighbour by a single line (`Borders.Left`), or unframed
-  * entirely (`.borderless`) while keeping the panel's padding and captions. Where two drawn sides meet, the block
-  * draws a corner glyph; where they do not, it does not, so a half-framed panel has no dangling corners.
+  * entirely (`.borderless`) while keeping the panel's padding and captions. Where two drawn sides meet, the block draws
+  * a corner glyph; where they do not, it does not, so a half-framed panel has no dangling corners.
   *
   * [[padding]] reserves blank cells between the border and the children.
   *
@@ -99,13 +99,13 @@ final case class PanelElement(
 
   /** Adds further captions, built by hand as `BlockTitle.top(line, alignment)` / `BlockTitle.bottom(...)`.
     *
-    * `title` and `titleBottom` take a plain `String` and paint it in one style, which cannot say "build" in the
-    * default colour and "failed" in red. A `BlockTitle` carries a `Line`, and a `Line` carries differently-styled
-    * spans, so this is the way to a mixed-style caption — or simply to a third and fourth one.
+    * `title` and `titleBottom` take a plain `String` and paint it in one style, which cannot say "build" in the default
+    * colour and "failed" in red. A `BlockTitle` carries a `Line`, and a `Line` carries differently-styled spans, so
+    * this is the way to a mixed-style caption — or simply to a third and fourth one.
     *
-    * Captions sharing a border *and* an alignment are drawn as one run separated by a single space, in the order
-    * given, with the `title`/`titleBottom` pair first. Captions never widen the box and never cost a content row: they
-    * are written over border cells that are being drawn anyway.
+    * Captions sharing a border *and* an alignment are drawn as one run separated by a single space, in the order given,
+    * with the `title`/`titleBottom` pair first. Captions never widen the box and never cost a content row: they are
+    * written over border cells that are being drawn anyway.
     */
   def titles(more: w.BlockTitle*): PanelElement = copy(extraTitles = extraTitles ++ more)
 
@@ -164,8 +164,8 @@ extension (panel: PanelElement)
     */
   def thick: PanelElement = panel.copy(borderType = w.BorderType.Thick)
 
-  /** Any border glyph set by name, for code that picks one from a value rather than writing it out — a theme setting,
-    * a user preference, a `match` on some state. The three named builders above are shorthands for this.
+  /** Any border glyph set by name, for code that picks one from a value rather than writing it out — a theme setting, a
+    * user preference, a `match` on some state. The three named builders above are shorthands for this.
     */
   def borderType(glyphs: w.BorderType): PanelElement = panel.copy(borderType = glyphs)
   /** Joins this panel's border to any border already drawn where it lands, instead of overwriting it.

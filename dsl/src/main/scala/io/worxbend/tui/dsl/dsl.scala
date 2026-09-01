@@ -152,9 +152,9 @@ val Modifiers: io.worxbend.tui.core.Modifiers.type = io.worxbend.tui.core.Modifi
   * Named by `PanelElement.borders(sides)`, so an application that wants a half-framed pane has to be able to write the
   * value. It used to be reachable only through `widgets.Block`, which meant a second import for one bitset.
   *
-  * The third opaque type in the library, and written as a type alias plus a value alias rather than an `export` for
-  * the reason given on [[KeyModifiers]]: an exported opaque type loses its companion's extension methods, and without
-  * `|` the sides could not be combined at all.
+  * The third opaque type in the library, and written as a type alias plus a value alias rather than an `export` for the
+  * reason given on [[KeyModifiers]]: an exported opaque type loses its companion's extension methods, and without `|`
+  * the sides could not be combined at all.
   */
 type Borders = io.worxbend.tui.widgets.Borders
 val Borders: io.worxbend.tui.widgets.Borders.type = io.worxbend.tui.widgets.Borders
@@ -300,22 +300,22 @@ extension [E <: Element](element: E)
   def styled(transform: Style => Style): element.Self =
     element.withProps(element.props.copy(style = transform(element.props.style)))
 
-  def bold: element.Self       = element.styled(_.bold)
-  def dim: element.Self        = element.styled(_.dim)
-  def italic: element.Self     = element.styled(_.italic)
-  def underline: element.Self  = element.styled(_.underline)
-  def reverse: element.Self    = element.styled(_.reverse)
+  def bold: element.Self      = element.styled(_.bold)
+  def dim: element.Self       = element.styled(_.dim)
+  def italic: element.Self    = element.styled(_.italic)
+  def underline: element.Self = element.styled(_.underline)
+  def reverse: element.Self   = element.styled(_.reverse)
 
   /** Slow blink. Widely ignored, and disabled outright in some terminals and by some accessibility settings, so never
     * carry meaning in it alone — pair it with a colour or a word.
     */
-  def blink: element.Self      = element.styled(_.blink)
+  def blink: element.Self = element.styled(_.blink)
 
   /** Paints the text in the background colour, so it occupies its cells but cannot be read — a password field's
     * masking, a spoiler. It is *not* a security measure: the characters are still in the terminal's buffer and are
     * still copied by a selection.
     */
-  def hidden: element.Self     = element.styled(_.hidden)
+  def hidden: element.Self = element.styled(_.hidden)
 
   /** A line struck through the text — a removed line in a diff, a completed to-do. */
   def crossedOut: element.Self = element.styled(_.crossedOut)

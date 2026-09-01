@@ -27,24 +27,36 @@ final class HandlerCompositionSpec extends AnyFunSuite:
   test("two key handlers on one element both survive, newest first"):
     val seen    = mutable.ListBuffer.empty[String]
     val element = text("x")
-      .onKeyEvent { _ => seen += "first"; false }
-      .onKeyEvent { _ => seen += "second"; false }
+      .onKeyEvent { _ =>
+        seen += "first"; false
+      }
+      .onKeyEvent { _ =>
+        seen += "second"; false
+      }
     element.props.onKey.foreach(handler => assert(!handler(Key.Enter)))
     assert(seen.toList == List("second", "first"))
 
   test("a consuming handler stops the chain"):
     val seen    = mutable.ListBuffer.empty[String]
     val element = text("x")
-      .onKeyEvent { _ => seen += "first"; false }
-      .onKeyEvent { _ => seen += "second"; true }
+      .onKeyEvent { _ =>
+        seen += "first"; false
+      }
+      .onKeyEvent { _ =>
+        seen += "second"; true
+      }
     element.props.onKey.foreach(handler => assert(handler(Key.Enter)))
     assert(seen.toList == List("second"))
 
   test("two mouse handlers on one element both survive too"):
     val seen    = mutable.ListBuffer.empty[String]
     val element = text("x")
-      .onMouseEvent { _ => seen += "first"; false }
-      .onMouseEvent { _ => seen += "second"; false }
+      .onMouseEvent { _ =>
+        seen += "first"; false
+      }
+      .onMouseEvent { _ =>
+        seen += "second"; false
+      }
     element.props.onMouse.foreach(handler => assert(!handler(mouseEvent(MouseEventKind.Down))))
     assert(seen.toList == List("second", "first"))
 

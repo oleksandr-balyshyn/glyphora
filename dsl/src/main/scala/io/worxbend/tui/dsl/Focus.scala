@@ -259,16 +259,16 @@ private[dsl] object FocusPass:
     *
     * "First" rather than "the one", because nothing stops a tree from carrying two — a screen with an autofocusing
     * search box pushed over a form with an autofocusing first field, say. Taking the first in depth-first order makes
-    * that case decided rather than arbitrary. (A modal covers the layer below it through
-    * [[FocusPass.suppressFocus]], which clears `focusable` on every node underneath, so a covered element's request is
-    * not in the tab order at all and cannot win.)
+    * that case decided rather than arbitrary. (A modal covers the layer below it through [[FocusPass.suppressFocus]],
+    * which clears `focusable` on every node underneath, so a covered element's request is not in the tab order at all
+    * and cannot win.)
     */
   def autofocusRequest(root: Element): Option[AutofocusRequest] =
     def search(element: Element, index: Int): (Option[AutofocusRequest], Int) =
-      val own   = if element.props.focusable && element.props.autofocus then
-        Some(AutofocusRequest(index, element.props.focusKey))
-      else None
-      val next  = if element.props.focusable then index + 1 else index
+      val own  =
+        if element.props.focusable && element.props.autofocus then Some(AutofocusRequest(index, element.props.focusKey))
+        else None
+      val next = if element.props.focusable then index + 1 else index
       element.children.foldLeft((own, next)) { case ((found, position), child) =>
         val (childFound, after) = search(child, position)
         (found.orElse(childFound), after)

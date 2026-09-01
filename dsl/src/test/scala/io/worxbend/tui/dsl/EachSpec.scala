@@ -31,15 +31,15 @@ final class EachSpec extends AnyFunSuite:
     assert(FocusPass.focusKeys(tree) == Vector(Some("1"), Some("42"), Some("7")))
 
   test("focus follows the item when one is inserted above it"):
-    val tracker  = FocusTracker()
-    val before   = column(each(processes)(_.pid.toString)(row)*)
+    val tracker = FocusTracker()
+    val before  = column(each(processes)(_.pid.toString)(row)*)
     tracker.reconcile(FocusPass.focusKeys(before), FocusPass.autofocusRequest(before))
     tracker.focusTo(1) // the editor
     // A deliberate move forgets the remembered key, so reconcile once more to re-derive it from the new index.
     tracker.reconcile(FocusPass.focusKeys(before), FocusPass.autofocusRequest(before))
     assert(tracker.focusedKey.contains("42"))
 
-    val grown    = column(each(Process(99, "daemon") +: processes)(_.pid.toString)(row)*)
+    val grown = column(each(Process(99, "daemon") +: processes)(_.pid.toString)(row)*)
     tracker.reconcile(FocusPass.focusKeys(grown), FocusPass.autofocusRequest(grown))
     assert(tracker.focusedIndex == 2, "the editor moved down one, and focus should have moved with it")
     assert(tracker.focusedKey.contains("42"))
