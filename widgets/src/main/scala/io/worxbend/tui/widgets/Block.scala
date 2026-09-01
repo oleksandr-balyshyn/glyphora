@@ -87,6 +87,11 @@ object BlockTitle:
   * Titles sharing a border *and* an alignment are drawn as one run separated by a single space, in the order given.
   * Titles that share a border with different alignments can still collide on a narrow block; the block clips rather
   * than reflows, matching the library-wide silent-clipping philosophy.
+  *
+  * [[mergeBorders]] decides what happens where this block's border lands on a border that is already in the buffer. The
+  * default, [[MergeStrategy.Replace]], overwrites — two panels sharing a column then draw one wall whose corners do not
+  * join. `Exact` and `Fuzzy` combine the two glyphs instead, so the seam becomes `┬`, `┴` or `┼`. See [[MergeStrategy]]
+  * for the difference between them.
   */
 final case class Block(
     titles: Seq[BlockTitle] = Seq.empty,
@@ -97,6 +102,9 @@ final case class Block(
     borderType: BorderType = BorderType.Plain,
     borderSet: Option[BorderGlyphs] = None,
     shadow: Option[Shadow] = None,
+    // Appended rather than placed in the layout-and-behaviour slot the widget conventions ask for: inserting a
+    // parameter mid-list would silently change what every positional caller written against 0.12.0 means.
+    mergeBorders: MergeStrategy = MergeStrategy.Replace,
 ) extends Widget:
 
   /** The rectangle the frame itself occupies inside `area`: everything except the rows and columns given up to the
@@ -136,43 +144,66 @@ final case class Block(
 
   def render(outer: Rect, buffer: Buffer): Unit =
     if !outer.isEmpty then
-      val area   = frame(outer)
+      val area    = frame(outer)
       // painted first, so the frame, the fill and the titles all win wherever they meet the band
       if area != outer then shadow.foreach(_.render(area, outer, buffer))
       // `mapStyle` with `patch`, not `setStyle`: the panel background has to layer *onto* whatever is already there,
       // keeping each cell's foreground colour and modifiers. `setStyle` would replace them outright.
       if style != Style.Default then buffer.mapStyle(area)(_.patch(style))
-      val glyphs = borderSet.getOrElse(BorderGlyphs.of(borderType))
-      val top    = area.y
-      val bottom = area.bottom - 1
-      val left   = area.x
-      val right  = area.right - 1
-      if borders.hasAny(Borders.Left) then verticalEdge(buffer, area, left, glyphs.verticalLeft)
-      if borders.hasAny(Borders.Right) && area.width > 1 then verticalEdge(buffer, area, right, glyphs.verticalRight)
-      if borders.hasAny(Borders.Top) then horizontalEdge(buffer, area, top, glyphs.horizontalTop)
+      val glyphs  = borderSet.getOrElse(BorderGlyphs.of(borderType))
+      val top     = area.y
+      val bottom  = area.bottom - 1
+      val left    = area.x
+      val right   = area.right - 1
+      // a corner needs both of its sides and a cell of its own to live in; where one is drawn, the edges leave that
+      // cell to it, so no cell of the frame is written twice and `mergeBorders` sees only what was there before
+      val corners = area.width > 1 && area.height > 1
+      if borders.hasAny(Borders.Left) then verticalEdge(buffer, area, left, glyphs.verticalLeft, corners)
+      if borders.hasAny(Borders.Right) && area.width > 1 then
+        verticalEdge(buffer, area, right, glyphs.verticalRight, corners)
+      if borders.hasAny(Borders.Top) then horizontalEdge(buffer, area, top, glyphs.horizontalTop, corners)
       if borders.hasAny(Borders.Bottom) && area.height > 1 then
-        horizontalEdge(buffer, area, bottom, glyphs.horizontalBottom)
-      if area.width > 1 && area.height > 1 then
+        horizontalEdge(buffer, area, bottom, glyphs.horizontalBottom, corners)
+      if corners then
         corner(buffer, left, top, glyphs.topLeft, Borders.Top, Borders.Left)
         corner(buffer, right, top, glyphs.topRight, Borders.Top, Borders.Right)
         corner(buffer, left, bottom, glyphs.bottomLeft, Borders.Bottom, Borders.Left)
         corner(buffer, right, bottom, glyphs.bottomRight, Borders.Bottom, Borders.Right)
       if titles.nonEmpty then renderTitles(buffer, area)
 
-  private def horizontalEdge(buffer: Buffer, area: Rect, y: Int, glyph: String): Unit =
-    var x = area.x
-    while x < area.right do
-      buffer.set(x, y, Cell(glyph, edgeStyle))
+  /** One horizontal run, minus the two cells the corners own when there are corners. */
+  private def horizontalEdge(buffer: Buffer, area: Rect, y: Int, glyph: String, corners: Boolean): Unit =
+    val from = if corners && borders.hasAny(Borders.Left) then area.x + 1 else area.x
+    val to   = if corners && borders.hasAny(Borders.Right) then area.right - 1 else area.right
+    var x    = from
+    while x < to do
+      put(buffer, x, y, glyph)
       x += 1
 
-  private def verticalEdge(buffer: Buffer, area: Rect, x: Int, glyph: String): Unit =
-    var y = area.y
-    while y < area.bottom do
-      buffer.set(x, y, Cell(glyph, edgeStyle))
+  /** One vertical run, minus the two cells the corners own when there are corners. */
+  private def verticalEdge(buffer: Buffer, area: Rect, x: Int, glyph: String, corners: Boolean): Unit =
+    val from = if corners && borders.hasAny(Borders.Top) then area.y + 1 else area.y
+    val to   = if corners && borders.hasAny(Borders.Bottom) then area.bottom - 1 else area.bottom
+    var y    = from
+    while y < to do
+      put(buffer, x, y, glyph)
       y += 1
 
   private def corner(buffer: Buffer, x: Int, y: Int, glyph: String, first: Borders, second: Borders): Unit =
-    if borders.hasAny(first) && borders.hasAny(second) then buffer.set(x, y, Cell(glyph, edgeStyle))
+    if borders.hasAny(first) && borders.hasAny(second) then put(buffer, x, y, glyph)
+
+  /** Writes one border glyph, joining it to whatever box-drawing glyph is already there when asked to.
+    *
+    * Under the default [[MergeStrategy.Replace]] this is a plain `buffer.set` and costs nothing extra; under `Exact` or
+    * `Fuzzy` the cell underneath is read first and the two glyphs are combined, which is what turns the seam between
+    * two touching panels into `┬`/`┴` instead of a doubled corner. Titles do not come through here — they are drawn by
+    * `LineRenderer` afterwards and must overwrite the border they sit on.
+    */
+  private def put(buffer: Buffer, x: Int, y: Int, glyph: String): Unit =
+    val resolved =
+      if mergeBorders == MergeStrategy.Replace then glyph
+      else BorderMerge.merge(buffer.get(x, y).symbol, glyph, mergeBorders)
+    buffer.set(x, y, Cell(resolved, edgeStyle))
 
   /** Draws every title into its border.
     *
