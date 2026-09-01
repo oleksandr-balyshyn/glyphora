@@ -212,6 +212,7 @@ export io.worxbend.tui.widgets.{
   Overflow,
   Padding,
   Paging,
+  Painter,
   ProgressLabel,
   ProgressPreset,
   ScrollViewState,

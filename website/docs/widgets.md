@@ -862,6 +862,46 @@ For custom plots, `canvas(xBounds, yBounds)(shapes*)` provides points, segments,
 polylines, rectangles, and circles. Charts can use braille or half-block resolution
 depending on density.
 
+### Writing your own shape
+
+A `Shape` is one method, `draw(painter: Painter): Unit`. The painter speaks two
+coordinate systems and hands you both.
+
+*World* coordinates are the numbers your data is already in — whatever `xBounds` and
+`yBounds` the canvas was given, with y pointing **up** the way a graph's y axis does.
+`painter.paint(x, y, style)` marks the sub-pixel a world point falls in.
+
+*Dot* coordinates are integer positions on the sub-cell grid the canvas actually lights.
+Column 0 is the left edge and row 0 is the **top** edge (the y flip has already
+happened), and how many dots a cell holds depends on the resolution — one at cell
+resolution, two stacked at half-block, eight (2 across, 4 down) at braille.
+
+- `painter.bounds` — the world rectangle, as `((xMin, xMax), (yMin, yMax))`.
+- `painter.dotSize` — the grid extent, as `(columns, rows)`.
+- `painter.getPoint(x, y)` — the dot a world point falls in, or `None` when it is
+  outside the bounds or not a finite number.
+- `painter.paintDot(column, row, style)` — mark one dot. Dots off the grid are dropped,
+  not clamped.
+
+Working in dot space is what lets a shape fill or trace an area exactly once, instead of
+guessing a sample count in world units and hoping it matches the surface:
+
+```scala
+final case class FilledBox(x1: Double, y1: Double, x2: Double, y2: Double, style: Style) extends Shape:
+  def draw(painter: Painter): Unit =
+    val corners =
+      for
+        (c1, r1) <- painter.getPoint(x1, y1)
+        (c2, r2) <- painter.getPoint(x2, y2)
+      yield (c1, r1, c2, r2)
+    corners.foreach { (c1, r1, c2, r2) =>
+      for
+        column <- math.min(c1, c2) to math.max(c1, c2)
+        row    <- math.min(r1, r2) to math.max(r1, r2)
+      do painter.paintDot(column, row, style)
+    }
+```
+
 ## Feedback and motion
 
 Animations need one thing from you — a tick rate — and nothing else:
