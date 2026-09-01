@@ -106,11 +106,17 @@ final case class GroupedBarChart(
         groupLeft += groupWidth + math.max(0, groupGap)
       }
 
-  /** Columns from a group's left edge to just past its last bar: one stride per bar, less the trailing gap that the
-    * last bar does not need. A group with no bars occupies nothing at all.
+  /** Columns from a group's left edge to just past its last bar. A group with no bars occupies nothing at all.
+    *
+    * Measured from where the bars actually go rather than from the gap that was asked for: the last bar starts at
+    * `(n - 1) * stride` and is `barWidth` columns wide, so that sum is the group's width by construction. For a
+    * non-negative gap it is the same number as the old `n * stride - barGap`, but a *negative* gap made those two
+    * disagree — `stride` clamps at one column while the subtraction used `max(0, barGap)`, so a group of two
+    * three-column bars a column apart measured four and painted five. It then passed the "does this group fit" test
+    * against an area one column too small and drew that column outside it, over whatever the layout put next door.
     */
   private def widthOf(group: BarGroup, stride: Int): Int =
-    if group.bars.isEmpty then 0 else group.bars.size * stride - math.max(0, barGap)
+    if group.bars.isEmpty then 0 else (group.bars.size - 1) * stride + barWidth
 
   /** Writes a group's label centred under the whole group on the area's last row, truncated to the group's width.
     *

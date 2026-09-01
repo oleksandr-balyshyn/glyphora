@@ -63,3 +63,14 @@ final class GroupedBarChartSpec extends AnyFunSuite:
     val groups = Seq(BarGroup.of("", "a" -> 8), BarGroup.of("", "a" -> 8))
     val buffer = rendered(GroupedBarChart(groups, barWidth = 1, barGap = -5, groupGap = -5, max = Some(8)), 3, 1)
     assert(trimmedLines(buffer) == Seq("██"))
+
+  test("a negative gap tight enough to overlap bars still keeps the group inside its area"):
+    // barWidth 3 with a gap of -1 gives a stride of 2, so two bars occupy columns 0..4 — five columns, not the four
+    // that `groups * stride - gap` used to compute. With the group believed to be four wide it passed the "does it
+    // fit" test against a four-column area and then painted a fifth column outside it. `Buffer.set` clips to the
+    // buffer and not to the area, so in a real layout that column lands on the neighbouring widget.
+    val buffer = io.worxbend.tui.core.Buffer(io.worxbend.tui.core.Rect(0, 0, 8, 2))
+    val chart  = GroupedBarChart(Seq(BarGroup.of("g", "a" -> 8, "b" -> 8)), barWidth = 3, barGap = -1, max = Some(8))
+    chart.render(io.worxbend.tui.core.Rect(0, 0, 4, 1), buffer)
+    val row    = (0 until 8).map(x => buffer.get(x, 0).symbol).mkString
+    assert(row.drop(4).forall(_ == ' '), s"the chart painted past its area: '$row'")

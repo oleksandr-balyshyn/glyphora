@@ -131,9 +131,11 @@ final case class Chart(
       // the first column no label has claimed yet, so a label starting before it would overlap its neighbour
       var takenTo = plotLeft
       xLabels.zipWithIndex.foreach { (label, index) =>
-        val fitted = CharWidth.substringByWidth(label, width)
-        val span   = CharWidth.of(fitted)
-        if span > 0 then
+        val span = CharWidth.of(label)
+        // Whole or not at all. This used to cut the label down to the plot's width and draw what was left, which is
+        // exactly the failure the widget documents it does not cause: "2026-09-01T12:00" drawn as "2026-09-01T12" is
+        // not a shortened label, it is a different timestamp, and a reader has no way to tell that anything was lost.
+        if span > 0 && span <= width then
           val start =
             if index == 0 then plotLeft
             else if index == xLabels.size - 1 then plotRight - span
@@ -142,7 +144,7 @@ final case class Chart(
               val share = width.toDouble / xLabels.size
               plotLeft + math.round(share * index + (share - span) / 2).toInt
           if start >= takenTo && start + span <= plotRight then
-            buffer.setString(start, row, fitted, axisStyle)
+            buffer.setString(start, row, label, axisStyle)
             // plus one, so two labels always have a blank column between them
             takenTo = start + span + 1
       }

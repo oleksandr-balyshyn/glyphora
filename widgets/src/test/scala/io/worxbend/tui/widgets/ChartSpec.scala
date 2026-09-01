@@ -220,9 +220,17 @@ final class ChartSpec extends AnyFunSuite:
     // "start" and "end" claim the two ends, leaving no room between them for "middle"
     assert(trimmedLines(buffer)(3) == " start   end")
 
-  test("an x label wider than the plot is left out entirely"):
+  test("an x label narrow enough for the plot is drawn"):
     val chart = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xLabels = Seq("0"))
     assert(trimmedLines(rendered(chart, 3, 4))(3) == " 0")
+
+  test("an x label wider than the plot is left out entirely rather than truncated"):
+    // half a timestamp reads as a different timestamp, which is the failure the widget documents it cannot cause
+    val chart  = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xLabels = Seq("2026-09-01T12:00", "end"))
+    val buffer = rendered(chart, 14, 4)
+    val row    = trimmedLines(buffer)(3)
+    assert(!row.contains("2026"), s"the over-wide label was cut down and drawn anyway: '$row'")
+    assert(row.contains("end"), "the label that does fit is still drawn")
 
   test("x labels are measured in columns, so a wide label keeps its distance"):
     val chart  = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xLabels = Seq("月", "火"))
