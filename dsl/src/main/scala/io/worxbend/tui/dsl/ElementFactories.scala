@@ -118,6 +118,9 @@ private[dsl] trait ElementFactories:
     * never wrapped. Only the visible rows are rendered, so handing it ten thousand rows costs the height of the area,
     * not the length of the list. Add a header with `.header(...)`.
     *
+    * The widths are varargs, so `table(rows)` with none of them is a legal call: it means "equal columns", and the
+    * table divides the area between as many columns as the widest visible row has. It used to draw a blank rectangle.
+    *
     * This one is a picture. For sorting, filtering, paging and a selection, use [[dataTable]].
     */
   def table(rows: Seq[Seq[String]], widths: Constraint*): TableElement =

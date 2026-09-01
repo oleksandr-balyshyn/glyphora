@@ -6,6 +6,12 @@ import io.worxbend.tui.core.{Buffer, Constraint, Direction, Layout, Line, Rect, 
   *
   * Each row is one terminal row (no cell wrapping); rows past the area's bottom edge are clipped, matching the
   * library-wide silent-clipping philosophy.
+  *
+  * @param widths
+  *   one [[Constraint]] per column. An empty sequence means "equal columns": the table counts the cells in the header
+  *   and in the rows it is about to draw, and gives each column an equal share of the area. That fallback exists
+  *   because an empty sequence used to render a blank rectangle, and the DSL's `table(rows)` — whose widths are
+  *   varargs, so writing none of them is a legal call — landed straight in it.
   */
 final case class Table(
     rows: Seq[Seq[Line]],
@@ -18,15 +24,19 @@ final case class Table(
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
-      val columns = Layout(Direction.Horizontal, widths, columnSpacing).split(area)
-      var y       = area.y
+      // bounded by the area, not the data: drawing 50 visible rows must not walk a 10 000-row Seq
+      val headerRows  = if header.isDefined then 1 else 0
+      val body        = rows.iterator.take(math.max(0, area.height - headerRows)).toSeq
+      // the fallback only walks the rows that are about to be drawn, which is why `body` is taken first
+      val constraints = TableColumns.resolve(widths, (header.iterator ++ body.iterator).map(_.size))
+      val columns     = Layout(Direction.Horizontal, constraints, columnSpacing).split(area)
+      var y           = area.y
       header.foreach { cells =>
         if y < area.bottom then
           renderRow(buffer, columns, cells, y, headerStyle)
           y += 1
       }
-      // bounded by the area, not the data: drawing 50 visible rows must not walk a 10 000-row Seq
-      rows.iterator.take(math.max(0, area.bottom - y)).foreach { cells =>
+      body.foreach { cells =>
         renderRow(buffer, columns, cells, y, style)
         y += 1
       }

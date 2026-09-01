@@ -124,12 +124,14 @@ object DataTableState:
   *
   * @param highlightSymbol
   *   text drawn to the left of the selected row, in a gutter reserved for it on *every* row so the columns do not jump
-  *   as the selection moves. `highlightStyle` alone marks the selection by reversing the row's colours, which two
-  *   kinds of terminal do not show: one that ignores reverse video, and one where the row already carries a background
-  *   colour of its own that the reversal blends into. A symbol survives both. The default is `""` — an empty symbol
-  *   reserves a zero-width gutter, so a table written before this parameter existed draws exactly the same cells in
-  *   exactly the same columns as before. [[ListView]] defaults to `"> "` instead, because a list has no column grid to
-  *   keep still.
+  *   as the selection moves. `highlightStyle` alone marks the selection by reversing the row's colours, which two kinds
+  *   of terminal do not show: one that ignores reverse video, and one where the row already carries a background colour
+  *   of its own that the reversal blends into. A symbol survives both. The default is `""` — an empty symbol reserves a
+  *   zero-width gutter, so a table written before this parameter existed draws exactly the same cells in exactly the
+  *   same columns as before. [[ListView]] defaults to `"> "` instead, because a list has no column grid to keep still.
+  * @param widths
+  *   one [[Constraint]] per column. An empty sequence means "equal columns": each of the `columns` titles gets an equal
+  *   share of the area. Before that fallback existed an empty sequence drew a blank rectangle instead.
   */
 final case class DataTable(
     columns: Seq[String],
@@ -207,7 +209,9 @@ final case class DataTable(
       // the gutter is carved off the left of the whole table, header included, so every column keeps one x position
       val symbolWidth = math.min(CharWidth.of(highlightSymbol), area.width)
       val grid        = area.copy(x = area.x + symbolWidth, width = area.width - symbolWidth)
-      val segments    = Layout(Direction.Horizontal, widths, columnSpacing).split(grid)
+      // an empty `widths` means equal columns; a DataTable always names its columns, so the header settles the count
+      val constraints = TableColumns.resolve(widths, Iterator(columns.size))
+      val segments    = Layout(Direction.Horizontal, constraints, columnSpacing).split(grid)
       renderHeader(buffer, segments, state)
       val bodyHeight  = area.height - 1
       if bodyHeight > 0 && view.nonEmpty then

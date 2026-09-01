@@ -124,14 +124,21 @@ final class DataTableSpec extends AnyFunSuite:
     assert(trimmedLines(rendered(wide, DataTableState(), 17, 2)).head == "  name     size")
 
   test("the highlight symbol is styled with the selected row's style"):
-    val state = DataTableState()
+    val state  = DataTableState()
     state.selected = Some(0)
     val buffer = rendered(table.copy(highlightSymbol = "> "), state, 17, 4)
     assert(buffer.get(0, 1).style.modifiers.hasAny(Modifiers.Reverse))
     assert(!buffer.get(0, 2).style.modifiers.hasAny(Modifiers.Reverse))
 
   test("a highlight symbol wider than the whole area leaves no room for cells and draws no garbage"):
-    val state = DataTableState()
+    val state  = DataTableState()
     state.selected = Some(0)
     val buffer = rendered(table.copy(highlightSymbol = ">>>>>>"), state, 3, 2)
     assert(trimmedLines(buffer) == Seq("", ">>>"))
+
+  test("no widths at all gives every named column an equal share of the area"):
+    val equal  = DataTable(columns = Seq("a", "b"), rows = Seq(Seq("1", "2")), widths = Seq.empty, columnSpacing = 0)
+    val buffer = rendered(equal, DataTableState(), 8, 2)
+    assert(buffer.get(0, 0).symbol == "a")
+    assert(buffer.get(4, 0).symbol == "b") // two four-column halves of an eight-column area
+    assert(buffer.get(4, 1).symbol == "2")

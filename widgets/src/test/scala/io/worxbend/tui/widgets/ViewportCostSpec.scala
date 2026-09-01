@@ -33,6 +33,14 @@ final class ViewportCostSpec extends AnyFunSuite:
     assert(rows.touched <= 20, s"walked ${rows.touched} rows to draw 20")
     assert(buffer.get(0, 0).symbol == "0", "the first row still rendered")
 
+  test("deriving equal columns from the data still only touches the rows it can draw"):
+    val data   = Vector.tabulate(10000)(i => Seq(Line.raw(i.toString), Line.raw(s"row $i")))
+    val rows   = CountingSeq(data)
+    val buffer = Buffer(Rect(0, 0, 40, 20))
+    Table(rows, Seq.empty).render(Rect(0, 0, 40, 20), buffer)
+    assert(rows.touched <= 20, s"walked ${rows.touched} rows to derive a column count for 20")
+    assert(buffer.get(0, 0).symbol == "0", "the first row still rendered")
+
   test("Table still renders every row that fits, header included"):
     val data   = Vector.tabulate(3)(i => Seq(Line.raw(i.toString), Line.raw(s"row $i")))
     val buffer = Buffer(Rect(0, 0, 40, 10))

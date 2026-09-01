@@ -348,6 +348,10 @@ table(
 )
 ```
 
+Passing no widths at all is allowed and means "equal columns" — `table(rows)` divides
+the area between as many columns as the widest visible row has, which is the quickest
+way to get a grid on screen before deciding what each column deserves.
+
 `.header(...)` adds a bold caption row above the data — one label per column, in the
 same order as the widths. It costs one row of the area:
 
