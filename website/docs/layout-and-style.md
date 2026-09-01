@@ -356,8 +356,17 @@ out. All four sets are one column wide, so the choice never changes how much roo
 left inside the box.
 
 The built-in modifiers are `.bold`, `.dim`, `.italic`, `.underline`, `.reverse`,
-`.fg(...)`, and `.bg(...)`. Use `.styled` when you need a complete
-`Style` transformation.
+`.blink`, `.hidden`, `.crossedOut`, `.fg(...)`, and `.bg(...)`. Each has a negative
+form — `.notBold`, `.notDim`, `.notItalic`, `.notUnderline`, `.notReverse`, `.notBlink`,
+`.notHidden`, `.notCrossedOut`, `.withoutFg`, `.withoutBg` — which is how one element
+opts out of something an ancestor set. Use `.styled` when you need a complete `Style`
+transformation.
+
+Two of the attributes come with caveats. `.blink` is widely ignored, and switched off
+outright by some terminals and some accessibility settings, so never carry meaning in it
+alone. `.hidden` paints text in the background colour so it occupies its cells but cannot
+be read; it is not a security measure, because the characters are still in the terminal's
+buffer and are still copied by a selection.
 
 `Style` itself carries two more text attributes that no element shortcut exposes:
 `.blink` and `.rapidBlink`. They are separate escape codes (SGR 5 and SGR 6), not two

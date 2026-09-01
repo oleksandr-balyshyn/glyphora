@@ -299,11 +299,48 @@ extension [E <: Element](element: E)
   def styled(transform: Style => Style): element.Self =
     element.withProps(element.props.copy(style = transform(element.props.style)))
 
-  def bold: element.Self      = element.styled(_.bold)
-  def dim: element.Self       = element.styled(_.dim)
-  def italic: element.Self    = element.styled(_.italic)
-  def underline: element.Self = element.styled(_.underline)
-  def reverse: element.Self   = element.styled(_.reverse)
+  def bold: element.Self       = element.styled(_.bold)
+  def dim: element.Self        = element.styled(_.dim)
+  def italic: element.Self     = element.styled(_.italic)
+  def underline: element.Self  = element.styled(_.underline)
+  def reverse: element.Self    = element.styled(_.reverse)
+
+  /** Slow blink. Widely ignored, and disabled outright in some terminals and by some accessibility settings, so never
+    * carry meaning in it alone — pair it with a colour or a word.
+    */
+  def blink: element.Self      = element.styled(_.blink)
+
+  /** Paints the text in the background colour, so it occupies its cells but cannot be read — a password field's
+    * masking, a spoiler. It is *not* a security measure: the characters are still in the terminal's buffer and are
+    * still copied by a selection.
+    */
+  def hidden: element.Self     = element.styled(_.hidden)
+
+  /** A line struck through the text — a removed line in a diff, a completed to-do. */
+  def crossedOut: element.Self = element.styled(_.crossedOut)
+
+  /** Turning an attribute *off*, which is not the same as never turning it on.
+    *
+    * A `Style` records what it was asked to clear as well as what it was asked to set, so `.notBold` on a child of a
+    * bold container removes the bold rather than being ignored the way a `Style.Default` would be. Without these, an
+    * element inside a styled ancestor had no way to opt out of one attribute while keeping the rest.
+    */
+  def notBold: element.Self       = element.styled(_.notBold)
+  def notDim: element.Self        = element.styled(_.notDim)
+  def notItalic: element.Self     = element.styled(_.notItalic)
+  def notUnderline: element.Self  = element.styled(_.notUnderline)
+  def notReverse: element.Self    = element.styled(_.notReverse)
+  def notBlink: element.Self      = element.styled(_.notBlink)
+  def notHidden: element.Self     = element.styled(_.notHidden)
+  def notCrossedOut: element.Self = element.styled(_.notCrossedOut)
+
+  /** Back to the terminal's own default foreground colour, whatever the surrounding elements set. The counterpart of
+    * [[fg]], and the colour equivalent of the `not*` builders above.
+    */
+  def withoutFg: element.Self = element.styled(_.withoutFg)
+
+  /** Back to the terminal's own default background colour. */
+  def withoutBg: element.Self = element.styled(_.withoutBg)
 
   /** Foreground colour. Named `fg`/`bg` to match `Style.withFg`/`withBg` and the vocabulary every other terminal
     * toolkit uses; the older `.color`/`.background` pair was a fourth spelling of the same two ideas.
