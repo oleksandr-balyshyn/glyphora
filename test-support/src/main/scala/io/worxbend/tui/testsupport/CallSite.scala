@@ -12,6 +12,10 @@ package io.worxbend.tui.testsupport
   * the caller's own. Nothing else about the error changes: the message, the cause and the remaining frames are
   * untouched.
   *
+  * This is also where the library's two failure kinds part company: bad arguments a caller can fix stay
+  * `IllegalArgumentException`, while a violated expectation about the test's own fixtures is an `AssertionError`
+  * attributed here.
+  *
   * Frames are only ever removed from the front, and never all of them. If every frame is a helper's — the library
   * calling itself, or a JVM that handed back a stack the trimming would empty — the original stack is kept, on the
   * grounds that a stackless error is strictly worse than a misattributed one.

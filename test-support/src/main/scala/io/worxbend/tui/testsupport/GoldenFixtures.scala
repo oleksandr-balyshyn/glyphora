@@ -43,7 +43,7 @@ object GoldenFixtures:
     * does not exist is, because it means the caller was handed the wrong path.
     */
   def fixtureNames(resourcesDirectory: Path): Set[String] =
-    requireDirectory(resourcesDirectory, "test-resources directory")
+    assertDirectory(resourcesDirectory, "test-resources directory")
     val golden = resourcesDirectory.resolve(FixtureDirectory)
     if !Files.isDirectory(golden) then Set.empty
     else
@@ -61,7 +61,7 @@ object GoldenFixtures:
     * orphaned, which is the one wrong answer this check must never give.
     */
   def referencedNames(sourcesDirectory: Path): Set[String] =
-    requireDirectory(sourcesDirectory, "test-sources directory")
+    assertDirectory(sourcesDirectory, "test-sources directory")
     val sources = Using.resource(Files.walk(sourcesDirectory)) { paths =>
       paths.iterator.asScala.filter(path => Files.isRegularFile(path) && path.toString.endsWith(".scala")).toVector
     }
@@ -95,6 +95,8 @@ object GoldenFixtures:
       }.toSet
     }
 
-  /** Rejects a path that is not a directory, naming which of the two arguments was wrong. */
-  private def requireDirectory(directory: Path, description: String): Unit =
+  /** Fails with an `AssertionError` attributed to the caller when the path is not a directory, naming which of the two
+    * arguments was wrong.
+    */
+  private def assertDirectory(directory: Path, description: String): Unit =
     if !Files.isDirectory(directory) then CallSite.fail(s"$description does not exist: $directory")
