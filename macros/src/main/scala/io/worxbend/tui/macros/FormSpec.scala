@@ -7,6 +7,15 @@ enum FieldInput:
   case DecimalField
   case BoolField
 
+  /** A choice between a closed set of labels, rather than free text.
+    *
+    * The labels travel with the case because they are what the control has to draw and what the parser has to match
+    * against, and because [[FormSpec]] carries no other channel between the derivation and the renderer. They also make
+    * the equality check `FormState.of` performs on this enum do the right thing: a validator built for a picklist over
+    * one set of labels no longer silently passes for a field declared over another.
+    */
+  case SelectField(options: Seq[String])
+
 /** One field of a derived form: the case-class field name and its input kind. */
 final case class FieldSpec(name: String, input: FieldInput)
 

@@ -91,6 +91,7 @@ final class FormValidatorWiringSpec extends AnyFunSuite:
       case bound: FieldBinding.BoolLike                                          => bound.value.set(true)
       case FieldBinding.TextLike(fieldSpec, input, _) if fieldSpec.name == "age" => input.insert("30")
       case FieldBinding.TextLike(_, input, _)                                    => input.insert("someone@example.com")
+      case _: FieldBinding.SelectLike                                            => () // this form declares no picklist
     state.submit()
     assert(state.errors.peek.isEmpty, s"unexpected errors: ${state.errors.peek}")
     assert(state.result.peek.contains(Registration("someone@example.com", 30, true)))

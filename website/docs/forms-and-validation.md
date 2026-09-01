@@ -99,6 +99,7 @@ Field.bool("subscribe").mapValidated { accepted =>
 | `java.time.LocalDateTime` | text input; the two joined by a literal `T`, `2026-09-01T14:30` | a parse error |
 | `java.time.Duration` | text input; ISO-8601 duration, `PT5M30S` is five minutes thirty seconds | a parse error |
 | `Option[A]` | the same control `A` would get | `None` |
+| an enum of parameterless cases | a picklist, once it opts in (below) | — |
 
 The date, time and identifier types render as a plain text field because this library has
 no calendar picker or masked entry yet. Their text is trimmed before parsing, so a stray
@@ -151,6 +152,58 @@ final case class Contact(email: Email, cc: Option[Email])
 
 `parse` runs on the render thread when the user submits, so keep it pure and quick — no
 network calls, no locks.
+
+### An enum becomes a picklist
+
+An enum whose cases all take no parameters is the most natural choice field there is, and
+one line in its companion turns it into one:
+
+```scala
+import io.worxbend.tui.macros.FormFieldType
+
+enum Environment:
+  case Development, Staging, Production
+
+object Environment:
+  given FormFieldType[Environment] = FormFieldType.ofEnum[Environment]
+
+final case class Deployment(service: String, environment: Environment)
+// deriveForm[Deployment] now compiles; `environment` renders as a one-row cycler
+```
+
+`FormFieldType.ofEnum` reads the case names out of the type and collects the case values
+by implicit search, both at compile time, so nothing about this reads a class at runtime
+and a native image needs no reflection configuration for it. Every case's name becomes one
+option; the label the user chose is matched back to the case, ignoring surrounding
+whitespace and letter case. A case that takes parameters has no singleton value, so it
+fails to compile naming that case rather than producing a picklist that cannot represent
+it.
+
+It is opt-in rather than automatic on purpose. An unconditional given for every
+`Mirror.SumOf` would collide with the one for `Option`, which is a sum type too, and would
+also quietly claim every sealed hierarchy whose cases happen to take no parameters —
+including ones that are not a choice a user should be offered.
+
+`FormFieldType.ofLabels` is the same thing with labels you choose, for when the case names
+are not what the user should read:
+
+```scala
+given FormFieldType[Tier] = FormFieldType.ofLabels(Seq("no charge" -> Tier.Free, "billed" -> Tier.Paid))
+```
+
+A picklist always has something showing, so unlike a text field there is no "nothing
+entered" state: an untouched form submits the first option. Validate it like any other
+field, with `Field.enumeration`:
+
+```scala
+FormState.of(
+  deriveForm[Deployment],
+  Field.enumeration[Environment]("environment").mapValidated {
+    case Environment.Production => Left("production needs an approval")
+    case other                  => Right(other)
+  },
+)
+```
 
 ## Render and submit
 

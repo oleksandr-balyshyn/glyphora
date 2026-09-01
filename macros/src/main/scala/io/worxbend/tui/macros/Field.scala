@@ -3,6 +3,8 @@ package io.worxbend.tui.macros
 import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
 import java.util.UUID
 
+import scala.deriving.Mirror
+
 /** A form field with parsing and validation, composing cue4s-style: transforms are stored lazily and run when the
   * field's raw input is submitted.
   */
@@ -67,3 +69,9 @@ object Field:
   def localDateTime(name: String): Field[LocalDateTime] = FormFieldType.localDateTime.field(name)
 
   def duration(name: String): Field[Duration] = FormFieldType.duration.field(name)
+
+  /** The starting point for a validator on a picklist field derived from an enum — see [[FormFieldType.ofEnum]]. It
+    * builds the same field the derivation would, so its spec carries the same options and the form accepts it.
+    */
+  inline def enumeration[A](name: String)(using Mirror.SumOf[A]): Field[A] =
+    FormFieldType.ofEnum[A].field(name)

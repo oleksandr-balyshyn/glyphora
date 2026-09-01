@@ -4,6 +4,8 @@ import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
 import java.util.UUID
 
 import scala.annotation.implicitNotFound
+import scala.compiletime.{constValueTuple, summonAll}
+import scala.deriving.Mirror
 import scala.util.Try
 
 /** How one *type* becomes one form field: which control the user types into, and how the text they typed turns back
@@ -33,7 +35,9 @@ import scala.util.Try
 @implicitNotFound(
   "deriveForm: no form control is defined for a field of type ${A}. Out of the box String, Int, Long, Double, " +
     "BigDecimal, Boolean, java.util.UUID, java.time.LocalDate/LocalTime/LocalDateTime/Duration and Option of those " +
-    "are supported; define a `given FormFieldType[${A}]` next to your own type to teach the derivation about it."
+    "are supported; define a `given FormFieldType[${A}]` next to your own type to teach the derivation about it. " +
+    "An enum whose cases all take no parameters can say " +
+    "`given FormFieldType[${A}] = FormFieldType.ofEnum[${A}]` in its companion."
 )
 trait FormFieldType[A]:
 
@@ -135,5 +139,61 @@ object FormFieldType:
     * either ticked or not, so the field always submits a `Some`. Declare a plain `Boolean` unless the `Option` means
     * something to the rest of your program.
     */
+  /** A picklist over an enum whose cases all take no parameters: every case's name becomes one option, and the label
+    * the user chose is matched back to the case value.
+    *
+    * Compile-time only. `constValueTuple` reads the case names out of the type and `summonAll` collects the singleton
+    * values, both during compilation, so nothing here reads a class at runtime and a native image needs no reflection
+    * configuration for it.
+    *
+    * This is opt-in rather than an automatic `given`, and deliberately so. An unconditional
+    * `given [A](using Mirror.SumOf[A])` would sit in the same implicit scope as [[option]] — `Option` has a
+    * `Mirror.SumOf` of its own — and would either shadow it or make the search ambiguous. It would also quietly claim
+    * every sealed hierarchy whose cases happen to take no parameters, including ones that are not choices a user should
+    * be offered. Opting in is one line, in the place the extension point already documents:
+    *
+    * {{{
+    * enum Role:
+    *   case Admin, Viewer
+    *
+    * object Role:
+    *   given FormFieldType[Role] = FormFieldType.ofEnum[Role]
+    * }}}
+    *
+    * A case that takes parameters has no `ValueOf`, so this fails to compile naming that case rather than producing a
+    * picklist that cannot represent it.
+    */
+  inline def ofEnum[A](using mirror: Mirror.SumOf[A]): FormFieldType[A] =
+    val labels = constValueTuple[mirror.MirroredElemLabels].toList.map(_.toString)
+    // every element is a `ValueOf[C]` for one of the enum's own case types, so each `.value` is already an `A`; the
+    // cast is what carries that fact past `ValueOf`'s wildcard element type, which the compiler cannot track through
+    // the tuple
+    val values = summonAll[Tuple.Map[mirror.MirroredElemTypes, ValueOf]].toList.map { case singleton: ValueOf[?] =>
+      // `summonAll` erases the tuple's element types to `ValueOf[?]`, so the fact that each element is a `ValueOf[C]`
+      // for one of A's own case types — and its `.value` therefore already an `A` — cannot be stated to the compiler
+      // here. Pattern matching cannot recover it either: the type argument is gone at runtime, so there is nothing
+      // left to match on.
+      singleton.value.asInstanceOf[A] // scalafix:ok DisableSyntax; the erased case type cannot be recovered
+    }
+    ofLabels(labels.zip(values))
+
+  /** A picklist over labels and values supplied by hand — the non-inline half of [[ofEnum]], and the way to build one
+    * whose labels are not the case names ("Administrator" for `Admin`, a translated label).
+    *
+    * It is a plain method rather than `inline` for the same reason `FormSpec.ofProduct` is: [[ofEnum]] is inlined into
+    * every call site, so keeping the matching and the error message here means the program holds one copy of them
+    * instead of one per call.
+    *
+    * Matching ignores surrounding whitespace and case, because the label makes the round trip through a control as
+    * text. An empty `options` produces a field that rejects everything, which is the honest answer for a choice with
+    * nothing to choose from.
+    */
+  def ofLabels[A](options: Seq[(String, A)]): FormFieldType[A] =
+    apply(FieldInput.SelectField(options.map(_._1))) { raw =>
+      options
+        .collectFirst { case (label, value) if label.equalsIgnoreCase(raw.trim) => value }
+        .toRight(s"'$raw' is not one of ${options.map(_._1).mkString(", ")}")
+    }
+
   given option[A](using inner: FormFieldType[A]): FormFieldType[Option[A]] =
     apply(inner.input)(raw => if raw.trim.isEmpty then Right(None) else inner.parse(raw).map(Some(_)))

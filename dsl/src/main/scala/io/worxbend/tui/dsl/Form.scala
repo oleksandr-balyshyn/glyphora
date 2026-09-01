@@ -24,6 +24,17 @@ private[dsl] object FieldBinding:
       parse: Boolean => Either[String, Any],
   ) extends FieldBinding
 
+  /** A choice between a closed set of labels. `selected` is an index into `options` rather than the label itself,
+    * because that is what the one-row cycler the form renders takes; the label is looked up on submit and handed to the
+    * parser, which turns it back into the field's declared type.
+    */
+  final case class SelectLike(
+      spec: FieldSpec,
+      options: Seq[String],
+      selected: Signal[Int],
+      parse: String => Either[String, Any],
+  ) extends FieldBinding
+
 /** Live state for a compile-time-derived form: boolean fields become checkboxes, everything else an input; [[submit]]
   * runs each field's parser/validators — errors land in [[errors]] per field, a fully valid form lands in [[result]].
   *
@@ -38,8 +49,15 @@ final class FormState[A] private (private[dsl] val bindings: Seq[FieldBinding], 
   /** Validates every field; either publishes per-field errors or the assembled value. */
   def submit(): Unit =
     val parsed: Seq[(String, Either[String, Any])] = bindings.map {
-      case FieldBinding.TextLike(spec, state, parse) => spec.name -> parse(state.value)
-      case FieldBinding.BoolLike(spec, value, parse) => spec.name -> parse(value.peek)
+      case FieldBinding.TextLike(spec, state, parse)               => spec.name -> parse(state.value)
+      case FieldBinding.BoolLike(spec, value, parse)               => spec.name -> parse(value.peek)
+      case FieldBinding.SelectLike(spec, options, selected, parse) =>
+        // the only way to reach the `Left` is a picklist with no options at all, and it must not throw here: `submit`
+        // runs on the render thread, where an exception takes the whole app down rather than showing a field error
+        spec.name -> options
+          .lift(selected.peek)
+          .map(parse)
+          .getOrElse(Left(s"no option to choose for '${spec.name}'"))
     }
     val failed                                     = parsed.collect { case (name, Left(message)) => name -> message }
     if failed.nonEmpty then
@@ -53,10 +71,11 @@ object FormState:
 
   /** The `Field` factory that produces `input`, named so a rejected validator can say what to write instead. */
   private def factoryFor(input: FieldInput): String = input match
-    case FieldInput.TextField    => "Field.text"
-    case FieldInput.IntField     => "Field.int"
-    case FieldInput.DecimalField => "Field.double"
-    case FieldInput.BoolField    => "Field.bool"
+    case FieldInput.TextField      => "Field.text"
+    case FieldInput.IntField       => "Field.int"
+    case FieldInput.DecimalField   => "Field.double"
+    case FieldInput.BoolField      => "Field.bool"
+    case FieldInput.SelectField(_) => "Field.enumeration"
 
   /** Builds live state from a derived [[FormSpec]]; `validators` override the default per-type parsers by field name
     * (only the name and the input kind are taken from their own `FieldSpec` — position comes from the derived spec).
@@ -106,10 +125,13 @@ object FormState:
       val field     = byName.getOrElse(derived.spec.name, derived)
       val fieldSpec = derived.spec
       fieldSpec.input match
-        case FieldInput.BoolField =>
+        case FieldInput.BoolField            =>
           // a checkbox holds a Boolean, so its validator sees the same `"true"`/`"false"` text `Field.bool` parses
           FieldBinding.BoolLike(fieldSpec, Signal(false), checked => field.parse(checked.toString).map(v => v: Any))
-        case _                    =>
+        case FieldInput.SelectField(options) =>
+          // the cycler starts on the first option, so a picklist always submits something rather than a blank
+          FieldBinding.SelectLike(fieldSpec, options, Signal(0), raw => field.parse(raw).map(value => value: Any))
+        case _                               =>
           FieldBinding.TextLike(fieldSpec, TextInputState(), raw => field.parse(raw).map(value => value: Any))
     }
     new FormState(bindings, spec.assemble)
@@ -160,15 +182,24 @@ object Form:
     val labelWidth = state.bindings.map(binding => CharWidth.of(binding.spec.name)).maxOption.getOrElse(0) + 2
     fieldColumn(state, message => s"${" ".repeat(labelWidth)}! $message") { (binding, _) =>
       binding match
-        case FieldBinding.TextLike(spec, inputState, _) =>
+        case FieldBinding.TextLike(spec, inputState, _)          =>
           Element
             .row(
               Element.text(s"${spec.name}:").length(labelWidth),
               textControl(spec, inputState).fill,
             )
             .length(1)
-        case FieldBinding.BoolLike(spec, value, _)      =>
+        case FieldBinding.BoolLike(spec, value, _)               =>
           Element.checkbox(spec.name, value)
+        case FieldBinding.SelectLike(spec, options, selected, _) =>
+          // the one-row cycler rather than the popup `dropdown`, because every other row of a form is one row tall and
+          // a control that changes height when it opens would move the rows under it while the user is filling them in
+          Element
+            .row(
+              Element.text(s"${spec.name}:").length(labelWidth),
+              Element.select(options, selected).fill,
+            )
+            .length(1)
     }
 
   /** A screen-reader-friendly rendering of the same [[FormState]] (Huh's `WithAccessible`): every field on its own
@@ -180,15 +211,22 @@ object Form:
     fieldColumn(state, message => s"Error: $message") { (binding, index) =>
       val position = s"Field ${index + 1} of $total"
       binding match
-        case FieldBinding.TextLike(spec, inputState, _) =>
+        case FieldBinding.TextLike(spec, inputState, _)          =>
           Element.column(
             Element.text(s"$position: ${spec.name}").length(1),
             textControl(spec, inputState).fill.length(1),
           )
-        case FieldBinding.BoolLike(spec, value, _)      =>
+        case FieldBinding.BoolLike(spec, value, _)               =>
           val announced = if value.get then "checked" else "unchecked"
           Element.column(
             Element.text(s"$position: ${spec.name} ($announced)").length(1),
             Element.checkbox(spec.name, value).length(1),
+          )
+        case FieldBinding.SelectLike(spec, options, selected, _) =>
+          // the chosen label is spelled out rather than left to the highlight, which is a colour and announces nothing
+          val announced = options.lift(selected.get).getOrElse("nothing to choose from")
+          Element.column(
+            Element.text(s"$position: ${spec.name} ($announced, ${options.size} options)").length(1),
+            Element.select(options, selected).length(1),
           )
     }
