@@ -45,6 +45,23 @@ final class ListViewSpec extends AnyFunSuite:
     state.selectPrevious(4)
     assert(state.selected.contains(0))
 
+  test("scrollPadding scrolls the list before the highlight reaches the bottom row"):
+    val twenty  = ListView((0 until 20).map(index => s"item-$index"))
+    val atSeven = ListState(selected = Some(7), scrollPadding = 2)
+    val atEight = ListState(selected = Some(8), scrollPadding = 2)
+    // rows 0..9 are on screen; with two rows of padding the highlight may rest on row 7 without scrolling
+    assert(trimmedLines(rendered(twenty, atSeven, 12, 10)).head == "  item-0")
+    assert(atSeven.offset == 0)
+    // one further step scrolls the list under the highlight rather than pinning it lower
+    assert(trimmedLines(rendered(twenty, atEight, 12, 10)).head == "  item-1")
+    assert(atEight.offset == 1)
+
+  test("the default scrollPadding of zero leaves the existing scroll behaviour untouched"):
+    val twenty   = ListView((0 until 20).map(index => s"item-$index"))
+    val unpadded = ListState(selected = Some(9))
+    assert(trimmedLines(rendered(twenty, unpadded, 12, 10)).head == "  item-0")
+    assert(unpadded.offset == 0)
+
   test("a bottom-to-top list sits against the floor of a taller area"):
     val threeItems = ListView(Seq("alpha", "beta", "gamma"), direction = ListDirection.BottomToTop)
     val buffer     = rendered(threeItems, ListState(), 10, 5)

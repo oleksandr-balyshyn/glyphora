@@ -359,6 +359,14 @@ def serviceList(using ReactiveScope, Theme): Element =
   }
 ```
 
+By default the highlight is allowed to come to rest on the very first or very last
+visible row, with more items sitting just out of sight below it — the reader cannot see
+what is coming next. `ListState(scrollPadding = 2)` keeps two further items visible on
+each side of the highlight whenever the list is long enough to show them, so pressing
+Down two rows short of the bottom scrolls the list underneath a highlight that stays put.
+Near the two ends of the list the padding gives way, because there is nothing left to
+reveal: the first and last items still reach the edge rows.
+
 A list normally starts at the top row of its area and grows downward, so a list with
 three entries in a ten-row pane leaves seven blank rows underneath it. A chat transcript
 or a log tail wants the opposite: the newest entry welded to the bottom edge, with the
