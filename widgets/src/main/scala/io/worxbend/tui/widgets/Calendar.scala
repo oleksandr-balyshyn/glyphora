@@ -14,24 +14,24 @@ import java.util.Locale
   * month grid usable in a narrow sidebar.
   *
   * `showSurroundingDays` fills the leading and trailing cells of the grid with the days of the months either side,
-  * drawn in `surroundingStyle` (dimmed by default) so they read as context rather than as part of this month. They
-  * are never selectable: `selected` names a day of the month being shown.
+  * drawn in `surroundingStyle` (dimmed by default) so they read as context rather than as part of this month. They are
+  * never selectable: `selected` names a day of the month being shown.
   *
   * `firstDayOfWeek` decides which weekday the leftmost column is, so a US-facing application asks for
   * `DayOfWeek.SUNDAY` and gets a Sunday-first grid with the day numbers moved to match. `locale` decides the language
-  * of the month name and the weekday abbreviations. It defaults to `Locale.ENGLISH` rather than to
-  * `Locale.getDefault`, deliberately: a widget whose output depends on the machine it runs on cannot be tested by
-  * comparing frames, and a caller who wants the machine's locale can pass `Locale.getDefault` and mean it.
+  * of the month name and the weekday abbreviations. It defaults to `Locale.ENGLISH` rather than to `Locale.getDefault`,
+  * deliberately: a widget whose output depends on the machine it runs on cannot be tested by comparing frames, and a
+  * caller who wants the machine's locale can pass `Locale.getDefault` and mean it.
   *
-  * `dayStyles` gives individual dates their own appearance — a date with an appointment, a public holiday, today,
-  * every day of a streak. It is keyed by `java.time.LocalDate` rather than by day-of-month so a caller can hold one map
+  * `dayStyles` gives individual dates their own appearance — a date with an appointment, a public holiday, today, every
+  * day of a streak. It is keyed by `java.time.LocalDate` rather than by day-of-month so a caller can hold one map
   * across several months and hand the same value to each grid. A date's style is layered over the calendar's `style`,
   * and `highlightStyle` is layered over that in turn, so the cursor stays visible wherever it lands: a marked day that
   * is also the selected day reads as selected first.
   *
-  * Needs 20 columns (seven three-column day slots, the last one two wide) and one row per header shown plus one row
-  * per week the month touches — so up to 8 rows with both headers, and up to 6 with neither. Overflow clips like
-  * everything else.
+  * Needs 20 columns (seven three-column day slots, the last one two wide) and one row per header shown plus one row per
+  * week the month touches — so up to 8 rows with both headers, and up to 6 with neither. Overflow clips like everything
+  * else.
   */
 final case class Calendar(
     year: Int,
@@ -102,8 +102,8 @@ final case class Calendar(
     }
 
   /** The style one day cell is drawn with: the calendar's `style` for a day of this month and `surroundingStyle` for a
-    * day borrowed from the month either side, then whatever `dayStyles` says about that date, then `highlightStyle`
-    * for the selected day.
+    * day borrowed from the month either side, then whatever `dayStyles` says about that date, then `highlightStyle` for
+    * the selected day.
     *
     * `selected` names a day of *this* month, so a surrounding day that happens to carry the same number is never
     * mistaken for the cursor.

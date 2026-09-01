@@ -85,7 +85,8 @@ final class GaugeSpec extends AnyFunSuite:
     assert(trimmedLines(buffer) == Seq("####", "####", "####"))
 
   test("the filled glyphs carry the filled style and the track does not"):
-    val gauge  = Gauge(0.5, label = ProgressLabel.Hidden, filledStyle = Style.Default.bold, preset = Some(ProgressPreset.Ascii))
+    val gauge  =
+      Gauge(0.5, label = ProgressLabel.Hidden, filledStyle = Style.Default.bold, preset = Some(ProgressPreset.Ascii))
     val buffer = rendered(gauge, 10, 1)
     assert(buffer.get(4, 0).style.modifiers.hasAny(Modifiers.Bold))
     assert(!buffer.get(5, 0).style.modifiers.hasAny(Modifiers.Bold))

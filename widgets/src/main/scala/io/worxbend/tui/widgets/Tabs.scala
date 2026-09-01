@@ -12,8 +12,8 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, Measured, Rect, Style, Wid
   *
   * `selected` is an index into `titles`. Any value outside that range — [[Tabs.NoSelection]] is the name for one —
   * highlights no tab at all, which is what a tab bar should look like before anything has been opened or while the
-  * focus is somewhere else entirely. That is part of this widget's contract and is covered by its tests, rather than
-  * an out-of-range index happening to match nothing.
+  * focus is somewhere else entirely. That is part of this widget's contract and is covered by its tests, rather than an
+  * out-of-range index happening to match nothing.
   *
   * Both paddings are empty by default, which draws exactly what this widget drew before they existed: the default
   * `divider` carries its own blanks. For the padded look, set the divider to a bare `"│"` and both paddings to `" "` —

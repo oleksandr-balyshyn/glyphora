@@ -65,9 +65,9 @@ final case class Gauge(
 
   /** The style one cluster of the caption is written with.
     *
-    * An explicit `labelStyle` wins everywhere. Without one, the caption over the *track* keeps the widget's `style`,
-    * as it always has, while the caption over the *fill* wears the fill's own style with `Reverse` toggled — which is
-    * a terminal's way of saying "swap this cell's foreground and background".
+    * An explicit `labelStyle` wins everywhere. Without one, the caption over the *track* keeps the widget's `style`, as
+    * it always has, while the caption over the *fill* wears the fill's own style with `Reverse` toggled — which is a
+    * terminal's way of saying "swap this cell's foreground and background".
     *
     * That swap is what makes the caption legible. Before it, the caption inherited the fill style unchanged: with the
     * default reversed fill the glyphs were reversed text drawn on an already-reversed cell, which some terminals
