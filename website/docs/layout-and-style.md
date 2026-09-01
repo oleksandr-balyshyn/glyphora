@@ -334,6 +334,29 @@ A `Line` and a `Text` hold no style of their own — a line is its spans — so 
 methods are a fold over the spans rather than a field being set. That is why they compose
 the way plain `Style` calls do.
 
+### Show a secret without showing it
+
+`maskedInput` hides what a user is *typing*. For a secret that is merely displayed — in a
+paragraph, a table cell, a list row, a log line — wrap it in `Masked`:
+
+```scala
+val token = Masked(apiToken)        // hidden behind •
+val pin   = Masked(accountPin, "*") // or behind a mask of your choosing
+
+text(token.value)
+line("token: ", pin.toSpan)
+```
+
+`Masked` emits one mask glyph per grapheme cluster, so an emoji or an accented letter is
+hidden by exactly one character. Writing `"*" * secret.length` by hand does not: that
+counts UTF-16 code units, so it produces more mask characters than there are characters to
+hide, which both leaks the shape of the secret and misaligns the row. Its `toString` is
+the mask too, so a `Masked` that reaches a log line or an assertion message does not print
+the secret.
+
+This hides characters on a screen. It is not encryption: the original text is still in
+memory and still readable through `content`.
+
 ### Walk text cell by cell
 
 A *grapheme cluster* is what a reader thinks of as one character: a base character plus

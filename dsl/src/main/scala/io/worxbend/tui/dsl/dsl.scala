@@ -100,6 +100,7 @@ export io.worxbend.tui.core.{
   KeyCode,
   KeyEvent,
   Line,
+  Masked,
   MouseEvent,
   MouseEventKind,
   Position,
