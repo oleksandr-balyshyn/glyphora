@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{KeyCode, KeyEvent, KeyModifiers, Style}
+import io.worxbend.tui.core.{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position, Style}
 
 /** Named key constants and constructors, so handlers read `onKey(Key.Up){ … }` instead of matching raw
   * `KeyEvent(KeyCode.Up, _)`. Mirrors terminus's `Key.up` / `Key.controlQ` vocabulary.
@@ -106,6 +106,92 @@ extension [E <: Element](element: E)
     */
   def onKey(spec: String, more: String*)(handler: => Unit): element.Self =
     bindKeys(element)((spec +: more).map(parseSpec))(handler)
+
+/** Ergonomic mouse handlers, the mouse-side counterpart of the `onKey` block above.
+  *
+  * The DSL's only mouse seam used to be [[Element.onMouseEvent]], which takes a raw `MouseEvent => Boolean`. Every call
+  * site that only wanted "run this when the user clicks me" therefore repeated the same shape:
+  *
+  * {{{
+  * .onMouseEvent { event =>
+  *   if event.kind == MouseEventKind.Down then
+  *     select(row)
+  *     true
+  *   else false
+  * }
+  * }}}
+  *
+  * which is the exact ceremony `onKey` was written to remove for keys. Each handler here consumes only the mouse kinds
+  * it names and hands every other kind to a handler already on the element, so several of them compose instead of
+  * overwriting each other — the same layering rule `onKey` follows. Reach for [[Element.onMouseEvent]] directly when a
+  * handler needs the raw event, its modifiers, or conditional consumption.
+  *
+  * Positions are absolute, zero-based terminal cells — the same coordinate space a `Rect` uses — because that is what a
+  * `MouseEvent` carries. An element that wants coordinates relative to its own area subtracts that area's origin.
+  *
+  * Like the key handlers and the styling builders, each one hands back the element's own type, so the node-specific
+  * builders stay reachable after the binding.
+  */
+extension [E <: Element](element: E)
+
+  /** A mouse press inside this element (`MouseEventKind.Down`).
+    *
+    * This is the same press the framework's own click-to-activate behavior reacts to, and a handler here runs first, so
+    * a click bound this way consumes the press and the built-in behavior does not also fire.
+    */
+  def onClick(handler: => Unit): element.Self = bindMouse(element)(Set(MouseEventKind.Down))(_ => handler)
+
+  /** As [[onClick]], but the handler is told which cell was pressed. */
+  def onClickAt(handler: Position => Unit): element.Self = bindMouse(element)(Set(MouseEventKind.Down))(handler)
+
+  /** The pointer moved over this element with no button held (`MouseEventKind.Moved`).
+    *
+    * Only terminals with any-motion reporting turned on deliver these. On the others the element simply never hears
+    * one, so a hover cue must never be the only way to reach something.
+    */
+  def onHover(handler: Position => Unit): element.Self = bindMouse(element)(Set(MouseEventKind.Moved))(handler)
+
+  /** The pointer moved with a button held down (`MouseEventKind.Drag`). */
+  def onDrag(handler: Position => Unit): element.Self = bindMouse(element)(Set(MouseEventKind.Drag))(handler)
+
+  /** The button came back up (`MouseEventKind.Up`) — the end of a drag, and where a drag gesture is committed. */
+  def onDragEnd(handler: Position => Unit): element.Self = bindMouse(element)(Set(MouseEventKind.Up))(handler)
+
+  /** Wheel steps: `up` runs on `MouseEventKind.ScrollUp` and `down` on `MouseEventKind.ScrollDown`.
+    *
+    * Both directions are taken together rather than as two separate builders because a wheel that scrolls one way and
+    * not the other is a bug, not a feature — asking for both makes forgetting one impossible.
+    */
+  def onScroll(up: => Unit, down: => Unit): element.Self =
+    val previous = element.props.onMouse
+    element.withProps(
+      element.props.copy(onMouse = Some { event =>
+        event.kind match
+          case MouseEventKind.ScrollUp   =>
+            up
+            true
+          case MouseEventKind.ScrollDown =>
+            down
+            true
+          case _                         => previous.exists(_(event))
+      })
+    )
+
+/** The body the mouse handlers share: consume the `kinds` this handler names, and hand every other mouse event to the
+  * handler the element already carried.
+  */
+private def bindMouse[E <: Element](
+    element: E
+)(kinds: Set[MouseEventKind])(handler: Position => Unit): element.Self =
+  val previous = element.props.onMouse
+  element.withProps(
+    element.props.copy(onMouse = Some { (event: MouseEvent) =>
+      if kinds.contains(event.kind) then
+        handler(event.position)
+        true
+      else previous.exists(_(event))
+    })
+  )
 
 /** The body both `onKey` overloads share: consume `keys`, and hand anything else to the handler the element already
   * carried, so several `.onKey(…)` calls layer instead of overwriting each other.

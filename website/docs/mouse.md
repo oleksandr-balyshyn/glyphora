@@ -90,6 +90,40 @@ For the focused path, routing order is:
 This lets an input consume normal text and editing keys while a parent still handles
 `Escape` and the app still handles global commands.
 
+## Use concise handlers for one kind of mouse event
+
+Most mouse handling is "run this when the user clicks me", and writing that as a raw
+`onMouseEvent` means repeating a `kind` test and a `true`/`false` every time. There is a
+named builder for each kind, the mouse-side counterpart of `.onKey`:
+
+```scala
+row(text(label), text(count))
+  .onClick { select(row) }                          // a press (MouseEventKind.Down)
+  .onScroll(up = zoom.update(_ + 1), down = zoom.update(_ - 1))
+
+panel("Canvas")(canvasView)
+  .onClickAt(pos => selectedCell.set((pos.x, pos.y)))  // told which cell was pressed
+  .onHover(pos => hovered.set(Some(pos)))              // pointer moved, no button held
+  .onDrag(pos => stroke.update(pos :: _))              // pointer moved, button held
+  .onDragEnd(_ => commitStroke())                      // the button came back up
+```
+
+Each one consumes only the kind it names and hands every other kind to a handler already
+on the element, so several of them layer instead of the last one replacing the ones
+before it — the same rule `.onKey` follows. `onScroll` takes both directions together on
+purpose: a wheel that scrolls one way and not the other is a bug, and asking for both
+makes forgetting one impossible.
+
+Positions are absolute, zero-based terminal cells, the same coordinate space a `Rect`
+uses; an element that wants its own coordinate space subtracts its area's origin.
+
+`onHover` and `onDrag` depend on the terminal reporting motion. On terminals without
+any-motion reporting the element simply never hears one, so a hover cue must never be
+the only way to reach something.
+
+Reach for the raw `onMouseEvent` below when a handler needs the whole event — its
+keyboard modifiers, say — or when whether it consumes the event depends on the state.
+
 ## Handle custom mouse behavior
 
 `MouseEvent` carries a `Position` (the absolute terminal cell the pointer was over), a
