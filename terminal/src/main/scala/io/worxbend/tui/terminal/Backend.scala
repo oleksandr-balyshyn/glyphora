@@ -289,6 +289,28 @@ trait Backend:
     val _ = kind
     Right(())
 
+  /** Writes `sequence` to the terminal exactly as given, without diffing it, encoding it or recording it as part of a
+    * frame.
+    *
+    * This is the partner of [[io.worxbend.tui.core.DiffDirective.Skip]] and the only reason it exists. A terminal image
+    * protocol — Sixel, the kitty graphics protocol, iTerm2 inline images — paints a rectangle with an escape sequence
+    * that has no cell-by-cell representation, so the two halves of showing a picture are: reserve the columns in the
+    * frame so the diff stops flushing over them, then hand the payload to the terminal through this method.
+    *
+    * Nothing is validated or stripped. That is the difference from [[printAbove]], which strips control sequences out
+    * of text of unknown provenance: here the control sequences *are* the payload, so a caller passing text it did not
+    * build itself is handing the terminal whatever that text says. Must run on the render thread, and the caller is
+    * responsible for leaving the cursor and the terminal modes as it found them — this backend's picture of the screen
+    * does not change, so anything the sequence draws outside the reserved columns is overwritten by the next frame only
+    * if that frame happens to change those cells.
+    *
+    * The default reports [[BackendError.UnsupportedTerminal]] rather than succeeding silently, because a caller whose
+    * picture never appeared needs to know that the backend never even tried.
+    */
+  def writeRaw(sequence: String): Either[BackendError, Unit] =
+    val _ = sequence
+    Left(BackendError.UnsupportedTerminal("this backend cannot pass raw escape sequences through to a terminal"))
+
   /** Discards what this backend believes is currently on screen, so the next [[draw]] writes every cell again.
     *
     * `draw` is diff-based: it emits only the cells that differ from the frame it last flushed. That is correct for

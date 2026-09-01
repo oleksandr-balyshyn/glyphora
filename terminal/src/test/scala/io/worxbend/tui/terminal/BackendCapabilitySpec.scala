@@ -44,6 +44,12 @@ final class BackendCapabilitySpec extends AnyFunSuite:
     // a terminal that cannot address the cursor's shape has not failed at anything, so the default reports success
     assert(backend.setCursorShape(CursorShape.SteadyBar) == Right(()))
 
+  test("passing raw escape sequences through is the one optional operation that refuses by default"):
+    // every other default is a silent success because the app loses only decoration. This one carries a payload the
+    // caller believes reached the screen — an image, say — so a backend that never wrote it has to say so.
+    val backend: Backend = MinimalBackend()
+    assert(backend.writeRaw("\u001b_Ga=T;payload\u001b\\").isLeft)
+
   test("the headless backend records the last title it was given"):
     val backend = HeadlessBackend(Size(10, 2))
     assert(backend.titleContents.isEmpty)

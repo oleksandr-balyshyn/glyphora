@@ -37,6 +37,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val wakeCounter                             = AtomicLong(0)
   private val fullRedrawCounter                       = AtomicLong(0)
   private val printedLines                            = scala.collection.mutable.ArrayBuffer.empty[String]
+  private val rawWrites                               = scala.collection.mutable.ArrayBuffer.empty[String]
   private val clears                                  = scala.collection.mutable.ArrayBuffer.empty[ClearType]
   private val insertedBlocks                          = scala.collection.mutable.ArrayBuffer.empty[Buffer]
   private val sizeRequests                            = scala.collection.mutable.ArrayBuffer.empty[Size]
@@ -198,6 +199,10 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     clears.synchronized { val _ = clears += kind }
     Right(())
 
+  override def writeRaw(sequence: String): Either[BackendError, Unit] =
+    rawWrites.synchronized { val _ = rawWrites += sequence }
+    Right(())
+
   override def printAbove(lines: Seq[String]): Either[BackendError, Unit] =
     printedLines.synchronized { printedLines ++= lines }
     Right(())
@@ -324,6 +329,11 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** The lines emitted above the app via [[printAbove]] or [[insertBefore]], in order. */
   def printedAbove: Seq[String] = printedLines.synchronized(printedLines.toSeq)
+
+  /** Every sequence handed to [[writeRaw]], in order — the out-of-band payloads (an image protocol's escape sequence,
+    * say) an application sent past the frame diff.
+    */
+  def rawSequences: Seq[String] = rawWrites.synchronized(rawWrites.toSeq)
 
   /** Total rows scrolled off the top via [[appendLines]] — how much room an inline viewport asked the shell for. */
   def appendedLineCount: Long = appendedLineCounter.get()
