@@ -118,6 +118,11 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   def enableRawMode(): Either[BackendError, Unit] =
     attempt {
+      // first, before anything this backend does can move the cursor: this is where the shell's prompt was, and it is
+      // where `disableRawMode` has to put the cursor back. It matters most on a terminal with no alternate screen —
+      // the case `enterAlternateScreen` refuses outright — where the app draws over the shell's own scrollback and
+      // there is no screen switch to restore the prompt's position for it.
+      write(AnsiSequences.SaveCursor)
       cookedAttributes = Some(terminal.enterRawMode())
       // modern input modes; terminals without support ignore them and keep legacy behavior
       write(AnsiSequences.EnableBracketedPaste)
@@ -134,6 +139,10 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
           write(AnsiSequences.DisableFocusReporting)
           write(AnsiSequences.DisableBracketedPaste)
           terminal.setAttributes(attributes)
+          // last, so the shell resumes on the line it started on rather than wherever the final frame left the cursor.
+          // Every restore is matched to the save in `enableRawMode`, which is why this is paired with raw mode and not
+          // added to the unconditional `RestoreAll` string.
+          write(AnsiSequences.RestoreCursor)
           cookedAttributes = None
         }
 

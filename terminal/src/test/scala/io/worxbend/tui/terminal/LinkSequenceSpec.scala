@@ -37,3 +37,14 @@ final class LinkSequenceSpec extends AnyFunSuite:
     // RestoreAll runs from a shutdown hook that cannot know whether a title was ever pushed, and a pop is not
     // idempotent: an unmatched one would discard an entry that belonged to the shell, not to this app
     assert(!AnsiSequences.RestoreAll.contains(AnsiSequences.PopTitle))
+
+  test("the cursor save and restore sequences are the two-byte DECSC and DECRC forms"):
+    // not `CSI s` / `CSI u`: `CSI s` is also "set left and right margin" on terminals with margin support enabled,
+    // so the same bytes would mean two different things depending on a mode this library never sets
+    assert(AnsiSequences.SaveCursor == s"${Esc}7")
+    assert(AnsiSequences.RestoreCursor == s"${Esc}8")
+
+  test("the emergency restore string does not restore the cursor"):
+    // a terminal whose save register was never written restores to the home position rather than doing nothing, so an
+    // unmatched DECRC from the shutdown hook would move a shell cursor that this app never touched
+    assert(!AnsiSequences.RestoreAll.contains(AnsiSequences.RestoreCursor))

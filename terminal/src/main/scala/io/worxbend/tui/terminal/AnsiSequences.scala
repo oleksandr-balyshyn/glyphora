@@ -40,6 +40,25 @@ private[terminal] object AnsiSequences:
   val PopKittyKeyboard: String  = s"$Esc[<u"
   val LinkClose: String         = s"$Esc]8;;$Esc\\"
 
+  /** DECSC (`ESC 7`), "save cursor": stores the cursor position, and the terminal's own graphic-rendition and
+    * character-set state, in a one-slot register.
+    *
+    * The two-byte form rather than `CSI s`: `CSI s` is also DECSLRM, "set left and right margin", on terminals that
+    * have margin support switched on, so the same bytes mean two different things depending on a mode this library
+    * never sets and cannot observe. `ESC 7` is unambiguous everywhere.
+    */
+  val SaveCursor: String = s"${Esc}7"
+
+  /** DECRC (`ESC 8`), "restore cursor": puts back whatever [[SaveCursor]] stored.
+    *
+    * Deliberately absent from [[RestoreAll]], unlike every mode reset there. A terminal whose save register was never
+    * written restores the cursor to the home position instead of leaving it alone, so a shutdown hook firing for a
+    * process that never entered raw mode — and therefore never saved anything — would move the user's shell cursor to
+    * the top-left corner. Pairing it with raw mode, which every dressed-up app enters, keeps every restore matched to a
+    * save.
+    */
+  val RestoreCursor: String = s"${Esc}8"
+
   /** Every mode the backend can turn on, turned off, in reverse acquisition order.
     *
     * Emitted verbatim by the shutdown hook straight to the process's stdout descriptor, so a terminal left dressed up
