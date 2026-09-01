@@ -619,8 +619,8 @@ something that reads `span.style` directly.
 
 ### Show a secret without showing it
 
-`maskedInput` hides what a user is *typing*. For a secret that is merely displayed — in a
-paragraph, a table cell, a list row, a log line — wrap it in `Masked`:
+For a secret that is merely displayed — in a paragraph, a table cell, a list row, a log
+line — wrap it in `Masked`:
 
 ```scala
 val token = Masked(apiToken)        // hidden behind •

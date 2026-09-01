@@ -11,8 +11,7 @@ package io.worxbend.tui.core
   * characters than there are characters to hide — which leaks the shape of the secret and misaligns the row it is drawn
   * in. [[value]] emits exactly one mask per grapheme cluster, the unit a terminal actually draws.
   *
-  * The editable counterpart is the DSL's masked text input, which hides what the user is typing. Use this one wherever
-  * a secret is merely displayed: a paragraph, a table cell, a list row, a log line.
+  * Use it wherever a secret is merely displayed: a paragraph, a table cell, a list row, a log line.
   *
   * @param content
   *   the text being hidden. Never rendered by anything on this type, `toString` included.
