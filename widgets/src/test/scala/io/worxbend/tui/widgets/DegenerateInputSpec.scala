@@ -1,7 +1,7 @@
 package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, Color, Constraint, Line, Modifiers, Rect, Style, Text, Widget}
-import io.worxbend.tui.testsupport.BufferAssertions.{line, trimmedLines}
+import io.worxbend.tui.testsupport.BufferAssertions.{line, renderedInto, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -180,11 +180,25 @@ final class DegenerateInputSpec extends AnyFunSuite:
       Text.raw("你好\nok")      -> 1,
       Text.raw("hello world") -> 5,
       Text.raw("")            -> 3,
+      Text.raw("hello world") -> 0,
+      Text.raw("a\nb\nc")     -> 0,
+      Text.raw("hello")       -> -1,
     )
     cases.foreach: (text, width) =>
       val measured = Paragraph(text, overflow = Overflow.Wrap).heightAt(width).getOrElse(0)
       val rendered = text.lines.flatMap(line => Paragraph.wrapLine(line, width)).size
       assert(measured == rendered, s"heightAt said $measured, wrapping produced $rendered for width $width")
+
+  /** A wrapping paragraph with no columns draws nothing, so it has to measure nothing. Reporting one row per source
+    * line there made a layout pass reserve rows that stayed blank.
+    */
+  test("a wrapping paragraph measures no rows in no columns"):
+    val wrapping = Paragraph(Text.raw("a\nb\nc"), overflow = Overflow.Wrap)
+    assert(wrapping.heightAt(0).contains(0))
+    assert(wrapping.heightAt(-1).contains(0))
+    assert(Paragraph(Text.raw("a\nb\nc")).heightAt(0).contains(3)) // clipping never consults the width
+    val drawn = renderedInto(wrapping, Rect(0, 0, 0, 3), 4, 3)
+    assert(trimmedLines(drawn) == Seq("", "", ""))
 
   // ---------------------------------------------------------------- degenerate counts
 

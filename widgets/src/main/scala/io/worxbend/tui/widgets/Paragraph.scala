@@ -41,11 +41,18 @@ final case class Paragraph(
   /** The rows this text occupies at `width` — the measurement counterpart of [[render]], and always an answer: a
     * paragraph always knows its own height. A clipping paragraph is one row per line; a wrapping one counts the rows
     * `wrapLine` would produce, which is why the two share that function rather than each doing the arithmetic.
+    *
+    * A wrapping paragraph given no columns at all (`width <= 0`) measures zero rows, because zero rows is what it
+    * draws: there is nothing to wrap into, `wrapLine` returns no rows and `render` returns immediately on an empty
+    * area. It used to answer one row per source line there, which is the one width at which measurement and rendering
+    * could disagree. Zero is an answer, not a refusal — [[io.worxbend.tui.core.Measured]] reserves `None` for "cannot
+    * say", and a paragraph with no columns can say. A clipping paragraph is still one row per line at any width,
+    * because clipping never consults the width to decide how many rows there are.
     */
   override def heightAt(width: Int): Option[Int] =
     val rows = overflow match
       case Overflow.Clip               => text.lines.size
-      case Overflow.Wrap if width <= 0 => text.lines.size
+      case Overflow.Wrap if width <= 0 => 0
       case Overflow.Wrap               => text.lines.map(line => math.max(1, Paragraph.wrapLine(line, width).size)).sum
     Some(rows)
 
