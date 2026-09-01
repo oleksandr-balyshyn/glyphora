@@ -23,6 +23,7 @@ final class CapabilityNegotiationSpec extends AnyFunSuite:
     */
   test("everything except an explicit denial counts as enabled"):
     val unknown = TerminalCapabilities.unknown
+    // the rule read off the state itself, which is the spelling the backend uses
     assert(Support.Unknown.usable)
     assert(Support.Yes.usable)
     assert(!Support.No.usable)
@@ -30,10 +31,6 @@ final class CapabilityNegotiationSpec extends AnyFunSuite:
     assert(unknown.enabled(Support.Unknown))
     assert(unknown.enabled(Support.Yes))
     assert(!unknown.enabled(Support.No))
-    // the same rule read off the state itself, which is the spelling the backend uses
-    assert(Support.Unknown.enabled)
-    assert(Support.Yes.enabled)
-    assert(!Support.No.enabled)
 
   test("a fresh value has established nothing"):
     assert(TerminalCapabilities.unknown == TerminalCapabilities())
