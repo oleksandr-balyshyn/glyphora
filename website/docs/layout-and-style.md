@@ -161,6 +161,7 @@ A `panel` reserves blank cells between its border and its children:
 ```scala
 panel("Summary")(summaryLines).padding(1)                        // the usual case
 panel("Summary")(summaryLines).padded(Padding.horizontal(2))     // columns only
+panel("Summary")(summaryLines).padded(Padding.left(2))           // one side only
 panel("Summary")(summaryLines)
   .padded(Padding(left = 4, right = 1, top = 0, bottom = 0))     // each side named
 ```
@@ -171,7 +172,10 @@ column does, and a 24-row terminal cannot spare a row top and bottom as cheaply 
 80-column one can spare a column. `.padding(n)` therefore reserves `n` rows above and
 below and `2 * n` columns either side — `Padding.proportional(n)` — which is what reads
 as an even margin. `Padding.zero`, `.uniform`, `.horizontal`, `.vertical` and
-`.symmetric(x, y)` name the other shapes.
+`.symmetric(x, y)` name the other shapes, and `.left`, `.right`, `.top` and `.bottom`
+pad a single side — worth using, because the case class takes `(left, right, top,
+bottom)` rather than the CSS order, so a positional `Padding(2, 0, 0, 0)` is easy to
+write for the wrong side.
 
 Padding is charged to the panel's measured height too, so a padded panel inside a
 `scrollView` still reports the rows it really occupies.

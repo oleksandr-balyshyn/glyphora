@@ -93,3 +93,15 @@ final class BlockSpec extends AnyFunSuite:
   test("inner accounts for missing sides"):
     val block = Block(borders = Borders.Top)
     assert(block.inner(Rect(0, 0, 10, 6)) == Rect(0, 1, 10, 5))
+
+  test("Borders.All.without draws the same frame as spelling out the remaining sides"):
+    val subtracted = rendered(Block(borders = Borders.All.without(Borders.Right)), 4, 3)
+    assert(
+      trimmedLines(subtracted) == trimmedLines(
+        rendered(Block(borders = Borders.Top | Borders.Bottom | Borders.Left), 4, 3)
+      )
+    )
+
+  test("single-side padding insets only that side of the inner area"):
+    assert(Block(padding = Padding.left(2)).inner(Rect(0, 0, 10, 3)) == Rect(3, 1, 6, 1))
+    assert(Block(padding = Padding.top(1)).inner(Rect(0, 0, 10, 5)) == Rect(1, 2, 8, 2))

@@ -131,7 +131,20 @@ column; `.padding(n)` therefore reserves `n` rows above and below and `2 * n` co
 either side, which is what reads as an even margin. When you want the exact counts,
 `.padded(Padding(left = 4, right = 1, top = 0, bottom = 0))` sets each side on its own,
 and `Padding.uniform`, `Padding.horizontal`, `Padding.vertical` and `Padding.symmetric`
-name the common shapes.
+name the common shapes. `Padding.left`, `Padding.right`, `Padding.top` and
+`Padding.bottom` pad a single side.
+
+`Block`'s `borders` is a bitset of the sides that draw a line. `Borders.All`,
+`Borders.None` and the four single sides combine with `|`; `Borders.Horizontal` is the
+top and bottom edges and `Borders.Vertical` the left and right ones. To take a side away
+rather than list the ones that stay, use `without`:
+
+```scala
+Block(borders = Borders.All.without(Borders.Top))   // same as Right | Bottom | Left
+```
+
+`&` intersects two sets, `hasAny` asks whether any named side is drawn, `hasAll` whether
+every one of them is, and `show` prints the set as `"Top|Left"` instead of a raw number.
 
 `titleBottom` writes into the bottom border at the right, `title` into the top border at
 the left. Neither costs a content row: they overwrite border cells that were being drawn

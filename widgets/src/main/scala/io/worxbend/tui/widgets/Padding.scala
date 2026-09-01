@@ -20,6 +20,21 @@ object Padding:
   /** No padding at all — the default everywhere, so adding the parameter changed no existing rendering. */
   val zero: Padding = Padding(0, 0, 0, 0)
 
+  /** `n` columns on the left only, nothing on the other three sides. Worth a name because the case class takes
+    * `(left, right, top, bottom)` rather than the CSS order `(top, right, bottom, left)`, so a positional
+    * `Padding(n, 0, 0, 0)` is easy to write for the wrong side.
+    */
+  def left(n: Int): Padding = Padding(n, 0, 0, 0)
+
+  /** `n` columns on the right only, nothing on the other three sides. */
+  def right(n: Int): Padding = Padding(0, n, 0, 0)
+
+  /** `n` rows above the content only, nothing on the other three sides. */
+  def top(n: Int): Padding = Padding(0, 0, n, 0)
+
+  /** `n` rows below the content only, nothing on the other three sides. */
+  def bottom(n: Int): Padding = Padding(0, 0, 0, n)
+
   /** `n` cells on all four sides. Looks lopsided in a terminal — see [[proportional]] for the usual intent. */
   def uniform(n: Int): Padding = Padding(n, n, n, n)
 
