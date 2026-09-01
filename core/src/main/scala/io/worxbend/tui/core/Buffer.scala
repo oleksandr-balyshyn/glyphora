@@ -383,6 +383,11 @@ final class Buffer(val area: Rect):
     * This is what a terminal backend flushes each frame instead of redrawing everything. Positions covered by the
     * continuation cell of a wide grapheme in `next` are never emitted — flushing the wide cell itself repaints both
     * columns. If the two buffers cover different areas (e.g. after a resize), every cell of `next` is emitted.
+    *
+    * One column is emitted even when its content did not change: a column that was the right half of a wide grapheme
+    * in this (previous) frame, is not one in `next`, and whose grapheme painted a style that shows through a blank —
+    * see [[visibleOnBlank]]. Both frames hold [[Cell.Empty]] there, so a plain content compare calls it unchanged,
+    * yet the terminal is still painting the old glyph's background across that half-cell.
     */
   def diff(next: Buffer): Iterator[(Position, Cell)] =
     val changes = Iterator.newBuilder[(Position, Cell)]
@@ -402,7 +407,7 @@ final class Buffer(val area: Rect):
       while x < next.area.right do
         val candidate = next.cellAt(x, y)
         // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
-        val changed   = emitAll || !sameCell(cellAt(x, y), candidate)
+        val changed   = emitAll || !sameCell(cellAt(x, y), candidate) || vacatedTrailing(next, x, y)
         if changed && !next.isContinuation(x, y) then emit(x, y, candidate)
         x += 1
       y += 1
@@ -412,6 +417,31 @@ final class Buffer(val area: Rect):
     */
   private def sameCell(a: Cell, b: Cell): Boolean =
     (a eq b) || a == b
+
+  /** Whether a style still paints its column when the glyph in it is a blank space.
+    *
+    * A background colour is drawn across the whole cell rather than behind the glyph's ink, and so are reverse video,
+    * underline, blink and crossed-out (all four draw something — a filled block, a rule, a strike — that a space does
+    * not hide). A foreground colour or bold, by contrast, is invisible on a space. This is the test for "the terminal
+    * would still be showing something here", which is what makes a vacated column worth repainting.
+    */
+  private def visibleOnBlank(style: Style): Boolean =
+    style.bg.exists(_ != Color.Reset) ||
+      style.modifiers.hasAny(Modifiers.Reverse | Modifiers.Underline | Modifiers.Blink | Modifiers.CrossedOut)
+
+  /** Whether `(x, y)` is a column this frame gave up: the previous frame drew the right half of a wide grapheme there,
+    * `next` does not, and that grapheme's style painted across the column.
+    *
+    * Before this test, such a column was never flushed. Both frames hold [[Cell.Empty]] at it — the previous frame's
+    * filler is an ordinary blank, and so is the new content — so the cell compare said "unchanged" and the backend
+    * skipped it. On screen the terminal was still painting the right half of the old glyph: replace a red-backed `漢`
+    * with a plain `a` and the red block to its right stayed. Emitting the new (blank) cell repaints it.
+    *
+    * The `x - 1` read is the grapheme that owned the filler; [[cellAt]] bounds-checks, so a column at the row's left
+    * edge reads [[Cell.Empty]] rather than the previous row's last cell.
+    */
+  private def vacatedTrailing(next: Buffer, x: Int, y: Int): Boolean =
+    isContinuation(x, y) && !next.isContinuation(x, y) && visibleOnBlank(cellAt(x - 1, y).style)
 
   /** The single bounds-check-and-index site behind [[get]]. Kept separate from [[get]] so the hot diff loop reads a
     * `private` method the compiler can inline freely.

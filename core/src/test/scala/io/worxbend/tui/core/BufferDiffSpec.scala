@@ -145,3 +145,57 @@ final class BufferDiffSpec extends AnyFunSuite:
     buffer.setString(0, 0, "a\r\nb", Style.Default)
     assert(buffer.get(0, 0).symbol == "a")
     assert(buffer.get(1, 0).symbol == "b")
+
+  test("a wide glyph with a coloured background repaints the column it vacates"):
+    // the shrink case a plain content compare cannot see: both frames hold a blank at column 1 (the filler in the old
+    // frame, real emptiness in the new one), but the terminal is still painting the right half of the red 漢 there
+    val previous = Buffer(Rect(0, 0, 4, 1))
+    previous.setString(0, 0, "漢", Style.Default.withBg(Color.Red))
+    val next     = Buffer(Rect(0, 0, 4, 1))
+    next.setString(0, 0, "a", Style.Default)
+    val changes  = collected(previous, next)
+    assert(changes.map(_._1.x) == Seq(0, 1))
+    assert(changes.map(_._2) == Seq(Cell("a", Style.Default), Cell.Empty))
+
+  test("a reversed wide glyph repaints its vacated column too"):
+    // reverse video swaps foreground and background, so it paints the whole cell exactly like a background colour does
+    val previous = Buffer(Rect(0, 0, 4, 1))
+    previous.setString(0, 0, "漢", Style.Default.reverse)
+    val next     = Buffer(Rect(0, 0, 4, 1))
+    assert(collected(previous, next).map(_._1.x) == Seq(0, 1))
+
+  test("an underlined, crossed-out or blinking wide glyph repaints its vacated column too"):
+    Seq(Style.Default.underline, Style.Default.crossedOut, Style.Default.blink).foreach { style =>
+      val previous = Buffer(Rect(0, 0, 4, 1))
+      previous.setString(0, 0, "漢", style)
+      val next     = Buffer(Rect(0, 0, 4, 1))
+      assert(collected(previous, next).map(_._1.x) == Seq(0, 1), s"style $style")
+    }
+
+  test("a wide glyph whose style is invisible on a blank does not repaint its vacated column"):
+    // a foreground colour and bold only tint the glyph's own ink; with the glyph gone there is nothing left to clear,
+    // so this stays a targeted extra emit rather than "flush every blank beside a shrunken glyph"
+    Seq(Style.Default, Style.Default.bold, Style.Default.withFg(Color.Red), Style.Default.withBg(Color.Reset))
+      .foreach { style =>
+        val previous = Buffer(Rect(0, 0, 4, 1))
+        previous.setString(0, 0, "漢", style)
+        val next     = Buffer(Rect(0, 0, 4, 1))
+        next.setString(0, 0, "a", Style.Default)
+        assert(collected(previous, next).map(_._1.x) == Seq(0), s"style $style")
+      }
+
+  test("a styled wide glyph that stays wide emits nothing"):
+    // `next` still owns the continuation, so the column was never vacated
+    val previous = Buffer(Rect(0, 0, 4, 1))
+    previous.setString(0, 0, "漢", Style.Default.withBg(Color.Red))
+    assert(collected(previous, previous.snapshot).isEmpty)
+
+  test("a vacated column at the start of a row does not read the previous row's last cell"):
+    // the owning glyph sits at `x - 1`; at column 0 of row 1 that index would land on row 0's right edge if the
+    // lookup were a raw array read instead of a bounds-checked one
+    val previous = Buffer(Rect(0, 0, 4, 2))
+    previous.setString(3, 0, "X", Style.Default.withBg(Color.Red))
+    previous.setString(0, 1, "b", Style.Default)
+    val next     = Buffer(Rect(0, 0, 4, 2))
+    next.setString(3, 0, "X", Style.Default.withBg(Color.Red))
+    assert(collected(next, previous).map(_._1) == Seq(Position(0, 1)))
