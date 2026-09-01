@@ -9,7 +9,7 @@ private[terminal] object AnsiSequences:
 
   val EnterAlternateScreen: String  = s"$Esc[?1049h"
   val LeaveAlternateScreen: String  = s"$Esc[?1049l"
-  val ClearScreen: String           = s"$Esc[2J"
+  val ClearScreen: String           = clear(ClearType.All)
   val HideCursor: String            = s"$Esc[?25l"
   val ShowCursor: String            = s"$Esc[?25h"
   val EnableMouseCapture: String    = s"$Esc[?1000h$Esc[?1002h$Esc[?1006h"
@@ -31,6 +31,22 @@ private[terminal] object AnsiSequences:
     mode match
       case MouseCaptureMode.Buttons   => EnableMouseCapture
       case MouseCaptureMode.AllMotion => EnableMouseAllMotion
+
+  /** The ED and EL erase forms — ECMA-48 §8.3.39 "Erase in Display" and §8.3.41 "Erase in Line".
+    *
+    * The cursor-relative variants are what a viewport that does not own the whole screen needs: an inline app drawing a
+    * few rows under the shell prompt erases its own rows and nothing else, where `CSI 2J` would take the user's
+    * scrollback with it.
+    *
+    * None of these moves the cursor; they only blank cells, using the current background colour.
+    */
+  def clear(kind: ClearType): String =
+    kind match
+      case ClearType.All          => s"$Esc[2J"
+      case ClearType.AfterCursor  => s"$Esc[0J"
+      case ClearType.BeforeCursor => s"$Esc[1J"
+      case ClearType.CurrentLine  => s"$Esc[2K"
+      case ClearType.UntilNewLine => s"$Esc[0K"
 
   /** Kitty keyboard protocol, progressive enhancement flag 1 (disambiguate escape codes): a lone Esc arrives as
     * `CSI 27 u` instead of a bare ESC byte, removing the read-timeout heuristic on terminals that support it.

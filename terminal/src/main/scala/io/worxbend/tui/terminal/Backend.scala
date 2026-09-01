@@ -105,6 +105,16 @@ trait Backend:
     val _ = lines
     Right(())
 
+  /** Erases part of the screen, as `kind` describes.
+    *
+    * Must run on the render thread. It also invalidates the diff baseline through [[requestFullRedraw]], because after
+    * an erase the terminal no longer shows what the last flushed frame described, and a diff against that frame would
+    * leave every unchanged cell blank. The default is a successful no-op for a backend with no screen to erase.
+    */
+  def clearRegion(kind: ClearType): Either[BackendError, Unit] =
+    val _ = kind
+    Right(())
+
   /** Discards what this backend believes is currently on screen, so the next [[draw]] writes every cell again.
     *
     * `draw` is diff-based: it emits only the cells that differ from the frame it last flushed. That is correct for
@@ -145,6 +155,29 @@ private[terminal] object Backend:
     */
   def requirePositiveTimeout(timeout: Duration): Unit =
     require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
+
+/** Which part of the screen [[Backend.clearRegion]] erases.
+  *
+  * Everything except `All` is relative to where the cursor currently is, which is what makes the partial forms useful
+  * to a viewport that owns only some of the screen: it positions the cursor at the start of its own region and erases
+  * from there, leaving the user's scrollback above it intact.
+  */
+enum ClearType:
+
+  /** The whole display (`CSI 2J`). */
+  case All
+
+  /** From the cursor to the end of the display (`CSI 0J`). */
+  case AfterCursor
+
+  /** From the start of the display up to and including the cursor (`CSI 1J`). */
+  case BeforeCursor
+
+  /** The whole line the cursor is on (`CSI 2K`). */
+  case CurrentLine
+
+  /** From the cursor to the end of its line (`CSI 0K`). */
+  case UntilNewLine
 
 /** Why a [[Backend]] operation could not be carried out. */
 enum BackendError:

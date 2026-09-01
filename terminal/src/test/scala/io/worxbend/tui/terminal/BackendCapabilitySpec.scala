@@ -39,6 +39,7 @@ final class BackendCapabilitySpec extends AnyFunSuite:
   test("a backend that overrides nothing still answers every optional operation"):
     val backend: Backend = MinimalBackend()
     assert(backend.setTitle("anything") == Right(()))
+    assert(backend.clearRegion(ClearType.All) == Right(()))
     assert(backend.requestFullRedraw() == ())
 
   test("the headless backend records the last title it was given"):

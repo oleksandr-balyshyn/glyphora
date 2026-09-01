@@ -157,7 +157,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     else
       attempt {
         write(AnsiSequences.EnterAlternateScreen)
-        write(AnsiSequences.ClearScreen)
+        write(AnsiSequences.clear(ClearType.All))
         alternateScreenActive = true
         requestFullRedraw() // the alternate screen starts blank; the next draw must repaint everything
       }
@@ -227,6 +227,14 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     woken.set(true)
     // a thread never interrupts its own read: the `woken` flag above already sends it back round the loop
     pollingThread.get().filter(_ ne Thread.currentThread()).foreach(_.interrupt())
+
+  override def clearRegion(kind: ClearType): Either[BackendError, Unit] =
+    attempt {
+      write(AnsiSequences.clear(kind))
+      // the screen no longer shows what `lastFlushed` describes, so a diff against it would leave the erased cells
+      // blank for as long as the app kept drawing them to the same values
+      requestFullRedraw()
+    }
 
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     attempt(write(AnsiSequences.clipboardCopy(text)))

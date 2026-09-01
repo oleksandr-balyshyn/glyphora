@@ -29,6 +29,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val wakeCounter                                      = AtomicLong(0)
   private val fullRedrawCounter                                = AtomicLong(0)
   private val printedLines                                     = scala.collection.mutable.ArrayBuffer.empty[String]
+  private val clears                                           = scala.collection.mutable.ArrayBuffer.empty[ClearType]
 
   def size: Either[BackendError, Size] = Right(terminalSize)
 
@@ -116,6 +117,10 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
       alternateScreen = wasAlt
       rawMode = wasRaw
 
+  override def clearRegion(kind: ClearType): Either[BackendError, Unit] =
+    clears.synchronized { val _ = clears += kind }
+    Right(())
+
   override def printAbove(lines: Seq[String]): Either[BackendError, Unit] =
     printedLines.synchronized { printedLines ++= lines }
     Right(())
@@ -159,6 +164,9 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** How many times a full repaint was requested via [[requestFullRedraw]]. */
   def fullRedrawCount: Long = fullRedrawCounter.get()
+
+  /** The erases requested via [[clearRegion]], in order. */
+  def clearedRegions: Seq[ClearType] = clears.synchronized(clears.toSeq)
 
   /** The lines emitted above the app via [[printAbove]], in order. */
   def printedAbove: Seq[String] = printedLines.synchronized(printedLines.toSeq)
