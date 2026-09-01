@@ -72,6 +72,24 @@ final class ParagraphSpec extends AnyFunSuite:
       assert(paragraph.heightAt(width).contains(drawn), s"width $width")
     }
 
+  test("counting rows and building them agree on every kind of awkward line"):
+    // The counting walk keeps no text, so this is what stops it drifting away from the walk that builds the rows.
+    val zwsp  = "​"
+    val lines = Seq(
+      Line.raw(""),
+      Line.raw("     "),
+      Line.raw("  indented prose that has to wrap somewhere"),
+      Line.raw("supercalifragilisticexpialidocious"),
+      Line.raw("10 kg of 你好 and 👍🏽 mixed together"),
+      Line.raw(s"aaa${zwsp}bbb${zwsp}ccc"),
+      Line(Seq(Span.raw("bold "), Span("red words here", Style.Default.withFg(Color.Red)))),
+    )
+    for line <- lines; width <- 1 to 12 do
+      assert(
+        Paragraph.wrappedRowCount(line, width) == Paragraph.wrapLine(line, width).size,
+        s"'${line.spans.map(_.content).mkString}' at width $width",
+      )
+
   test("widthAt reports the longest line, in columns rather than characters"):
     val paragraph = Paragraph(Text.raw("ab\n你好世界\nc"))
     assert(paragraph.widthAt(1).contains(8))  // four wide characters, two columns each
