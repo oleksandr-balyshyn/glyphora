@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Constraint, Direction, Size, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{Constraint, Direction, Line, Size, Span, Style, Text, Widget}
 import io.worxbend.tui.runtime.{ReactiveScope, Signal}
 import io.worxbend.tui.widgets as w
 
@@ -204,8 +204,11 @@ private[dsl] trait ElementFactories:
     *
     * The selected row is drawn in the app [[Theme]]'s `focus` style, which the focus pass stamps onto every element —
     * focused or not — so a list keeps the app's highlight even while the keyboard is somewhere else.
+    *
+    * An item is either a plain `String` or a styled [[Line]], and the two may be mixed in one call, so a single row can
+    * be red or dimmed without splitting the list. Call `.highlightSymbol("→ ")` to replace the `> ` selection marker.
     */
-  def list(items: Seq[String], state: w.ListState): ListElement =
+  def list(items: Seq[String | Line], state: w.ListState): ListElement =
     ListElement(items, state)
 
   /** A collapsible tree over caller-owned [[w.TreeState]] — same state ownership rules as [[list]]. */

@@ -556,6 +556,27 @@ leaving the highlight style as the only cue:
 list(services.get, selected).highlightGutter(HighlightSpacing.Never)
 ```
 
+`highlightSymbol` replaces the marker itself. Whatever you pass keeps its display width
+reserved on every row, counted in terminal columns rather than in characters, so a
+two-column marker such as `"▶ "` gives up two columns of text and nothing shifts sideways
+when the selection moves.
+
+An item in a list is either a plain `String` or a styled `Line`, and the two may be mixed
+in the same call. A plain string is drawn in the element's own style; a `Line` carries its
+own — that is how one row goes red while the rest stay as they were, without splitting the
+list in two:
+
+```scala
+list(
+  Seq[String | Line](
+    "api",
+    Line(Seq(Span("worker", Style.Default.withFg(Color.Red)))),
+    "scheduler",
+  ),
+  selected,
+).highlightSymbol("▶ ")
+```
+
 A list normally starts at the top row of its area and grows downward, so a list with
 three entries in a ten-row pane leaves seven blank rows underneath it. A chat transcript
 or a log tail wants the opposite: the newest entry welded to the bottom edge, with the

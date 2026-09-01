@@ -9,12 +9,17 @@ import java.nio.file.Path
   * widget scrolls to keep the selection visible. `state` is caller-owned, so the app can read or set the selection.
   *
   * `direction` says which edge the rows are anchored to — call [[bottomToTop]] for the chat-transcript shape.
+  *
+  * An item is either a plain `String` or a styled [[Line]], and the two may be mixed in one list — the same union
+  * [[w.ListView]] itself accepts. A plain string is the common case and needs no ceremony; a `Line` is how a single row
+  * carries its own colour (a red failure, a dimmed disabled entry) or several styles at once.
   */
 final case class ListElement(
-    items: Seq[String],
+    items: Seq[String | Line],
     state: w.ListState,
     direction: w.ListDirection = w.ListDirection.TopToBottom,
     highlightSpacing: w.HighlightSpacing = w.HighlightSpacing.Always,
+    highlightSymbolOverride: Option[String] = None,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   type Self = ListElement
@@ -29,7 +34,15 @@ final case class ListElement(
   /** Chooses when the columns holding the `> ` selection marker are reserved; see [[w.HighlightSpacing]]. The default
     * reserves them always, so the text never shifts sideways.
     */
-  def highlightGutter(spacing: w.HighlightSpacing): ListElement          = copy(highlightSpacing = spacing)
+  def highlightGutter(spacing: w.HighlightSpacing): ListElement = copy(highlightSpacing = spacing)
+
+  /** Replaces the `> ` marker drawn in front of the selected row.
+    *
+    * The marker's display width is reserved on *every* row (unless [[highlightGutter]] says otherwise), so a wider
+    * marker shifts the whole list right, not only the selected line. The width is counted in terminal columns through
+    * `CharWidth`, so a two-column marker such as `"▶ "` reserves two columns and not two `Char`s.
+    */
+  def highlightSymbol(symbol: String): ListElement                       = copy(highlightSymbolOverride = Some(symbol))
   def widget: Widget =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
     val view = w.ListView(
@@ -38,6 +51,7 @@ final case class ListElement(
       highlightSpacing = highlightSpacing,
       style = props.style,
       highlightStyle = props.focusStyle,
+      highlightSymbol = highlightSymbolOverride.getOrElse("> "),
     )
     (area, buffer) => view.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): ListElement           = copy(props = props)
