@@ -254,6 +254,32 @@ column(
 - `link(label, url)` emits a clickable OSC 8 hyperlink when the terminal supports it.
 - `bigText` renders banners; `image` renders raster data with half-block cells.
 
+### How wrapping breaks a line
+
+`Overflow.Wrap` — the mode `Paragraph`, `markdown` and `notice(...).wrapped` use to grow
+onto further rows instead of cutting text off — breaks between words:
+
+| Input, at width 8 | Rows drawn |
+| --- | --- |
+| `hello world` | `hello` / `world` — the word moves whole, it is not cut after `hello wo` |
+| `aa    bb` (four blanks) | `aa` / `bb` — the blanks sat at the break, so they are dropped |
+| `    indented text` | `    indented` / `text` — blanks at the *start* of a line are content, not a break point |
+| `supercalifragilistic` | `supercal` / `ifragili` / `stic` — a word longer than the whole width has nowhere to go |
+
+Two Unicode characters exist purely to control this, and both are honoured:
+
+- `U+00A0` NO-BREAK SPACE draws a blank column but forbids a break, so `10 kg` never ends
+  up with the number alone at the end of a row.
+- `U+200B` ZERO WIDTH SPACE draws nothing but permits one, which is how Thai, Japanese and
+  long URLs mark a place a wrapper may break.
+
+The classification lives in `io.worxbend.tui.core.LineBreaks` (`isBreakingSpace`,
+`isZeroWidthBreak`, `endsWithZeroWidthBreak`) next to `CharWidth`, so any code that wraps
+text agrees with the built-in widgets about where a break is allowed.
+
+`heightAt(width)` counts exactly the rows this produces, so a scroll container or a
+layout pass sizing a wrapped paragraph never disagrees with what is drawn.
+
 ### One row, several styles
 
 `text(...)` paints its whole block in a single style, so it cannot say `Status:` in the

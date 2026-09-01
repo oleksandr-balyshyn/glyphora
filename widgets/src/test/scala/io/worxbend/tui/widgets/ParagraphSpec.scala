@@ -23,6 +23,55 @@ final class ParagraphSpec extends AnyFunSuite:
     val buffer = rendered(Paragraph(Text.raw("ab你cd"), overflow = Overflow.Wrap), 3, 2)
     assert(trimmedLines(buffer) == Seq("ab", "你c"))
 
+  test("wrapping breaks between words rather than inside one"):
+    val buffer = rendered(Paragraph(Text.raw("hello world"), overflow = Overflow.Wrap), 8, 2)
+    assert(trimmedLines(buffer) == Seq("hello", "world"))
+
+  test("the blanks at a break are dropped, not carried to the next row"):
+    val buffer = rendered(Paragraph(Text.raw("aa   bb"), overflow = Overflow.Wrap), 4, 2)
+    assert(buffer.get(0, 1).symbol == "b")
+
+  test("indentation the caller wrote survives, because it is not a break point"):
+    val buffer = rendered(Paragraph(Text.raw("  aa bb"), overflow = Overflow.Wrap), 5, 2)
+    assert(trimmedLines(buffer) == Seq("  aa", "bb"))
+
+  test("a word longer than the whole width is broken between grapheme clusters"):
+    val buffer = rendered(Paragraph(Text.raw("ab superlong"), overflow = Overflow.Wrap), 4, 4)
+    assert(trimmedLines(buffer) == Seq("ab", "supe", "rlon", "g"))
+
+  test("no-break space holds two words together and zero width space offers a break"):
+    val heldTogether = rendered(Paragraph(Text.raw("10 kg x"), overflow = Overflow.Wrap), 5, 2)
+    assert(trimmedLines(heldTogether) == Seq("10 kg", "x"))
+    // The zero width space draws nothing, so it stays inside the cluster it was absorbed into rather than costing a
+    // column; what matters is that the row was broken there instead of after the fourth column.
+    val zwsp         = "​"
+    val breakable    = rendered(Paragraph(Text.raw(s"aaa${zwsp}bbb"), overflow = Overflow.Wrap), 4, 2)
+    assert(trimmedLines(breakable) == Seq(s"aaa$zwsp", "bbb"))
+
+  test("wrapping keeps a wide word whole when it fits on a row of its own"):
+    val buffer = rendered(Paragraph(Text.raw("ab 你好"), overflow = Overflow.Wrap), 4, 2)
+    assert(trimmedLines(buffer) == Seq("ab", "你好"))
+
+  test("span styles survive a wrap onto the next row"):
+    val line   = Line(Seq(Span.raw("aaa "), Span("bbb", Style.Default.withFg(Color.Red))))
+    val buffer = rendered(Paragraph(Text(Seq(line)), overflow = Overflow.Wrap), 4, 2)
+    assert(trimmedLines(buffer) == Seq("aaa", "bbb"))
+    assert(buffer.get(0, 1).style.fg.contains(Color.Red))
+
+  test("a blank source line still occupies one row when wrapping"):
+    val text   = Text.raw("aaaa bbbb\n\ncc")
+    assert(Paragraph(text, overflow = Overflow.Wrap).heightAt(4).contains(4))
+    val buffer = rendered(Paragraph(text, overflow = Overflow.Wrap), 4, 4)
+    assert(trimmedLines(buffer) == Seq("aaaa", "bbbb", "", "cc"))
+
+  test("measurement counts exactly the rows the wrapped render draws"):
+    val text      = Text.raw("the quick brown fox jumps over the lazy dog")
+    val paragraph = Paragraph(text, overflow = Overflow.Wrap)
+    (1 to 20).foreach { width =>
+      val drawn = text.lines.flatMap(Paragraph.wrapLine(_, width)).size
+      assert(paragraph.heightAt(width).contains(drawn), s"width $width")
+    }
+
   test("center alignment offsets each line by its own width"):
     val buffer = rendered(Paragraph(Text.raw("ab\nabcd"), alignment = Alignment.Center), 6, 2)
     assert(trimmedLines(buffer) == Seq("  ab", " abcd"))

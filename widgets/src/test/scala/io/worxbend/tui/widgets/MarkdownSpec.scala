@@ -42,10 +42,12 @@ final class MarkdownSpec extends AnyFunSuite:
     assert(trimmedLines(buffer)(1) == "val x = **not bold**")
     assert(buffer.get(0, 1).style.fg.contains(Color.Yellow))
 
-  test("prose wraps at the area width without splitting clusters"):
+  test("prose wraps between words without splitting clusters"):
+    // Every pair of words together is wider than eight columns, so each word takes a row of its own; the wide
+    // characters are never split, and the area only shows the first three of the four rows.
     val buffer = rendered(Markdown("hello wide 你好 world"), 8, 3)
-    assert(trimmedLines(buffer).size == 3)
-    assert(trimmedLines(buffer).head == "hello wi")
+    assert(trimmedLines(buffer) == Seq("hello", "wide", "你好"))
+    assert(Markdown("hello wide 你好 world").heightAt(8).contains(4))
 
   test("inline links render their label with the url attached"):
     val buffer = rendered(Markdown("see [the docs](https://example.com) here"), 40, 1)

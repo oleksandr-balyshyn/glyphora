@@ -14,7 +14,12 @@ enum Overflow:
     */
   case Clip
 
-  /** Break content onto further rows at grapheme-cluster boundaries, so nothing is lost. The widget then needs more
-    * rows than it has lines of content, which is what [[io.worxbend.tui.core.Measured.heightAt]] reports.
+  /** Break content onto further rows so nothing is lost. The break lands between words: a word that does not fit moves
+    * to the next row whole, and the blanks that sat at the break are dropped rather than becoming a leading indent.
+    * Blanks at the start of a line are content and are kept, so indentation survives. Only a word longer than the whole
+    * width is broken inside, and then between grapheme clusters, so a wide character or emoji is never split.
+    *
+    * The widget then needs more rows than it has lines of content, which is what
+    * [[io.worxbend.tui.core.Measured.heightAt]] reports.
     */
   case Wrap

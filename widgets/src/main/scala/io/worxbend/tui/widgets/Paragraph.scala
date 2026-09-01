@@ -1,14 +1,17 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Line, Measured, Rect, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Line, LineBreaks, Measured, Rect, Span, Style, Text, Widget}
 
 /** Multi-line styled text with alignment and optional wrapping.
   *
   * `alignment` places every line; a [[Line]] that carries an alignment of its own overrides it for that one row, and a
   * wrapped line keeps its alignment on every row it spills onto.
   *
-  * With [[Overflow.Wrap]] the text breaks at grapheme-cluster boundaries (not word boundaries — good enough for v1 and
-  * never splits a wide character or emoji); with [[Overflow.Clip]], the default, long lines are cut at the area edge.
+  * With [[Overflow.Wrap]] the text breaks at word boundaries: a word moves to the next row whole rather than being cut
+  * in half, and the blanks that sat at the break are dropped instead of becoming a stray indent on the next row. A word
+  * longer than the whole width has nowhere to go, so that one is broken between grapheme clusters — never inside one,
+  * so a wide character or emoji is never split. With [[Overflow.Clip]], the default, long lines are cut at the area
+  * edge.
   *
   * [[heightAt]] reports the rows the paragraph needs from the same `overflow` field `render` draws with, so the two
   * cannot disagree about whether the text wraps.
@@ -48,43 +51,109 @@ final case class Paragraph(
 
 object Paragraph:
 
+  /** Breaks `line` into the rows it occupies at `width`, at word boundaries where the row has one.
+    *
+    * This is the single owner of the wrapping decision: `render` draws the rows it returns and `heightAt` counts them,
+    * so the two can never disagree. The rules, in the order the loop applies them:
+    *
+    *   - A word is committed to the current row only if the whole word fits. Otherwise the row is flushed and the word
+    *     starts the next one.
+    *   - The blanks at the point of the break are dropped, so a wrapped row never begins with the space that caused the
+    *     break. Blanks the caller wrote at the *start* of the source line are content, not a break point, and are kept
+    *     — indentation survives wrapping.
+    *   - What counts as a blank is [[io.worxbend.tui.core.LineBreaks.isBreakingSpace]], so U+00A0 NO-BREAK SPACE holds
+    *     two words together and U+200B ZERO WIDTH SPACE offers a break that costs no column.
+    *   - A single word longer than the whole width cannot be placed whole anywhere, so it is broken between grapheme
+    *     clusters, and a single cluster wider than the whole width gets a row of its own and is clipped by the
+    *     renderer. Dropping it would be worse than clipping it: `heightAt` counts these rows, so a dropped cluster
+    *     would shift every following line up by a row.
+    *   - A source line that produces no rows at all (it was empty, or nothing but blanks) still yields one empty row,
+    *     so a blank line in the source stays a blank line on screen.
+    *
+    * Span styles survive the reflow: each output row carries the spans it was built from, so bold or coloured runs from
+    * [[Markdown]] keep their styling across a break.
+    */
   private[widgets] def wrapLine(line: Line, width: Int): Seq[Line] =
     if width <= 0 then Seq.empty
     else if line.width <= width then Seq(line)
     else
-      val wrapped      = List.newBuilder[Line]
-      var currentSpans = Vector.empty[Span]
-      var currentWidth = 0
+      val wrapped = List.newBuilder[Line]
+      var rows    = 0
 
-      def flush(): Unit =
-        wrapped += Line(currentSpans, line.alignment)
-        currentSpans = Vector.empty
-        currentWidth = 0
+      // The row being filled, the run of blanks seen since the last word, and the word being read. A word is only
+      // moved from `word` onto `row` when it is known to fit, which is what makes the break land between words.
+      var rowSpans    = Vector.empty[Span]
+      var rowWidth    = 0
+      var gapSpans    = Vector.empty[Span]
+      var gapWidth    = 0
+      var wordSpans   = Vector.empty[Span]
+      var wordWidth   = 0
+      // True until the first row is flushed: while it holds, the pending blanks are the caller's own indentation
+      // rather than a break point, and are kept.
+      var atLineStart = true
+
+      def flushRow(): Unit =
+        wrapped += Line(rowSpans, line.alignment)
+        rows += 1
+        rowSpans = Vector.empty
+        rowWidth = 0
+        atLineStart = false
+
+      def commitWord(): Unit =
+        if wordSpans.nonEmpty then
+          if rowSpans.isEmpty then
+            if atLineStart then
+              rowSpans = gapSpans ++ wordSpans
+              rowWidth = gapWidth + wordWidth
+            else
+              rowSpans = wordSpans
+              rowWidth = wordWidth
+          else if rowWidth + gapWidth + wordWidth <= width then
+            rowSpans = rowSpans ++ gapSpans ++ wordSpans
+            rowWidth = rowWidth + gapWidth + wordWidth
+          else
+            flushRow()
+            rowSpans = wordSpans
+            rowWidth = wordWidth
+          wordSpans = Vector.empty
+          wordWidth = 0
+          // The blanks have now either been written into the row or dropped at a break; either way they are spent.
+          // They are only cleared here, with a word: a run of blanks with no word after it yet is still growing.
+          gapSpans = Vector.empty
+          gapWidth = 0
 
       line.spans.foreach { span =>
-        var pending = span.content
-        while pending.nonEmpty do
-          val fitted = CharWidth.substringByWidth(pending, width - currentWidth)
-          if fitted.isEmpty then
-            if currentWidth == 0 then
-              // A single cluster wider than the whole area. It cannot be split, but deleting it is worse than
-              // clipping it: `heightAt` counts the rows this same function returns, so a dropped cluster makes
-              // measurement and rendering disagree and shifts every following line up a row. Give it a row of its
-              // own and let the renderer clip it, the way overflow is handled everywhere else.
-              val clusterLength = firstClusterLength(pending)
-              currentSpans = currentSpans :+ Span(pending.take(clusterLength), span.style)
-              pending = pending.drop(clusterLength)
-              flush()
-            else flush()
+        val clusters = CharWidth.graphemeClusters(span.content)
+        while clusters.hasNext do
+          val cluster = clusters.next()
+          if LineBreaks.isBreakingSpace(cluster) then
+            commitWord()
+            gapSpans = appended(gapSpans, cluster, span.style)
+            gapWidth += CharWidth.of(cluster)
+          else if LineBreaks.isZeroWidthBreak(cluster) then
+            // A break opportunity with no glyph, standing on its own at the very start of the text: end the word here
+            // and drop the character, which draws nothing whether the break is taken or not.
+            commitWord()
           else
-            currentSpans = currentSpans :+ Span(fitted, span.style)
-            currentWidth += CharWidth.of(fitted)
-            pending = pending.drop(fitted.length) // removes the exact prefix just cut, not layout math
-          if currentWidth >= width then flush()
+            val clusterWidth = CharWidth.of(cluster)
+            if wordWidth + clusterWidth > width then
+              // The word alone is wider than any row can be, so it has to be broken. Put what has been read onto a
+              // row of its own and carry on reading the rest of the word into the next one.
+              commitWord()
+              if rowSpans.nonEmpty then flushRow()
+            wordSpans = appended(wordSpans, cluster, span.style)
+            wordWidth += clusterWidth
+            // A zero width space rides along inside the cluster before it, and says a break is allowed after that
+            // cluster: end the word here so the next one may start on a new row.
+            if LineBreaks.endsWithZeroWidthBreak(cluster) then commitWord()
       }
-      if currentSpans.nonEmpty then flush()
+      commitWord()
+      if rowSpans.nonEmpty || rows == 0 then flushRow()
       wrapped.result()
 
-  private def firstClusterLength(text: String): Int =
-    val clusters = CharWidth.graphemeClusters(text)
-    if clusters.hasNext then clusters.next().length else text.length
+  /** `spans` with `text` on the end, merged into the last span when it carries the same style, so a run of clusters
+    * read one at a time comes back out as one span rather than one span per character.
+    */
+  private def appended(spans: Vector[Span], text: String, style: Style): Vector[Span] =
+    if spans.nonEmpty && spans.last.style == style then spans.init :+ Span(spans.last.content + text, style)
+    else spans :+ Span(text, style)
