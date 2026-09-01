@@ -175,6 +175,51 @@ final class Pilot private (
     backend.resizeTo(Size(width, height))
     this
 
+  /** Posts one bracketed paste carrying `text` as a single event.
+    *
+    * A terminal in bracketed-paste mode hands an application the whole pasted string at once instead of a storm of key
+    * events, which is how a paste and a very fast typist stay distinguishable. That makes this a *different code path*
+    * from [[typeText]] — the DSL routes it to an element's paste handler rather than to its key handler — so a test of
+    * what an input does with a long or multi-line paste has to post the paste and cannot type it.
+    */
+  def paste(text: String): Pilot =
+    backend.postEvent(Event.Paste(text))
+    this
+
+  /** Posts `times` synthetic ticks, the event a runner configured with a tick rate injects on its own.
+    *
+    * Posting them by hand is what makes an animation or timeout test exact: the app under test needs no tick rate at
+    * all, so nothing depends on wall-clock timing, and a test that wants ten ticks gets exactly ten.
+    */
+  def tick(times: Int = 1): Pilot =
+    var remaining = times
+    while remaining > 0 do
+      backend.postEvent(Event.Tick)
+      remaining -= 1
+    this
+
+  /** Posts the report a terminal sends when its window regains focus (the "mode 1004" focus report). */
+  def focusGained(): Pilot =
+    backend.postEvent(Event.FocusGained)
+    this
+
+  /** Posts the report a terminal sends when its window loses focus — the hook an app uses to pause an animation or dim
+    * its chrome while the user is looking somewhere else.
+    */
+  def focusLost(): Pilot =
+    backend.postEvent(Event.FocusLost)
+    this
+
+  /** Posts an interrupt — what reaches the application when `Ctrl+C` raises SIGINT.
+    *
+    * It arrives as an ordinary event rather than killing the JVM, and an application that does not consume it quits
+    * through its normal teardown. A test therefore usually follows this with [[awaitTermination]]; follow it with
+    * [[waitForIdle]] instead when the app under test is expected to *consume* the interrupt and stay up.
+    */
+  def interrupt(): Pilot =
+    backend.postEvent(Event.Interrupt)
+    this
+
   /** Waits until the app has consumed every posted event and gone idle (an empty-queue read timeout), or the app thread
     * has exited. Throws on deadline overrun — an assertion failure, not a modeled error. An app thread that died from a
     * throwable is not an exit: this fails with that throwable as the cause.
