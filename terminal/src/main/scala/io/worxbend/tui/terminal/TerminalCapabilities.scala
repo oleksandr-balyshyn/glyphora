@@ -96,6 +96,10 @@ private[terminal] object CapabilityReplies:
     * The parameter text of `CSI ? 2026 ; 2 $ y` is `?2026;2$`: a leading `?`, the two numbers, and the `$` intermediate
     * byte the scanner keeps with the parameters. Both are stripped by taking digits only, which is also what keeps a
     * malformed reply from being read as a mode number.
+    *
+    * This deliberately does not use the decoder's parameter reading: a DECRPM reply carries the `$` intermediate byte
+    * inside its last field, which that reading would drop as unparseable, and the two fields here are matched by
+    * position rather than skipped when empty.
     */
   private[terminal] def modeReport(params: String): Option[(Int, Support)] =
     if !params.startsWith("?") then None

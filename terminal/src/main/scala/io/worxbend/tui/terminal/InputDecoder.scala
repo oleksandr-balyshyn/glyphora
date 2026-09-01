@@ -351,7 +351,16 @@ private[terminal] final class InputDecoder(
     * vocabulary for either, and a parameter it cannot read must not shift the ones after it out of position.
     */
   private def parameterNumbers(params: String): Seq[Int] =
-    params.split(';').toSeq.filter(_.nonEmpty).flatMap(_.takeWhile(_ != ':').toIntOption)
+    parameterFields(params).flatMap(_.takeWhile(_ != ':').toIntOption)
+
+  /** The positional fields of a CSI parameter string.
+    *
+    * One owner for "which field is at which index", because that is the rule the numeric reading above and the
+    * sub-parameter reading in [[kittyEventType]] must agree on. An empty field (`CSI ;5H`) is skipped rather than
+    * defaulted: a parameter glyphora cannot read must not shift the ones after it out of position.
+    */
+  private def parameterFields(params: String): Seq[String] =
+    params.split(';').toSeq.filter(_.nonEmpty)
 
   private def decodeCsiKey(
       numbers: Seq[Int],
@@ -462,14 +471,7 @@ private[terminal] final class InputDecoder(
     * press here — see [[Event.KeyRelease]] for why a repeat is not an event of its own.
     */
   private def kittyEventType(params: String): Int =
-    params
-      .split(';')
-      .toSeq
-      .filter(_.nonEmpty)
-      .lift(1)
-      .flatMap(_.split(':').toSeq.lift(1))
-      .flatMap(_.toIntOption)
-      .getOrElse(KittyPress)
+    parameterFields(params).lift(1).flatMap(_.split(':').toSeq.lift(1)).flatMap(_.toIntOption).getOrElse(KittyPress)
 
   /** Rewrites a kitty "base key plus a Shift bit" report into the single legacy encoding, so a key spec has one
     * spelling that works on every terminal.
