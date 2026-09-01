@@ -33,6 +33,18 @@ final class Buffer(val area: Rect):
   /** The cell at `(x, y)`, or [[Cell.Empty]] when the coordinates fall outside `area`. */
   def get(x: Int, y: Int): Cell = cellAt(x, y)
 
+  /** The cell at `position`, or [[Cell.Empty]] when it falls outside `area`.
+    *
+    * The same read as `get(x, y)`, spelled for callers that already hold a [[Position]] — a mouse event's coordinate,
+    * a [[Rect]]'s `position`, an entry from [[diff]] — so they need not unpack it into two arguments.
+    */
+  def get(position: Position): Cell = cellAt(position.x, position.y)
+
+  /** Writes `cell` at `position`, with exactly the semantics of `set(x, y, cell)` including the clipping and the
+    * wide-grapheme bookkeeping described there.
+    */
+  def set(position: Position, cell: Cell): Unit = set(position.x, position.y, cell)
+
   /** Writes `cell` at `(x, y)`; writes outside `area` are silently clipped.
     *
     * A write can also mutate the neighbouring cell, because a two-column grapheme owns two cells and a terminal cannot

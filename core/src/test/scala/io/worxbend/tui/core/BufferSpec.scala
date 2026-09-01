@@ -371,3 +371,10 @@ final class BufferSpec extends AnyFunSuite:
     }
     assert(column == 8)
     assert((0 until 8).map(x => buf.get(x, 0).symbol) == Seq("漢", " ", "a", "b", "c", "d", "e", "f"))
+
+  test("get and set accept a Position as well as a pair of coordinates"):
+    val buf = buffer(3, 2)
+    buf.set(Position(1, 1), Cell("z", Style.Default))
+    assert(buf.get(Position(1, 1)) == Cell("z", Style.Default))
+    assert(buf.get(1, 1) == buf.get(Position(1, 1)))
+    assert(buf.get(Position(9, 9)) == Cell.Empty)
