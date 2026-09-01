@@ -1,10 +1,16 @@
 package io.worxbend.tui.terminal
 
-<<<<<<< HEAD
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
-=======
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, ModifierKey, MouseEvent, MouseEventKind, Position}
->>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
+import io.worxbend.tui.core.{
+  Event,
+  KeyCode,
+  KeyEvent,
+  KeyModifiers,
+  ModifierKey,
+  MouseButton,
+  MouseEvent,
+  MouseEventKind,
+  Position,
+}
 
 import org.scalatest.funsuite.AnyFunSuite
 

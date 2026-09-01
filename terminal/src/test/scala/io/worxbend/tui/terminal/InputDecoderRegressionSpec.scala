@@ -1,10 +1,17 @@
 package io.worxbend.tui.terminal
 
-<<<<<<< HEAD
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
-=======
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, ModifierKey, MouseEvent, MouseEventKind, Position}
->>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
+import io.worxbend.tui.core.{
+  Event,
+  KeyCode,
+  KeyEvent,
+  KeyModifiers,
+  MediaKey,
+  ModifierKey,
+  MouseButton,
+  MouseEvent,
+  MouseEventKind,
+  Position,
+}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -163,9 +170,7 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     assert(decoded(csi("57376u")*) == Event.Key(KeyEvent.of(KeyCode.F(13))))     // F13
     assert(decoded(csi("57398u")*) == Event.Key(KeyEvent.of(KeyCode.F(35)))) // F35
 
-<<<<<<< HEAD
-  test("kitty modifier-only keys are not reported as keys"):
-    dropped(csi("57441u")*) // LEFT_SHIFT: holding a modifier is not a key event in this model
+  test("an unassigned kitty functional code point is not reported as a key"):
     dropped(csi("57344u")*) // an unassigned code point at the foot of the functional block
 
   test("a kitty lock or system key is reported, and reports the press rather than the resulting state"):
@@ -174,11 +179,6 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     // whether the lock is now on.
     assert(decoded(csi("57358u")*) == Event.Key(KeyEvent.of(KeyCode.CapsLock)))
     assert(decoded(csi("57363u")*) == Event.Key(KeyEvent.of(KeyCode.Menu)))
-=======
-  test("kitty lock and media keys are not reported as keys"):
-    dropped(csi("57358u")*) // CAPS_LOCK
-    dropped(csi("57428u")*) // MEDIA_PLAY
->>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
 
   test("kitty reports a bare modifier press as its own key"):
     assert(decoded(csi("57441u")*) == Event.Key(KeyEvent.of(KeyCode.Modifier(ModifierKey.LeftShift))))
@@ -191,9 +191,11 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
       decoded(csi("57441;5u")*) == Event.Key(KeyEvent(KeyCode.Modifier(ModifierKey.LeftShift), KeyModifiers.Ctrl))
     )
 
-  test("the code points on either side of the modifier block are still not keys"):
-    dropped(csi("57440u")*) // MENU's neighbour, unassigned
-    dropped(csi("57455u")*) // the first media key past ISO_LEVEL5_SHIFT
+  test("the code points bounding the modifier block are decoded as themselves"):
+    // 57440 is MUTE_VOLUME, the last of the media block directly below the modifier-only block; 57455 is the first
+    // unassigned code point above it. Asserting both is what catches an off-by-one in either transcribed table.
+    assert(decoded(csi("57440u")*) == Event.Key(KeyEvent.of(KeyCode.Media(MediaKey.MuteVolume))))
+    dropped(csi("57455u")*)
 
   test("kitty modifier parameters follow the 1 + bitmask encoding"):
     assert(decoded(csi("97;5u")*) == Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.Ctrl)))

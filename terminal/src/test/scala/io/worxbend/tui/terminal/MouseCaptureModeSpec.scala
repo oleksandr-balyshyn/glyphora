@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position, Size}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position, Size}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -55,7 +55,8 @@ final class MouseCaptureModeSpec extends AnyFunSuite:
   test("an SGR motion report with no button held decodes as Moved, not Drag"):
     // 32 is the motion bit; +3 in the low two bits means "no button", which is a hover
     assert(
-      decoded(csi("<35;11;6M")*) == Event.Mouse(MouseEvent(Position(10, 5), MouseEventKind.Moved, KeyModifiers.None))
+      decoded(csi("<35;11;6M")*) ==
+        Event.Mouse(MouseEvent(Position(10, 5), MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown))
     )
 
   test("an SGR motion report naming a held button is still a Drag"):
@@ -67,18 +68,23 @@ final class MouseCaptureModeSpec extends AnyFunSuite:
   test("modifiers survive a hover report"):
     // 35 + 4 sets the shift bit, which sits two positions above the button bits
     assert(
-      decoded(csi("<39;11;6M")*) == Event.Mouse(MouseEvent(Position(10, 5), MouseEventKind.Moved, KeyModifiers.Shift))
+      decoded(csi("<39;11;6M")*) ==
+        Event.Mouse(MouseEvent(Position(10, 5), MouseEventKind.Moved, KeyModifiers.Shift, MouseButton.Unknown))
     )
 
   test("a legacy X10 hover report decodes as Moved too"):
     // X10 biases every byte by 32: button 35 (motion, no button), column 11, row 6
     val report = csi("M") ++ Seq(32 + 35, 32 + 11, 32 + 6)
-    assert(decoded(report*) == Event.Mouse(MouseEvent(Position(10, 5), MouseEventKind.Moved, KeyModifiers.None)))
+    assert(
+      decoded(report*) ==
+        Event.Mouse(MouseEvent(Position(10, 5), MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown))
+    )
 
   test("a hover at the very top-left corner is not clamped away"):
     // the smallest coordinates the protocol can express, one-based 1;1, are the zero-based origin
     assert(
-      decoded(csi("<35;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.Moved, KeyModifiers.None))
+      decoded(csi("<35;1;1M")*) ==
+        Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown))
     )
 
   test("urxvt reporting is requested before SGR and released after it"):
@@ -102,7 +108,8 @@ final class MouseCaptureModeSpec extends AnyFunSuite:
     )
     // 35 is 32 + 3, and 3 in the button bits means "some button came up" — urxvt has no per-button release code
     assert(
-      decoded(csi("35;120;30M")*) == Event.Mouse(MouseEvent(Position(119, 29), MouseEventKind.Up, KeyModifiers.None))
+      decoded(csi("35;120;30M")*) ==
+        Event.Mouse(MouseEvent(Position(119, 29), MouseEventKind.Up, KeyModifiers.None, MouseButton.Unknown))
     )
 
   test("a urxvt report reaches columns the legacy encoding cannot express"):
@@ -115,13 +122,16 @@ final class MouseCaptureModeSpec extends AnyFunSuite:
   test("urxvt drag, hover and wheel share the SGR decoding rules"):
     assert(decoded(csi("64;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Drag, KeyModifiers.None)))
     assert(
-      decoded(csi("67;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Moved, KeyModifiers.None))
+      decoded(csi("67;10;5M")*) ==
+        Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown))
     )
     assert(
-      decoded(csi("96;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.ScrollUp, KeyModifiers.None))
+      decoded(csi("96;10;5M")*) ==
+        Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.ScrollUp, KeyModifiers.None, MouseButton.Unknown))
     )
     assert(
-      decoded(csi("97;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.ScrollDown, KeyModifiers.None))
+      decoded(csi("97;10;5M")*) ==
+        Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.ScrollDown, KeyModifiers.None, MouseButton.Unknown))
     )
 
   test("modifier bits survive a urxvt report"):

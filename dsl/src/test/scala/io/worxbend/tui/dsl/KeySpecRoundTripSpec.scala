@@ -125,7 +125,6 @@ final class KeySpecRoundTripSpec extends AnyFunSuite:
     case KeyCode.Right       => Some("right")
     case KeyCode.Char(cp)    => Some(Character.toString(cp)) // a printable key names itself
     case KeyCode.F(n)        => Some(s"f$n")
-<<<<<<< HEAD
     // the kitty lock and system block; `printscreen` also answers to the shorter `prtsc`
     case KeyCode.CapsLock    => Some("capslock")
     case KeyCode.ScrollLock  => Some("scrolllock")
@@ -149,12 +148,10 @@ final class KeySpecRoundTripSpec extends AnyFunSuite:
         case MediaKey.LowerVolume   => Some("volumedown")
         case MediaKey.RaiseVolume   => Some("volumeup")
         case MediaKey.MuteVolume    => Some("mute")
-=======
     // A bare modifier press is the one deliberate exception: it has no spec name, and must not gain one. A binding on
     // it would fire part-way through every chord that starts with that modifier. An application reads
     // `KeyCode.Modifier` from a key handler instead of binding it, so `None` here is the intended answer, not a gap.
     case KeyCode.Modifier(_) => None
->>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
 
   test("every named KeyCode the decoder can emit is nameable in a spec"):
     val named = Seq(

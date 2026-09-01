@@ -6,6 +6,7 @@ import io.worxbend.tui.core.{
   KeyEvent,
   KeyModifiers,
   MediaKey,
+  ModifierKey,
   MouseButton,
   MouseEvent,
   MouseEventKind,
@@ -81,8 +82,10 @@ final class InputDecoderSpec extends AnyFunSuite:
 
   test("the legacy shifted function keys decode to F13-F20"):
     // xterm sends these when Shift is held with F1-F8. The numbers are not contiguous: 27, 30 and 35 name no key,
-    // which is why the pairs are written out rather than derived from an offset.
-    val expected = Seq(25 -> 13, 26 -> 14, 28 -> 15, 29 -> 16, 31 -> 17, 32 -> 18, 33 -> 19, 34 -> 20)
+    // which is why the pairs are written out rather than derived from an offset. 29 is missing for a different
+    // reason: it is claimed by both F16 and the menu key, and `CsiKeys` resolves that in favour of Menu, so F16 is
+    // unreachable through the tilde encoding and only a kitty-protocol terminal can report it.
+    val expected = Seq(25 -> 13, 26 -> 14, 28 -> 15, 31 -> 17, 32 -> 18, 33 -> 19, 34 -> 20)
     expected.foreach: (tilde, functionKey) =>
       assert(decoded(csi(s"$tilde~")*) == Event.Key(KeyEvent.of(KeyCode.F(functionKey))))
 
@@ -98,7 +101,8 @@ final class InputDecoderSpec extends AnyFunSuite:
     // The two vocabularies have to agree: `KeyEvent.parse` accepting "f13" while no decoder path ever produces
     // KeyCode.F(13) on a non-kitty terminal is a binding that silently never fires. This is the assertion that
     // would have caught that, so it compares the parsed spec against what the legacy sequence decodes to.
-    Seq(25 -> 13, 26 -> 14, 28 -> 15, 29 -> 16, 31 -> 17, 32 -> 18, 33 -> 19, 34 -> 20).foreach: (tilde, n) =>
+    // 29 is left out: it decodes to Menu rather than F16, so "f16" has no legacy sequence to compare against.
+    Seq(25 -> 13, 26 -> 14, 28 -> 15, 31 -> 17, 32 -> 18, 33 -> 19, 34 -> 20).foreach: (tilde, n) =>
       val parsed = KeyEvent.parse(s"f$n").getOrElse(fail(s"f$n should parse"))
       assert(decoded(csi(s"$tilde~")*) == Event.Key(parsed))
 
@@ -237,10 +241,11 @@ final class InputDecoderSpec extends AnyFunSuite:
     for (codePoint, key) <- expected do
       assert(decoded(csi(s"${codePoint}u")*) == Event.Key(KeyEvent.of(KeyCode.Media(key))))
 
-  test("the code points on either side of the media block are still unmapped"):
-    // the boundary is the part of a transcribed table that rots, so it is asserted rather than assumed
+  test("the code points bounding the media block decode as their own blocks, not as media keys"):
+    // the boundary is the part of a transcribed table that rots, so it is asserted rather than assumed. 57427 is
+    // unassigned; 57441 is LEFT_SHIFT, the first code point of the modifier-only block that sits directly above.
     assert(decoderFor(csi("57427u")*).decode(10).isEmpty)
-    assert(decoderFor(csi("57441u")*).decode(10).isEmpty)
+    assert(decoded(csi("57441u")*) == Event.Key(KeyEvent.of(KeyCode.Modifier(ModifierKey.LeftShift))))
 
   test("a media key carries its modifiers like any other key"):
     assert(decoded(csi("57438;2u")*) == Event.Key(KeyEvent(KeyCode.Media(MediaKey.LowerVolume), KeyModifiers.Shift)))
