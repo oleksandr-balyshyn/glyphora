@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Style}
+import io.worxbend.tui.core.{Buffer, Cell, Style}
 
 /** Turns the difference between two frames into the ANSI text that moves the terminal from one to the other.
   *
@@ -60,9 +60,31 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
           currentLink = cell.style.link
         body ++= cell.symbol
         currentY = y
-        expectedX = x + math.max(1, CharWidth.of(cell.symbol))
+        expectedX = x + advanceOf(next, x, y)
       }
     if previous.area == next.area then previous.diff(next, paint) else next.emitAll(paint)
     // a link left open would swallow everything drawn after this frame
     if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
     body.result()
+
+  /** How many columns the terminal's cursor has moved after the cell at `(x, y)` was written.
+    *
+    * The answer comes from the buffer's own bookkeeping rather than from measuring the symbol again: a cell is two
+    * columns wide exactly when the buffer reserved the column to its right as that grapheme's continuation, which
+    * [[io.worxbend.tui.core.Buffer.isContinuation]] reports. Everything else advances one column, including a
+    * zero-width symbol — something was written into the stream for it, and the terminal's own cursor moved by whatever
+    * that glyph turned out to be, so the next cell must be positioned with an explicit `moveTo` rather than assumed to
+    * be adjacent.
+    *
+    * This used to be `math.max(1, CharWidth.of(cell.symbol))`, and the difference matters. A `Cell`'s symbol is meant
+    * to hold one grapheme cluster, and the buffer reserves columns for it with a per-cluster measurement that can only
+    * answer 0, 1 or 2. `CharWidth.of` measures a whole string and sums over every cluster in it, so a symbol that
+    * somehow carried more than one cluster — several combining marks after their base character, or a long escape
+    * sequence smuggled in as content — measured 3, 40 or 400 columns while the buffer had reserved one. `expectedX`
+    * then pointed far to the right of the real cursor, the next changed cell's `moveTo` was suppressed because its `x`
+    * "already matched", and the rest of the frame was painted into the wrong columns. ratatui hit this exact bug with a
+    * 400-byte escape sequence in a cell; asking the buffer instead of re-measuring makes it unreachable by
+    * construction.
+    */
+  private def advanceOf(next: Buffer, x: Int, y: Int): Int =
+    if next.isContinuation(x + 1, y) then 2 else 1

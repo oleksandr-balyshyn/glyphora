@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Color, Rect, Style}
+import io.worxbend.tui.core.{Buffer, Cell, Color, Rect, Style}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -101,3 +101,32 @@ final class FrameEncoderSpec extends AnyFunSuite:
     next.setString(0, 0, "a", Style.Default)
     // three cells written, not one: the two blanks are what clears whatever the old, wider frame had drawn there
     assert(encoder.encode(previous, next) == AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + "a  ")
+
+  test("a pathologically long symbol cannot swallow the cells drawn after it"):
+    // The regression ratatui shipped two tests for. A `Cell`'s symbol is meant to hold a single grapheme cluster, but
+    // nothing in the type stops a caller from putting a whole escape sequence — or a base character trailed by a dozen
+    // combining marks — into one. Measuring such a symbol as a *string* answers "many columns"; the buffer reserved
+    // one. The encoder used to believe that measurement, decide the cursor already stood past the next changed cell,
+    // and omit that cell's `moveTo` — so every later cell in the row was painted in the wrong column.
+    val smuggled = "e" + "́" * 40
+    val previous = frame(_ => ())
+    val next     = frame { buffer =>
+      buffer.set(0, 0, Cell(smuggled, Style.Default))
+      buffer.setString(4, 0, "tail", Style.Default)
+    }
+    assert(
+      encoder.encode(previous, next) ==
+        AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + smuggled + AnsiSequences.moveTo(4, 0) + "tail"
+    )
+
+  test("a long symbol leaves the cell immediately beside it addressable"):
+    // The tight half of the same bug: the cell at column 1 is where a one-column symbol at column 0 leaves the cursor,
+    // so it must be written with no move at all. An over-measured symbol used to push `expectedX` past column 1, which
+    // is how a whole row's worth of cells ended up shifted.
+    val smuggled = "x" + "̀" * 3
+    val previous = frame(_ => ())
+    val next     = frame { buffer =>
+      buffer.set(0, 0, Cell(smuggled, Style.Default))
+      buffer.setString(1, 0, "y", Style.Default)
+    }
+    assert(encoder.encode(previous, next) == AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + smuggled + "y")
