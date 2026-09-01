@@ -78,6 +78,31 @@ private[dsl] trait ElementFactories:
     */
   def column(children: Element*): ColumnElement = ColumnElement(children)
 
+  /** One element per item, each stamped with a `.key` derived from the item itself, so focus follows the *item* across
+    * insertions and reorders rather than the screen position it happened to occupy.
+    *
+    * `column(processes.map(processRow)*)` is positional. The framework remembers "focus is on the third focusable";
+    * insert a process at the top and the third focusable is now a different process, so the highlight appears to jump
+    * to the row that moved into that slot. `column(each(processes)(_.pid.toString)(processRow)*)` gives every child a
+    * stable identity, which the focus pass collects and the tracker re-anchors focus against, so the highlight stays on
+    * the process it was on.
+    *
+    * It returns a `Seq[Element]`, not a container, so it splices into whichever container the call site wants:
+    * `column(each(…)*)`, `row(each(…)*)`, `panel("Processes")(each(…)*)`.
+    *
+    * Keys must be unique within one frame — use something that identifies the item (a database id, a process id, a
+    * file path), not its index, which is the positional identity this exists to replace. Two children sharing a key
+    * re-anchor focus to the first of them.
+    */
+  def each[A](items: Seq[A])(keyOf: A => String)(render: A => Element): Seq[Element] =
+    items.map(item => render(item).key(keyOf(item)))
+
+  /** [[each]] with a `prefix` on every key, for two keyed lists in one view whose key functions would otherwise
+    * collide — two panes both keyed by a row number, say. The prefix and the key are joined with a colon.
+    */
+  def each[A](items: Seq[A], prefix: String)(keyOf: A => String)(render: A => Element): Seq[Element] =
+    items.map(item => render(item).key(s"$prefix:${keyOf(item)}"))
+
   /** Flexible blank space (fills what siblings leave over). */
   def spacer: SpacerElement = SpacerElement()
 

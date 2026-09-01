@@ -18,6 +18,7 @@ export Element.{
   clear,
   dialog,
   dualSparkline,
+  each,
   filePicker,
   spinner,
   spinnerAt,

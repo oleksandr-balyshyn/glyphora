@@ -268,6 +268,28 @@ children out along an axis. (A `panel` stacks its children with the same widget 
 that quietly does nothing. `.rounded` and `.doubleBorder` are typed the same way: they
 exist only on `panel`.
 
+## Give list rows a stable identity
+
+Focus is positional by default. The framework remembers "focus is on the third
+focusable"; insert a row at the top of a list and the third focusable is now a different
+row, so the highlight appears to jump. `each(items)(keyOf)(render)` renders one element
+per item and stamps each with a `.key` derived from the item itself:
+
+```scala
+// positional — inserting a process at the top moves the highlight to a different process
+column(processes.map(processRow)*)
+
+// keyed — the highlight stays on the process it was on
+column(each(processes)(_.pid.toString)(processRow)*)
+```
+
+It returns a plain `Seq[Element]`, so it splices into whichever container you want:
+`column(each(…)*)`, `row(each(…)*)`, `panel("Processes")(each(…)*)`.
+
+Keys must be unique within one frame, and must identify the *item* — a database id, a
+process id, a file path — not its index, which is the positional identity this replaces.
+Two children sharing a key re-anchor focus to the first of them. When two lists in one
+view could derive the same keys, `each(items, "left")(…)(…)` prefixes them.
 ## Paint the gaps a split leaves
 
 `Layout.split(area)` hands back one rectangle per constraint. `splitWithSpacers(area)`
