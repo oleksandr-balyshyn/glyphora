@@ -186,10 +186,13 @@ private[dsl] trait ElementFactories:
   /** Vertical bars, one per `(label, value)`, each `barWidth` columns wide with the label underneath.
     *
     * Bars are scaled against the largest value in `data`, so the tallest always reaches the top of the area; the top of
-    * each bar uses a partial block glyph for sub-cell precision. See [[w.BarChart]] for the styling and gap knobs.
+    * each bar uses a partial block glyph for sub-cell precision. `showValues = true` writes each bar's number on the
+    * row above it, so a reader gets the magnitude and not only the comparison; a number with no room there, or wider
+    * than its own bar, is left out rather than truncated. See [[w.BarChart]] for the styling, gap and number-format
+    * knobs.
     */
-  def barChart(data: Seq[(String, Long)], barWidth: Int = 3): WidgetElement =
-    WidgetElement(w.BarChart(data, barWidth))
+  def barChart(data: Seq[(String, Long)], barWidth: Int = 3, showValues: Boolean = false): WidgetElement =
+    WidgetElement(w.BarChart(data, barWidth, showValues = showValues))
 
   /** The same bars laid on their side: one per `(label, value)`, growing rightwards, `barHeight` rows thick, with the
     * labels right-aligned in a gutter down the left edge.
@@ -197,10 +200,17 @@ private[dsl] trait ElementFactories:
     * This is the layout for long category names. In a vertical [[barChart]] a label has only its own bar's columns, so
     * "authentication" under a three-column bar becomes "aut"; here the names get a strip of their own — up to half the
     * width — and the bars take the rest. A name still too long for the gutter keeps its beginning, which is the part
-    * that identifies the category. See [[w.BarChart]] for the scale, gap and styling knobs.
+    * that identifies the category. `showValues = true` writes each bar's number in the track just past the bar's end.
+    * See [[w.BarChart]] for the scale, gap and styling knobs.
     */
-  def horizontalBarChart(data: Seq[(String, Long)], barHeight: Int = 1): WidgetElement =
-    WidgetElement(w.BarChart(data, direction = Direction.Horizontal, barHeight = barHeight))
+  def horizontalBarChart(
+      data: Seq[(String, Long)],
+      barHeight: Int = 1,
+      showValues: Boolean = false,
+  ): WidgetElement =
+    WidgetElement(
+      w.BarChart(data, direction = Direction.Horizontal, barHeight = barHeight, showValues = showValues)
+    )
 
   /** An x/y plot of one or more [[w.Dataset]]s with axes, over an explicit world window.
     *

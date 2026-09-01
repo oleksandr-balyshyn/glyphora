@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Direction, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Direction, Rect, Style, Widget}
 
 /** Bars with labels, one per `(label, value)`, scaled against `max` (defaulting to the data's maximum) and topped with
   * a partial block glyph for sub-cell precision.
@@ -10,6 +10,13 @@ import io.worxbend.tui.core.{Buffer, Direction, Rect, Style, Widget}
   * `Horizontal` draws the bars rightwards, `barHeight` rows tall, and reserves a gutter down the left edge for the
   * labels: that is the layout to reach for when the category names are long, because a name in the gutter has a whole
   * strip of columns to itself instead of being truncated to a bar's width.
+  *
+  * `showValues` writes each bar's number beside the bar: above an upright bar, to the right of a sideways one. It is
+  * written next to the bar rather than inside it because a [[io.worxbend.tui.core.Buffer]] cell holds one style, so a
+  * number drawn on top of a filled bar would take the bar's colours and could vanish into them. A number with no room —
+  * a bar already at the top of the area, or wider than the space left beside it — is left out rather than truncated,
+  * because half a number reads as a different number. `valueFormat` turns the value into that text, which is where a
+  * unit or a thousands separator goes.
   *
   * @param direction
   *   by the widget parameter-order convention this is layout and would belong immediately after `data`; it sits after
@@ -31,6 +38,9 @@ final case class BarChart(
     barSet: BarSet = BarSet.Eighths,
     direction: Direction = Direction.Vertical,
     barHeight: Int = 1,
+    showValues: Boolean = false,
+    valueStyle: Style = Style.Default,
+    valueFormat: Long => String = _.toString,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit = direction match
@@ -60,6 +70,7 @@ final case class BarChart(
             set = barSet,
           )
           if showLabels then ColumnChart.drawCentredLabel(buffer, area, barLeft, barWidth, label, labelStyle)
+          if showValues then drawValueAbove(buffer, area, barLeft, chartHeight, value, ceiling)
       }
 
   /** Bars growing rightwards down the area, labels right-aligned in a gutter on the left. */
@@ -87,7 +98,38 @@ final case class BarChart(
             style = barStyle,
           )
           if gutter > 0 then RowChart.drawGutterLabel(buffer, area, barTop, gutter, label, labelStyle)
+          if showValues then drawValueBeside(buffer, barTop, plotLeft, plotWidth, value, ceiling)
       }
+
+  /** Writes an upright bar's value on the row above its top, centred over the bar and dropped when it does not fit. */
+  private def drawValueAbove(
+      buffer: Buffer,
+      area: Rect,
+      barLeft: Int,
+      chartHeight: Int,
+      value: Long,
+      ceiling: Long,
+  ): Unit =
+    val text    = valueFormat(value)
+    val filled  = BlockLadder.filledCells(value, ceiling, chartHeight)
+    val labelY  = area.y + chartHeight - filled - 1
+    val fitsRow = labelY >= area.y
+    if fitsRow && CharWidth.of(text) <= barWidth then
+      buffer.setString(Alignment.Center.originAt(barLeft, barWidth, CharWidth.of(text)), labelY, text, valueStyle)
+
+  /** Writes a sideways bar's value in the track just right of the bar's end, dropped when it does not fit. */
+  private def drawValueBeside(
+      buffer: Buffer,
+      barTop: Int,
+      plotLeft: Int,
+      plotWidth: Int,
+      value: Long,
+      ceiling: Long,
+  ): Unit =
+    val text   = valueFormat(value)
+    val filled = BlockLadder.filledCells(value, ceiling, plotWidth)
+    val room   = plotWidth - filled - 1
+    if CharWidth.of(text) <= room then buffer.setString(plotLeft + filled + 1, barTop, text, valueStyle)
 
   /** The top of the scale, at least one so an all-zero series cannot divide by zero. */
   private def scaleCeiling: Long =

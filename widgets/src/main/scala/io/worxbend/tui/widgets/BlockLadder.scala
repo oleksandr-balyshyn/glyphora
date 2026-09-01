@@ -72,6 +72,18 @@ private[widgets] object BlockLadder:
         y -= 1
     }
 
+  /** How many whole cells of an `extent`-cell track a bar covers, partial leading cell included.
+    *
+    * The fill loops above hand out eight eighths per cell and stop when they run out, so a bar that comes to two and a
+    * half cells touches three of them. A caller that wants to write something *next to* a bar — a value label, say —
+    * needs that same number to know where the bar ends, and computing it here rather than at the call site is what
+    * stops the label and the bar disagreeing about where the boundary is.
+    */
+  def filledCells(value: Long, ceiling: Long, extent: Int): Int =
+    val clamped = math.max(0L, math.min(value, ceiling))
+    val eighths = math.round(clamped.toDouble / ceiling * extent * 8).toInt
+    math.min(extent, (eighths + 7) / 8)
+
   /** Paints one horizontal bar: `value` measured against `ceiling`, filling rightwards from column `left` and stopping
     * at column `right`.
     *

@@ -86,3 +86,52 @@ final class BarChartSpec extends AnyFunSuite:
       val buffer = rendered(BarChart(Seq.empty, direction = direction), 5, 3)
       assert(trimmedLines(buffer).forall(_.isEmpty))
     }
+
+  test("an upright bar's value is written on the row above its top"):
+    val chart  = BarChart(Seq(("", 4)), barWidth = 1, barGap = 0, max = Some(8), showValues = true)
+    val buffer = rendered(chart, 1, 4)
+    // 4 of 8 over four rows is two full cells, so the number lands on the row above them
+    assert(trimmedLines(buffer) == Seq("", "4", "█", "█"))
+
+  test("a value with no room above the bar is left out rather than truncated"):
+    val chart = BarChart(Seq(("", 8)), barWidth = 1, barGap = 0, max = Some(8), showValues = true)
+    assert(trimmedLines(rendered(chart, 1, 2)) == Seq("█", "█"))
+
+  test("a value wider than its bar is left out"):
+    val chart  = BarChart(Seq(("", 1000)), barWidth = 1, barGap = 0, max = Some(8000), showValues = true)
+    val buffer = rendered(chart, 1, 4)
+    assert(!trimmedLines(buffer).mkString.contains("1"))
+
+  test("valueFormat decides the text, so a unit or a separator can be added"):
+    val chart  =
+      BarChart(Seq(("", 4)), barWidth = 4, barGap = 0, max = Some(8), showValues = true, valueFormat = v => s"${v}ms")
+    val buffer = rendered(chart, 4, 4)
+    // centred over the four-column bar: three columns of text leave one spare, which goes to the right
+    assert(trimmedLines(buffer)(1) == "4ms")
+
+  test("a sideways bar's value is written in the track past the bar's end"):
+    val chart = BarChart(
+      Seq(("", 4)),
+      barGap = 0,
+      max = Some(8),
+      direction = Direction.Horizontal,
+      showValues = true,
+    )
+    // four of eight over eight columns is four filled cells, one blank, then the number
+    assert(trimmedLines(rendered(chart, 8, 1)) == Seq("████ 4"))
+
+  test("a sideways value with no room left in the track is left out"):
+    val chart = BarChart(
+      Seq(("", 8)),
+      barGap = 0,
+      max = Some(8),
+      direction = Direction.Horizontal,
+      showValues = true,
+    )
+    assert(trimmedLines(rendered(chart, 4, 1)) == Seq("████"))
+
+  test("values are off unless they are asked for"):
+    val plain = rendered(BarChart(Seq(("", 4)), barWidth = 1, barGap = 0, max = Some(8)), 1, 4)
+    val asked = rendered(BarChart(Seq(("", 4)), barWidth = 1, barGap = 0, max = Some(8), showValues = false), 1, 4)
+    assert(trimmedLines(plain) == trimmedLines(asked))
+    assert(!trimmedLines(plain).mkString.contains("4"))

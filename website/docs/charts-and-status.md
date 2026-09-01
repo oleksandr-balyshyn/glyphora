@@ -93,6 +93,22 @@ name and never more than half the area, so the bars always keep half the width:
 horizontalBarChart(buckets.map(bucket => bucket.label -> bucket.count))
 ```
 
+Bars show a comparison; they do not show a magnitude. `showValues = true` — on
+`barChart` and `horizontalBarChart` alike — writes each bar's number beside its bar:
+above an upright bar, in the empty part of the track past the end of a sideways one. It
+goes *beside* the bar rather than inside it because a terminal cell carries one style,
+so a number drawn over a filled bar takes the bar's colours and can vanish into them. A
+number with nowhere to go — a bar already at the top of the area, or a number wider than
+its own bar — is left out rather than truncated, since half a number reads as a
+different number. The widget-level `BarChart` takes a `valueFormat: Long => String`,
+which is where a unit or a thousands separator belongs:
+
+```scala
+horizontalBarChart(rows, showValues = true)
+
+BarChart(rows, showValues = true, valueFormat = count => s"$count req")
+```
+
 Build the rows by hand instead when you want a number printed beside each bar, which
 the widget does not draw:
 
