@@ -275,3 +275,41 @@ final case class WidgetElement(
 
   private[dsl] def withProps(props: ElementProps): WidgetElement = copy(props = props)
   private[dsl] override def claim: SizeClaim                     = rows.fold(SizeClaim.Fill)(SizeClaim.rows)
+
+/** A free-form drawing surface, with the sub-cell resolution and the marker glyph reachable from the view.
+  *
+  * A terminal cell is a single character, so a plot drawn one dot per cell is very coarse. The underlying
+  * [[io.worxbend.tui.widgets.Canvas]] can do better by packing several *sub-pixels* into one cell — two stacked
+  * half-blocks (`▀`, `▄`, `█`), or the eight dots of a braille pattern (`⣿`), which is eight times the detail of one
+  * marker per cell. Before this node the `canvas(...)` factory built the widget with both of those parameters left at
+  * their defaults and gave back a plain `WidgetElement`, so a view had no way to ask for anything but the coarsest
+  * mode; getting braille meant dropping out of the DSL and constructing `widgets.Canvas` by hand.
+  *
+  * The builders read the same way as the ones [[OrbitSpinnerElement]] already carries, which is the other place in this
+  * package that paints onto a canvas: `.markers(glyph)` picks one-glyph-per-cell drawing with that glyph, `.halfBlocks`
+  * and `.braille` pick the two finer modes. The marker is read only in cell mode — the finer modes have fixed glyph
+  * sets — so setting one does not silently switch resolution back.
+  */
+final case class CanvasElement(
+    xBounds: (Double, Double),
+    yBounds: (Double, Double),
+    shapes: Seq[w.Shape],
+    marker: String = "•",
+    resolution: w.CanvasResolution = w.CanvasResolution.Cell,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  type Self = CanvasElement
+  def widget: Widget = w.Canvas(xBounds, yBounds, shapes, marker, resolution)
+
+  /** One `glyph` per hit cell — the coarsest mode, and the one that needs no special font. */
+  def markers(glyph: String): CanvasElement = copy(marker = glyph, resolution = w.CanvasResolution.Cell)
+
+  /** Two stacked sub-pixels per cell, drawn with `▀`/`▄`/`█`: twice the vertical detail, no braille font needed. */
+  def halfBlocks: CanvasElement = copy(resolution = w.CanvasResolution.HalfBlock)
+
+  /** Eight sub-pixels per cell (2 wide by 4 tall) drawn with braille patterns — the smoothest lines this toolkit can
+    * draw, on any terminal whose font covers the braille block.
+    */
+  def braille: CanvasElement = copy(resolution = w.CanvasResolution.Braille)
+
+  private[dsl] def withProps(props: ElementProps): CanvasElement = copy(props = props)

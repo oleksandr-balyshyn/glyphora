@@ -252,11 +252,14 @@ private[dsl] trait ElementFactories:
     )
 
   /** A free-form drawing surface: shapes describe themselves in world coordinates (`xBounds` increasing rightward,
-    * `yBounds` increasing *upward*, unlike buffer coordinates) and the canvas maps them onto the cell grid. See
-    * [[w.Canvas]] for the sub-cell resolutions (cell, half-block, braille).
+    * `yBounds` increasing *upward*, unlike buffer coordinates) and the canvas maps them onto the cell grid.
+    *
+    * Draws one marker glyph per hit cell unless told otherwise. `.halfBlocks` and `.braille` pack two and eight
+    * sub-pixels into each cell respectively, which is how a canvas draws a smooth line rather than a dotted one; see
+    * [[CanvasElement]].
     */
-  def canvas(xBounds: (Double, Double), yBounds: (Double, Double))(shapes: w.Shape*): WidgetElement =
-    WidgetElement(w.Canvas(xBounds, yBounds, shapes))
+  def canvas(xBounds: (Double, Double), yBounds: (Double, Double))(shapes: w.Shape*): CanvasElement =
+    CanvasElement(xBounds, yBounds, shapes)
 
   /** A month grid for `month` (1–12) of `year`, weeks starting Monday, with `selected` (a day of the month)
     * highlighted. Needs 20 columns and up to 8 rows; anything smaller clips. See [[w.Calendar]].

@@ -189,6 +189,7 @@ export io.worxbend.tui.widgets.{
   BadgeVariant,
   BlockTitle,
   BorderType,
+  CanvasResolution,
   ColorRamp,
   ColumnSort,
   DataTable,
