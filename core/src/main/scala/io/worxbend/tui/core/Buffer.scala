@@ -30,6 +30,19 @@ final class Buffer(val area: Rect):
     */
   private val continuations: Array[Boolean] = Array.fill(area.area)(false)
 
+  /** The per-position [[DiffDirective]] of each cell, held as the enum's ordinal.
+    *
+    * The second plane of per-position render metadata, alongside [[continuations]], and here for the same reason: the
+    * fact is about a *position* in a frame rather than about a glyph value, so it cannot live on [[Cell]] — the same
+    * `Cell` is skipped in one column and flushed in the next. Keeping it off `Cell` also keeps the library's hottest
+    * value two fields wide.
+    *
+    * Ordinals in an `Array[Byte]` rather than an `Array[DiffDirective]`: a reference array would cost eight bytes per
+    * cell — 80 kB on a 200x50 frame — to store one of three constants. The encoding never escapes this class;
+    * [[diffDirective]] hands out the enum value.
+    */
+  private val directives: Array[Byte] = new Array[Byte](area.area)
+
   /** The cell at `(x, y)`, or [[Cell.Empty]] when the coordinates fall outside `area`. */
   def get(x: Int, y: Int): Cell = cellAt(x, y)
 
@@ -296,6 +309,9 @@ final class Buffer(val area: Rect):
     * the landing point moves by however much the trim shifted the region's origin, so the surviving cells keep their
     * position relative to `at` instead of sliding onto the ones that were dropped.
     *
+    * A cell's [[DiffDirective]] travels with it, so a fragment that reserved columns for an out-of-band painter keeps
+    * that reservation once it is composited into the frame.
+    *
     * Blitting a buffer onto itself works on a snapshot: without it, overlapping rows would read cells this call has
     * already overwritten and smear them across the region.
     *
@@ -323,8 +339,20 @@ final class Buffer(val area: Rect):
             else if dx == clipped.width - 1 && CharWidth.ofCluster(cell.symbol) == 2 then Cell.Empty
             else cell
           set(originX + dx, originY + dy, safe)
+          // the directive travels with the cell: a sub-buffer that reserved columns for an image protocol must keep
+          // that reservation once it is composited into the frame, or the frame flushes over the picture
+          copyDirective(originX + dx, originY + dy, source, clipped.x + dx, y)
           dx += 1
         dy += 1
+
+  /** Carries one position's [[DiffDirective]] from `source` to this buffer, allocating nothing.
+    *
+    * [[blit]]'s per-cell helper. Going through [[setDiffDirective]] would build a one-cell `Rect` for every column of
+    * every composited fragment, which is the hottest loop the composition path has.
+    */
+  private def copyDirective(x: Int, y: Int, source: Buffer, sourceX: Int, sourceY: Int): Unit =
+    if area.contains(x, y) && source.area.contains(sourceX, sourceY) then
+      directives(indexOf(x, y)) = source.directives(source.indexOf(sourceX, sourceY))
 
   /** Copies all of `source` into this buffer at `at`. */
   def blit(source: Buffer, at: Position): Unit =
@@ -392,6 +420,33 @@ final class Buffer(val area: Rect):
   def isContinuation(x: Int, y: Int): Boolean =
     area.contains(x, y) && continuations(indexOf(x, y))
 
+  /** How [[diff]] must treat `(x, y)`. Coordinates outside `area` are always [[DiffDirective.Default]]. */
+  def diffDirective(x: Int, y: Int): DiffDirective =
+    if area.contains(x, y) then DiffDirective.fromOrdinal(directives(indexOf(x, y))) else DiffDirective.Default
+
+  /** Declares how [[diff]] must treat every position of `region` that falls inside `area`; the rest is clipped away,
+    * exactly as [[set]] clips a single write. A single cell is `Rect(x, y, 1, 1)`.
+    *
+    * This changes what gets *flushed*, never what the grid holds: the cells keep whatever [[set]] put in them. See
+    * [[DiffDirective]] for what each value means and why the two non-default ones are mutually exclusive.
+    *
+    * Directives do not survive [[reset]], so a widget that owns a region re-declares it on every render. That is the
+    * behaviour a frame loop wants: the frame that stops drawing an image is the frame whose cells must be flushed
+    * again, and a directive that outlived the widget that asked for it would freeze the region for the rest of the run.
+    * They *are* carried by [[snapshot]] and [[copyFrom]], because those produce a record of the frame that was flushed,
+    * and the diff of the next frame against that record is exactly where the directives are read.
+    */
+  def setDiffDirective(region: Rect, directive: DiffDirective): Unit =
+    val clipped = region.intersection(area)
+    val code    = directive.ordinal.toByte
+    var y       = clipped.y
+    while y < clipped.bottom do
+      var x = clipped.x
+      while x < clipped.right do
+        directives(indexOf(x, y)) = code
+        x += 1
+      y += 1
+
   /** An independent copy of this buffer. Backends snapshot the frame they just flushed so later mutation of the
     * caller's buffer cannot corrupt the next diff.
     *
@@ -402,6 +457,7 @@ final class Buffer(val area: Rect):
     val copied = Buffer(area)
     Array.copy(cells, 0, copied.cells, 0, cells.length)
     Array.copy(continuations, 0, copied.continuations, 0, continuations.length)
+    Array.copy(directives, 0, copied.directives, 0, directives.length)
     copied
 
   /** Overwrites this buffer's contents with `source`'s, allocating nothing.
@@ -426,6 +482,7 @@ final class Buffer(val area: Rect):
     if source ne this then
       Array.copy(source.cells, 0, cells, 0, cells.length)
       Array.copy(source.continuations, 0, continuations, 0, continuations.length)
+      Array.copy(source.directives, 0, directives, 0, directives.length)
 
   /** Resets every cell to [[Cell.Empty]], recycling the buffer for the next frame. */
   def reset(): Unit =
@@ -433,6 +490,7 @@ final class Buffer(val area: Rect):
     while index < cells.length do
       cells(index) = Cell.Empty
       continuations(index) = false
+      directives(index) = Buffer.DefaultCode
       index += 1
 
   /** The cells that changed going from this buffer (the previous frame) to `next` (the frame to display).
@@ -446,6 +504,11 @@ final class Buffer(val area: Rect):
     * this (previous) frame, is not one in `next`, and whose grapheme painted a style that shows through a blank — see
     * [[visibleOnBlank]]. Both frames hold [[Cell.Empty]] there, so a plain content compare calls it unchanged, yet the
     * terminal is still painting the old glyph's background across that half-cell.
+    *
+    * `next`'s [[DiffDirective]]s override the content comparison, and are read from `next` alone — the request belongs
+    * to the frame being drawn, not to the one being replaced. A [[DiffDirective.Skip]] position is never emitted; a
+    * [[DiffDirective.AlwaysUpdate]] one always is; and a position `next` no longer skips is emitted even if its content
+    * matches, because while it was skipped this buffer's memory of it was never flushed to the terminal at all.
     */
   def diff(next: Buffer): Iterator[(Position, Cell)] =
     val changes = Iterator.newBuilder[(Position, Cell)]
@@ -501,18 +564,22 @@ final class Buffer(val area: Rect):
     // not to the instance: no accessor is added, and neither array escapes the method
     val nextCells  = next.cells
     val nextFiller = next.continuations
+    val nextRules  = next.directives
     var row        = 0
     while row < rows do
       val start = row * width
       val end   = start + width
-      if !rowUnchanged(nextCells, nextFiller, start, end) then
+      if !rowUnchanged(nextCells, nextFiller, nextRules, start, end) then
         val y     = originY + row
         var index = start
         while index < end do
           val candidate = nextCells(index)
           // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
-          val changed   = !sameCell(cells(index), candidate) || vacatedTrailing(nextFiller, index, start)
-          if changed && !nextFiller(index) then
+          val changed   = nextRules(index) == Buffer.AlwaysUpdateCode ||
+            !sameCell(cells(index), candidate) ||
+            vacatedTrailing(nextFiller, index, start) ||
+            released(nextRules, index)
+          if changed && !nextFiller(index) && nextRules(index) != Buffer.SkipCode then
             emit(originX + index - start, y, candidate)
             // the reserved column exists only for a two-column cluster, so this is the pair the workaround is about
             if clearEmojiTrailingCell && index + 1 < end && nextFiller(index + 1)
@@ -530,11 +597,34 @@ final class Buffer(val area: Rect):
     * `previous` is this buffer; the arrays are index-aligned because [[diff]] has already required both frames to be
     * the same width and to start at the same column.
     */
-  private def rowUnchanged(nextCells: Array[Cell], nextFiller: Array[Boolean], from: Int, until: Int): Boolean =
+  private def rowUnchanged(
+      nextCells: Array[Cell],
+      nextFiller: Array[Boolean],
+      nextRules: Array[Byte],
+      from: Int,
+      until: Int,
+  ): Boolean =
     var index = from
-    while index < until && sameCell(cells(index), nextCells(index)) && continuations(index) == nextFiller(index) do
-      index += 1
+    while index < until && positionUnchanged(nextCells, nextFiller, nextRules, index) do index += 1
     index == until
+
+  /** Whether one position of the row can be passed over without running the per-cell emit machinery.
+    *
+    * Three questions, and a "no" to any of them puts the row back on the slow path: the cell must be the same value,
+    * the wide-grapheme filler flag must be the same (see [[vacatedTrailing]]), and the [[DiffDirective]] must be the
+    * same *and* not [[DiffDirective.AlwaysUpdate]] — a position that asks to be re-emitted is by definition one this
+    * scan must not declare finished.
+    */
+  private def positionUnchanged(
+      nextCells: Array[Cell],
+      nextFiller: Array[Boolean],
+      nextRules: Array[Byte],
+      index: Int,
+  ): Boolean =
+    sameCell(cells(index), nextCells(index)) &&
+      continuations(index) == nextFiller(index) &&
+      directives(index) == nextRules(index) &&
+      nextRules(index) != Buffer.AlwaysUpdateCode
 
   /** Emits every cell of this buffer, in the same row-major order and with the same continuation rule as [[diff]] — the
     * full repaint the first frame after a resize or a resume from suspend needs.
@@ -546,7 +636,8 @@ final class Buffer(val area: Rect):
     *
     * The columns holding the right half of a two-column grapheme are skipped here as well: emitting the grapheme itself
     * repaints both of its columns, and a terminal handed the filler would draw a stray blank over the half already
-    * painted.
+    * painted. So are the positions marked [[DiffDirective.Skip]] — a resize is exactly the moment a blind full repaint
+    * would erase an image somebody else painted, so the owner of such a region redraws it rather than this buffer.
     */
   def emitAll(emit: (Int, Int, Cell) => Unit): Unit =
     var y = area.y
@@ -554,7 +645,7 @@ final class Buffer(val area: Rect):
       var x = area.x
       while x < area.right do
         val index = indexOf(x, y)
-        if !continuations(index) then emit(x, y, cells(index))
+        if !continuations(index) && directives(index) != Buffer.SkipCode then emit(x, y, cells(index))
         x += 1
       y += 1
 
@@ -690,6 +781,17 @@ final class Buffer(val area: Rect):
   private def vacatedTrailing(nextFiller: Array[Boolean], index: Int, rowStart: Int): Boolean =
     continuations(index) && !nextFiller(index) && index > rowStart && visibleOnBlank(cells(index - 1).style)
 
+  /** Whether `index` is a position an out-of-band painter has just given back: [[DiffDirective.Skip]] in this (the
+    * previous) frame and not in `next`.
+    *
+    * Such a position has to be emitted whatever its content says. The buffer never flushed it while it was skipped, so
+    * the grid's memory of it describes a cell the terminal was never told about — and the picture that was really there
+    * is one this renderer cannot compare against. An ordinary content compare would call the position unchanged and
+    * leave the last frame of a dismissed image on screen.
+    */
+  private def released(nextRules: Array[Byte], index: Int): Boolean =
+    directives(index) == Buffer.SkipCode && nextRules(index) != Buffer.SkipCode
+
   /** The single bounds-check-and-index site behind [[get]]. Kept separate from [[get]] so the hot diff loop reads a
     * `private` method the compiler can inline freely.
     */
@@ -706,6 +808,11 @@ final class Buffer(val area: Rect):
   * right size by hand and calling `setString` once per row.
   */
 object Buffer:
+
+  /** The [[DiffDirective]] ordinals the diff loop compares against, resolved once rather than per cell. */
+  private val DefaultCode: Byte      = DiffDirective.Default.ordinal.toByte
+  private val SkipCode: Byte         = DiffDirective.Skip.ordinal.toByte
+  private val AlwaysUpdateCode: Byte = DiffDirective.AlwaysUpdate.ordinal.toByte
 
   /** A fresh buffer covering `area` with every cell already set to `cell` — the starting point for a layer that is
     * opaque rather than transparent. The plain constructor `Buffer(area)` still starts out as [[Cell.Empty]]
