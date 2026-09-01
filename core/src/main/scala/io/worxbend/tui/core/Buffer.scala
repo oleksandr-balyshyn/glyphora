@@ -35,8 +35,8 @@ final class Buffer(val area: Rect):
 
   /** The cell at `position`, or [[Cell.Empty]] when it falls outside `area`.
     *
-    * The same read as `get(x, y)`, spelled for callers that already hold a [[Position]] — a mouse event's coordinate,
-    * a [[Rect]]'s `position`, an entry from [[diff]] — so they need not unpack it into two arguments.
+    * The same read as `get(x, y)`, spelled for callers that already hold a [[Position]] — a mouse event's coordinate, a
+    * [[Rect]]'s `position`, an entry from [[diff]] — so they need not unpack it into two arguments.
     */
   def get(position: Position): Cell = cellAt(position.x, position.y)
 
@@ -127,14 +127,14 @@ final class Buffer(val area: Rect):
   /** Writes `text` at `(x, y)` stopping after at most `maxWidth` columns, and answers how many columns it wrote.
     *
     * Two things this adds over the four-argument [[setString]]. The bound: the write stops at whichever comes first,
-    * the area's right edge or `x + maxWidth`, so a caller with a column budget no longer has to cut the string to
-    * size beforehand. And the answer: the returned column count is exactly how far the cursor advanced, so a caller
-    * laying a row out as a run of segments adds it to `x` instead of measuring the text a second time.
+    * the area's right edge or `x + maxWidth`, so a caller with a column budget no longer has to cut the string to size
+    * beforehand. And the answer: the returned column count is exactly how far the cursor advanced, so a caller laying a
+    * row out as a run of segments adds it to `x` instead of measuring the text a second time.
     *
     * The count can be smaller than `maxWidth` even with text left over. A two-column cluster that would only half-fit
     * inside the bound is dropped whole rather than split — a terminal handed half a wide glyph draws it across the
-    * column beyond the budget — so a budget of 3 filled with `漢字` writes 2 columns and reports 2. A negative
-    * `maxWidth` is treated as zero: nothing is written and the answer is 0.
+    * column beyond the budget — so a budget of 3 filled with `漢字` writes 2 columns and reports 2. A negative `maxWidth`
+    * is treated as zero: nothing is written and the answer is 0.
     */
   def setString(x: Int, y: Int, text: String, style: Style, maxWidth: Int): Int =
     writeString(x, y, text, style, math.min(area.right, x + math.max(0, maxWidth)))
@@ -309,9 +309,9 @@ final class Buffer(val area: Rect):
     * underneath them. The result is a third buffer, owned by the caller.
     *
     * Coordinates are absolute (see the class documentation), so each input lands at the position it already claims.
-    * Cells of the union that neither input covers stay [[Cell.Empty]]. Where the two overlap, `other` wins, and it
-    * wins as a whole grapheme: the copy goes through [[blit]], so a two-column cluster cut by a seam is blanked rather
-    * than drawn torn.
+    * Cells of the union that neither input covers stay [[Cell.Empty]]. Where the two overlap, `other` wins, and it wins
+    * as a whole grapheme: the copy goes through [[blit]], so a two-column cluster cut by a seam is blanked rather than
+    * drawn torn.
     *
     * Both buffers must belong to the calling thread for the duration of the call, for the same reason [[blit]] does.
     */
@@ -323,14 +323,14 @@ final class Buffer(val area: Rect):
 
   /** Applies `visit(x, y, cell)` to every cell of `region` that this buffer covers, in row-major order.
     *
-    * The traversal every reader of a finished frame — a golden-frame writer, a test assertion, an alternative encoder
-    * — would otherwise write for itself as a nested loop over [[get]]. Two reasons to have it here rather than there:
-    * the bounds check happens once, on `region`, instead of once per cell; and nothing is allocated per cell, no
-    * `Position` and no tuple, which matters because a 200x50 frame is 10 000 cells.
+    * The traversal every reader of a finished frame — a golden-frame writer, a test assertion, an alternative encoder —
+    * would otherwise write for itself as a nested loop over [[get]]. Two reasons to have it here rather than there: the
+    * bounds check happens once, on `region`, instead of once per cell; and nothing is allocated per cell, no `Position`
+    * and no tuple, which matters because a 200x50 frame is 10 000 cells.
     *
     * `visit` sees the raw grid, continuation cells included — they arrive as the [[Cell.Empty]] they hold. A caller
-    * rebuilding what a terminal displays must skip them with [[isContinuation]] rather than print their blank, or a
-    * row containing a two-column grapheme comes out one column too wide.
+    * rebuilding what a terminal displays must skip them with [[isContinuation]] rather than print their blank, or a row
+    * containing a two-column grapheme comes out one column too wide.
     *
     * Writing into this buffer from inside `visit` is not supported: a write can move a neighbouring cell (see [[set]])
     * and the traversal has already decided which positions it will read.
@@ -384,10 +384,10 @@ final class Buffer(val area: Rect):
     * continuation cell of a wide grapheme in `next` are never emitted — flushing the wide cell itself repaints both
     * columns. If the two buffers cover different areas (e.g. after a resize), every cell of `next` is emitted.
     *
-    * One column is emitted even when its content did not change: a column that was the right half of a wide grapheme
-    * in this (previous) frame, is not one in `next`, and whose grapheme painted a style that shows through a blank —
-    * see [[visibleOnBlank]]. Both frames hold [[Cell.Empty]] there, so a plain content compare calls it unchanged,
-    * yet the terminal is still painting the old glyph's background across that half-cell.
+    * One column is emitted even when its content did not change: a column that was the right half of a wide grapheme in
+    * this (previous) frame, is not one in `next`, and whose grapheme painted a style that shows through a blank — see
+    * [[visibleOnBlank]]. Both frames hold [[Cell.Empty]] there, so a plain content compare calls it unchanged, yet the
+    * terminal is still painting the old glyph's background across that half-cell.
     */
   def diff(next: Buffer): Iterator[(Position, Cell)] =
     val changes = Iterator.newBuilder[(Position, Cell)]
@@ -419,8 +419,8 @@ final class Buffer(val area: Rect):
     * produce different diffs.
     *
     * '''A `Buffer` is mutable''', so this answer — and [[hashCode]] with it — changes as a frame is rendered into the
-    * buffer. Compare or hash one only while nothing is writing to it, and never use one as a key in a hash map: the
-    * key would move out from under the map on the next `set`.
+    * buffer. Compare or hash one only while nothing is writing to it, and never use one as a key in a hash map: the key
+    * would move out from under the map on the next `set`.
     */
   override def equals(other: Any): Boolean = other match
     case that: Buffer =>
@@ -454,8 +454,8 @@ final class Buffer(val area: Rect):
     * frames differ. This prints three sections instead, following ratatui's `Debug for Buffer`:
     *
     *   - `content` — one quoted string per row, every column included. Continuation cells hold [[Cell.Empty]] by
-    *     construction, so they print as a space and the rows stay aligned in the dump even though the wide glyph
-    *     before them takes two columns on a real terminal.
+    *     construction, so they print as a space and the rows stay aligned in the dump even though the wide glyph before
+    *     them takes two columns on a real terminal.
     *   - `styles` — one line per *change* of style in row-major order, not one line per cell. A frame is usually a few
     *     long runs of one style, so listing the runs is what makes a wrong colour visible instead of drowned.
     *   - `hidden` — the positions holding the second column of a two-column grapheme, which the `content` section
@@ -551,9 +551,9 @@ final class Buffer(val area: Rect):
 
 /** Ways of building a buffer from content that is already laid out, rather than from an empty rectangle.
   *
-  * `Buffer(rect)` — the class's own constructor — remains how a render target is allocated. These factories are for
-  * the other direction: a test that wants to write the frame it expects as a literal, instead of allocating a `Rect`
-  * of the right size by hand and calling `setString` once per row.
+  * `Buffer(rect)` — the class's own constructor — remains how a render target is allocated. These factories are for the
+  * other direction: a test that wants to write the frame it expects as a literal, instead of allocating a `Rect` of the
+  * right size by hand and calling `setString` once per row.
   */
 object Buffer:
 

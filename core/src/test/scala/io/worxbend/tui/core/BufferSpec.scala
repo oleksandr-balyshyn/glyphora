@@ -364,8 +364,8 @@ final class BufferSpec extends AnyFunSuite:
 
   test("consecutive bounded writes chain by their own answers"):
     // the reason the count is returned at all: laying a row out as segments without measuring any of them twice
-    val buf     = buffer(8, 1)
-    var column  = 0
+    val buf    = buffer(8, 1)
+    var column = 0
     Seq("漢", "ab", "cdef").foreach { segment =>
       column += buf.setString(column, 0, segment, Style.Default, 8 - column)
     }
@@ -415,7 +415,7 @@ final class BufferSpec extends AnyFunSuite:
     assert(merged.get(0, 0) == Cell("a", Style.Default))
     assert(merged.get(2, 0) == Cell("X", Style.Default.bold)) // the overlay wins where they overlap
     assert(merged.get(4, 0) == Cell.Empty)                    // covered by the overlay's area but never written
-    assert(merged.get(0, 1) == Cell.Empty)                    // covered by neither input's content
+    assert(merged.get(0, 1) == Cell.Empty) // covered by neither input's content
 
   test("merged leaves both inputs untouched"):
     val base    = Buffer(Rect(0, 0, 2, 1))
@@ -480,9 +480,9 @@ final class BufferSpec extends AnyFunSuite:
     assert(dump.contains("x: 1, y: 0, hidden by a two-column grapheme"))
 
   test("the debug dump lists style runs, not one line per cell"):
-    val buf   = buffer(6, 1)
+    val buf  = buffer(6, 1)
     buf.setString(0, 0, "ab", Style.Default.bold)
-    val runs  = buf.toString.linesIterator.filter(_.contains("Style")).toSeq
+    val runs = buf.toString.linesIterator.filter(_.contains("Style")).toSeq
     // one line opening the bold run at column 0, one closing it at column 2 where the untouched cells begin
     assert(runs.size == 2, runs)
     assert(runs.head.contains("x: 0, y: 0"))
