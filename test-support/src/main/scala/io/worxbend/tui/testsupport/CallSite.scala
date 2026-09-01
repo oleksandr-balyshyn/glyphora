@@ -25,7 +25,7 @@ private[testsupport] object CallSite:
     * very frame the trimming exists to expose whenever a glyphora suite is the caller. A new helper that throws an
     * assertion adds its name here.
     */
-  private val Helpers: Set[String] = Set("BufferAssertions", "GoldenFrames", "Pilot", "CallSite")
+  private val Helpers: Set[String] = Set("BufferAssertions", "GoldenFrames", "GoldenFixtures", "Pilot", "CallSite")
 
   /** Whether `frame` belongs to one of the [[Helpers]]. Companion objects and lambdas append `$…` to the class name, so
     * only the part before the first `$` is compared.

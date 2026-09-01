@@ -211,6 +211,32 @@ therefore matches a golden file that ends after the last row with content, and a
 editor that adds or removes a final newline cannot break a test. Blank rows *between*
 content are significant and are compared like any other row.
 
+### A fixture that outlives its test
+
+Naming a fixture that is not on disk fails immediately. The opposite mistake is
+silent: delete or rename the test, and its `golden/<name>.txt` file stays in the
+repository forever, reviewed as if it still guarded something while guarding nothing.
+
+`GoldenFixtures` catches that. Point it at a module's test resources and its test
+sources, and it fails when a fixture is named by no `assertMatches("…", …)` or
+`assertGolden("…")` call anywhere in those sources:
+
+```scala
+import io.worxbend.tui.testsupport.GoldenFixtures
+
+GoldenFixtures.assertNoOrphans(Path.of("src/test/resources"), Path.of("src/test/scala"))
+```
+
+It reads the source files rather than counting assertions while the tests run,
+because the build gives each test class its own JVM — no single process ever sees the
+names that every suite in a module asserted. The consequence is that only names
+written out as string literals are recognised: a fixture whose name is computed at run
+time would be reported as an orphan, so keep those names literal. A missing sources
+directory fails loudly rather than reporting the whole module as orphaned.
+
+In this repository the check runs once, from `GoldenFixtureDisciplineSpec` in
+`dsl.test`, over every module and example in the checkout.
+
 ## Drive a full app with Pilot
 
 `Pilot` starts the app on a daemon thread, posts input into a `HeadlessBackend`, and
