@@ -127,9 +127,9 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
         textAreaPixels =
           if cookedAttributes.isEmpty then None
           else
-            screenOwnership.synchronized {
-              write(AnsiSequences.RequestTextAreaPixels)
-            }
+            write(AnsiSequences.RequestTextAreaPixels)
+            // the *read* deliberately stays outside the monitor, for the reason [[queryCursorPosition]] gives: a read
+            // holding it for the length of the timeout would block the Ctrl+Z handover
             decoder.readTextAreaSize(JLine3Backend.PixelQueryTimeout)
         WindowSize(currentSize, textAreaPixels)
     }
@@ -342,33 +342,21 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   /** Writes CUP (`CSI row ; column H`) to park the terminal's own caret on `position`.
     *
-    * Taken under `screenOwnership` for the same reason the frame write in [[draw]] is: a Ctrl+Z landing between leaving
-    * the alternate screen and this write would move the cursor around in the user's shell instead.
-    *
     * Nothing has to be done to the frame diff afterwards. [[FrameEncoder.encode]] starts every frame with
     * `expectedX = -1`, so it emits an absolute move before its first cell and cannot be misled about where the caret
     * was left by the previous frame.
     */
   override def setCursorPosition(position: Position): Either[BackendError, Unit] =
-    attempt {
-      screenOwnership.synchronized {
-        write(AnsiSequences.moveTo(position.x, position.y))
-      }
-    }
+    attempt(write(AnsiSequences.moveTo(position.x, position.y)))
 
   /** Writes DECSET/DECRST 12 to switch the caret's blink on or off.
-    *
-    * Taken under `screenOwnership` for the same reason [[setCursorPosition]] is: this is a write to the terminal, and a
-    * Ctrl+Z landing between leaving the alternate screen and this one would aim it at the user's shell.
     *
     * The suppression is remembered so that [[releaseTerminal]] can undo it — see `cursorBlinkSuppressed`.
     */
   override def setCursorBlink(blinking: Boolean): Either[BackendError, Unit] =
     attempt {
-      screenOwnership.synchronized {
-        write(if blinking then AnsiSequences.EnableCursorBlink else AnsiSequences.DisableCursorBlink)
-        cursorBlinkSuppressed = !blinking
-      }
+      write(if blinking then AnsiSequences.EnableCursorBlink else AnsiSequences.DisableCursorBlink)
+      cursorBlinkSuppressed = !blinking
     }
 
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
@@ -415,9 +403,6 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   /** Writes the XTerm "resize the text area" sequence.
     *
-    * Under `screenOwnership` like every other out-of-band write, so a Ctrl+Z cannot land between leaving the alternate
-    * screen and this write and aim it at the user's shell.
-    *
     * Nothing is recorded and nothing is restored on the way out: unlike raw mode or the alternate screen, a window size
     * is not a mode this backend switched on and owes the shell back. If the emulator honoured the request, the new size
     * is the user's terminal now, and shrinking it back on exit would be this library second-guessing a change the user
@@ -425,18 +410,14 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     */
   override def requestSize(size: Size): Either[BackendError, Unit] =
     require(size.width > 0 && size.height > 0, s"requestSize needs a positive size, got $size")
-    attempt {
-      screenOwnership.synchronized {
-        write(AnsiSequences.resizeWindow(size))
-      }
-    }
+    attempt(write(AnsiSequences.resizeWindow(size)))
 
   /** Writes `ESC[6n` and reads the terminal's reply off the input stream.
     *
-    * The write is taken under `screenOwnership` like every other out-of-band write; the *read* deliberately is not. A
-    * read that held the monitor for the length of the timeout would block the signal handler that hands the terminal
-    * back on Ctrl+Z — exactly the key a user reaches for when something seems stuck. What protects the decoder from a
-    * second reader is the render-thread contract in [[Backend.queryCursorPosition]], not this monitor.
+    * The *read* deliberately runs outside `screenOwnership`, unlike the write in front of it. A read that held the
+    * monitor for the length of the timeout would block the signal handler that hands the terminal back on Ctrl+Z —
+    * exactly the key a user reaches for when something seems stuck. What protects the decoder from a second reader is
+    * the render-thread contract in [[Backend.queryCursorPosition]], not this monitor.
     *
     * A terminal that does not implement the report never answers, so the timeout expiring is reported as an unsupported
     * terminal rather than as an I/O failure: nothing broke, the terminal simply cannot say.
@@ -444,9 +425,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   override def queryCursorPosition(timeout: Duration): Either[BackendError, Position] =
     Backend.requirePositiveTimeout(timeout)
     attempt {
-      screenOwnership.synchronized {
-        write(AnsiSequences.RequestCursorPosition)
-      }
+      write(AnsiSequences.RequestCursorPosition)
       decoder.readCursorReport(timeout)
     }.flatMap {
       case Some(position) => Right(position)
@@ -563,17 +542,12 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * move it, and needs no knowledge of the terminal's height. What it *does* do is move every row that stays on
     * screen, so the diff baseline no longer describes what is displayed — hence the forced repaint, raised through the
     * same [[requestFullRedraw]] the alternate screen and SIGCONT use rather than a second mechanism.
-    *
-    * Under `screenOwnership` for the same reason [[draw]] is: the scroll must not land between the two halves of
-    * someone else's screen handover.
     */
   override def appendLines(n: Int): Either[BackendError, Unit] =
     if n <= 0 then Right(())
     else
       attempt {
-        screenOwnership.synchronized {
-          write(AnsiSequences.scrollUp(n))
-        }
+        write(AnsiSequences.scrollUp(n))
         requestFullRedraw()
       }
 
@@ -730,9 +704,18 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   private def bestEffort(step: Either[BackendError, Unit]): Unit =
     step.left.foreach(error => System.err.println(s"glyphora: could not reclaim the terminal: ${error.message}"))
 
+  /** Writes one sequence to the terminal and flushes it, under `screenOwnership`.
+    *
+    * Every sequence goes out under the monitor, so a Ctrl+Z cannot land between leaving the alternate screen and the
+    * write and aim it at the user's shell. The monitor is reentrant, so a caller that needs a wider critical section —
+    * `draw`'s single batched frame, `probeCapabilities`' five queries, the two teardown paths — simply takes it and
+    * calls this.
+    */
   private def write(sequence: String): Unit =
-    terminal.writer().write(sequence)
-    terminal.writer().flush()
+    screenOwnership.synchronized {
+      terminal.writer().write(sequence)
+      terminal.writer().flush()
+    }
 
   private def attempt[A](body: => A): Either[BackendError, A] =
     try Right(body)
