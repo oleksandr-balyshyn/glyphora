@@ -359,6 +359,15 @@ def serviceList(using ReactiveScope, Theme): Element =
   }
 ```
 
+While a list is focused, Up and Down move the highlight one row, Home and End jump to
+the first and last item, and PageUp/PageDown move it ten rows at a time. Those four
+jumps are also available on the state object as `selectFirst`, `selectLast` and
+`selectBy` (which takes a signed number of rows), so an app can bind its own keys to
+them. None of them touches the scroll offset: the list re-derives that during the next
+render, which is what scrolls the chosen row into view. A `dataTable` gains the
+same four moves, except that a table with paging turned on keeps PageUp/PageDown for
+turning pages.
+
 By default the highlight is allowed to come to rest on the very first or very last
 visible row, with more items sitting just out of sight below it — the reader cannot see
 what is coming next. `ListState(scrollPadding = 2)` keeps two further items visible on

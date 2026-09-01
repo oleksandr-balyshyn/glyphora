@@ -24,6 +24,10 @@ package io.worxbend.tui.widgets
   * over a sequence of values instead of a count. [[Menu]] is the wrapping one and calls
   * [[nextSelectable]]/[[previousSelectable]].
   *
+  * '''Beyond one step at a time.''' [[first]] and [[last]] are the Home and End answers, and [[by]] is the general
+  * clamped move that PageUp and PageDown use — [[next]] and [[previous]] are simply [[by]] with a `delta` of `+1` and
+  * `-1`, so there is one place where the clamping rule lives.
+  *
   * These are pure functions of the values passed in. The selection itself lives in caller-owned state, which the render
   * thread reads, so the same thread constraint the widgets carry applies to whoever stores the result.
   */
@@ -36,14 +40,37 @@ private[widgets] object Selection:
     * pressing "down" into a fresh list selects its first row. `None` when the list is empty, because there is nothing
     * to point at.
     */
-  def next(current: Option[Int], count: Int): Option[Int] =
-    if count <= 0 then None else Some(current.fold(0)(index => math.min(index + 1, count - 1)))
+  def next(current: Option[Int], count: Int): Option[Int] = by(current, count, 1)
 
   /** The index one step before `current`, clamped at index 0 — the mirror of [[next]], including its behaviour with
     * nothing selected yet and with an empty list.
     */
-  def previous(current: Option[Int], count: Int): Option[Int] =
-    if count <= 0 then None else Some(current.fold(0)(index => math.max(index - 1, 0)))
+  def previous(current: Option[Int], count: Int): Option[Int] = by(current, count, -1)
+
+  /** `current` moved `delta` places, clamped to both ends of a list of `count` items — the screenful jump PageUp and
+    * PageDown make, and the one owner of the clamping rule that [[next]] and [[previous]] are the one-step cases of.
+    *
+    * Clamping rather than wrapping, for the reason [[next]] gives: a page jump that ran off the end and reappeared at
+    * the top would move the highlight somewhere the reader is not looking. With nothing selected yet the move starts
+    * With nothing selected yet the move starts from a sentinel just outside the list — the same trick [[moveWithin]]
+    * uses — so that the very first downward move of one place lands on index 0 rather than skipping it, and any
+    * upward move stays on index 0. That is what lets [[next]] and [[previous]] be defined as the `delta` of `+1` and
+    * `-1` without changing what either of them did. `None` when the list is empty, because there is nothing to point
+    * at.
+    */
+  def by(current: Option[Int], count: Int, delta: Int): Option[Int] =
+    if count <= 0 then None
+    else
+      val noSelectionStart = if delta > 0 then -1 else 0
+      Some(math.max(0, math.min(current.getOrElse(noSelectionStart) + delta, count - 1)))
+
+  /** The first index of a list of `count` items — the Home key's answer, and `None` when the list is empty. */
+  def first(count: Int): Option[Int] =
+    if count <= 0 then None else Some(0)
+
+  /** The last index of a list of `count` items — the End key's answer, and `None` when the list is empty. */
+  def last(count: Int): Option[Int] =
+    if count <= 0 then None else Some(count - 1)
 
   /** The next index after `current` that `isSelectable` accepts, wrapping past the end — the popup-menu rule.
     *

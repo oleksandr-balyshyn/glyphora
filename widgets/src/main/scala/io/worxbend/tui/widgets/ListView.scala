@@ -25,6 +25,25 @@ final class ListState(var selected: Option[Int] = None, var offset: Int = 0, var
   def selectPrevious(itemCount: Int): Unit =
     if itemCount > 0 then selected = Selection.previous(selected, itemCount)
 
+  /** Selects the first item — the Home key's move. A no-op on an empty list. */
+  def selectFirst(itemCount: Int): Unit =
+    if itemCount > 0 then selected = Selection.first(itemCount)
+
+  /** Selects the last item — the End key's move. A no-op on an empty list.
+    *
+    * This deliberately leaves `offset` alone. The widget re-derives the offset during render to bring the selection
+    * back into view, so the list scrolls to the bottom on the next frame without this method having to guess at a
+    * viewport height it cannot see from here.
+    */
+  def selectLast(itemCount: Int): Unit =
+    if itemCount > 0 then selected = Selection.last(itemCount)
+
+  /** Moves the selection `delta` items, clamped at both ends — the screenful jump PageUp and PageDown make. A negative
+    * `delta` moves toward the first item. A no-op on an empty list.
+    */
+  def selectBy(itemCount: Int, delta: Int): Unit =
+    if itemCount > 0 then selected = Selection.by(selected, itemCount, delta)
+
 /** A scrollable list of single-row items with an optional highlighted selection.
   *
   * Named `ListView` rather than the reference libraries' `List` to avoid colliding with `scala.List` at every call

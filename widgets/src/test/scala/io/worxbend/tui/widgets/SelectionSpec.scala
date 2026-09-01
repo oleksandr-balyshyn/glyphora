@@ -31,6 +31,37 @@ final class SelectionSpec extends AnyFunSuite:
     assert(Selection.moveWithin(Seq("a", "b", "c"), Some("gone"), +1) == Some("a"))
   }
 
+  test("first and last answer the ends of the list, and nothing on an empty one") {
+    assert(Selection.first(3) == Some(0))
+    assert(Selection.last(3) == Some(2))
+    assert(Selection.first(0).isEmpty)
+    assert(Selection.last(0).isEmpty)
+  }
+
+  test("a page-sized move clamps at both ends") {
+    assert(Selection.by(Some(1), 10, +10) == Some(9))
+    assert(Selection.by(Some(8), 10, -10) == Some(0))
+    assert(Selection.by(Some(3), 10, +2) == Some(5))
+    assert(Selection.by(Some(0), 0, +1).isEmpty)
+  }
+
+  test("a page-sized move with nothing selected starts from just outside the list") {
+    // the same sentinel `moveWithin` uses, so a one-place move still lands on index 0 rather than skipping it
+    assert(Selection.by(None, 10, +1) == Some(0))
+    assert(Selection.by(None, 10, +10) == Some(9))
+    assert(Selection.by(None, 10, -10) == Some(0))
+  }
+
+  test("next and previous are the one-place cases of the general move") {
+    (0 until 4).foreach { count =>
+      val positions = None +: (0 until count).map(Some(_))
+      positions.foreach { current =>
+        assert(Selection.next(current, count) == Selection.by(current, count, +1))
+        assert(Selection.previous(current, count) == Selection.by(current, count, -1))
+      }
+    }
+  }
+
   test("the popup rule wraps where the list rule clamps") {
     val anything = (_: Int) => true
     assert(Selection.nextSelectable(Some(2), 3, anything) == Some(0))

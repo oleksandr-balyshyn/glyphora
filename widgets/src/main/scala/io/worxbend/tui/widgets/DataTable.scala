@@ -150,6 +150,26 @@ final class DataTableState:
     selected = Some(math.max(0, row))
     selectedColumn = Some(math.max(0, column))
 
+  /** Selects the first visible row — the Home key's move. A no-op when the filter has left nothing to select.
+    *
+    * `visibleCount` is the number of rows *after* filtering and sorting, not `rows.size`: the selection is an index
+    * into the view the reader is looking at.
+    */
+  def selectFirst(visibleCount: Int): Unit =
+    if visibleCount > 0 then selected = Selection.first(visibleCount)
+
+  /** Selects the last visible row — the End key's move, with the same `visibleCount` contract as [[selectFirst]].
+    *
+    * Like the other selection moves this leaves `offset` alone; the table re-derives it during render to scroll the
+    * chosen row into view.
+    */
+  def selectLast(visibleCount: Int): Unit =
+    if visibleCount > 0 then selected = Selection.last(visibleCount)
+
+  /** Moves the selection `delta` visible rows, clamped at both ends — the screenful jump PageUp and PageDown make. */
+  def selectBy(visibleCount: Int, delta: Int): Unit =
+    if visibleCount > 0 then selected = Selection.by(selected, visibleCount, delta)
+
 object DataTableState:
   /** Everything that can change the filtered/sorted view, used as the memoization key. */
   private[widgets] final case class ViewKey(

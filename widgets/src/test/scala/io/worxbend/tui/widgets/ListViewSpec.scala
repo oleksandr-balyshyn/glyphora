@@ -45,6 +45,35 @@ final class ListViewSpec extends AnyFunSuite:
     state.selectPrevious(4)
     assert(state.selected.contains(0))
 
+  test("selectLast scrolls to the bottom without the state ever touching the offset"):
+    val fifty = ListView((0 until 50).map(index => s"item-$index"))
+    val state = ListState()
+    state.selectLast(50)
+    assert(state.selected.contains(49))
+    assert(state.offset == 0) // the state does not know the viewport height, so it leaves the offset to the render
+    val buffer = rendered(fifty, state, 12, 5)
+    assert(trimmedLines(buffer) == Seq("  item-45", "  item-46", "  item-47", "  item-48", "> item-49"))
+    assert(state.offset == 45)
+
+  test("selectFirst and selectBy make the Home and PageUp moves"):
+    val state = ListState()
+    state.selectLast(50)
+    state.selectBy(50, -10)
+    assert(state.selected.contains(39))
+    state.selectBy(50, -100) // a page jump past the start stops at the first item rather than wrapping
+    assert(state.selected.contains(0))
+    state.selectBy(50, +10)
+    assert(state.selected.contains(10))
+    state.selectFirst(50)
+    assert(state.selected.contains(0))
+
+  test("the jump moves are no-ops on an empty list"):
+    val state = ListState(selected = Some(2))
+    state.selectFirst(0)
+    state.selectLast(0)
+    state.selectBy(0, +5)
+    assert(state.selected.contains(2)) // untouched, exactly as selectNext/selectPrevious leave it
+
   test("scrollPadding scrolls the list before the highlight reaches the bottom row"):
     val twenty  = ListView((0 until 20).map(index => s"item-$index"))
     val atSeven = ListState(selected = Some(7), scrollPadding = 2)

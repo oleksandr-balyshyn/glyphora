@@ -30,7 +30,16 @@ final case class ListElement(
     (area, buffer) => view.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): ListElement               = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =
-    Some(selectionKeys(() => state.selectNext(items.size), () => state.selectPrevious(items.size)))
+    Some(
+      selectionKeys(() => state.selectNext(items.size), () => state.selectPrevious(items.size))
+        .orElse(
+          selectionJumpKeys(
+            () => state.selectFirst(items.size),
+            () => state.selectLast(items.size),
+            delta => state.selectBy(items.size, delta),
+          )
+        )
+    )
 
 /** A collapsible tree over an in-memory node list. Up/Down move the selection through the *visible* rows and Enter
   * expands or collapses the selected branch (a no-op on a leaf), all while focused; the wheel moves the selection on
@@ -128,6 +137,13 @@ final case class SelectionListElement(
     Some(
       keys { case KeyEvent(KeyCode.Char(' '), _) => state.selected.foreach(onToggle) }
         .orElse(selectionKeys(() => state.selectNext(items.size), () => state.selectPrevious(items.size)))
+        .orElse(
+          selectionJumpKeys(
+            () => state.selectFirst(items.size),
+            () => state.selectLast(items.size),
+            delta => state.selectBy(items.size, delta),
+          )
+        )
     )
 
 /** A file chooser over a [[FilePickerState]]: arrows navigate, Enter opens directories or accepts a file into
@@ -212,6 +228,14 @@ final case class DataTableElement(
         selectionKeys(
           () => state.selectNext(table.visibleRows(state).size),
           () => state.selectPrevious(table.visibleRows(state).size),
+        )
+      ).orElse(
+        // the paging branch above is guarded on `state.paging.nonEmpty` and runs first, so a paged table keeps
+        // PageUp/PageDown turning pages; only an unpaged one falls through to jumping the selection by a screenful
+        selectionJumpKeys(
+          () => state.selectFirst(table.visibleRows(state).size),
+          () => state.selectLast(table.visibleRows(state).size),
+          delta => state.selectBy(table.visibleRows(state).size, delta),
         )
       )
     )
