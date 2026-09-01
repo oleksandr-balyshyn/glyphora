@@ -41,6 +41,11 @@ private[terminal] object AnsiSequences:
   val DisableBracketedPaste: String = s"$Esc[?2004l"
   val EnableFocusReporting: String  = s"$Esc[?1004h"
   val DisableFocusReporting: String = s"$Esc[?1004l"
+  // DECSTBM with no parameters — the scroll region becomes the whole screen again. Declared here, above RestoreAll,
+  // rather than beside `setScrollRegion` further down: an object's `val`s initialise in declaration order, and
+  // RestoreAll names this one, so a definition below it would be read as null while RestoreAll was being built.
+  // See `setScrollRegion` for what a region is and why leaving one set is the failure worth guarding against.
+  val ResetScrollRegion: String     = s"$Esc[r"
   val BeginSynchronized: String     = s"$Esc[?2026h"
   val EndSynchronized: String       = s"$Esc[?2026l"
 
@@ -74,13 +79,6 @@ private[terminal] object AnsiSequences:
   val PopKittyKeyboard: String  = s"$Esc[<u"
   val LinkClose: String         = s"$Esc]8;;$Esc\\"
 
-  /** DECSTBM with no parameters: the scrolling region becomes the whole screen again.
-    *
-    * Idempotent, like the mode resets it sits beside in [[RestoreAll]] — resetting a region that was never set does
-    * nothing at all.
-    */
-  val ResetScrollRegion: String = s"$Esc[r"
-
   /** DECSC (`ESC 7`), "save cursor": stores the cursor position, and the terminal's own graphic-rendition and
     * character-set state, in a one-slot register.
     *
@@ -110,6 +108,10 @@ private[terminal] object AnsiSequences:
     * and it belongs here for exactly the same reason. A process killed while a scrolling region was set would otherwise
     * leave the user's *shell* scrolling inside a sub-rectangle of their terminal, which is the class of damage this
     * string exists to prevent.
+    *
+    * [[ResetScrollRegion]] is the one member that is not a private-mode reset. It earns its place by the same property:
+    * releasing a scroll region that was never set leaves the screen exactly as it was, and a region left clamped
+    * outlives the process and turns most of the user's terminal into rows that scrolling refuses to touch.
     *
     * [[EndSynchronized]] leads. A frame is written as one `?2026h` … `?2026l` pair (see `JLine3Backend.draw`), which
     * asks the terminal to hold everything back until the closing half arrives so a half-drawn frame is never shown. A

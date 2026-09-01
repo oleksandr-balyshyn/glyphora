@@ -36,9 +36,11 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val fullRedrawCounter                                = AtomicLong(0)
   private val printedLines                                     = scala.collection.mutable.ArrayBuffer.empty[String]
   private val clears                                           = scala.collection.mutable.ArrayBuffer.empty[ClearType]
-  private val insertedBlocks                                   = scala.collection.mutable.ArrayBuffer.empty[Buffer]
+  private val insertedBlocks  = scala.collection.mutable.ArrayBuffer.empty[Buffer]
   private val scrolledRegions = scala.collection.mutable.ArrayBuffer.empty[ScrolledRegion]
   private val sizeRequests    = scala.collection.mutable.ArrayBuffer.empty[Size]
+  private val scrolls         =
+    scala.collection.mutable.ArrayBuffer.empty[(RowRange, Int, ScrollDirection)]
 
   def size: Either[BackendError, Size] = Right(terminalSize)
 
@@ -143,6 +145,27 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     sizeRequests.synchronized { val _ = sizeRequests += size }
     resizeTo(size)
     Right(())
+
+  /** Records the scroll and applies it to the retained frame, so a test sees the rows where the terminal would have put
+    * them.
+    *
+    * The trait's default is a failure — "this backend has no scroll region" — so that a caller knows to repaint the
+    * rows itself. This backend answers `Right` instead, because it *can* model the operation exactly: there is no
+    * device to refuse, and a test driving an app that scrolls this way needs to see the app's own frames rather than
+    * its fallback path. A test that wants the fallback exercised should drive a backend whose default stands.
+    */
+  override def scrollRegionUp(region: RowRange, lines: Int): Either[BackendError, Unit] =
+    recordScroll(region, lines, ScrollDirection.Up)
+
+  override def scrollRegionDown(region: RowRange, lines: Int): Either[BackendError, Unit] =
+    recordScroll(region, lines, ScrollDirection.Down)
+
+  private def recordScroll(region: RowRange, lines: Int, direction: ScrollDirection): Either[BackendError, Unit] =
+    if lines <= 0 then Right(())
+    else
+      scrolls.synchronized { val _ = scrolls += ((region, lines, direction)) }
+      lastFrame = lastFrame.map(frame => ScrollDirection.shifted(frame, region, lines, direction))
+      Right(())
 
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     lastClipboard = Some(text)
@@ -290,6 +313,14 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** How many times a full repaint was requested via [[requestFullRedraw]]. */
   def fullRedrawCount: Long = fullRedrawCounter.get()
+
+  /** Every region scroll asked for via [[scrollRegionUp]] or [[scrollRegionDown]], in order, as
+    * `(rows, lines, direction)`.
+    *
+    * The interesting assertion is usually the *count*: an app that scrolls a list one row and repaints the whole list
+    * anyway is a correct app doing the expensive thing, and this is what tells the two apart.
+    */
+  def regionScrolls: Seq[(RowRange, Int, ScrollDirection)] = scrolls.synchronized(scrolls.toSeq)
 
   /** The sizes asked for via [[requestSize]], in order — what the app wanted, as opposed to what it got. */
   def requestedSizes: Seq[Size] = sizeRequests.synchronized(sizeRequests.toSeq)

@@ -330,6 +330,47 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       }
     }
 
+  override def scrollRegionUp(region: RowRange, lines: Int): Either[BackendError, Unit] =
+    scrollRegion(region, lines, ScrollDirection.Up)
+
+  override def scrollRegionDown(region: RowRange, lines: Int): Either[BackendError, Unit] =
+    scrollRegion(region, lines, ScrollDirection.Down)
+
+  /** Confines scrolling to `region`, scrolls it, and releases the region again.
+    *
+    * The release is not deferred to teardown: a region left set makes every later scroll — this app's, and the user's
+    * shell after it exits — refuse to touch the rest of the screen.
+    *
+    * The diff baseline is shifted to match, so the next [[draw]] writes only the rows the scroll newly exposed. That
+    * shift is the entire saving. Without it the following frame would find every row of the band changed and repaint
+    * the lot, which is the work this call exists to avoid.
+    *
+    * A region reaching past the bottom of the terminal is refused rather than clamped: clamping would scroll a band the
+    * caller did not name, and the wrong rows moving is far harder to notice than a rejected call.
+    */
+  private def scrollRegion(region: RowRange, lines: Int, direction: ScrollDirection): Either[BackendError, Unit] =
+    if lines <= 0 then Right(())
+    else
+      size.flatMap { terminalSize =>
+        if region.bottom >= terminalSize.height then
+          Left(BackendError.UnsupportedTerminal(s"row range $region does not fit a terminal of $terminalSize"))
+        else
+          attempt {
+            screenOwnership.synchronized {
+              write(
+                AnsiSequences.setScrollRegion(region.top, region.bottom) +
+                  ScrollDirection.sequence(direction, lines) +
+                  AnsiSequences.ResetScrollRegion
+              )
+            }
+            // The baseline is the frame `draw` diffs against, so it has to be shifted exactly as the terminal just
+            // shifted the screen; otherwise every row of the band reads as changed and the next frame repaints them
+            // all, which is the work this call exists to avoid. Only when it is valid: before the first frame it
+            // describes nothing.
+            if baselineValid then baseline.copyFrom(ScrollDirection.shifted(baseline, region, lines, direction))
+          }
+      }
+
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     attempt(write(AnsiSequences.clipboardCopy(text)))
 

@@ -62,6 +62,40 @@ trait Backend:
     val _ = position
     Right(())
 
+  /** Asks the terminal itself to shift the rows of `region` up by `lines`, instead of repainting them.
+    *
+    * What this is for. A list of forty rows scrolled by one costs, through the ordinary frame diff, forty rows of
+    * changed cells — every row now holds what the row below it held. The terminal can do the same job with one escape
+    * sequence: confine scrolling to the band (DECSTBM), scroll it (SU), and the only row the application still has to
+    * write is the one newly exposed at the bottom. On a slow link that is the difference between a scroll that keeps up
+    * with a held-down arrow key and one that does not.
+    *
+    * Two things to know before reaching for it. Rows leaving the top of a *region* are discarded — they do not enter
+    * the terminal's scrollback the way rows leaving the top of the whole screen do; [[appendLines]] is the operation
+    * for that. And the region ends at `region.bottom` inclusive, so a caller that scrolls a list must pass the list's
+    * own rows and not the panel's, or it will move the border too.
+    *
+    * The backend's diff baseline is adjusted to match, so the next [[draw]] correctly writes only the newly exposed
+    * rows. Must run on the render thread. `lines <= 0` is a successful no-op, so a caller computing a delta needs no
+    * guard.
+    *
+    * The default reports [[BackendError.UnsupportedTerminal]] rather than succeeding silently: a caller that cannot
+    * scroll this way has to know, because its fallback is to repaint the rows itself, and a no-op that claimed success
+    * would leave the stale rows on screen.
+    */
+  def scrollRegionUp(region: RowRange, lines: Int): Either[BackendError, Unit] =
+    Backend.scrollUnsupported(region, lines)
+
+  /** As [[scrollRegionUp]], but downward: the rows of `region` move down by `lines`, `lines` blank rows appear at its
+    * top, and the rows pushed off its bottom are discarded.
+    *
+    * This is a list scrolling *backwards* — the user pressing Up at the top of the visible window — and it is the
+    * direction with no consolation prize at all: rows leaving the bottom of the screen have nowhere to go, whereas rows
+    * leaving the top of the whole screen at least reach the scrollback.
+    */
+  def scrollRegionDown(region: RowRange, lines: Int): Either[BackendError, Unit] =
+    Backend.scrollUnsupported(region, lines)
+
   /** Asks the terminal emulator to resize its text area to `size`.
     *
     * Named `requestSize` rather than `setSize`, and the asymmetry with the read-only [[size]] is the point: asking is
@@ -340,6 +374,30 @@ private[terminal] object Backend:
       rows += row.result().reverse.dropWhile(_ == ' ').reverse
       y += 1
     rows.result()
+  /** The answer both scroll-region defaults give: this backend has no scroll region to offer.
+    *
+    * A failure rather than a silent success, because the caller's fallback is to repaint the rows itself. A no-op that
+    * reported `Right(())` would leave the stale rows on screen and give nothing to notice it by.
+    */
+  private def scrollUnsupported(region: RowRange, lines: Int): Either[BackendError, Unit] =
+    val _ = (region, lines)
+    Left(BackendError.UnsupportedTerminal("this backend has no scroll region"))
+
+/** An inclusive, zero-based band of terminal rows — the unit [[Backend.scrollRegionUp]] operates on.
+  *
+  * Rows only, and deliberately not a [[io.worxbend.tui.core.Rect]]: a `Rect` carries columns, and the terminal's own
+  * scroll region has no column margins on the emulators this library targets. Handing one over would promise a
+  * horizontal bound that the sequence then quietly ignores, moving the full width of every row inside the band.
+  *
+  * `bottom` is inclusive because that is how DECSTBM reads and how every reference for it is written; an exclusive
+  * bound here would put an off-by-one between this type and the specification it exists to express.
+  */
+final case class RowRange(top: Int, bottom: Int):
+  require(top >= 0, s"a row range starts at or after row 0, got $top")
+  require(bottom >= top, s"a row range ends at or after it starts, got $top..$bottom")
+
+  /** How many rows the band covers — at least one, since `bottom` is inclusive. */
+  def height: Int = bottom - top + 1
 
 /** Which part of the screen [[Backend.clearRegion]] erases.
   *

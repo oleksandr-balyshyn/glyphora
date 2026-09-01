@@ -200,7 +200,20 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   that honour it clamp it to the screen, and a tiling window manager overrules both.
   `size` and `Event.Resize` therefore stay the only truth about how big the terminal
   is — never wait for a resize event that may never arrive.
-  All of these are defaulted no-ops on the trait, so a backend written before they
+  `scrollRegionUp(rows, lines)` and `scrollRegionDown` ask the terminal to shift a
+  band of rows itself. Scrolling a forty-row list by one costs, through the ordinary
+  frame diff, forty rows of changed cells — every row now holds what the row below it
+  held. The terminal can do it with one escape sequence (DECSTBM to confine scrolling
+  to the band, then SU or SD), leaving the application only the row newly exposed at
+  the end. `RowRange(top, bottom)` names the band; both ends are inclusive and
+  zero-based, matching the sequence. Two caveats: rows leaving the top of a *region*
+  are discarded rather than entering the terminal's scrollback (that is what
+  `appendLines` is for), and the backend adjusts its own diff baseline to match, which
+  is what makes the saving real rather than theoretical. Unlike the other optional
+  operations these two default to a `BackendError.UnsupportedTerminal` failure rather
+  than a silent success, because the caller's fallback is to repaint the rows itself
+  and a no-op claiming success would leave stale rows on screen.
+  All the others are defaulted no-ops on the trait, so a backend written before they
   existed still compiles.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`
   and `org.jline:jline-terminal-jni` 3.30.x, pinned. Those two rather than the
