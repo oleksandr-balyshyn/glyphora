@@ -32,6 +32,13 @@ final class Painter private[widgets] (
   private val surface                = SubCellSurface(area, resolution, marker)
   private val styles                 = Array.fill(surface.slotCount)(Style.Default)
   private val (dotsAcross, dotsDown) = SubCell.dotsPerCell(resolution)
+  private val (xMin, xMax)           = xBounds
+  private val (yMin, yMax)           = yBounds
+
+  /** Whether the world rectangle has extent on both axes. A degenerate bound (`xMin == xMax`) has no mapping onto dots
+    * at all, so every paint is dropped rather than divided by zero.
+    */
+  private val hasExtent: Boolean = xMax > xMin && yMax > yMin
 
   /** Labels recorded by [[print]], as `(cell x, cell y, line)`, written by [[flush]] once every dot is down.
     *
@@ -64,8 +71,7 @@ final class Painter private[widgets] (
     * nothing will be drawn anyway".
     */
   def dotsPerWorldUnit: (Double, Double) =
-    val (xMin, xMax)    = xBounds
-    val (yMin, yMax)    = yBounds
+    // per axis, so the guards are per axis too: hasExtent would wrongly zero both when only one is degenerate
     val (columns, rows) = dotSize
     val across          = if xMax > xMin && columns > 1 then (columns - 1) / (xMax - xMin) else 0.0
     val down            = if yMax > yMin && rows > 1 then (rows - 1) / (yMax - yMin) else 0.0
@@ -82,10 +88,8 @@ final class Painter private[widgets] (
     * this way the guard survives the next rewrite of the arithmetic around it.
     */
   def getPoint(x: Double, y: Double): Option[(Int, Int)] =
-    val (xMin, xMax) = xBounds
-    val (yMin, yMax) = yBounds
-    val insideWorld  = x.isFinite && y.isFinite && x >= xMin && x <= xMax && y >= yMin && y <= yMax
-    if insideWorld && xMax > xMin && yMax > yMin && surface.dotWidth > 0 && surface.dotHeight > 0 then
+    val insideWorld = x.isFinite && y.isFinite && x >= xMin && x <= xMax && y >= yMin && y <= yMax
+    if insideWorld && hasExtent && surface.dotWidth > 0 && surface.dotHeight > 0 then
       val column = ((x - xMin) / (xMax - xMin) * (surface.dotWidth - 1)).round.toInt
       val row    = ((yMax - y) / (yMax - yMin) * (surface.dotHeight - 1)).round.toInt
       Some((column, row))
@@ -188,8 +192,6 @@ final class Painter private[widgets] (
     * bottom of the view — so clamping is right here where rejection is right in [[getPoint]].
     */
   private def nearestRow(y: Double): Option[Int] =
-    val (yMin, yMax) = yBounds
-    val (xMin, _)    = xBounds
     getPoint(xMin, clampInto(y, yMin, yMax)).map((_, row) => row)
 
   /** The part of the segment inside the world bounds, as `(x1, y1, x2, y2)`, or `None` when none of it is.
@@ -204,9 +206,7 @@ final class Painter private[widgets] (
     * `start + t * delta` in floating point can land a hair past the edge it was solved for.
     */
   private def clipToBounds(x1: Double, y1: Double, x2: Double, y2: Double): Option[(Double, Double, Double, Double)] =
-    val (xMin, xMax) = xBounds
-    val (yMin, yMax) = yBounds
-    if xMax <= xMin || yMax <= yMin then None
+    if !hasExtent then None
     else
       val dx    = x2 - x1
       val dy    = y2 - y1

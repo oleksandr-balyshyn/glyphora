@@ -110,16 +110,17 @@ final case class Chart(
     if area.width >= 3 && area.height >= 3 + titleRows then
       // Explicit labels win over the two auto-formatted bounds: `showLabels` is the shorthand for "label the axis
       // with its own range", and a caller who has said what the rows mean has answered that already.
-      val labels   =
+      val (yLow, yHigh) = yBounds
+      val labels        =
         if yLabels.nonEmpty then yLabels
-        else if showLabels then Seq(formatBound(yBounds._2), formatBound(yBounds._1))
+        else if showLabels then Seq(formatBound(yHigh), formatBound(yLow))
         else Seq.empty
-      val gutter   = labelGutter(area, labels)
-      val axisX    = area.x + gutter
-      val plotTop  = area.y + yTitle.size
-      val axisRow  = area.bottom - 1 - xTitle.size - labelRows
+      val gutter        = labelGutter(area, labels)
+      val axisX         = area.x + gutter
+      val plotTop       = area.y + yTitle.size
+      val axisRow       = area.bottom - 1 - xTitle.size - labelRows
       drawAxes(axisX, plotTop, axisRow, area.right, buffer)
-      val plotArea = Rect(axisX + 1, plotTop, area.width - gutter - 1, axisRow - plotTop)
+      val plotArea      = Rect(axisX + 1, plotTop, area.width - gutter - 1, axisRow - plotTop)
       // One canvas pass per distinct (resolution, marker) pair, in the order those pairs first appear, so a chart
       // whose datasets override nothing is still exactly one pass drawing exactly the frame it always drew.
       groupedBySurface.foreach { case ((groupResolution, groupMarker), group) =>
