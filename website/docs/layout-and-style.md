@@ -334,6 +334,26 @@ A `Line` and a `Text` hold no style of their own — a line is its spans — so 
 methods are a fold over the spans rather than a field being set. That is why they compose
 the way plain `Style` calls do.
 
+### Walk text cell by cell
+
+A *grapheme cluster* is what a reader thinks of as one character: a base character plus
+whatever attaches to it, so `e` followed by a combining acute accent is one cluster, and
+so is a multi-code-point emoji. It is also the smallest thing a terminal cell can hold.
+
+`styledGraphemes(base)` on a `Span` or a `Line` steps through the text one cluster at a
+time, each one already carrying the style it will be drawn in — the span's own style
+layered over the `base` you pass, so nothing downstream has to resolve it again:
+
+```scala
+val cells = line.styledGraphemes(theme.body).toList
+cells.map(_.width).sum == line.width // always
+```
+
+Reach for it when you need per-cell information: working out which character a mouse click
+landed on, or writing a reflow rule the built-in wrapping does not cover. The returned
+iterator is stateful, single-use and owned by the calling thread — walk it once, and call
+the method again rather than storing one.
+
 ### Build a value up a piece at a time
 
 These are immutable values, so nothing is pushed into them: each helper returns a copy and

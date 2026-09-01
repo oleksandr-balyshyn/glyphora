@@ -34,6 +34,20 @@ final case class Span(content: String, style: Style):
     */
   infix def +(that: Span): Line = Line(Seq(this, that))
 
+  /** Steps this span one terminal cell-unit at a time, every cluster carrying `base` with this span's own style
+    * layered on top — the resolution [[Style.patch]] does, done once here instead of at each consumer.
+    *
+    * This is the primitive for anything that has to reason about text cell by cell: custom reflow, hit-testing a
+    * mouse column against the character under it, or measuring a prefix.
+    *
+    * '''The returned iterator is stateful, single-use and owned by the calling thread.''' It wraps
+    * [[CharWidth.graphemeClusters]] and inherits that ownership rule exactly: walk it once, never store one across
+    * frames, never share one between threads.
+    */
+  def styledGraphemes(base: Style): Iterator[StyledGrapheme] =
+    val resolved = base.patch(style)
+    CharWidth.graphemeClusters(content).map(StyledGrapheme(_, resolved))
+
 object Span:
   def raw(content: String): Span = Span(content, Style.Default)
 

@@ -70,6 +70,15 @@ final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None):
     */
   infix def ++(other: Line): Line = appendedAll(other)
 
+  /** The whole row as one stream of cell-units, the spans walked in order — see [[Span.styledGraphemes]] for what a
+    * cluster is and for the iterator's ownership rules, which this inherits unchanged.
+    *
+    * Each span resolves its own style against `base`, so a cluster always arrives carrying the style it will really
+    * be drawn in. The spans are visited lazily, so taking a screenful off the front never walks the tail.
+    */
+  def styledGraphemes(base: Style): Iterator[StyledGrapheme] =
+    spans.iterator.flatMap(_.styledGraphemes(base))
+
 object Line:
   /** A line with no spans: zero columns wide, and the identity for [[Line.appendedAll]], so a fold that accumulates
     * spans has somewhere to start.
