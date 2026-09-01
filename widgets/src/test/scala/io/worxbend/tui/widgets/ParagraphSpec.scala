@@ -112,6 +112,31 @@ final class ParagraphSpec extends AnyFunSuite:
     val buffer = rendered(Paragraph(Text.raw("ab"), alignment = Alignment.Right), 5, 1)
     assert(trimmedLines(buffer) == Seq("   ab"))
 
+  test("an over-wide right-aligned line keeps its end, not its beginning"):
+    // A right-aligned path or timestamp is aligned that way because the end is the part that identifies it.
+    val buffer = rendered(Paragraph(Text.raw("/var/log/app.log"), alignment = Alignment.Right), 7, 1)
+    assert(trimmedLines(buffer) == Seq("app.log"))
+
+  test("an over-wide centered line loses as much from each side"):
+    val buffer = rendered(Paragraph(Text.raw("abcdefgh"), alignment = Alignment.Center), 4, 1)
+    assert(trimmedLines(buffer) == Seq("cdef"))
+
+  test("an over-wide left-aligned line still keeps its beginning"):
+    val buffer = rendered(Paragraph(Text.raw("abcdefgh"), alignment = Alignment.Left), 4, 1)
+    assert(trimmedLines(buffer) == Seq("abcd"))
+
+  test("truncating an over-wide line never splits a wide character"):
+    // Two columns must go from the front of "你好世", but the cut lands inside 你, so the whole character goes and the
+    // row starts one column in from the right edge rather than showing half a glyph.
+    val buffer = rendered(Paragraph(Text.raw("你好世"), alignment = Alignment.Right), 4, 1)
+    assert(trimmedLines(buffer) == Seq("好世"))
+
+  test("truncation away from the alignment keeps each span's style"):
+    val line   = Line(Seq(Span.raw("dropped "), Span("kept", Style.Default.withFg(Color.Red))))
+    val buffer = rendered(Paragraph(Text(Seq(line)), alignment = Alignment.Right), 4, 1)
+    assert(trimmedLines(buffer) == Seq("kept"))
+    assert(buffer.get(0, 0).style.fg.contains(Color.Red))
+
   test("span styles survive rendering and layer over the paragraph style"):
     val line   = Line(Seq(Span.raw("a"), Span("b", Style.Default.withFg(Color.Red))))
     val buffer = rendered(Paragraph(Text(Seq(line)), style = Style.Default.bold), 3, 1)
@@ -144,9 +169,11 @@ final class ParagraphSpec extends AnyFunSuite:
     val buffer = rendered(Paragraph(Text(Seq(Line.raw("你好").centered))), 9, 1)
     assert(trimmedLines(buffer) == Seq("  你好"))
 
-  test("a line wider than the area is pinned to the left edge whatever it asked for"):
+  test("a line wider than the area starts at the left edge and keeps the end it asked for"):
+    // There is nowhere to place a line that is already wider than the area, so it always starts at column 0. What it
+    // keeps still follows its alignment: a right-aligned line loses its beginning rather than its end.
     val buffer = rendered(Paragraph(Text(Seq(Line.raw("abcdef").rightAligned))), 4, 1)
-    assert(trimmedLines(buffer) == Seq("abcd"))
+    assert(trimmedLines(buffer) == Seq("cdef"))
 
   test("a one-column area clips a centred line instead of starting it off-screen"):
     val buffer = rendered(Paragraph(Text(Seq(Line.raw("ab").centered))), 1, 1)

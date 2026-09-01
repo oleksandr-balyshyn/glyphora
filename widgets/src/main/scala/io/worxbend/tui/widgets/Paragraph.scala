@@ -13,6 +13,11 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, LineBreaks, Measured, Rect
   * so a wide character or emoji is never split. With [[Overflow.Clip]], the default, long lines are cut at the area
   * edge.
   *
+  * A line that is still wider than the area — one that is clipped, or a single unbreakable word — loses the side away
+  * from its `alignment`: a right-aligned line keeps its end, a centred one loses as much from each side, and a
+  * left-aligned one keeps its beginning. Keeping the beginning of a right-aligned line would hide exactly the part the
+  * alignment was chosen to show, which for a path or a timestamp is the part that identifies it.
+  *
   * [[heightAt]] reports the rows the paragraph needs from the same `overflow` field `render` draws with, so the two
   * cannot disagree about whether the text wraps.
   */
@@ -34,8 +39,16 @@ final case class Paragraph(
         val lineWidth = math.min(line.width, area.width)
         // the line's own alignment wins over the paragraph's; `None` means "use the paragraph's", which is what
         // every line said before `Line` could carry one
-        val startX    = line.alignment.getOrElse(alignment).originAt(area.x, area.width, lineWidth)
-        val _         = LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, style)
+        val placement = line.alignment.getOrElse(alignment)
+        val startX    = placement.originAt(area.x, area.width, lineWidth)
+        // A line wider than the area loses the side *away* from the alignment: a right-aligned line keeps its end, a
+        // centred one loses as much from each side. Left-aligned text keeps its beginning, as before.
+        val tooWideBy = math.max(0, line.width - area.width)
+        val skipWidth = placement match
+          case Alignment.Left   => 0
+          case Alignment.Center => tooWideBy / 2
+          case Alignment.Right  => tooWideBy
+        val _         = LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, style, skipWidth)
       }
 
   /** The rows this text occupies at `width` — the measurement counterpart of [[render]], and always an answer: a

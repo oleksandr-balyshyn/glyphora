@@ -280,6 +280,22 @@ text agrees with the built-in widgets about where a break is allowed.
 `heightAt(width)` counts exactly the rows this produces, so a scroll container or a
 layout pass sizing a wrapped paragraph never disagrees with what is drawn.
 
+### Which end of a too-wide line survives
+
+A line that still does not fit — because the paragraph clips rather than wraps, or
+because it is one unbreakable word — loses the side *away* from its alignment:
+
+| Alignment | `"/var/log/app.log"` in seven columns |
+| --- | --- |
+| `Left` | `/var/lo` — the beginning, as before |
+| `Right` | `app.log` — the end, the part the alignment was chosen to show |
+| `Center` | `og/app.` — as much goes from each side |
+
+A cut that lands inside a wide character drops the whole character rather than half
+of it, so the row can start one column in from the edge instead of showing a broken
+glyph. `CharWidth.dropByWidth(text, columns)` is the counterpart of
+`substringByWidth` this is built on, for custom widgets that need the same thing.
+
 ### One row, several styles
 
 `text(...)` paints its whole block in a single style, so it cannot say `Status:` in the
