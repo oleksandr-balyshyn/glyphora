@@ -62,7 +62,7 @@ final case class Paragraph(
       // frame, and the diff-based flush would lose its cheap path for the overwhelmingly common unstyled case.
       if style != Style.Default then buffer.mapStyle(area)(_.patch(style))
       // lazily: wrapping the whole document to draw one screenful makes render cost scale with the text, not the area
-      val lines     = WrapBlanks.of(overflow) match
+      val lines     = overflow.wrapBlanks match
         case Some(blanks) => text.lines.iterator.flatMap(Paragraph.wrapLine(_, area.width, blanks))
         case None         => text.lines.iterator
       // resolved once for the whole paragraph rather than per row: the widget's style is the floor, the text's own
@@ -112,7 +112,7 @@ final case class Paragraph(
     * its area gives it.
     */
   override def heightAt(width: Int): Option[Int] =
-    val rows = WrapBlanks.of(overflow) match
+    val rows = overflow.wrapBlanks match
       case None                  => text.lines.size
       case Some(_) if width <= 0 => 0
       case Some(blanks)          =>

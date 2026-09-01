@@ -52,3 +52,8 @@ final class OverflowWrapModesSpec extends AnyFunSuite:
   test("every wrapping mode reports that it wraps and Clip does not"):
     assert(Overflow.Wrap.wraps && Overflow.WrapTrimmed.wraps && Overflow.WrapPreserved.wraps)
     assert(!Overflow.Clip.wraps)
+
+  test("a mode names a blank rule exactly when it wraps"):
+    // `wraps` is spelled as its own predicate rather than as `wrapBlanks.isDefined`, so the two agreeing is an
+    // invariant rather than a definition — this is what would catch a fifth case that only updated one of them.
+    assert(Overflow.values.forall(mode => mode.wraps == mode.wrapBlanks.isDefined))

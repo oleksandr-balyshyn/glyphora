@@ -63,8 +63,20 @@ enum Overflow:
     *
     * Callers that only need to know "does the height depend on the width" ask this instead of matching every wrapping
     * case, so adding a fourth wrapping mode does not reopen every one of those matches.
+    *
+    * Consistent with [[wrapBlanks]] by construction: every case but [[Clip]] wraps, and every case but [[Clip]] names a
+    * blank rule. Deliberately not defined as `wrapBlanks.isDefined` — `wraps` is asked once per frame from several
+    * render paths, and routing it through an `Option` would allocate there for no correctness gain.
     */
   def wraps: Boolean = this != Overflow.Clip
+
+  /** The rule this mode wraps blanks by, or `None` when it clips and there is no wrapping to rule on. */
+  private[widgets] def wrapBlanks: Option[WrapBlanks] =
+    this match
+      case Overflow.Clip          => None
+      case Overflow.Wrap          => Some(WrapBlanks.KeepIndent)
+      case Overflow.WrapTrimmed   => Some(WrapBlanks.DropAll)
+      case Overflow.WrapPreserved => Some(WrapBlanks.KeepAll)
 
 /** What one wrapping mode does with the blanks at the head of a row — the single decision [[Overflow]]'s three wrapping
   * cases differ by, named on its own so the wrapping walk takes one argument rather than re-deriving the mode.
@@ -81,13 +93,3 @@ private[widgets] enum WrapBlanks:
 
   /** Keep every blank, so a break indents the row after it — [[Overflow.WrapPreserved]]. */
   case KeepAll
-
-private[widgets] object WrapBlanks:
-
-  /** The rule `overflow` wraps by, or `None` when it clips and there is no wrapping to rule on. */
-  def of(overflow: Overflow): Option[WrapBlanks] =
-    overflow match
-      case Overflow.Clip          => None
-      case Overflow.Wrap          => Some(KeepIndent)
-      case Overflow.WrapTrimmed   => Some(DropAll)
-      case Overflow.WrapPreserved => Some(KeepAll)
