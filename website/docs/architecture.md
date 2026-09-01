@@ -222,6 +222,17 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   default and belongs to a backend rather than to the buffer, because the opposite
   artifact is equally real: on a terminal that does draw both columns, that blank
   clips the glyph's right half.
+
+  Style is written in two forms. The first painted cell of a frame gets the
+  *absolute* sequence — one that opens with `ESC[0`, a reset — so no attribute the
+  terminal was left holding by the previous frame, the shell or a subprocess can
+  leak into this one. Every later style change on the same frame gets only the
+  attributes that actually moved: two neighbouring runs that share their colours
+  and differ in the bold flag cost `ESC[1m`, not a restatement of both truecolour
+  selectors. Where a change cannot be undone safely — a styled underline going
+  away, an underline colour returning to the terminal default; both need escape
+  codes that several emulators do not implement — the encoder falls back to the
+  absolute form for that run.
 - **`HeadlessBackend`** — in-memory backend for the `Pilot` end-to-end test harness.
 
 The trait is deliberately JLine-free: a fake backend can implement it without

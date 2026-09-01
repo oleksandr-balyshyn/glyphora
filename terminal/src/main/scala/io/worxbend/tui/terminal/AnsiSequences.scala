@@ -211,6 +211,84 @@ private[terminal] object AnsiSequences:
       effective.underlineColor.foreach(color => append(codes, underlineColorCode(ColorDepth.downsample(color, depth))))
     codes.append('m').result()
 
+  /** The SGR that moves a terminal already showing `from` to showing `to`, writing only what actually changed.
+    *
+    * [[sgr]] is the *absolute* form: it opens with a reset (`ESC[0`) and then restates the whole style, so no attribute
+    * of whatever came before can leak through. That is always correct, and it is expensive. A run of cells that differs
+    * from its neighbour only in the bold flag still rewrites both truecolour colours — roughly thirty bytes where five
+    * would do. Over a link where bytes cost time (ssh, mosh, a serial console) that is the largest remaining per-frame
+    * cost after the frame diff itself.
+    *
+    * This form assumes the terminal is currently in exactly `from`. [[FrameEncoder]] guarantees that, because `from` is
+    * the style it last emitted on this frame; no other caller should use it. Returns the empty string when the two
+    * styles render identically — including when they differ only in a field SGR does not carry, such as the hyperlink.
+    *
+    * Falls back to `sgr(to, depth)` byte for byte whenever the difference cannot be expressed safely as a delta; see
+    * `deltaIsSafe` for which cases those are and why.
+    */
+  def sgrDelta(from: Style, to: Style, depth: ColorDepth): String =
+    if from == to then ""
+    else
+      val before = if depth == ColorDepth.Monochrome then monochromeStyle(from) else from
+      val after  = if depth == ColorDepth.Monochrome then monochromeStyle(to) else to
+      if !deltaIsSafe(before, after, depth) then sgr(to, depth) else buildDelta(before, after, depth)
+
+  /** Whether the step from `from` to `to` can be written as a delta at all.
+    *
+    * Turning an attribute *off* needs a reset code, and three of them are either not universally implemented or too
+    * blunt to use here:
+    *
+    *   - SGR 59 ("default underline colour") is missing from several emulators, so dropping an underline colour back to
+    *     the terminal default cannot be done by delta. Under [[ColorDepth.NoColor]] the underline colour is never
+    *     emitted in the first place, so a change to it is not a difference at all.
+    *   - The `4:0` styled-underline selector has the same patchy support, so any change of [[UnderlineStyle]] — into,
+    *     out of, or between the styled forms — takes the absolute path.
+    *   - SGR 24 ("no underline") clears the styled underline along with the plain one. So switching the plain
+    *     [[Modifiers.Underline]] flag on or off while a styled underline is in force would silently take the style with
+    *     it; that combination also takes the absolute path.
+    *
+    * Everything else has a well-defined reset code and is handled by `buildDelta`.
+    */
+  private def deltaIsSafe(from: Style, to: Style, depth: ColorDepth): Boolean =
+    val underlineStyleUnchanged = from.underlineStyle == to.underlineStyle
+    val underlineFlagUnchanged  = from.modifiers.hasAny(Modifiers.Underline) == to.modifiers.hasAny(Modifiers.Underline)
+    val underlineColorKept      =
+      depth == ColorDepth.NoColor || from.underlineColor == to.underlineColor || to.underlineColor.isDefined
+    underlineStyleUnchanged &&
+    (underlineFlagUnchanged || to.underlineStyle == UnderlineStyle.None) &&
+    underlineColorKept
+
+  /** Builds the delta itself. Only called once `deltaIsSafe` has agreed the step is expressible. */
+  private def buildDelta(from: Style, to: Style, depth: ColorDepth): String =
+    val codes    = StringBuilder()
+    val removed  = from.modifiers.without(to.modifiers)
+    // Flags that have to be stated again because the reset code for one of them also cleared a sibling that survives:
+    // SGR 22 clears bold *and* dim, and SGR 25 clears both blink rates. Dropping bold from a bold+dim style therefore
+    // has to write `22;2`, not a bare `22`, or the dim goes with it. Collected first so each reset is written once.
+    var reassert = Modifiers.None
+    ResetCodes.foreach: (group, code) =>
+      if removed.hasAny(group) then
+        appendParam(codes, code)
+        reassert = reassert | (to.modifiers & group)
+    val added    = to.modifiers.without(from.modifiers) | reassert
+    ModifierCodes.foreach((flag, code) => if added.hasAny(flag) then appendParam(codes, code))
+    if depth != ColorDepth.NoColor then
+      // `Color.Reset` is SGR 39/49, "back to the terminal's own colour", which is exactly what a colour going from
+      // `Some` to `None` means. It is substituted *after* the downsample rather than before it: under
+      // [[ColorDepth.Monochrome]] every colour is pushed onto black or white, and a `Reset` fed through that would come
+      // back out as an explicit white — turning "let the terminal choose" into "paint it white".
+      if from.fg != to.fg then
+        appendParam(codes, foregroundCode(to.fg.fold(Color.Reset)(ColorDepth.downsample(_, depth))))
+      if from.bg != to.bg then
+        appendParam(codes, backgroundCode(to.bg.fold(Color.Reset)(ColorDepth.downsample(_, depth))))
+      if from.underlineColor != to.underlineColor then
+        to.underlineColor.foreach(color => appendParam(codes, underlineColorCode(ColorDepth.downsample(color, depth))))
+    if codes.isEmpty then "" else s"$Esc[${codes.result()}m"
+
+  /** Adds one parameter to a delta sequence, which — unlike the absolute form — has no leading `0` to separate from. */
+  private def appendParam(codes: StringBuilder, code: String): Unit =
+    val _ = if codes.isEmpty then codes.append(code) else codes.append(';').append(code)
+
   /** Keeps a style legible under [[ColorDepth.Monochrome]], where every color collapses onto one of two tones.
     *
     * Two colors that differ on a full palette can land on the same tone — red text on a blue background both threshold
@@ -332,4 +410,24 @@ private[terminal] object AnsiSequences:
       Modifiers.Reverse    -> "7",
       Modifiers.Hidden     -> "8",
       Modifiers.CrossedOut -> "9",
+    )
+
+  /** The reset code for each group of text attributes, in the order they are emitted.
+    *
+    * Grouped rather than one entry per flag because ECMA-48 does not give every attribute its own "off" code: SGR 22
+    * turns off bold *and* dim, and SGR 25 turns off both blink rates. `buildDelta` therefore works group by group,
+    * writing each reset at most once and restating whichever members of the group survive.
+    *
+    * A `val` for the same reason [[ModifierCodes]] is one: this is walked once per style change on a frame, and
+    * rebuilding the list on each of those calls cost more than the walk.
+    */
+  private val ResetCodes: List[(Modifiers, String)] =
+    List(
+      (Modifiers.Bold | Modifiers.Dim)         -> "22",
+      Modifiers.Italic                         -> "23",
+      Modifiers.Underline                      -> "24",
+      (Modifiers.Blink | Modifiers.RapidBlink) -> "25",
+      Modifiers.Reverse                        -> "27",
+      Modifiers.Hidden                         -> "28",
+      Modifiers.CrossedOut                     -> "29",
     )

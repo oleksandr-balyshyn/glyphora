@@ -25,35 +25,40 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     * `previous` and `next` covering different rectangles is not a difference that can be encoded — that happens when
     * the terminal was resized, and the grid the old frame described no longer exists — so every cell of `next` is
     * written instead. Anything narrower would leave the parts of the new grid the old one never covered unpainted.
+    *
+    * Style is written in two forms. The first painted cell of a frame gets the absolute sequence, which begins with a
+    * reset, so nothing the terminal was left holding can leak into this frame. Every later style change on the same
+    * frame gets only the attributes that moved (see [[AnsiSequences.sgrDelta]]) — a run that differs from its
+    * predecessor in the bold flag alone costs a few bytes rather than a restatement of both colours.
     */
   def encode(previous: Buffer, next: Buffer): String =
     val body                            = StringBuilder()
     var expectedX                       = -1
     var currentY                        = -1
-    var currentStyle                    = ""
+    var currentStyle: Style             = Style.Default
     var currentLink: Option[String]     = None
-    // The last style [[AnsiSequences.sgr]] was asked about, and what it answered. Neighbouring cells overwhelmingly
-    // share a style, and on a full-change frame — the first one, every resize, every SIGCONT, every tick of a
-    // whole-frame effect — rebuilding that sequence per cell and throwing it away was most of the encoding cost.
-    // Both halves of the comparison earn their keep: reference equality catches the common case of one `Style` value
-    // reused across a run of cells, and the structural compare catches effects such as `Effect.fadeIn`, which hand
-    // every cell a freshly allocated but usually equal `Style`.
-    // Seeded with `Style.Default` so there is no "nothing cached yet" case, and local to the call so that `encode`
-    // stays pure and callable from any thread, as the class doc promises.
-    var memoStyle: Style                = Style.Default
-    var memoSgr: String                 = AnsiSequences.sgr(Style.Default, colorDepth)
+    // Whether this frame has emitted an SGR sequence yet. The first one is written in the absolute form
+    // ([[AnsiSequences.sgr]], which opens with a reset), because the encoder cannot know what state the terminal was
+    // left in by whatever was drawn before — a previous frame, the shell, a subprocess. After that anchor every style
+    // change on the frame is written as a delta against the style the encoder itself last emitted, which is a handful
+    // of bytes instead of a full restatement of every colour and flag.
+    var frameOpened                     = false
     // one frame cannot be described as a difference from a frame of another shape — after a resize the terminal has
     // thrown the old grid away — so that case repaints every cell instead of diffing
     val paint: (Int, Int, Cell) => Unit =
       (x, y, cell) => {
         if y != currentY || x != expectedX then body ++= AnsiSequences.moveTo(x, y)
-        if !((cell.style eq memoStyle) || cell.style == memoStyle) then
-          memoStyle = cell.style
-          memoSgr = AnsiSequences.sgr(cell.style, colorDepth)
-        val sgr = memoSgr
-        if sgr != currentStyle then
-          body ++= sgr
-          currentStyle = sgr
+        // Both halves of the comparison earn their keep: reference equality catches the common case of one `Style`
+        // value reused across a run of cells, and the structural compare catches effects such as `Effect.fadeIn`,
+        // which hand every cell a freshly allocated but usually equal `Style`. Either way a run of same-styled cells
+        // builds no sequence at all.
+        if !frameOpened then
+          body ++= AnsiSequences.sgr(cell.style, colorDepth)
+          currentStyle = cell.style
+          frameOpened = true
+        else if !((cell.style eq currentStyle) || cell.style == currentStyle) then
+          body ++= AnsiSequences.sgrDelta(currentStyle, cell.style, colorDepth)
+          currentStyle = cell.style
         if cell.style.link != currentLink then
           if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
           cell.style.link.foreach(url => body ++= AnsiSequences.linkOpen(url))

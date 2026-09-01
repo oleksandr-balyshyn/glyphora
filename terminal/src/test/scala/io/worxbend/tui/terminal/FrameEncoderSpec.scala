@@ -48,7 +48,32 @@ final class FrameEncoderSpec extends AnyFunSuite:
       buffer.setString(0, 0, "ab", warning)
       buffer.setString(2, 0, "cd", muted)
     }
-    assert(encoder.encode(previous, next) == AnsiSequences.moveTo(0, 0) + sgr(warning) + "ab" + sgr(muted) + "cd")
+    // the first style on a frame is written in full, the second as the difference from it
+    val second   = AnsiSequences.sgrDelta(warning, muted, ColorDepth.TrueColor)
+    assert(encoder.encode(previous, next) == AnsiSequences.moveTo(0, 0) + sgr(warning) + "ab" + second + "cd")
+
+  test("a later style change on a frame writes only what moved, not a fresh reset"):
+    // the point of the delta form, asserted where it actually pays off: two runs that share both colours and differ
+    // only in the bold flag cost one parameter, where the absolute form would restate both truecolour selectors
+    val plain    = Style.Default.withFg(Color.Rgb(220, 160, 40)).withBg(Color.Rgb(10, 20, 60))
+    val previous = frame(_ => ())
+    val next     = frame { buffer =>
+      buffer.setString(0, 0, "ab", plain)
+      buffer.setString(2, 0, "cd", plain.bold)
+    }
+    val encoded  = encoder.encode(previous, next)
+    assert(encoded.endsWith("ab\u001b[1mcd"))
+    // exactly one reset on the frame: the anchor at its first painted cell
+    assert(encoded.split("\u001b\\[0;", -1).length - 1 == 1)
+
+  test("each frame re-anchors with a full sequence rather than trusting the previous frame's state"):
+    // the encoder is called once per frame and keeps nothing between calls, so it cannot know what the terminal was
+    // left holding — by the last frame, by the shell, or by a subprocess. Every frame therefore opens with a reset.
+    val bold   = Style.Default.bold
+    val first  = encoder.encode(frame(_ => ()), frame(_.setString(0, 0, "x", bold)))
+    val second = encoder.encode(frame(_.setString(0, 0, "x", bold)), frame(_.setString(0, 0, "y", bold)))
+    assert(first.contains(sgr(bold)))
+    assert(second.contains(sgr(bold)))
 
   test("a run sharing one style emits that SGR once, even when every cell holds its own equal Style"):
     // what `Effect.fadeIn` and every themed widget produce: a fresh but equal `Style` per cell. The encoder compares
