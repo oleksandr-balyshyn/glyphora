@@ -29,6 +29,11 @@ final case class Span(content: String, style: Style):
     */
   def patchStyle(style: Style): Span = copy(style = this.style.patch(style))
 
+  /** Joins two spans side by side into a one-row [[Line]], each keeping its own [[Style]]:
+    * `Span.raw("ok ") + Span.styled("3 errors", warning)`.
+    */
+  infix def +(that: Span): Line = Line(Seq(this, that))
+
 object Span:
   def raw(content: String): Span = Span(content, Style.Default)
 

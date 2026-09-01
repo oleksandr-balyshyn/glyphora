@@ -346,6 +346,13 @@ val row = spans.foldLeft(Line.Empty)(_.appended(_))
 val doc = rows.foldLeft(Text.Empty)(_.appended(_))
 ```
 
+`+` and `++` are the same two helpers as operators, for the short inline cases:
+`Span.raw("ok ") + count` makes a one-row `Line` out of two spans, `line + span` and
+`line ++ otherLine` extend a row to the right, and `text + line` and `text ++ otherText`
+add rows below. There is no operator for stacking two `Line`s vertically — that would give
+`+` two different axes depending on the type of its right-hand side — so write
+`Text(Seq(first, second))` when you mean "one above the other".
+
 `Text.appendedToLast(span)` extends the *last* row rather than starting a new one, and it
 owns the case that is easy to get wrong: a text with no rows at all has no last row, so
 one is started holding just that span. A text whose last row exists but is empty is not

@@ -58,6 +58,18 @@ final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None):
   /** This line with every span of `other` added after its own, in order — the two rows laid end to end. */
   def appendedAll(other: Line): Line = Line(spans ++ other.spans)
 
+  /** [[appended]] as an operator, for building a row inline: `Span.raw("ok") + separator + count`. */
+  infix def +(span: Span): Line = appended(span)
+
+  /** [[appendedAll]] as an operator: the two rows laid end to end, every span keeping its own style.
+    *
+    * There is deliberately no operator for stacking two lines vertically. ratatui gives `+` both jobs and picks the
+    * axis from the argument's type, so the same symbol means "further right" or "further down" depending on what is
+    * on its right-hand side — which is not something a reader can see at a glance. Stacking is spelled out instead,
+    * as `Text(Seq(first, second))` or `Text.Empty.appended(first).appended(second)`.
+    */
+  infix def ++(other: Line): Line = appendedAll(other)
+
 object Line:
   /** A line with no spans: zero columns wide, and the identity for [[Line.appendedAll]], so a fold that accumulates
     * spans has somewhere to start.

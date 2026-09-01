@@ -57,3 +57,29 @@ final class TextBuildingSpec extends AnyFunSuite:
     val folded = spans.foldLeft(Text.Empty)((text, span) => text.appendedToLast(span))
     assert(folded == Text(Seq(Line(spans))))
     assert(folded.width == 4)
+
+  test("two spans added together make a one-row line, each keeping its style"):
+    val red  = Span("a", Style.Default.withFg(Color.Red))
+    val blue = Span("b", Style.Default.withFg(Color.Blue))
+    val line = red + blue
+    assert(line == Line(Seq(red, blue)))
+    assert(line.width == 2)
+
+  test("the horizontal operators agree with the named helpers"):
+    val line = Line(Seq(Span.raw("a")))
+    assert((line + Span.raw("b")) == line.appended(Span.raw("b")))
+    assert((line ++ Line.raw("cd")) == line.appendedAll(Line.raw("cd")))
+
+  test("the vertical operators agree with the named helpers"):
+    val text = Text.raw("a")
+    assert((text + Line.raw("b")) == text.appended(Line.raw("b")))
+    assert((text ++ Text.raw("c\nd")) == text.appendedAll(Text.raw("c\nd")))
+    assert((text ++ Text.raw("c\nd")).height == 3)
+
+  test("adding an empty line to a text still adds a blank row"):
+    assert((Text.raw("a") + Line.Empty).height == 2)
+
+  test("composed width is measured in columns, not code units"):
+    val line = Span.raw("👨‍👩‍👧") + Span.raw("あ")
+    assert(line.width == CharWidth.of(line.plainText))
+    assert(line.width == 4) // two columns for the family emoji, two for the kana

@@ -46,6 +46,12 @@ final case class Text(lines: Seq[Line]):
     if lines.isEmpty then Text(Seq(Line(Seq(span))))
     else Text(lines.init :+ lines.last.appended(span))
 
+  /** [[appended]] as an operator: `header + body + footer` stacks three rows into one block. */
+  infix def +(line: Line): Text = appended(line)
+
+  /** [[appendedAll]] as an operator: every row of `other` below this text's own. */
+  infix def ++(other: Text): Text = appendedAll(other)
+
 object Text:
   /** A text with no lines: zero rows, zero columns, and the identity for [[Text.appendedAll]], so a fold that
     * accumulates lines has somewhere to start.
