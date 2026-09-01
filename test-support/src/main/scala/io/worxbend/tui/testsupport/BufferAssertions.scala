@@ -1,6 +1,6 @@
 package io.worxbend.tui.testsupport
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Line, Position, Rect, StatefulWidget, Style, Widget}
 
 import java.util.regex.Pattern
 
@@ -67,6 +67,119 @@ object BufferAssertions:
     val buffer = Buffer(Rect(0, 0, width, height))
     widget.render(area, buffer)
     buffer
+
+  /** An expected frame written out as plain rows: `rows.length` high, and as wide as the widest row's *display* width.
+    *
+    * Display width, not `String.length`: a row of three ideographs is six columns wide, and sizing the buffer by
+    * character count would leave the last one half off the edge, where [[Buffer.setString]] drops it entirely rather
+    * than draw a two-column glyph across a boundary. Every cell carries [[io.worxbend.tui.core.Style.Default]] — see
+    * the [[Line]] overload for an expected frame that carries styling.
+    */
+  def buffered(rows: String*): Buffer =
+    buffered(rows.map(Line.raw), Style.Default)
+
+  /** An expected frame built from styled [[Line]]s: each span keeps its own style, patched onto `base`.
+    *
+    * This is the shape [[assertEquals]] is for — an expected frame that carries colour and modifiers, which a golden
+    * fixture deliberately does not. `base` is the style the whole frame starts from (a theme's background, say) and
+    * each span's own style is applied on top of it, exactly as a widget would.
+    */
+  def buffered(rows: Seq[Line], base: Style): Buffer =
+    val width  = rows.map(_.width).maxOption.getOrElse(0)
+    val buffer = Buffer(Rect(0, 0, width, rows.size))
+    rows.zipWithIndex.foreach { (line, y) =>
+      var x = 0
+      line.spans.foreach { span =>
+        buffer.setString(x, y, span.content, base.patch(span.style))
+        x += span.width
+      }
+    }
+    buffer
+
+  /** Fails unless `actual` renders exactly like `expected`: the same area first, then the same symbol *and* the same
+    * [[io.worxbend.tui.core.Style]] in every cell.
+    *
+    * This is the style-aware counterpart of [[text]]. `text` answers "does the frame read the way it should"; this
+    * answers "is the frame the way it should be", which is the question a colour, a bold run or a reversed selection
+    * row regresses on while every glyph stays exactly where it was. Before this existed, a test that cared about style
+    * had to name each interesting cell by hand and compare `buffer.get(x, y).style` one cell at a time — which catches
+    * only the cells somebody thought to name.
+    *
+    * The continuation cells of wide graphemes (the second column an ideograph or an emoji occupies) are compared like
+    * any other cell. Two frames showing the same graphemes in different columns are therefore *not* equal here, even
+    * though [[trimmedLines]] reads them identically; a test that wants the looser, glyph-only reading should compare
+    * [[text]] instead.
+    *
+    * The failure is an `AssertionError`, the way [[GoldenFrames]] reports a mismatched fixture. It names the differing
+    * positions with both cells (at most [[MaxReportedDifferences]] of them) and then prints both frames as text, so a
+    * reader who cannot picture a coordinate can still see what moved.
+    */
+  def assertEquals(actual: Buffer, expected: Buffer): Unit =
+    assertEquals(actual, expected, "")
+
+  /** [[assertEquals]] with `label` written in front of the failure message, for a test that compares several frames in
+    * a row and would otherwise have to work out which of them failed.
+    */
+  def assertEquals(actual: Buffer, expected: Buffer, label: String): Unit =
+    val prefix      = if label.isEmpty then "" else s"$label: "
+    if actual.area != expected.area then
+      throw AssertionError(s"${prefix}buffer area ${actual.area} does not match expected ${expected.area}")
+    val differences = cellDifferences(actual, expected)
+    if differences.nonEmpty then throw AssertionError(differenceReport(prefix, actual, expected, differences))
+
+  /** Every position where `actual` and `expected` hold a different [[Cell]], in row-major order, each paired with the
+    * two cells as `(position, actualCell, expectedCell)`.
+    *
+    * Public rather than private so a suite can assert on the *shape* of a difference — "only the selected row changed
+    * style" — without reading a failure message back apart.
+    *
+    * @throws IllegalArgumentException
+    *   if the two buffers cover different areas. "Which cells differ" has no answer across two different shapes, and
+    *   quietly comparing the overlap would let a resize regression pass.
+    */
+  def cellDifferences(actual: Buffer, expected: Buffer): Seq[(Position, Cell, Cell)] =
+    require(
+      actual.area == expected.area,
+      s"cellDifferences needs two buffers of the same area, got ${actual.area} and ${expected.area}",
+    )
+    val differences = Seq.newBuilder[(Position, Cell, Cell)]
+    var y           = expected.area.y
+    while y < expected.area.bottom do
+      var x = expected.area.x
+      // One column at a time, deliberately. Unlike `rowText` this must *not* step over the continuation cell of a wide
+      // grapheme, because a grapheme sitting one column off is exactly the defect this assertion exists to catch.
+      // `Buffer.diff` is not reused for the same reason: it suppresses continuation cells, collapses a mismatched area
+      // into "every cell changed", and reports only the new cell rather than both sides of the pair.
+      while x < expected.area.right do
+        val actualCell   = actual.get(x, y)
+        val expectedCell = expected.get(x, y)
+        if actualCell != expectedCell then differences += ((Position(x, y), actualCell, expectedCell))
+        x += 1
+      y += 1
+    differences.result()
+
+  /** How many differing cells a failure message lists before summarising the rest. One wrong cell in an 80x24 frame is
+    * worth reading; 1 920 of them are not, and the two frames printed underneath say more at that point.
+    */
+  private val MaxReportedDifferences: Int = 20
+
+  /** Builds the message [[assertEquals]] fails with: a count, the first differing cells, then both frames as text. */
+  private def differenceReport(
+      prefix: String,
+      actual: Buffer,
+      expected: Buffer,
+      differences: Seq[(Position, Cell, Cell)],
+  ): String =
+    val message = StringBuilder()
+    message ++= s"$prefix${differences.size} of ${expected.area.area} cells differ"
+    differences.take(MaxReportedDifferences).zipWithIndex.foreach {
+      case ((position, actualCell, expectedCell), index) =>
+        message ++= s"\n  ${index + 1}. (${position.x},${position.y}) actual $actualCell expected $expectedCell"
+    }
+    if differences.size > MaxReportedDifferences then
+      message ++= s"\n  … and ${differences.size - MaxReportedDifferences} more"
+    message ++= s"\nactual:\n${text(actual)}\nexpected:\n${text(expected)}"
+    message.result()
 
   /** One row of the buffer as a string, stepping over the continuation cells of wide graphemes.
     *
