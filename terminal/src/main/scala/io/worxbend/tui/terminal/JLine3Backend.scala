@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Event, Position, Size}
+import io.worxbend.tui.core.{Buffer, Event, Position, Rect, Size}
 
 import org.jline.terminal.{Attributes, Terminal, TerminalBuilder}
 import org.jline.utils.InfoCmp
@@ -14,7 +14,7 @@ import scala.util.control.NonFatal
 /** [[Backend]] implementation over JLine 3's system terminal.
   *
   * Owns the JLine `Terminal` for its whole lifetime: construct via [[JLine3Backend.create]], release with `close()`
-  * (which restores cooked mode, the main screen, and cursor visibility if still active). `draw` keeps a snapshot of the
+  * (which restores cooked mode, the main screen, and cursor visibility if still active). `draw` keeps a copy of the
   * last flushed frame and writes only the diff.
   *
   * Signals are owned here rather than left to JLine's defaults. `INT`/`QUIT` become [[Event.Interrupt]] so the runner
@@ -35,10 +35,19 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   @volatile private var suspendedState                               = TerminalState.Undressed
   @volatile private var inlineRows                                   = 0
 
-  // owned by the render thread alone — no other thread may read or write it. A thread that takes the screen away (the
-  // SIGCONT handler re-entering the alternate screen) raises `fullRedrawRequested` instead: a reset written here from
-  // the signal-dispatch thread would be overwritten by an in-flight `draw`'s snapshot and the repaint would be lost.
-  private var lastFlushed: Option[Buffer] = None
+  // What the terminal is believed to be showing: the frame `draw` last flushed, kept so the next frame can be sent as
+  // a diff against it. Owned by the render thread alone — no other thread may read or write it. A thread that takes the
+  // screen away (the SIGCONT handler re-entering the alternate screen) raises `fullRedrawRequested` instead: a reset
+  // written here from the signal-dispatch thread would be overwritten by an in-flight `draw` and the repaint lost.
+  //
+  // One buffer, recycled in place rather than a fresh `snapshot` per frame. Copying into it costs two array copies and
+  // no allocation; snapshotting allocated a `Buffer` plus a cell array plus a flag array — 10 000 entries each on a
+  // 200x50 screen — on every frame, at the tick rate, all of it immediately garbage.
+  private var baseline: Buffer       = Buffer(Rect(0, 0, 0, 0))
+  // whether `baseline` describes what is on screen. False before the first frame, and again whenever a frame was
+  // composed but could not be written: a baseline that describes a frame the terminal never received would make the
+  // next diff skip exactly the cells that are wrong.
+  private var baselineValid: Boolean = false
 
   /** Serialises the three things that decide which screen the terminal is showing: writing a composed frame, handing
     * the terminal back to the shell, and taking it again. See [[releaseTerminal]] for what goes wrong without it.
@@ -80,12 +89,19 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     val forced  = fullRedrawRequested.claim()
     // a terminal that narrowed has already reflowed what was on screen, and the wrapped remnants sit outside the new,
     // smaller area where no amount of repainting reaches them — see ScreenReset for why only a shrink pays for this
-    val erasing = ScreenReset.clearsOnShrink(lastFlushed.map(_.area), buffer.area)
+    val erasing = ScreenReset.clearsOnShrink(Option.when(baselineValid)(baseline.area), buffer.area)
     val result  = attempt {
-      // after an erase the display is blank, so the frame is diffed against blankness rather than against a picture
-      // the terminal no longer shows
-      val previous = if forced || erasing then None else lastFlushed
-      val body     = frameEncoder.encode(previous.getOrElse(Buffer(buffer.area)), buffer)
+      // The grid the new frame is diffed against. A resize gives it a new shape, and there is nothing to recycle then;
+      // otherwise the same grid is reused for the lifetime of the size. After an erase, or when a full repaint was
+      // asked for, the frame is diffed against blankness rather than against a picture the terminal no longer shows —
+      // `reset()` produces exactly the all-empty grid a freshly allocated buffer would, without allocating one.
+      if baseline.area != buffer.area then
+        baseline = Buffer(buffer.area)
+        baselineValid = false
+      else if forced || erasing then
+        baseline.reset()
+        baselineValid = false
+      val body = frameEncoder.encode(baseline, buffer)
       // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent — unless
       // the erase itself has to go out, which is the one case where "nothing changed" still needs a write
       if body.nonEmpty || erasing then
@@ -99,7 +115,10 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
           terminal.writer().write(frame)
           terminal.writer().flush()
         }
-      lastFlushed = Some(buffer.snapshot)
+      // a private copy, so later writes into the caller's buffer cannot corrupt the next diff — the same guarantee
+      // `snapshot` gave, without the per-frame allocation
+      baseline.copyFrom(buffer)
+      baselineValid = true
     }
     // the forced frame never reached the terminal and the baseline was not updated: the request has not been served
     if forced && result.isLeft then requestFullRedraw()
@@ -110,10 +129,10 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * Public through [[Backend.requestFullRedraw]] so an app whose screen was disturbed by something this backend did
     * not do — a subprocess it started itself rather than through [[suspend]] — has a supported way to recover.
     *
-    * Raised whenever the screen stops showing what `lastFlushed` describes: the alternate screen was just cleared, or
+    * Raised whenever the screen stops showing what `baseline` describes: the alternate screen was just cleared, or
     * something else owned the terminal in between (the shell, between SIGTSTP and SIGCONT). A flag rather than a reset
-    * of the baseline keeps `lastFlushed` render-thread-private, so a request raised while a `draw` is in flight is
-    * consumed by the *following* frame instead of being overwritten by that frame's snapshot.
+    * of the baseline keeps that buffer render-thread-private, so a request raised while a `draw` is in flight is
+    * consumed by the *following* frame instead of being overwritten by that frame's own copy.
     */
   override def requestFullRedraw(): Unit = fullRedrawRequested.raise()
 
@@ -269,7 +288,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   override def clearRegion(kind: ClearType): Either[BackendError, Unit] =
     attempt {
       write(AnsiSequences.clear(kind))
-      // the screen no longer shows what `lastFlushed` describes, so a diff against it would leave the erased cells
+      // the screen no longer shows what `baseline` describes, so a diff against it would leave the erased cells
       // blank for as long as the app kept drawing them to the same values
       requestFullRedraw()
     }
@@ -371,9 +390,9 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * `LeaveAlternateScreen`; a frame is a full screen of cursor moves, SGR sequences and box-drawing glyphs. A Ctrl+Z
     * landing between the two halves of an unguarded `draw` would put that payload on the *primary* screen: the user's
     * shell and their scrollback, which is durable and outlives the app. Nothing repairs it either, because the
-    * backend's diff still believes `lastFlushed` is on screen. (The mirror case — SIGCONT racing a draw — is
-    * self-healing, since [[reacquireTerminal]] raises a full redraw.) A frame write costs microseconds, so the signal
-    * thread never waits perceptibly.
+    * backend's diff still believes `baseline` is on screen. (The mirror case — SIGCONT racing a draw — is self-healing,
+    * since [[reacquireTerminal]] raises a full redraw.) A frame write costs microseconds, so the signal thread never
+    * waits perceptibly.
     *
     * What the monitor does *not* make atomic is a whole `suspend`: the body between release and reacquire runs without
     * it, because that body is `$EDITOR`. A Ctrl+Z arriving then still interleaves two complete undress/redress
@@ -557,12 +576,12 @@ object JLine3Backend:
   private[terminal] def logTeardownFailure(error: BackendError): Unit =
     System.err.println(s"glyphora: could not restore the terminal: ${error.message}")
 
-/** The "repaint every cell next frame" request that [[JLine3Backend]] uses to keep `lastFlushed` render-thread-private.
+/** The "repaint every cell next frame" request that [[JLine3Backend]] uses to keep `baseline` render-thread-private.
   *
   * A separate value rather than a bare flag because the ordering is the whole point and is worth testing on its own:
   * `draw` [[claim]]s before it composes a frame, so a [[raise]] from another thread *during* that frame is not consumed
   * by it and survives for the next one. Writing the baseline directly from the raising thread would instead lose the
-  * repaint, because the in-flight frame's snapshot would overwrite it.
+  * repaint, because the in-flight frame's own copy would overwrite it.
   *
   * Every operation is safe from any thread.
   */
