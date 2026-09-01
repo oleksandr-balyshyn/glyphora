@@ -223,13 +223,13 @@ trait TuiApp:
     * exactly [[bindings]].
     */
   protected final def activeBindings(using scope: ReactiveScope): KeyBindings =
-    merged(screenStack.get(using scope).headOption)
+    merged(screenStack.top(using scope))
 
   /** [[activeBindings]] read without subscribing: the spelling for the event path, which must not add a dependency to
     * whatever view happens to be recomputing. Dispatch, the `Ctrl+P` gate and the command palette all read this one
     * accessor, so they cannot disagree about which keys exist.
     */
-  private def activeBindingsNow: KeyBindings = merged(screenStack.peek.headOption)
+  private def activeBindingsNow: KeyBindings = merged(screenStack.topNow)
 
   /** The screen's bindings followed by the app's, minus any app binding the screen has completely taken over.
     *
@@ -265,18 +265,10 @@ trait TuiApp:
     * The screen's `Screen.onEnter` runs immediately afterwards, on the render thread, before the frame that first shows
     * it — after the stack has been written, so a callback that reads [[screenDepthNow]] sees itself on it.
     */
-  protected final def pushScreen(screen: Screen): Unit =
-    screenStack.update(screen :: _)
-    screen.onEnter()
+  protected final def pushScreen(screen: Screen): Unit = screenStack.push(screen)
 
   /** Pops the top screen and runs its `Screen.onLeave`. No-op on an empty stack. */
-  protected final def popScreen(): Unit =
-    val popped = screenStack.peek.headOption
-    screenStack.update {
-      case _ :: tail => tail
-      case Nil       => Nil
-    }
-    popped.foreach(_.onLeave())
+  protected final def popScreen(): Unit = screenStack.pop()
 
   /** Swaps the screen on top for `screen` in a single update.
     *
@@ -284,14 +276,7 @@ trait TuiApp:
     * redraw the pop itself asked for — briefly shows the layer underneath. This writes once, so the swap is one frame.
     * On an empty stack it does the same thing as [[pushScreen]].
     */
-  protected final def replaceScreen(screen: Screen): Unit =
-    val replaced = screenStack.peek.headOption
-    screenStack.update {
-      case _ :: tail => screen :: tail
-      case Nil       => screen :: Nil
-    }
-    replaced.foreach(_.onLeave())
-    screen.onEnter()
+  protected final def replaceScreen(screen: Screen): Unit = screenStack.replace(screen)
 
   /** Unwinds every pushed screen at once, so the app's own [[view]] is what shows again.
     *
@@ -300,26 +285,21 @@ trait TuiApp:
     *
     * Every unwound screen's `Screen.onLeave` runs, innermost first — the same order as popping them one at a time.
     */
-  protected final def resetScreens(): Unit =
-    val unwound = screenStack.peek
-    screenStack.set(Nil)
-    unwound.foreach(_.onLeave())
+  protected final def resetScreens(): Unit = screenStack.reset()
 
   /** The screen on top, as a reactive read — `None` means the app's own [[view]] is showing.
     *
     * Reading it from `view` subscribes that view to navigation, so a breadcrumb or a title bar recomputes when a screen
     * is pushed or popped.
     */
-  protected final def currentScreen(using scope: ReactiveScope): Option[Screen] =
-    screenStack.get(using scope).headOption
+  protected final def currentScreen(using scope: ReactiveScope): Option[Screen] = screenStack.top
 
   /** How many screens are stacked over the app's own [[view]] — `0` when none are — as a reactive read.
     *
     * Use this from `view` (a breadcrumb that shows the depth). An event handler has no [[ReactiveScope]] and must not
     * subscribe anything anyway, so it reads [[screenDepthNow]] instead.
     */
-  protected final def screenDepth(using scope: ReactiveScope): Int =
-    screenStack.get(using scope).size
+  protected final def screenDepth(using scope: ReactiveScope): Int = screenStack.depth
 
   /** The names of the screens on the stack, outermost first — the sequence a breadcrumb wants — as a reactive read.
     *
@@ -334,8 +314,7 @@ trait TuiApp:
     * There is deliberately no accessor for the screens themselves. Handing out the list would publish the order the
     * stack happens to be stored in, and every use for it that came up — a breadcrumb, a title bar — wants the names.
     */
-  protected final def screenLabels(using scope: ReactiveScope): Seq[String] =
-    screenStack.get(using scope).reverse.flatMap(_.label)
+  protected final def screenLabels(using scope: ReactiveScope): Seq[String] = screenStack.labels
 
   /** [[screenDepth]] read without subscribing — the spelling for an event handler, which has no [[ReactiveScope]].
     *
@@ -346,7 +325,7 @@ trait TuiApp:
     * binding("esc", "back")(if screenDepthNow > 0 then popScreen() else quit())
     * }}}
     */
-  protected final def screenDepthNow: Int = screenStack.peek.size
+  protected final def screenDepthNow: Int = screenStack.depthNow
 
   /** Shows a toast in the top-right corner for `duration` (needs a `config.tickRate` for it to age out again). */
   protected final def notify(
@@ -607,8 +586,7 @@ trait TuiApp:
     * registered. Leaving the value alone also matches every other piece of per-instance state, none of which `runWith`
     * resets: running the same instance a second time keeps whatever the first run left behind.
     */
-  private def leaveRemainingScreens(): Unit =
-    screenStack.peek.foreach(_.onLeave())
+  private def leaveRemainingScreens(): Unit = screenStack.leaveAll()
 
   // ---- the loop ----
 
@@ -740,7 +718,7 @@ trait TuiApp:
     * frame depend on the navigation signal whether or not the view looked at it.
     */
   private def syncFocusLayers(run: RunState): Unit =
-    val screens = screenStack.peek
+    val screens = screenStack.allNow
     val layers  = screens.size + (if palette.isOpenNow then 1 else 0)
     val top     = screens.headOption
     // reference identity, not `==`: two screens can be equal values and still be different pushes
@@ -853,9 +831,7 @@ trait TuiApp:
     * Reads the stack with `peek` rather than `get`: this runs from the event loop, not from a view evaluation, so
     * subscribing here would attach a dependency to whatever view happened to be recomputing.
     */
-  private def topScreenClosesOnEscape: Boolean =
-    screenStack.peek.headOption
-      .exists(screen => screen.presentation == Presentation.Modal && screen.dismissal.byEscape)
+  private def topScreenClosesOnEscape: Boolean = screenStack.closesOnEscape
 
   /** The composed view: base -> screens -> palette -> toasts.
     *
@@ -865,7 +841,7 @@ trait TuiApp:
     */
   private def effectiveView(using scope: ReactiveScope): Element =
     given Theme     = theme
-    val withScreens = screenStack.get.reverse.foldLeft(view) { (below, screen) =>
+    val withScreens = screenStack.outermostFirst.foldLeft(view) { (below, screen) =>
       screen.presentation match
         case Presentation.Modal =>
           // a modal that closes on a click outside is wrapped in the backdrop that notices such a click; the layer
@@ -893,11 +869,11 @@ trait TuiApp:
   // Everything below is per-instance state written only from the render thread (event handlers, the render lambda, and
   // the app's own callbacks all run there). None of it is reset by `runWith`, so running the same instance a second
   // time keeps whatever the first run left behind — a screen still on the stack, an effect still running.
-  private val screenStack: Signal[List[Screen]] = Signal(Nil)
-  private val toasts: ToastStack                = ToastStack()
-  private val palette: CommandPalette           = CommandPalette(() => activeBindingsNow)
-  private val effects: EffectStack              = EffectStack(() => System.nanoTime())
-  private val activeHandle                      = AtomicReference[Option[RunnerHandle]](None)
+  private val screenStack: ScreenStack = ScreenStack()
+  private val toasts: ToastStack       = ToastStack()
+  private val palette: CommandPalette  = CommandPalette(() => activeBindingsNow)
+  private val effects: EffectStack     = EffectStack(() => System.nanoTime())
+  private val activeHandle             = AtomicReference[Option[RunnerHandle]](None)
 
   /** The running invocation's focus tracker, so [[focusTo]] and [[clearFocus]] can reach it. `None` outside a run,
     * which is what makes both of them no-ops rather than failures when the app is not running.
