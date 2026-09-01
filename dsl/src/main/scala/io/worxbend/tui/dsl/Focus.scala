@@ -32,9 +32,20 @@ private[dsl] final case class MouseHit(focusIndex: Int, area: Rect)
   */
 private[dsl] final class FocusTracker:
 
+  /** Which focusable holds focus, as a position in the depth-first tab order — or `-1`, meaning nothing does.
+    *
+    * `-1` is a real state, not an "uninitialised" marker: [[clearFocus]] puts the tracker there deliberately, and while
+    * it lasts no element renders focused and every key goes straight past the tree to the app's bindings. `Tab` from
+    * there lands on the first focusable and `Shift+Tab` on the last.
+    */
   var focusedIndex: Int          = 0
   var focusableCount: Int        = 0
   var focusedKey: Option[String] = None
+
+  /** The focus keys of the tree the last [[reconcile]] saw, in tab order (`None` for an unkeyed focusable). Kept so
+    * [[focusToKey]] can answer "which index is the element named `email`?" without walking the tree again.
+    */
+  private var focusKeysSeen      = Vector.empty[Option[String]]
   private val areas              = mutable.Map[Int, Rect]()
   private val pointerAreas       = mutable.Map[Int, Rect]()
   private var viewports          = List.empty[ViewportTransform]
@@ -78,22 +89,63 @@ private[dsl] final class FocusTracker:
   /** Re-anchors focus against the focus keys of the tree that is about to render (depth-first order, `None` for unkeyed
     * focusables): a keyed element keeps focus even when its position moved, and the index is clamped into the new
     * range. Areas recorded for the previous frame are dropped — this frame's render re-records them.
+    *
+    * The "nothing is focused" state survives this. A tracker at `-1` — which is where [[clearFocus]] leaves it — stays
+    * at `-1` however the tree changed shape, because the clamp is what an *existing* focus needs and re-anchoring a
+    * deliberately dropped one would put the cursor back where the app asked it not to be.
     */
   def reconcile(keys: Seq[Option[String]]): Unit =
+    focusKeysSeen = keys.toVector
     focusableCount = keys.size
-    focusedKey.map(key => keys.indexOf(Some(key))).filter(_ >= 0).foreach(focusedIndex = _)
-    focusedIndex = if focusableCount > 0 then math.max(0, math.min(focusedIndex, focusableCount - 1)) else 0
-    focusedKey = keys.lift(focusedIndex).flatten
+    if focusedIndex < 0 then focusedKey = None
+    else
+      focusedKey.map(key => keys.indexOf(Some(key))).filter(_ >= 0).foreach(focusedIndex = _)
+      focusedIndex = if focusableCount > 0 then math.max(0, math.min(focusedIndex, focusableCount - 1)) else 0
+      focusedKey = keys.lift(focusedIndex).flatten
     clearAreas()
 
+  /** Moves focus to the focusable declared with `.key(name)` in the last reconciled tree; `false` — and nothing changed
+    * — when no focusable carries that key, which is what happens when the element sits in a branch the view did not
+    * render this frame.
+    *
+    * Unlike [[focusTo]] the key is *remembered*, so focus then follows that element across later renders even when the
+    * tree changes shape: this is a lasting "the cursor belongs on the email field", not a one-off jump to a position.
+    */
+  def focusToKey(key: String): Boolean =
+    val index = focusKeysSeen.indexOf(Some(key))
+    if index < 0 then false
+    else
+      focusedIndex = index
+      focusedKey = Some(key)
+      true
+
+  /** Drops focus entirely: no element renders focused, and keys go past the tree straight to the app's bindings until
+    * `Tab`, a mouse press or [[focusToKey]] puts focus back.
+    */
+  def clearFocus(): Unit =
+    focusedIndex = -1
+    focusedKey = None
+
+  /** `Tab`. From the no-focus state this lands on the *first* focusable rather than the second one. */
   def focusNext(): Boolean =
-    if focusableCount > 1 then
+    if focusableCount == 0 then false
+    else if focusedIndex < 0 then
+      focusTo(0)
+      true
+    else if focusableCount > 1 then
       focusTo((focusedIndex + 1) % focusableCount)
       true
     else false
 
+  /** `Shift+Tab`. From the no-focus state this lands on the *last* focusable — stepping backwards out of "nothing"
+    * arrives at the end of the tab order, the same way it wraps from the first element.
+    */
   def focusPrevious(): Boolean =
-    if focusableCount > 1 then
+    if focusableCount == 0 then false
+    else if focusedIndex < 0 then
+      focusTo(focusableCount - 1)
+      true
+    else if focusableCount > 1 then
       focusTo((focusedIndex - 1 + focusableCount) % focusableCount)
       true
     else false

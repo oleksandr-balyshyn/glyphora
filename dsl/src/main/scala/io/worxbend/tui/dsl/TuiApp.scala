@@ -46,7 +46,8 @@ private final class RunState(val splash: SplashPlayer):
   * redraw when it changes — state lives in signals, not in an explicitly threaded `State` value.
   *
   * Focus and events: focusable elements form a tab order in depth-first view order; `Tab` / `Shift+Tab` cycle focus and
-  * a mouse press focuses the innermost focusable under the pointer. Key events start at the focused element and bubble
+  * a mouse press focuses the innermost focusable under the pointer; [[focusTo]] and [[clearFocus]] move it from code.
+  * Key events start at the focused element and bubble
   * to its ancestors (`true` consumes), then the app's [[bindings]] run; an unconsumed `Ctrl+P` opens the command
   * palette (when bindings exist) and `Ctrl+C` quits.
   *
@@ -281,6 +282,50 @@ trait TuiApp:
   protected final def requestRedraw(): Unit =
     activeHandle.get().foreach(_.requestRedraw())
 
+  /** Moves keyboard focus to the focusable declared with `.key(name)`, and asks for the frame that shows it.
+    *
+    * This is the imperative half of focus, next to the `Tab` traversal and click-to-focus the framework does by itself.
+    * What needs it: a form that failed validation putting the cursor back on the offending field, a list row selection
+    * handing focus to the detail pane beside it, a dialog that opens with the cursor already in its search box.
+    *
+    * {{{
+    * input(email).key("email")                     // in the view
+    * if !emailIsValid then focusTo("email")        // in a handler
+    * }}}
+    *
+    * Answers `false`, and changes nothing, when no focusable with that key was in the frame the app last rendered —
+    * the element lives in a branch the view did not render, the key is misspelt, or the app is not running. The key is
+    * then *remembered*, so focus follows that element across later renders even when the tree changes shape.
+    *
+    * Call it on the render thread, which every event handler, timer body and `Async` continuation already is.
+    */
+  protected final def focusTo(key: String): Boolean =
+    activeFocus.get().exists { tracker =>
+      val moved = tracker.focusToKey(key)
+      if moved then requestRedraw()
+      moved
+    }
+
+  /** Drops focus entirely: no element renders focused, and keys go past the tree straight to the app's [[bindings]]
+    * until `Tab`, a mouse press or [[focusTo]] puts focus back. `Tab` from here lands on the first focusable and
+    * `Shift+Tab` on the last.
+    *
+    * Useful when a view enters a mode where element-level keys would be in the way — a "press any key to continue"
+    * state, or a global search overlay whose keys must not be eaten by whatever happened to be focused. No-op when the
+    * app is not running.
+    */
+  protected final def clearFocus(): Unit =
+    activeFocus.get().foreach { tracker =>
+      tracker.clearFocus()
+      requestRedraw()
+    }
+
+  /** The `.key(name)` of the element that currently holds focus — `None` when it is unkeyed, nothing is focusable,
+    * focus was cleared, or the app is not running. Read without subscribing, for an event handler.
+    */
+  protected final def focusedKey: Option[String] =
+    activeFocus.get().flatMap(_.focusedKey)
+
   /** Copies `text` to the system clipboard via OSC 52. Best-effort — terminals without OSC 52 support ignore it, and it
     * is a no-op when the app is not running.
     */
@@ -356,6 +401,9 @@ trait TuiApp:
       TerminalRunner(backend, effectiveConfig, redrawRequested = () => run.invalidated).run(
         handle =>
           activeHandle.set(Some(handle))
+          // published for the same reason and with the same lifetime as the handle: `focusTo`/`clearFocus` are called
+          // from app code that cannot see this run's `RunState`, and must be inert once the run is over
+          activeFocus.set(Some(run.tracker))
           // on the render thread, and while this run is still registered on it: the clock this app's animations read
           // is the one belonging to this loop, and the exit path below can no longer resolve it for itself
           run.renderLoop = Some(AnimationClock.attachToCurrentLoop())
@@ -368,6 +416,7 @@ trait TuiApp:
       // dropped *before* `onStop`, so the terminal services an app might reach for during teardown are inert rather
       // than talking to a backend the runner has already closed
       activeHandle.set(None)
+      activeFocus.set(None)
       onStop()
       // after `onStop`, so an app cancelling timers there still animates whatever its last frames show
       run.renderLoop.foreach(AnimationClock.releaseLoop)
@@ -514,3 +563,8 @@ trait TuiApp:
   private val palette: CommandPalette           = CommandPalette(() => bindings)
   private val effects: EffectStack              = EffectStack(() => System.nanoTime())
   private val activeHandle                      = AtomicReference[Option[RunnerHandle]](None)
+
+  /** The running invocation's focus tracker, so [[focusTo]] and [[clearFocus]] can reach it. `None` outside a run,
+    * which is what makes both of them no-ops rather than failures when the app is not running.
+    */
+  private val activeFocus = AtomicReference[Option[FocusTracker]](None)

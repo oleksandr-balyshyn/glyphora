@@ -49,6 +49,35 @@ column(
 During the next focus pass glyphora finds the same key in the new tree and moves the
 focus index to it.
 
+## Move focus from application code
+
+The same key is how an app moves focus itself, alongside the `Tab` traversal and
+click-to-focus the framework does on its own:
+
+```scala
+binding("ctrl+s", "save") {
+  if !emailIsValid then
+    notify("that email address is not valid", NoticeLevel.Warning)
+    focusTo("email")      // put the cursor back on the offending field
+  else save()
+}
+```
+
+`focusTo(key)` answers `false` and changes nothing when no focusable carrying that key
+was in the frame the app last rendered — which is what happens when the element sits in
+a branch the view did not render, or when the key is misspelt. When it succeeds, the key
+is remembered, so focus then *follows* that element across later renders the way a
+`.key(...)` normally does.
+
+`clearFocus()` is the other direction: it leaves nothing focused at all, so no element
+renders with the focus cue and keys go straight past the tree to the app's bindings.
+`Tab` from there lands on the first focusable and `Shift+Tab` on the last. `focusedKey`
+reads back where focus currently is (`None` when the focused element is unkeyed, when
+focus was cleared, or when the app is not running).
+
+All three are no-ops outside a run, so calling one from a constructor is a `false`
+rather than a crash.
+
 ## Use concise handlers for exact keys
 
 `.onKey` consumes an event only when one of its keys matches and composes with other
