@@ -28,7 +28,11 @@ final case class ScrollbarSymbols(
 
 object ScrollbarSymbols:
 
-  /** Track and thumb only, no caps — the shape a `Scrollbar` draws when nothing is overridden. */
+  /** Track and thumb only, no caps — the shape a `Scrollbar` draws when nothing is overridden.
+    *
+    * Two places take their default glyphs from here: `Scrollbar`'s own parameter defaults, and the DSL's `scrollbar`
+    * factory. Changing either glyph changes the look of every scrollbar in both layers at once.
+    */
   val Plain: ScrollbarSymbols = ScrollbarSymbols("│", "█")
 
   /** A single-line vertical bar capped with `↑` and `↓`. */

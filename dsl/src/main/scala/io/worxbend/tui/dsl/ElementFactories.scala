@@ -366,7 +366,15 @@ private[dsl] trait ElementFactories:
     * next to without being told to; `.thumbStyle(...)` overrides the moving part on its own.
     */
   def scrollbar(contentLength: Int, position: Int = 0)(using theme: Theme): ScrollbarElement =
-    ScrollbarElement(contentLength, position, Direction.Vertical, theme.border, theme.primary, "│", "█")
+    ScrollbarElement(
+      contentLength,
+      position,
+      Direction.Vertical,
+      theme.border,
+      theme.primary,
+      w.ScrollbarSymbols.Plain.track,
+      w.ScrollbarSymbols.Plain.thumb,
+    )
 
   /** A month grid for `month` (1–12) of `year`, weeks starting Monday, with `selected` (a day of the month)
     * highlighted. Needs 20 columns and up to 8 rows; anything smaller clips. See [[w.Calendar]].
