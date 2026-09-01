@@ -13,9 +13,10 @@ Everything above (`tui-runtime`, widgets, DSL) talks to `Backend` only.
   nothing here calls: glyphora uses four JLine types in total. Keeps a snapshot of the last
   flushed frame and writes only changed cells, batched into one ANSI string per
   frame, with OSC 8 hyperlink transitions. `create(colorDepth)` takes an optional
-  color-depth override; the default honors `NO_COLOR`/`CLICOLOR_FORCE`.
-- **`ColorDepth`** — `TrueColor`/`Ansi256`/`Ansi16`/`NoColor`, with environment
-  detection (`COLORTERM`, `TERM`, and the `NO_COLOR`/`CLICOLOR_FORCE` conventions)
+  color-depth override; the default honors the `NO_COLOR`/`CLICOLOR` conventions.
+- **`ColorDepth`** — `TrueColor`/`Ansi256`/`Ansi16`/`Monochrome`/`NoColor`, with
+  environment detection (`COLORTERM`, `TERM`, `TERM_PROGRAM`, and the
+  `NO_COLOR`/`CLICOLOR`/`CLICOLOR_FORCE` conventions)
   and RGB downsampling to the nearest palette entry.
 - **`InputDecoder`** — ANSI/CSI/SS3/SGR-mouse decoder, injected with a plain
   `read(timeoutMillis) => Int` function so it is fully unit-tested without a TTY.

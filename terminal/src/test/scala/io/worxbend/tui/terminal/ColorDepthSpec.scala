@@ -11,7 +11,6 @@ final class ColorDepthSpec extends AnyFunSuite:
     assert(ColorDepth.detect(Map("COLORTERM" -> "24bit", "TERM" -> "xterm")) == ColorDepth.TrueColor)
     assert(ColorDepth.detect(Map("TERM" -> "xterm-256color")) == ColorDepth.Ansi256)
     assert(ColorDepth.detect(Map("TERM" -> "vt100")) == ColorDepth.Ansi16)
-    assert(ColorDepth.detect(Map.empty) == ColorDepth.Ansi16)
 
   /** Case folding uses `Locale.ROOT`, not the JVM's default locale. Under a Turkish locale the default folding turns
     * `"24BIT"` into `"24bıt"` (a dotless i), which matches nothing — so a true-colour terminal used to be downgraded to
@@ -36,6 +35,127 @@ final class ColorDepthSpec extends AnyFunSuite:
       ) == ColorDepth.TrueColor
     )
     assert(ColorDepth.detect(Map("NO_COLOR" -> "1", "CLICOLOR_FORCE" -> "0")) == ColorDepth.NoColor)
+
+  test("TERM=dumb disables color even when COLORTERM advertises true color"):
+    assert(ColorDepth.detect(Map("TERM" -> "dumb", "COLORTERM" -> "truecolor")) == ColorDepth.NoColor)
+    assert(ColorDepth.detect(Map("TERM" -> "DUMB")) == ColorDepth.NoColor)
+    // exact equality, not a substring match: a terminfo name that merely contains "dumb" is a real terminal
+    assert(ColorDepth.detect(Map("TERM" -> "xterm-dumbterm")) == ColorDepth.Ansi16)
+
+  test("CLICOLOR=0 disables color, and CLICOLOR_FORCE still overrides it"):
+    assert(ColorDepth.detect(Map("CLICOLOR" -> "0", "TERM" -> "xterm-256color")) == ColorDepth.NoColor)
+    assert(ColorDepth.detect(Map("CLICOLOR" -> "1", "TERM" -> "xterm-256color")) == ColorDepth.Ansi256)
+    assert(ColorDepth.detect(Map("CLICOLOR" -> "0", "CLICOLOR_FORCE" -> "1", "TERM" -> "vt100")) == ColorDepth.Ansi16)
+
+  /** An unset or empty `TERM` is what a process sees when its output is a file rather than a terminal. The two
+    * assertions at the end guard the ordering: an explicit `COLORTERM`, or a forced-on `CLICOLOR_FORCE`, still wins.
+    */
+  test("an absent TERM means output is not going to a terminal"):
+    assert(ColorDepth.detect(Map.empty) == ColorDepth.NoColor)
+    assert(ColorDepth.detect(Map("TERM" -> "")) == ColorDepth.NoColor)
+    assert(ColorDepth.detect(Map("COLORTERM" -> "truecolor")) == ColorDepth.TrueColor)
+    assert(ColorDepth.detect(Map("CLICOLOR_FORCE" -> "1")) == ColorDepth.Ansi16)
+
+  test("an old Apple Terminal.app is capped at 256 colors despite its COLORTERM"):
+    def apple(version: Option[String]): ColorDepth =
+      ColorDepth.detect(
+        Map("TERM" -> "xterm-256color", "COLORTERM" -> "truecolor", "TERM_PROGRAM" -> "Apple_Terminal")
+          ++ version.map("TERM_PROGRAM_VERSION" -> _)
+      )
+    assert(apple(Some("440")) == ColorDepth.Ansi256)
+    assert(apple(Some("465")) == ColorDepth.TrueColor)
+    assert(apple(Some("465.1")) == ColorDepth.TrueColor)
+    assert(apple(None) == ColorDepth.Ansi256)
+    assert(apple(Some("abc")) == ColorDepth.Ansi256)
+    // the vendor token is matched case-insensitively
+    assert(
+      ColorDepth.detect(
+        Map(
+          "TERM"                 -> "xterm-256color",
+          "COLORTERM"            -> "truecolor",
+          "TERM_PROGRAM"         -> "apple_terminal",
+          "TERM_PROGRAM_VERSION" -> "440",
+        )
+      ) == ColorDepth.Ansi256
+    )
+
+  /** `screen` and `tmux` hand the outer terminal's `COLORTERM` to the program without necessarily being able to honor
+    * it, so the claim is not believed unless the multiplexer's own `TERM` says direct color was passed through.
+    */
+  test("a multiplexer TERM caps a COLORTERM claim at 256 colors unless it advertises direct color"):
+    assert(ColorDepth.detect(Map("TERM" -> "screen-256color", "COLORTERM" -> "truecolor")) == ColorDepth.Ansi256)
+    assert(ColorDepth.detect(Map("TERM" -> "tmux-256color", "COLORTERM" -> "truecolor")) == ColorDepth.Ansi256)
+    assert(ColorDepth.detect(Map("TERM" -> "tmux-direct", "COLORTERM" -> "truecolor")) == ColorDepth.TrueColor)
+    assert(ColorDepth.detect(Map("TERM" -> "screen-truecolor", "COLORTERM" -> "24bit")) == ColorDepth.TrueColor)
+
+  test("the corrections leave every other terminal alone"):
+    assert(ColorDepth.detect(Map("TERM" -> "xterm-256color", "COLORTERM" -> "24bit")) == ColorDepth.TrueColor)
+    assert(
+      ColorDepth.detect(Map("TERM" -> "xterm-256color", "COLORTERM" -> "truecolor", "TERM_PROGRAM" -> "iTerm.app"))
+        == ColorDepth.TrueColor
+    )
+    val oldApple =
+      Map("COLORTERM" -> "truecolor", "TERM_PROGRAM" -> "Apple_Terminal", "TERM_PROGRAM_VERSION" -> "440")
+    assert(ColorDepth.detect(oldApple + ("NO_COLOR" -> "1")) == ColorDepth.NoColor)
+    // forced back on, but still corrected: the correction is a capability question, not an opt-out
+    assert(ColorDepth.detect(oldApple + ("NO_COLOR" -> "1") + ("CLICOLOR_FORCE" -> "1")) == ColorDepth.Ansi256)
+
+  /** Monochrome is opt-in, by overriding the application's `colorDepth`; no environment resolves to it. */
+  test("detection never resolves to Monochrome"):
+    val environments = Seq(
+      Map.empty[String, String],
+      Map("TERM"     -> "dumb"),
+      Map("NO_COLOR" -> "1"),
+      Map("TERM"     -> "xterm-256color", "COLORTERM" -> "truecolor"),
+    )
+    assert(environments.forall(env => ColorDepth.detect(env) != ColorDepth.Monochrome))
+
+  /** Monochrome maps color to contrast instead of discarding it: bright colors become white, dark ones black, judged by
+    * Rec.709 luminance rather than a channel average — which is why blue is dark and yellow is light.
+    */
+  test("Monochrome thresholds every color to black or white by luminance"):
+    def mono(color: Color): Color = ColorDepth.downsample(color, ColorDepth.Monochrome)
+    assert(mono(Color.Rgb(0, 0, 0)) == Color.Black)
+    assert(mono(Color.Rgb(255, 255, 255)) == Color.White)
+    assert(mono(Color.Rgb(128, 128, 128)) == Color.White)
+    assert(mono(Color.Rgb(127, 127, 127)) == Color.Black)
+    assert(mono(Color.Blue) == Color.Black)
+    assert(mono(Color.BrightYellow) == Color.White)
+    assert(mono(Color.Indexed(196)) == Color.Black)
+
+  /** Contrast with the NoColor assertions above, which emit no color codes at all: a selection drawn only as a
+    * background color survives this rung.
+    */
+  test("Monochrome still emits color codes, unlike NoColor"):
+    val style = Style.Default.withFg(Color.Rgb(200, 0, 0)).withBg(Color.Rgb(20, 20, 20))
+    val codes = AnsiSequences.sgr(style, ColorDepth.Monochrome)
+    assert(codes.contains("37")) // white foreground
+    assert(codes.contains("40")) // black background
+    assert(AnsiSequences.sgr(style, ColorDepth.NoColor) == "\u001b[0m")
+
+  test("Monochrome flips a foreground that would land on the same tone as its background"):
+    val bothLight = Style.Default.withFg(Color.White).withBg(Color.BrightYellow)
+    assert(AnsiSequences.sgr(bothLight, ColorDepth.Monochrome) == "\u001b[0;30;47m")
+    val bothDark  = Style.Default.withFg(Color.Blue).withBg(Color.Black)
+    assert(AnsiSequences.sgr(bothDark, ColorDepth.Monochrome) == "\u001b[0;37;40m")
+    // a style with no background is left alone: the terminal's own background is unknowable here
+    assert(AnsiSequences.sgr(Style.Default.withFg(Color.Blue), ColorDepth.Monochrome) == "\u001b[0;30m")
+
+  test("Monochrome names a contrasting foreground for a background-only style"):
+    // the ordinary selection highlight sets a background and lets the text inherit the terminal's foreground. That
+    // foreground can threshold to the background's own tone, and the selected row would then be a solid block.
+    val lightSelection = Style.Default.withBg(Color.BrightWhite)
+    assert(AnsiSequences.sgr(lightSelection, ColorDepth.Monochrome) == "[0;30;47m")
+    val darkSelection  = Style.Default.withBg(Color.Black)
+    assert(AnsiSequences.sgr(darkSelection, ColorDepth.Monochrome) == "[0;37;40m")
+
+  test("Monochrome lifts an underline color off the background tone"):
+    val onDark  = Style.Default.withBg(Color.Black).curlyUnderline.withUnderlineColor(Color.Rgb(10, 10, 10))
+    // the underline thresholds dark, exactly like the background, so it is flipped to the contrasting tone
+    assert(AnsiSequences.sgr(onDark, ColorDepth.Monochrome).contains("58:2::229:229:229"))
+    val onLight = Style.Default.withBg(Color.BrightWhite).curlyUnderline.withUnderlineColor(Color.Rgb(240, 240, 240))
+    // same collision on a light background, flipped the other way
+    assert(AnsiSequences.sgr(onLight, ColorDepth.Monochrome).contains("58:2::0:0:0"))
 
   test("NoColor drops color codes from SGR but keeps text attributes"):
     val style = Style.Default.withFg(Color.Rgb(255, 0, 0)).withBg(Color.Blue).bold.underline

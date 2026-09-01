@@ -6,62 +6,129 @@ import java.util.Locale
 
 /** How many colors the terminal can actually show; RGB output is downsampled to fit.
   *
-  * [[NoColor]] is not a device capability but an explicit opt-out: when it is in effect the backend emits text
-  * attributes (bold, underline, …) but no foreground/background color at all. It is what honoring the `NO_COLOR`
-  * convention resolves to.
+  * The rungs run from most to least capable. [[Monochrome]] and [[NoColor]] are the two ways of coping with a terminal
+  * that cannot show a palette, and they are not the same thing:
+  *   - [[Monochrome]] still emits color codes, but every color is thresholded to black or white by how bright it is. A
+  *     selection that is conveyed only by a background color stays visible, which is what a two-tone terminal — or a
+  *     black-and-white screen capture of a colorful app — needs.
+  *   - [[NoColor]] is not a device capability but an explicit opt-out: when it is in effect the backend emits text
+  *     attributes (bold, underline, …) but no foreground/background color at all. It is what honoring the `NO_COLOR`
+  *     convention resolves to.
+  *
+  * Nothing in the environment ever resolves to [[Monochrome]]; it is opt-in, by overriding the application's
+  * `colorDepth`.
   */
 enum ColorDepth:
-  case TrueColor, Ansi256, Ansi16, NoColor
+  case TrueColor, Ansi256, Ansi16, Monochrome, NoColor
 
 object ColorDepth:
 
   /** Resolves the effective color depth from the environment.
     *
-    * Precedence follows the widely-adopted conventions:
-    *   1. `NO_COLOR` set to any non-empty value disables color entirely (see https://no-color.org) — unless
-    *   2. `CLICOLOR_FORCE` is set to a non-zero value, which forces color on even when `NO_COLOR` asks for none or the
-    *      output is not a TTY.
-    *   3. Otherwise `COLORTERM=truecolor|24bit` wins, a `256color` `TERM` falls back to the 256 palette, and everything
-    *      else to the classic 16.
+    * Precedence follows the widely-adopted conventions (https://no-color.org and https://bixense.com/clicolors/):
+    *   1. `NO_COLOR` set to any non-empty value, or `CLICOLOR` set to exactly `0`, disables color entirely — unless
+    *   2. `CLICOLOR_FORCE` is set to a non-zero value, which forces color on even when the two above ask for none or
+    *      the output is not a TTY.
+    *   3. `TERM=dumb` resolves to [[NoColor]]: by convention such a terminal understands no escape sequences at all, so
+    *      a `COLORTERM` inherited from an outer terminal must not resurrect color.
+    *   4. Otherwise `COLORTERM=truecolor|24bit` wins (subject to the corrections in [[capability]]), a `256color`
+    *      `TERM` falls back to the 256 palette, and everything else to the classic 16.
+    *   5. An unset or empty `TERM` with no `COLORTERM` signal resolves to [[NoColor]]: that is what output redirected
+    *      into a file looks like from inside the process.
+    *
+    * A `CLICOLOR_FORCE` lifts steps 3 and 5 too: if the environment would otherwise say "no color at all", forcing
+    * color on yields the classic sixteen.
     */
   def detect(env: Map[String, String] = sys.env): ColorDepth =
     val forced   = env.get("CLICOLOR_FORCE").exists(value => value.nonEmpty && value != "0")
-    val disabled = env.get("NO_COLOR").exists(_.nonEmpty)
+    val disabled = env.get("NO_COLOR").exists(_.nonEmpty) || env.get("CLICOLOR").contains("0")
     if disabled && !forced then NoColor
-    else capability(env)
+    else
+      val detected = capability(env)
+      // `CLICOLOR_FORCE` means "emit color anyway", so it also lifts the two capability answers of NoColor — a `dumb`
+      // or absent TERM — back to the classic sixteen colors, which is the safest thing to force on.
+      if forced && detected == NoColor then Ansi16 else detected
 
   /** The capability half of [[detect]], on the environment variables the conventions above name.
     *
-    * Both comparisons lower-case with `Locale.ROOT` rather than the default locale. Under a Turkish locale
+    * Two corrections apply to a `COLORTERM` claim, because some terminals advertise 24-bit color they cannot render and
+    * then mangle every RGB escape instead of showing an approximation:
+    *   - macOS `Terminal.app` (`TERM_PROGRAM=Apple_Terminal`) only gained 24-bit SGR support in build 465. An older
+    *     build, or a build number this code cannot read, is capped at the 256 palette.
+    *   - Inside `screen` or `tmux` the multiplexer passes the outer terminal's `COLORTERM` through without necessarily
+    *     being able to honor it. Such a session is capped at the 256 palette unless its own `TERM` says otherwise
+    *     (`tmux-direct`, `screen-truecolor`, …), which is the documented way of saying the multiplexer was configured
+    *     to pass 24-bit color through.
+    *
+    * All comparisons lower-case with `Locale.ROOT` rather than the default locale. Under a Turkish locale
     * `"24BIT".toLowerCase` is `"24bıt"` with a dotless i, so `contains("24bit")` fails and a true-colour terminal is
     * silently downgraded to sixteen colours — every RGB style in the app flattens to the nearest named colour because
     * of the user's language setting.
     */
   private def capability(env: Map[String, String]): ColorDepth =
-    val colorterm = env.getOrElse("COLORTERM", "").toLowerCase(Locale.ROOT)
-    val term      = env.getOrElse("TERM", "").toLowerCase(Locale.ROOT)
-    if colorterm.contains("truecolor") || colorterm.contains("24bit") then TrueColor
-    else if term.contains("256") then Ansi256
+    val colorterm       = env.getOrElse("COLORTERM", "").toLowerCase(Locale.ROOT)
+    val term            = env.getOrElse("TERM", "").toLowerCase(Locale.ROOT)
+    val claimsTrueColor = colorterm.contains("truecolor") || colorterm.contains("24bit")
+    if term == "dumb" then NoColor
+    else if claimsTrueColor && canRenderTrueColor(env, term) then TrueColor
+    else if claimsTrueColor || term.contains("256") then Ansi256
+    else if term.isEmpty then NoColor
     else Ansi16
+
+  /** Whether a terminal that *claims* 24-bit color can actually show it; see [[capability]] for the two exceptions.
+    *
+    * Anything not recognised as one of those exceptions is believed, so the common case (a modern terminal setting
+    * `COLORTERM=truecolor`) is unaffected.
+    */
+  private def canRenderTrueColor(env: Map[String, String], term: String): Boolean =
+    val program = env.getOrElse("TERM_PROGRAM", "")
+    if program.equalsIgnoreCase("Apple_Terminal") then appleTerminalHasTrueColor(env)
+    else if term.startsWith("screen") || term.startsWith("tmux") then
+      term.contains("truecolor") || term.contains("direct")
+    else true
+
+  /** `Terminal.app` build 465 is the first that renders 24-bit SGR; `TERM_PROGRAM_VERSION` carries the build number,
+    * sometimes with a suffix such as `465.1`, so only the leading digits are read.
+    *
+    * A missing or unreadable version counts as *not* capable on purpose: guessing too low costs a slightly duller
+    * frame, guessing too high costs unreadable escape sequences on screen.
+    */
+  private def appleTerminalHasTrueColor(env: Map[String, String]): Boolean =
+    env.get("TERM_PROGRAM_VERSION").flatMap(_.takeWhile(_.isDigit).toIntOption).exists(_ >= 465)
 
   /** Reduces `color` to something `depth` can represent (identity for capable terminals). [[NoColor]] is handled by the
     * SGR encoder dropping color codes, so this returns the color unchanged for it.
     */
   def downsample(color: Color, depth: ColorDepth): Color =
     depth match
-      case TrueColor => color
-      case NoColor   => color
-      case Ansi256   =>
+      case TrueColor  => color
+      case NoColor    => color
+      case Monochrome => if isLight(color) then Color.White else Color.Black
+      case Ansi256    =>
         color match
           case rgb: Color.Rgb => Color.Indexed(nearestIndexed(rgb))
           case other          => other
-      case Ansi16    =>
+      case Ansi16     =>
         color match
           case Color.Rgb(r, g, b)                  => nearestNamed(r, g, b)
           case Color.Indexed(index) if index >= 16 =>
             val (r, g, b) = Color.approximateRgb(Color.Indexed(index))
             nearestNamed(r, g, b)
           case other                               => other
+
+  /** Rec.709 relative luminance of `color`, on the same 0-255 scale as its channels.
+    *
+    * Green counts for far more than blue because the eye is far more sensitive to it: naively averaging the channels
+    * would call pure blue and pure yellow equally bright, and thresholding both the same way would make yellow text on
+    * a blue background disappear. Goes through [[Color.approximateRgb]] so a named or indexed color answers the same
+    * question as an RGB one. Integer arithmetic on purpose, so there is no floating-point rounding to argue about.
+    */
+  private def luminance(color: Color): Int =
+    val (r, g, b) = Color.approximateRgb(color)
+    (2126 * r + 7152 * g + 722 * b) / 10000
+
+  /** Which of the two tones [[Monochrome]] maps `color` to: `true` is the light one (white), `false` the dark one. */
+  private[terminal] def isLight(color: Color): Boolean = luminance(color) >= 128
 
   /** Nearest xterm-256 palette entry: the grayscale ramp for near-gray values, else the 6x6x6 color cube. */
   private def nearestIndexed(rgb: Color.Rgb): Int =

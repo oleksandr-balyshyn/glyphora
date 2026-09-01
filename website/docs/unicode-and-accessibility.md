@@ -149,18 +149,39 @@ You never pick colors twice. Write the color you mean — including 24-bit
 
 ### What is detected
 
-`ColorDepth.detect()` reads four environment variables, in this order:
+`ColorDepth.detect()` reads the environment, in this order:
 
-1. **`NO_COLOR`** — set to any non-empty value, color is off entirely
-   ([no-color.org](https://no-color.org)). Text attributes still work: bold,
-   dim, italic, underline and reverse are emitted, only the color codes are dropped.
+1. **`NO_COLOR` and `CLICOLOR=0`** — either one turns color off entirely
+   ([no-color.org](https://no-color.org) and the
+   [CLICOLOR convention](https://bixense.com/clicolors/)); `NO_COLOR` counts when it is
+   set to any non-empty value, `CLICOLOR` only when it is exactly `0`. Text attributes
+   still work: bold, dim, italic, underline and reverse are emitted, only the color
+   codes are dropped.
 2. **`CLICOLOR_FORCE`** — set to anything other than empty or `0`, color is forced
-   back on, overriding `NO_COLOR` and overriding "output is not a TTY".
-3. **`COLORTERM`** — containing `truecolor` or `24bit` means the full 24-bit palette.
-4. **`TERM`** — containing `256` means the xterm-256 palette. Anything else falls back
-   to the classic sixteen named colors.
+   back on, overriding the two above and overriding "output is not a TTY". If the rest
+   of the environment would have said "no color at all", forcing gives you the classic
+   sixteen.
+3. **`TERM=dumb`** — a terminal that by convention understands no escape sequences, so
+   this resolves to `NoColor` before `COLORTERM` is even looked at. A `COLORTERM`
+   inherited from an outer terminal must not resurrect color here. The match is exact,
+   so a terminfo name that merely contains `dumb` is unaffected.
+4. **`COLORTERM`** — containing `truecolor` or `24bit` means the full 24-bit palette,
+   with two corrections for terminals that advertise color they cannot render:
+   - macOS `Terminal.app` (`TERM_PROGRAM=Apple_Terminal`) only gained 24-bit output in
+     build 465, so an older `TERM_PROGRAM_VERSION` — or one that cannot be read — is
+     capped at the 256 palette.
+   - Inside `screen` or `tmux` the multiplexer passes the outer terminal's `COLORTERM`
+     through whether or not it can honor it, so such a session is capped at 256 unless
+     its own `TERM` advertises direct color (`TERM=tmux-direct`,
+     `TERM=screen-truecolor`). Setting `COLORTERM=` empty forces the fallback instead.
+5. **`TERM`** — containing `256` means the xterm-256 palette. An unset or empty `TERM`
+   with no `COLORTERM` signal means `NoColor`: that is what output redirected into a
+   file looks like from inside the process. Anything else falls back to the classic
+   sixteen named colors.
 
-The resolved value is one of `ColorDepth.TrueColor`, `Ansi256`, `Ansi16` or `NoColor`.
+The resolved value is one of `ColorDepth.TrueColor`, `Ansi256`, `Ansi16`, `Monochrome`
+or `NoColor`. Nothing in the environment ever resolves to `Monochrome`; it is opt-in,
+described below.
 
 ### How a color degrades
 
@@ -169,6 +190,7 @@ The resolved value is one of `ColorDepth.TrueColor`, `Ansi256`, `Ansi16` or `NoC
 | `TrueColor` | emitted as-is |
 | `Ansi256` | nearest entry of the xterm-256 palette — the 24-step grayscale ramp for near-gray values, otherwise the 6×6×6 color cube |
 | `Ansi16` | nearest of the sixteen named colors (and a `Color.Indexed(n)` with `n >= 16` is approximated to RGB first, then reduced the same way) |
+| `Monochrome` | thresholded by Rec.709 relative luminance to `Color.Black` or `Color.White`; a foreground that lands on the same tone as its background is flipped to the opposite one, and `Modifiers.Reverse` remains the way to express a highlight |
 | `NoColor` | dropped; the cell keeps its attributes |
 
 Two RGB shades that are close together can therefore land on the *same* cell color at
@@ -191,11 +213,20 @@ per `run()`. Pinning it to `Ansi16` makes every RGB style in the app go through 
 reduction above, so the run you are looking at is the run a user on a plain `xterm`
 gets. `ColorDepth.NoColor` does the same for the `NO_COLOR` audience.
 
+`ColorDepth.Monochrome` is the rung between those two. It still emits color codes, but
+every color becomes black or white depending on how bright it is, so a selection drawn
+only as a background color stays visible instead of vanishing the way it does under
+`NoColor`. Pin it for a two-tone terminal, or to check that a black-and-white screen
+capture of a colorful app is still readable.
+
 From a shell, the same two checks without touching the code:
 
 ```bash
 NO_COLOR=1 ./mill examples.showcase.run       # attributes only, no color at all
 TERM=xterm COLORTERM= ./mill examples.showcase.run   # sixteen colors
+TERM=dumb ./mill examples.showcase.run        # no color codes at all
+TERM_PROGRAM=Apple_Terminal TERM_PROGRAM_VERSION=440 COLORTERM=truecolor \
+  ./mill examples.showcase.run                # 256 colors, not 24-bit
 ```
 
 Test at least one sixteen-color environment and one true-color terminal before
