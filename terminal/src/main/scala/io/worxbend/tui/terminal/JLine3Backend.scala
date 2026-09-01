@@ -312,6 +312,24 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       requestFullRedraw()
     }
 
+  /** Writes the XTerm "resize the text area" sequence.
+    *
+    * Under `screenOwnership` like every other out-of-band write, so a Ctrl+Z cannot land between leaving the alternate
+    * screen and this write and aim it at the user's shell.
+    *
+    * Nothing is recorded and nothing is restored on the way out: unlike raw mode or the alternate screen, a window size
+    * is not a mode this backend switched on and owes the shell back. If the emulator honoured the request, the new size
+    * is the user's terminal now, and shrinking it back on exit would be this library second-guessing a change the user
+    * can see and undo.
+    */
+  override def requestSize(size: Size): Either[BackendError, Unit] =
+    require(size.width > 0 && size.height > 0, s"requestSize needs a positive size, got $size")
+    attempt {
+      screenOwnership.synchronized {
+        write(AnsiSequences.resizeWindow(size))
+      }
+    }
+
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     attempt(write(AnsiSequences.clipboardCopy(text)))
 

@@ -194,6 +194,12 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   back on the way out — but only when the app was the one that turned it off, because
   re-enabling it unasked would overwrite the preference of a user who runs a steady
   caret.
+  `requestSize(size)` asks the emulator to resize its own text area. It is named for
+  the asymmetry with the read-only `size`: asking is not getting. Most emulators
+  disable window manipulation by default and ignore the request silently, the ones
+  that honour it clamp it to the screen, and a tiling window manager overrules both.
+  `size` and `Event.Resize` therefore stay the only truth about how big the terminal
+  is — never wait for a resize event that may never arrive.
   All of these are defaulted no-ops on the trait, so a backend written before they
   existed still compiles.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`

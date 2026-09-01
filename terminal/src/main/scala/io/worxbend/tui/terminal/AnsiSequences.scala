@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Color, Modifiers, Style, UnderlineStyle}
+import io.worxbend.tui.core.{Color, Modifiers, Size, Style, UnderlineStyle}
 
 /** ANSI escape sequences the backend emits. Pure string construction, no I/O — separately testable. */
 private[terminal] object AnsiSequences:
@@ -144,6 +144,18 @@ private[terminal] object AnsiSequences:
   def clipboardCopy(text: String): String =
     val encoded = java.util.Base64.getEncoder.encodeToString(text.getBytes(java.nio.charset.StandardCharsets.UTF_8))
     s"$Esc]52;c;$encoded$Esc\\"
+
+  /** XTerm window manipulation, "resize the text area" — `CSI 8 ; rows ; columns t` (XTerm `ctlseqs.ms`, "Window
+    * manipulation").
+    *
+    * Note the argument order: rows first, then columns, which is the reverse of how [[io.worxbend.tui.core.Size]] reads
+    * (width, then height). Getting that backwards produces a terminal of the transposed shape rather than an error, so
+    * the swap lives here, named, rather than being written out at each call site.
+    *
+    * Most emulators disable window operations by default and ignore this silently, which is why the caller can never
+    * learn from the sequence alone whether it worked.
+    */
+  def resizeWindow(size: Size): String = s"$Esc[8;${size.height};${size.width}t"
 
   /** OSC 2 window/tab title.
     *

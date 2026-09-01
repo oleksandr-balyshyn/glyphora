@@ -62,6 +62,24 @@ trait Backend:
     val _ = position
     Right(())
 
+  /** Asks the terminal emulator to resize its text area to `size`.
+    *
+    * Named `requestSize` rather than `setSize`, and the asymmetry with the read-only [[size]] is the point: asking is
+    * not the same as getting. Most emulators disable window manipulation by default and ignore the request without
+    * saying so, the ones that honour it apply their own clamping to the screen and to their configured limits, and a
+    * tiling window manager overrules both. Success here means the request was written and nothing more.
+    *
+    * So [[size]] and `Event.Resize` remain the only truth about how big the terminal is. A caller must not assume the
+    * requested size took effect, and must not wait for a resize event that may never arrive.
+    *
+    * `size` must have strictly positive width and height; a zero or negative request is a defect, not a runtime
+    * failure, so it is rejected with `IllegalArgumentException` rather than a [[BackendError]]. Must run on the render
+    * thread. The default is a successful no-op for backends with no emulator to ask.
+    */
+  def requestSize(size: Size): Either[BackendError, Unit] =
+    val _ = size
+    Right(())
+
   /** Sets whether the terminal's own caret blinks (the DECSET 12 mode).
     *
     * Cosmetic, and a companion to [[setCursorPosition]] rather than a replacement for [[hideCursor]]: a form can blink

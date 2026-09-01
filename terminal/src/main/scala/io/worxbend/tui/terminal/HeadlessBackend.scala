@@ -38,6 +38,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val clears                                           = scala.collection.mutable.ArrayBuffer.empty[ClearType]
   private val insertedBlocks                                   = scala.collection.mutable.ArrayBuffer.empty[Buffer]
   private val scrolledRegions = scala.collection.mutable.ArrayBuffer.empty[ScrolledRegion]
+  private val sizeRequests    = scala.collection.mutable.ArrayBuffer.empty[Size]
 
   def size: Either[BackendError, Size] = Right(terminalSize)
 
@@ -126,6 +127,22 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     */
   override def requestFullRedraw(): Unit =
     val _ = fullRedrawCounter.incrementAndGet()
+
+  /** Records the request and, unlike a real emulator, honours it.
+    *
+    * A real terminal is free to refuse, so an app must never depend on a resize arriving. This backend grants every
+    * request instead, for two reasons: there is no window manager here to model a refusal faithfully, and a test that
+    * wants to see the app's reaction to a resize already has [[resizeTo]] to force one. Delegating to `resizeTo` means
+    * the app sees a genuine `Event.Resize` through its normal path rather than a size that changed behind its back.
+    *
+    * [[requestedSizes]] keeps what was asked for, which is the half a test asserting on the *app* wants: it can check
+    * the app asked for the right shape without also depending on the grant.
+    */
+  override def requestSize(size: Size): Either[BackendError, Unit] =
+    require(size.width > 0 && size.height > 0, s"requestSize needs a positive size, got $size")
+    sizeRequests.synchronized { val _ = sizeRequests += size }
+    resizeTo(size)
+    Right(())
 
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     lastClipboard = Some(text)
@@ -273,6 +290,9 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** How many times a full repaint was requested via [[requestFullRedraw]]. */
   def fullRedrawCount: Long = fullRedrawCounter.get()
+
+  /** The sizes asked for via [[requestSize]], in order — what the app wanted, as opposed to what it got. */
+  def requestedSizes: Seq[Size] = sizeRequests.synchronized(sizeRequests.toSeq)
 
   /** The erases requested via [[clearRegion]], in order. */
   def clearedRegions: Seq[ClearType] = clears.synchronized(clears.toSeq)
