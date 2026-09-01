@@ -56,3 +56,22 @@ final class KeyBindingsSpec extends AnyFunSuite:
   test("a multi-key binding rejects a malformed spec anywhere in the list"):
     assertThrows[IllegalArgumentException](binding(Seq("down", "banana"), "next")(()))
     assertThrows[IllegalArgumentException](binding(Seq.empty[String], "next")(()))
+
+  test("a compiler-checked key declares the same binding the string spec does"):
+    var fromLiteral = 0
+    var fromSpec    = 0
+    val checked     = binding(key"ctrl+s", "ctrl+s", "save")(fromLiteral += 1)
+    val spelled     = binding("ctrl+s", "save")(fromSpec += 1)
+
+    assert(checked.triggers == spelled.triggers)
+    assert(checked.label == spelled.label)
+    assert(KeyBindings(checked).handle(KeyEvent(KeyCode.Char('s'), KeyModifiers.Ctrl)))
+    assert(fromLiteral == 1 && fromSpec == 0)
+
+  test("a several-key binding still shows one hint"):
+    val declared = binding(Seq(key"down", key"j"), "down", "next")(())
+    assert(declared.triggers.sizeIs == 2)
+    assert(KeyBindings(declared).hints == Seq(("down", "next")))
+
+  test("a binding declared with no keys at all is a programmer error"):
+    assertThrows[IllegalArgumentException](binding(Seq.empty[KeyEvent], "none", "boom")(()))

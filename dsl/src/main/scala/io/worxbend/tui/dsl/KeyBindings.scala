@@ -37,6 +37,28 @@ def binding(keys: Seq[String], description: String)(action: => Unit): KeyBinding
   require(keys.nonEmpty, "a binding needs at least one key spec")
   KeyBinding(keys.map(parseSpec), keys.head, description, () => action)
 
+/** Declares one binding from an already-parsed key, for the compiler-checked `key"ctrl+s"` spelling:
+  * `binding(key"ctrl+s", "ctrl+s", "save") { … }`.
+  *
+  * The `label` is separate here, where the string form derives it from the spec, because a [[KeyEvent]] does not carry
+  * the text it was written as — and the label is what the status bar and the help overlay show, so guessing at a
+  * spelling for it would put a key on screen under a name its author did not choose.
+  *
+  * @param trigger
+  *   the key that fires the action, usually written `key"ctrl+s"`
+  * @param label
+  *   how the key is spelled to the user in hints and in the help overlay
+  */
+def binding(trigger: KeyEvent, label: String, description: String)(action: => Unit): KeyBinding =
+  KeyBinding(Seq(trigger), label, description, () => action)
+
+/** Declares one binding that several already-parsed keys fire — the [[KeyEvent]] counterpart of
+  * `binding(Seq("down", "j"), …)`, with the same one-hint-per-command behaviour.
+  */
+def binding(triggers: Seq[KeyEvent], label: String, description: String)(action: => Unit): KeyBinding =
+  require(triggers.nonEmpty, "a binding needs at least one key")
+  KeyBinding(triggers, label, description, () => action)
+
 /** Parses one spec or throws — bindings are static declarations, so a bad spec is a programmer error that should fail
   * at startup rather than turn into a key that never fires.
   *

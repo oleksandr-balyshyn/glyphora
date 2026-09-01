@@ -159,6 +159,41 @@ when the light changes for any other reason.
 A spec that names no key (`"ctrl+"`) or no known key (`"banana"`) is a programmer error
 and throws from `binding` at declaration time.
 
+### Checking a key spec while compiling
+
+"Throws at declaration time" still means the program has to run before anyone finds out.
+Every spec in an application is a string written by hand, so a typo in one is knowable
+much earlier than that. `key"ctrl+s"` is the same spec put through the same parser, but
+during compilation: it gives back the `KeyEvent` the spec names, and a spec the parser
+rejects fails the build with the parser's own message instead.
+
+```scala
+override def bindings = KeyBindings(
+  binding(key"ctrl+s", "ctrl+s", "save current file")(save()),
+  binding("ctrl+o", "open project")(openProject()),      // the string form still works
+)
+
+panel("editor")(editor).onKey(key"ctrl+d") { duplicateLine() }
+```
+
+Three kinds of spec are a compile error rather than a value:
+
+- one the parser rejects — `key"ctlr+s"` (misspelt modifier), `key"banana"` (no such
+  key), `key"ctrl+"` (modifiers with no key), `key"ctrl+i"` (a combination no terminal
+  can deliver);
+- one with a `$` hole in it, because a value filled in later is not known while
+  compiling;
+- anything that is not a literal at all.
+
+For a spec that genuinely is built at run time — read from a config file, say — keep
+using `KeyEvent.parse`, which reports the same problem as a `Left` you can show the
+person who wrote the config.
+
+The `KeyEvent` form of `binding` takes the label separately, as
+`binding(key"ctrl+s", "ctrl+s", "save current file")`. A `KeyEvent` does not remember
+the text it was written as, and the label is what the status bar and the help overlay
+show, so glyphora asks for it rather than inventing a spelling.
+
 ## Modifier keys held on their own
 
 A modifier is normally visible only as part of another key's event: holding Ctrl and

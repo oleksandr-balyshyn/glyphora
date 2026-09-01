@@ -162,6 +162,21 @@ val Modifiers: io.worxbend.tui.core.Modifiers.type = io.worxbend.tui.core.Modifi
 type Borders = io.worxbend.tui.widgets.Borders
 val Borders: io.worxbend.tui.widgets.Borders.type = io.worxbend.tui.widgets.Borders
 
+/** `key"ctrl+s"` — a key spec the compiler checks, giving back the [[KeyEvent]] it names.
+  *
+  * The same value `KeyEvent.parse("ctrl+s")` produces, except that a spec the parser rejects — `ctlr+s`, a key name
+  * that does not exist, a Ctrl combination no terminal can deliver — stops the build with the parser's own message
+  * rather than throwing when the binding is first declared. Pass it wherever a `KeyEvent` is taken:
+  * `.onKey(key"ctrl+s") { … }` on an element, or `binding(key"ctrl+s", "ctrl+s", "save") { … }`.
+  *
+  * Written out here rather than `export`ed for a mechanical reason: an extension method on `StringContext` cannot be
+  * re-exported, so the one-import promise needs the forwarder. Its body is the same macro call `tui-core` declares, so
+  * there is one implementation and not two. Only a literal can be checked; a spec assembled at run time keeps going
+  * through [[KeyEvent.parse]].
+  */
+extension (inline sc: StringContext)
+  inline def key(inline args: Any*): KeyEvent = ${ io.worxbend.tui.core.KeySpecLiteral.expand('sc, 'args) }
+
 // `AsyncErrorHandler` and `QueuedTaskFailures` are here for the same reason as everything else in this block: they are
 // named by signatures this package already exports. `Async.run`'s `onError` parameter takes an `AsyncErrorHandler`, and
 // installing a `given` one is the documented way to decide where a background failure is reported;
