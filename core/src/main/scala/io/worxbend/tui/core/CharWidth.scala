@@ -242,12 +242,10 @@ object CharWidth:
       // a variation selector only speaks for a base that has both presentations; after a letter or an ideograph
       // it is inert decoration, and a cluster that is nothing but selectors has no base at all
       else if isEmojiCapable(base) then presentationWidth(cluster, base, mode)
+      // zero-width is asked first, so a codepoint that is both zero-width and ambiguous — the combining marks in the
+      // ambiguous set are — keeps its zero rather than falling through to `baseWidth`
       else if isZeroWidth(base) || Character.isISOControl(base) then 0
-      else if isWideCodePoint(base) then 2
-      // an ambiguous codepoint is asked about last, so a codepoint that is both zero-width and ambiguous — the
-      // combining marks in the ambiguous set are — keeps the zero the earlier branch already gave it
-      else if mode == WidthMode.Wide && isAmbiguousCodePoint(base) then 2
-      else 1
+      else baseWidth(base, mode)
 
   /** Whether `cluster` contains U+FE0F, the variation selector that asks for a character's emoji presentation.
     *
@@ -271,8 +269,15 @@ object CharWidth:
   private def presentationWidth(cluster: String, base: Int, mode: WidthMode): Int =
     if containsCodePoint(cluster, TextPresentationSelector) then 1
     else if containsCodePoint(cluster, EmojiPresentationSelector) then 2
-    else if isWideCodePoint(base) then 2
-    else if mode == WidthMode.Wide && isAmbiguousCodePoint(base) then 2
+    else baseWidth(base, mode)
+
+  /** The width of `cp` on its own, before any selector, flag or combining rule has had a say: East Asian Wide and
+    * Fullwidth are two columns, and East Asian Ambiguous is two only when the caller asked for [[WidthMode.Wide]]. This
+    * is the single owner of the ambiguous-width policy, so a caller changing that knob changes one place.
+    */
+  private def baseWidth(cp: Int, mode: WidthMode): Int =
+    if isWideCodePoint(cp) then 2
+    else if mode == WidthMode.Wide && isAmbiguousCodePoint(cp) then 2
     else 1
 
   /** Whether `cp` is a character that has both a text and an emoji presentation, so that a variation selector or a ZWJ
