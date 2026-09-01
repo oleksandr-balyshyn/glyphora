@@ -38,6 +38,40 @@ Built-in widgets already route their width calculations through generated Unicod
 Character Database tables. `TextInput` and `TextArea` edit by grapheme cluster, so
 Backspace does not split combining sequences or emoji families.
 
+## Characters Unicode gives no single width
+
+A few hundred characters — the box-drawing set, Greek and Cyrillic letters, the arrow
+block, `±`, `×` — carry the East Asian Width property *Ambiguous*. A terminal configured
+for a Western locale draws them one column wide; one configured for a Chinese, Japanese
+or Korean locale draws the same characters two columns wide, because its font has
+full-width glyphs for them. Nothing your program sends chooses between the two, and
+nothing it receives reports which was chosen: the decision lives in the user's terminal
+settings.
+
+glyphora measures and lays out everything as one column, the Western answer, and that
+does not change — a widget and the buffer it clips against have to agree on every column,
+so there is exactly one number the renderer uses. What you can now ask for is the *other*
+answer, so your application can notice when the two will disagree:
+
+```scala
+import io.worxbend.tui.core.{CharWidth, WidthMode}
+
+CharWidth.of("─α")                          // 2 — what glyphora lays out with
+CharWidth.of("─α", WidthMode.Wide)          // 4 — what a CJK-locale terminal will show
+CharWidth.isAmbiguousCodePoint('─'.toInt)   // true
+
+span.widthIn(WidthMode.Wide)                // the same question for a Span, Line or Text
+line.widthIn(WidthMode.Wide)
+text.widthIn(WidthMode.Wide)
+```
+
+`widthIn(WidthMode.Narrow)` is exactly `width`, so the two never drift apart. The reason
+to care is that glyphora's own borders are made of ambiguous characters: under a CJK
+locale a bordered box is drawn wider than it was measured, and the mismatch shows as a
+border that runs past its pane. If your users work in those locales, compare the two
+numbers for the text you are about to draw and, where they differ, either use the ASCII
+border set or leave the extra columns free.
+
 ## The terminal's own caret
 
 A widget's caret is a styled cell: visible to someone looking at the screen, and

@@ -17,6 +17,11 @@ package io.worxbend.tui.core
 final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None, style: Style = Style.Default):
   def width: Int = spans.map(_.width).sum
 
+  /** This row's width under a given East Asian Ambiguous policy — the sum of its spans' [[Span.widthIn]]. See
+    * [[WidthMode]]; `widthIn(WidthMode.Narrow)` is exactly [[width]].
+    */
+  def widthIn(mode: WidthMode): Int = spans.map(_.widthIn(mode)).sum
+
   /** This line with `style` as its base layer, replacing whatever base it had. The spans are untouched, so each one
     * keeps its own style and still wins over this one wherever the two disagree.
     *

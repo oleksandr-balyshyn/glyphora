@@ -10,10 +10,12 @@ import java.util.Arrays
   * for anything that affects layout.
   *
   * Widths are derived from the Unicode Character Database: East Asian Width `W`/`F` codepoints (see [[WidthTable]]) are
-  * two columns; combining marks, format controls, and conjoining Hangul jamo are zero; everything else is one.
-  * Variation selectors override the base width — VS16 forces emoji presentation (two columns), VS15 text presentation
-  * (one) — but only after a base that has both presentations; after a letter or an ideograph they are inert. A
-  * regional-indicator pair (flag emoji) is two.
+  * two columns; combining marks, format controls, and conjoining Hangul jamo are zero; everything else is one. East
+  * Asian Width `A` (Ambiguous) codepoints — box drawing, Greek, Cyrillic, arrows, `±`, `×` — are one column, which is
+  * what a Western-locale terminal draws; the overloads that take a [[WidthMode]] answer the CJK-locale question
+  * instead, and that mode is the one thing here a caller may vary. Variation selectors override the base width — VS16
+  * forces emoji presentation (two columns), VS15 text presentation (one) — but only after a base that has both
+  * presentations; after a letter or an ideograph they are inert. A regional-indicator pair (flag emoji) is two.
   *
   * Everything here is a pure function of its arguments and holds no state, so it is safe to call from any thread. The
   * one exception is [[graphemeClusters]], which hands back a stateful iterator; its own documentation states who owns
@@ -21,13 +23,27 @@ import java.util.Arrays
   */
 object CharWidth:
 
-  /** Display width of `text` in terminal columns. Control characters count as zero. */
-  def of(text: String): Int =
+  /** Display width of `text` in terminal columns. Control characters count as zero.
+    *
+    * Ambiguous-width codepoints count as one column, which is what a Western-locale terminal draws and what every
+    * widget in this library lays out with. Use the [[WidthMode]] overload to ask the CJK-locale question.
+    */
+  def of(text: String): Int = of(text, WidthMode.Narrow)
+
+  /** Display width of `text` in terminal columns, measuring East Asian Ambiguous codepoints according to `mode`.
+    *
+    * `WidthMode.Narrow` gives exactly the number the single-argument [[of]] gives, and is what the renderer uses.
+    * `WidthMode.Wide` gives the number a terminal running under a Chinese, Japanese or Korean locale would use — see
+    * [[WidthMode]] for why the two differ and why an application might want to know both.
+    */
+  def of(text: String, mode: WidthMode): Int =
+    // the ASCII fast path holds under either mode: no codepoint in 0x20-0x7E is East Asian Ambiguous, so there is
+    // nothing for the mode to change. Do not "fix" this by taking the fast path away from the Wide branch.
     if isPrintableAscii(text) then text.length
     else
       var total    = 0
       val clusters = graphemeClusters(text)
-      while clusters.hasNext do total += clusterWidth(clusters.next())
+      while clusters.hasNext do total += clusterWidth(clusters.next(), mode)
       total
 
   /** Whether every char of `text` is printable US-ASCII (`0x20`–`0x7E`), i.e. exactly one column each.
@@ -55,7 +71,12 @@ object CharWidth:
     else null // scalafix:ok DisableSyntax; hot-path sentinel: an Option here allocates on every ASCII character
 
   /** The longest prefix of `text` that fits in `maxWidth` columns; never splits a grapheme cluster. */
-  def substringByWidth(text: String, maxWidth: Int): String =
+  def substringByWidth(text: String, maxWidth: Int): String = substringByWidth(text, maxWidth, WidthMode.Narrow)
+
+  /** [[substringByWidth]] measuring East Asian Ambiguous codepoints according to `mode` — the prefix that would fit
+    * `maxWidth` columns of a terminal running that locale's width rules.
+    */
+  def substringByWidth(text: String, maxWidth: Int, mode: WidthMode): String =
     if isPrintableAscii(text) then
       return text.substring(
         0,
@@ -67,7 +88,7 @@ object CharWidth:
     var truncated = false
     while !truncated && clusters.hasNext do
       val cluster = clusters.next()
-      val width   = clusterWidth(cluster)
+      val width   = clusterWidth(cluster, mode)
       if used + width > maxWidth then truncated = true
       else
         prefix.append(cluster)
@@ -103,7 +124,7 @@ object CharWidth:
       while clusters.hasNext do
         val cluster = clusters.next()
         if skipped >= skipWidth then remainder ++= cluster
-        else skipped += clusterWidth(cluster)
+        else skipped += clusterWidth(cluster, WidthMode.Narrow)
       remainder.result()
 
   /** `text` with every grapheme cluster whose base code point is a control character (C0, DEL, C1) removed.
@@ -125,9 +146,25 @@ object CharWidth:
         if !isControlCluster(cluster) then kept ++= cluster
       kept.result()
 
-  /** Whether `codePoint` has East Asian Width `W` (Wide) or `F` (Fullwidth), i.e. occupies two columns. */
-  def isWideCodePoint(codePoint: Int): Boolean =
-    val table    = WidthTable.WideRanges
+  /** Whether `codePoint` has East Asian Width `W` (Wide) or `F` (Fullwidth), i.e. occupies two columns in every
+    * terminal, whatever locale it runs under.
+    */
+  def isWideCodePoint(codePoint: Int): Boolean = inRanges(WidthTable.WideRanges, codePoint)
+
+  /** Whether `codePoint` has East Asian Width `A` (Ambiguous): one column under a Western locale, two under a Chinese,
+    * Japanese or Korean one. See [[WidthMode]].
+    *
+    * Worth knowing before reaching for it: the box-drawing characters this library's own borders are made of are all
+    * ambiguous, which is why a border drawn under a CJK locale can come out twice as wide as it was measured.
+    */
+  def isAmbiguousCodePoint(codePoint: Int): Boolean = inRanges(WidthTable.AmbiguousRanges, codePoint)
+
+  /** Whether `codePoint` falls inside one of `table`'s inclusive ranges.
+    *
+    * `table` is a flat sorted array of (start, end) pairs, so a plain binary search over it lands either exactly on a
+    * boundary — the codepoint is a range's own start or end, so it is inside — or between two entries.
+    */
+  private def inRanges(table: Array[Int], codePoint: Int): Boolean =
     val position = Arrays.binarySearch(table, codePoint)
     if position >= 0 then true
     else
@@ -191,12 +228,12 @@ object CharWidth:
   private[core] def ofCluster(cluster: String): Int =
     // 0x20-0x7E is exactly one column and covers no combining mark, no East Asian W/F, and no control character
     if cluster.length == 1 && cluster.charAt(0) >= FirstPrintableAscii && cluster.charAt(0) <= LastPrintableAscii then 1
-    else clusterWidth(cluster)
+    else clusterWidth(cluster, WidthMode.Narrow)
 
   private def isControlCluster(cluster: String): Boolean =
     cluster.nonEmpty && Character.isISOControl(cluster.codePointAt(0))
 
-  private def clusterWidth(cluster: String): Int =
+  private def clusterWidth(cluster: String, mode: WidthMode): Int =
     if cluster.isEmpty then 0
     else
       val base = cluster.codePointAt(0)
@@ -204,9 +241,12 @@ object CharWidth:
       if isRegionalIndicator(base) && secondCodePointIsRegionalIndicator(cluster, base) then 2
       // a variation selector only speaks for a base that has both presentations; after a letter or an ideograph
       // it is inert decoration, and a cluster that is nothing but selectors has no base at all
-      else if isEmojiCapable(base) then presentationWidth(cluster, base)
+      else if isEmojiCapable(base) then presentationWidth(cluster, base, mode)
       else if isZeroWidth(base) || Character.isISOControl(base) then 0
       else if isWideCodePoint(base) then 2
+      // an ambiguous codepoint is asked about last, so a codepoint that is both zero-width and ambiguous — the
+      // combining marks in the ambiguous set are — keeps the zero the earlier branch already gave it
+      else if mode == WidthMode.Wide && isAmbiguousCodePoint(base) then 2
       else 1
 
   /** Whether `cluster` contains U+FE0F, the variation selector that asks for a character's emoji presentation.
@@ -221,11 +261,18 @@ object CharWidth:
 
   /** The width of an emoji-capable `base` once its variation selector has had its say: VS15 forces text presentation
     * (one column), VS16 forces emoji presentation (two). With neither, the base's own width stands.
+    *
+    * "The base's own width" is where `mode` gets a say. Many of the characters that reach here are symbols rather than
+    * emoji — the box-drawing set, the arrows, `±` and `×` are all category `Sm` or `So` and so are treated as
+    * emoji-capable — and those are exactly the East Asian Ambiguous characters a CJK-locale terminal draws two columns
+    * wide. An explicit variation selector still outranks the locale, because a selector is the author saying which
+    * presentation they meant.
     */
-  private def presentationWidth(cluster: String, base: Int): Int =
+  private def presentationWidth(cluster: String, base: Int, mode: WidthMode): Int =
     if containsCodePoint(cluster, TextPresentationSelector) then 1
     else if containsCodePoint(cluster, EmojiPresentationSelector) then 2
     else if isWideCodePoint(base) then 2
+    else if mode == WidthMode.Wide && isAmbiguousCodePoint(base) then 2
     else 1
 
   /** Whether `cp` is a character that has both a text and an emoji presentation, so that a variation selector or a ZWJ

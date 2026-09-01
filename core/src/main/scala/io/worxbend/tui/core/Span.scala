@@ -4,6 +4,15 @@ package io.worxbend.tui.core
 final case class Span(content: String, style: Style):
   def width: Int = CharWidth.of(content)
 
+  /** This span's width under a given East Asian Ambiguous policy — see [[WidthMode]].
+    *
+    * `widthIn(WidthMode.Narrow)` is exactly [[width]]. `widthIn(WidthMode.Wide)` is what a terminal running under a
+    * Chinese, Japanese or Korean locale would give the same characters, which is more wherever the text contains box
+    * drawing, Greek, Cyrillic or arrows. [[width]] stays the one number the renderer agrees with; this one exists so an
+    * application can notice that a CJK-locale terminal will disagree with it, and leave room accordingly.
+    */
+  def widthIn(mode: WidthMode): Int = CharWidth.of(content, mode)
+
   /** This span with its [[Style]] put through `transform`, the content untouched: `span.styled(_.bold)`.
     *
     * The point is that a span handed back by a helper can be adjusted instead of taken apart and rebuilt. Before this

@@ -18,6 +18,14 @@ final case class Text(lines: Seq[Line], alignment: Option[Alignment] = None, sty
 
   def width: Int = if lines.isEmpty then 0 else lines.map(_.width).max
 
+  /** This block's width under a given East Asian Ambiguous policy — the widest of its lines' [[Line.widthIn]], and zero
+    * when there are no lines. See [[WidthMode]]; `widthIn(WidthMode.Narrow)` is exactly [[width]].
+    *
+    * The widest line under one policy need not be the widest under the other: a long ASCII line can lose to a shorter
+    * one full of box drawing once the ambiguous characters count double.
+    */
+  def widthIn(mode: WidthMode): Int = if lines.isEmpty then 0 else lines.map(_.widthIn(mode)).max
+
   /** This text with `style` as its base layer, replacing whatever base it had. The lines and their spans are untouched,
     * so each keeps its own style and still wins over this one wherever the two disagree.
     *
