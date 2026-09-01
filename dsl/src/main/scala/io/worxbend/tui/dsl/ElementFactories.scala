@@ -671,10 +671,18 @@ private[dsl] trait ElementFactories:
 
   /** A one-row horizontal divider, optionally captioned. Drawn in the ambient [[Theme]]'s `border` style, with the
     * caption in `muted`, so it matches the frames around it.
+    *
+    * `borderType` picks the weight of the line from the same set panels frame themselves with, so a divider inside a
+    * `panel(...).borderType(BorderType.Thick)` can be given the same weight and read as part of the same frame.
     */
-  def rule(label: String = "")(using theme: Theme): WidgetElement =
+  def rule(label: String = "", borderType: w.BorderType = w.BorderType.Plain)(using theme: Theme): WidgetElement =
     WidgetElement(
-      w.Rule(Option(label).filter(_.nonEmpty), style = theme.border, labelStyle = theme.muted),
+      w.Rule(
+        Option(label).filter(_.nonEmpty),
+        style = theme.border,
+        labelStyle = theme.muted,
+        borderType = borderType,
+      ),
       rows = Some(1),
     )
 

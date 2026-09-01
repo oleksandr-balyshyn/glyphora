@@ -183,6 +183,20 @@ final class DslConstructionSpec extends AnyFunSuite:
     val element = line(Span.raw("Total")).rightAligned
     assert(trimmedLines(rendered(element.widget, 8, 1)) == Seq("   Total"))
 
+  /** A divider inside a thick panel has to be drawn with the thick run, or the two read as separate frames. */
+  test("rule takes its weight from a BorderType and still claims one row"):
+    given Theme = Theme.default
+    val thick   = rule("cfg", BorderType.Thick)
+    assert(
+      thick.widget == io.worxbend.tui.widgets.Rule(
+        Some("cfg"),
+        style = Theme.default.border,
+        labelStyle = Theme.default.muted,
+        borderType = BorderType.Thick,
+      )
+    )
+    assert(thick.claim == SizeClaim.rows(1))
+    assert(trimmedLines(rendered(rule("", BorderType.Double).widget, 6, 1)) == Seq("══════"))
   /** `table` is a `FlexContainer`, so the alignment and gap builders every `row` and `column` has apply to its columns
     * too. Before that, fixed-width columns could only ever pack at the left of the area they were given.
     */

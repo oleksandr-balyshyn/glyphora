@@ -79,7 +79,10 @@ Core structural elements:
 - `row(children*)` / `column(children*)` — constrained layout containers;
 - `spacer` / `spacer(cells)` — flexible or fixed blank space;
 - `line(spans*)` — one row carrying several styles (see [Text, documents, and logs](#text-documents-and-logs));
-- `rule(label)` — horizontal divider;
+- `rule(label, borderType)` — horizontal divider, whose weight comes from the same
+  `BorderType` set panels frame themselves with: `Plain`, `Rounded` (which draws the
+  plain run, since rounding only affects corners), `Double`, or `Thick`. Giving the
+  divider the panel's own border type is what makes the two read as one frame;
 - `scrollView(content, state)` — measured vertical viewport with wheel/key scrolling;
 - `tabbedContent("Name" -> page, ...)(selected)` — tabs plus the selected page;
 - `collapsible(title, expanded)(body)` — toggleable disclosure region;
