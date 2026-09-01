@@ -26,12 +26,44 @@ import io.worxbend.tui.dsl.*
 |---|---|---|
 | `table` / `TableElement` | column widths and an optional header, nothing else | the rows are short, static and read-only — a percentile summary, a key list |
 | `dataTable` / `DataTableElement` | sort, filter, selection, scroll and paging, all in a caller-owned `DataTableState` | the reader has to find a row, and the rows outlive one frame |
+| `styledTable` / `StyledTableElement` | the same as `table`, but every cell is a `Line`, so it can carry its own colour, and a row can be taller than one line | one cell has to look different from its neighbours — a red `failed`, a dim timestamp |
 
 `table` renders and stops there: no state, no focus, no keys. That is the point —
 a six-row latency summary that could be highlighted but never acted on invites a
 click that does nothing. The `table(rows, widths*)` factory omits the header, so
-construct `TableElement(rows, widths, header = Some(...))` directly when you want
-one.
+add one with `.header(...)`, and a bottom-pinned summary row with `.footer(...)`.
+
+## Colour one cell without colouring the row
+
+`table` takes `String`s, and a `String` has no style of its own: the whole table
+gets one style and every cell in it looks the same. `styledTable` takes cells as
+`Line`s instead, and a `Line` carries its own spans and styles, so a status
+column can be green on the rows that passed and red on the one that did not:
+
+```scala
+def view(using ReactiveScope, theme: Theme): Element =
+  styledTable(
+    Seq(
+      Seq(Line.raw("api"), Line.styled("ready", theme.success)),
+      Seq(Line.raw("cache"), Line.styled("failed", theme.error)),
+    ),
+    Constraint.Fill(1),
+    Constraint.Length(8),
+  ).header(Line.raw("service"), Line.raw("state"))
+    .footer(Line.raw("total"), Line.raw("2"))
+```
+
+Two further shapes are accepted wherever a cell or a row is:
+
+- a `TableCell(line, columnSpan)` covers several columns at once — a grouped
+  caption over a pair of data columns, or a full-width note inside the body;
+- a `TableRow(cells, height, topMargin, bottomMargin, style)` gives one row extra
+  vertical room, a blank line above or below it, or a style of its own.
+
+Both may be mixed with plain `Line`s and plain cell sequences in the same call,
+so nothing pays for a feature it does not use. Everything else — the varargs
+widths, the equal-column fallback when you pass none, rendering only the visible
+rows — behaves exactly as it does for `table`.
 
 ## Rebuild the table, keep the state
 

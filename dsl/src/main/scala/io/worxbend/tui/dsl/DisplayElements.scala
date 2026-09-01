@@ -1,6 +1,7 @@
 package io.worxbend.tui.dsl
 
 import io.worxbend.tui.core.{Alignment, CharWidth, Color, Constraint, Flex, Line, Span, Style, Text, Widget}
+import io.worxbend.tui.widgets.{TableCell, TableRow}
 import io.worxbend.tui.widgets as w
 
 import java.time.LocalTime
@@ -304,6 +305,49 @@ final case class TableElement(
   def footer(labels: String*): TableElement = copy(footer = Some(labels))
 
   private[dsl] def withProps(props: ElementProps): TableElement = copy(props = props)
+
+/** A static table whose cells carry their own styles, and whose rows can be taller than one line.
+  *
+  * The same widget as [[TableElement]] draws both; the difference is what a cell is made of. Here a cell is a
+  * [[io.worxbend.tui.core.Line]] — or a [[io.worxbend.tui.widgets.TableCell]] when it has to span several columns — so
+  * one figure in a row can be red while the rest of the row stays plain. A row is either a bare sequence of those
+  * cells, one line tall, or a [[io.worxbend.tui.widgets.TableRow]], which adds a height, top and bottom margins and a
+  * style of its own. Both shapes may appear in the same table.
+  *
+  * Before this node the DSL could express none of that: `table(...)` takes `String`s, so a caller wanting a single
+  * green cell had to drop out of the element tree into `widget(w.Table(...))` and give up every fluent builder on the
+  * way. The two nodes stay separate rather than becoming one node over a union type, because a union two collections
+  * deep is unpleasant to read and to infer — the same reasoning that gives the widget its `Table.ofStrings`.
+  *
+  * A [[FlexContainer]], exactly like [[TableElement]]: `.center` / `.flexEnd` place the block of columns when
+  * fixed-width columns leave room over, and `.gap(n)` sets the blank cells between neighbouring columns.
+  */
+final case class StyledTableElement(
+    rows: Seq[TableRow.Source],
+    widths: Seq[Constraint],
+    header: Option[Seq[TableCell.Source]] = None,
+    footer: Option[Seq[TableCell.Source]] = None,
+    columnSpacing: Int = 1,
+    flex: Flex = Flex.Start,
+    props: ElementProps = ElementProps(),
+) extends FlexContainer:
+  type Self = StyledTableElement
+  def widget: Widget =
+    w.Table(rows, widths, header, footer, columnSpacing, flex, props.style)
+
+  /** This table rebuilt with the leftover width placed differently — see [[TableElement.withFlex]]. */
+  def withFlex(mode: Flex): StyledTableElement = copy(flex = mode)
+
+  /** This table rebuilt with `cells` blank columns between neighbouring columns (negative counts clamp to zero). */
+  def withSpacing(cells: Int): StyledTableElement = copy(columnSpacing = math.max(0, cells))
+
+  /** Adds a bold caption row above the data — one cell per column, in the same order as `widths`. */
+  def header(cells: TableCell.Source*): StyledTableElement = copy(header = Some(cells))
+
+  /** Adds a bold summary row pinned to the *bottom* of the table's area — see [[TableElement.footer]]. */
+  def footer(cells: TableCell.Source*): StyledTableElement = copy(footer = Some(cells))
+
+  private[dsl] def withProps(props: ElementProps): StyledTableElement = copy(props = props)
 
 /** Escape hatch: any core [[Widget]] as a leaf element (its rendering ignores the element style).
   *

@@ -2,6 +2,7 @@ package io.worxbend.tui.dsl
 
 import io.worxbend.tui.core.{Constraint, Direction, Line, Size, Span, Style, Text, Widget}
 import io.worxbend.tui.runtime.{ReactiveScope, Signal}
+import io.worxbend.tui.widgets.TableRow
 import io.worxbend.tui.widgets as w
 
 import scala.concurrent.duration.FiniteDuration
@@ -160,6 +161,24 @@ private[dsl] trait ElementFactories:
     */
   def table(rows: Seq[Seq[String]], widths: Constraint*): TableElement =
     TableElement(rows, widths)
+
+  /** A static table whose cells carry their own styles: one element of `rows` per line, one `widths` constraint per
+    * column, and every cell a [[io.worxbend.tui.core.Line]] rather than a `String`.
+    *
+    * This is [[table]] for the case where one cell has to look different from its neighbours — a red "failed", a dim
+    * timestamp — which a grid of plain strings cannot say. Build a cell with `Line.raw("ok")` or
+    * `Line.styled("ok", theme.success)`. A cell that must cover several columns is a
+    * [[io.worxbend.tui.widgets.TableCell]], and a row that needs more than one line of room, margins around it, or a
+    * style of its own is a [[io.worxbend.tui.widgets.TableRow]]; plain cell sequences and both of those may be mixed
+    * freely in one call.
+    *
+    * Everything [[table]] does it does too: varargs widths, so no widths at all means equal columns; only the visible
+    * rows are rendered; `.header(...)` and `.footer(...)` add the caption and the bottom-pinned summary. For a grid of
+    * plain text prefer [[table]] — it says less and reads better. For sorting, filtering and a selection use
+    * [[dataTable]].
+    */
+  def styledTable(rows: Seq[TableRow.Source], widths: Constraint*): StyledTableElement =
+    StyledTableElement(rows, widths)
 
   /** Any `tui-core` [[Widget]] as a leaf element — the escape hatch down a level when a widget knob has no DSL builder
     * yet, or when the widget is your own.
