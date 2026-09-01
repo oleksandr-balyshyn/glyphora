@@ -489,6 +489,27 @@ row(
 )
 ```
 
+### Bar glyphs
+
+A terminal has no pixels, so a bar two and a half cells tall is drawn as two full cells and
+one half-filled one. The glyphs that make that possible are the eight Unicode block
+elements `▁▂▃▄▅▆▇█`, and `BarSet` is the record that holds them — one glyph per eighth of a
+cell, plus an optional glyph for the cells the bar does not reach. `Sparkline` and
+`BarChart` both take one as `barSet`:
+
+```scala
+Sparkline(samples, barSet = BarSet.Ascii)   // '#', for a terminal with no block elements
+BarChart(data, barSet = BarSet.Halves)      // three levels: empty, half a cell, a whole cell
+BarChart(data, barSet = BarSet.Solid)       // whole cells only, no sub-cell precision
+Sparkline(samples, barSet = BarSet.uniform("*", empty = Some("·")))
+```
+
+The default, `BarSet.Eighths`, has no empty glyph, so the cells above a bar are left exactly
+as they were — that is what lets a chart be drawn over an existing background. The other
+built-in sets do have one, so each bar gets a visible track behind it, painted in the bar's
+own style. Every glyph in a set must be a single terminal column wide, because a bar is
+measured in whole columns and a two-column glyph would spill into the bar next door.
+
 For custom plots, `canvas(xBounds, yBounds)(shapes*)` provides points, segments,
 polylines, rectangles, and circles. Charts can use braille or half-block resolution
 depending on density.

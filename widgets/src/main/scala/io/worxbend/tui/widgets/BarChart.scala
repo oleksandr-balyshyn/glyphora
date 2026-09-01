@@ -4,6 +4,10 @@ import io.worxbend.tui.core.{Buffer, Rect, Style, Widget}
 
 /** Vertical bars with optional labels underneath: each `(label, value)` gets a `barWidth`-column bar scaled against
   * `max` (defaulting to the data's maximum), topped with a partial block glyph for sub-cell precision.
+  *
+  * `barSet` swaps the glyphs the bars are drawn from — [[BarSet.Ascii]] for a terminal with no block elements,
+  * [[BarSet.Solid]] or [[BarSet.Halves]] for blunter bars, or a set of your own. Its `empty` glyph, if it has one, also
+  * fills the cells above each bar, which is how the chart gets a visible track behind every bar.
   */
 final case class BarChart(
     data: Seq[(String, Long)],
@@ -12,6 +16,7 @@ final case class BarChart(
     max: Option[Long] = None,
     barStyle: Style = Style.Default,
     labelStyle: Style = Style.Default,
+    barSet: BarSet = BarSet.Eighths,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -38,6 +43,7 @@ final case class BarChart(
       value = value,
       ceiling = ceiling,
       style = barStyle,
+      set = barSet,
     )
 
   private def drawLabel(buffer: Buffer, area: Rect, barLeft: Int, label: String): Unit =

@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Style, Symbols}
+import io.worxbend.tui.core.{Buffer, Cell, Style}
 
 /** The bottom-up eighth-block ladder every column chart in this module draws with.
   *
@@ -15,8 +15,11 @@ private[widgets] object BlockLadder:
     *
     * Ordered so that `Eighths(n - 1)` is the glyph for `n` eighths of fill, with the fill growing upwards from the
     * bottom of the cell — which is why a column is walked from its bottom row towards its top.
+    *
+    * Kept as a name of its own because it is the ladder every chart in this module used before the glyphs became
+    * substitutable; [[BarSet.Eighths]] is the same eight glyphs wrapped in the record a caller now passes.
     */
-  val Eighths: Vector[String] = Symbols.Block.VerticalEighths
+  val Eighths: Vector[String] = BarSet.Eighths.eighths
 
   /** Paints one column of the chart: `value` measured against `ceiling`, filling upwards from row `bottom` and stopping
     * at row `top`.
@@ -26,8 +29,11 @@ private[widgets] object BlockLadder:
     * algorithm. The rows `top..bottom` inclusive are the chart's own vertical extent, so the caller has already taken
     * off any space it reserves for labels; the height that the value is scaled against is that extent.
     *
-    * `value` outside `0..ceiling` is clamped, so a caller may pass raw data against an explicit ceiling. Cells above
-    * the fill are left untouched rather than blanked, which is what lets a chart draw over an existing background.
+    * `value` outside `0..ceiling` is clamped, so a caller may pass raw data against an explicit ceiling.
+    *
+    * `set` picks the glyphs. Its `empty` decides what happens to the cells above the fill: left untouched by default,
+    * which is what lets a chart draw over an existing background, or painted with the set's empty glyph, which is what
+    * gives each bar a visible track.
     *
     * Renders into `buffer` and nothing else, so it carries the same thread constraint as any
     * [[io.worxbend.tui.core.Widget]]: call it from the render thread that owns the buffer.
@@ -41,6 +47,7 @@ private[widgets] object BlockLadder:
       value: Long,
       ceiling: Long,
       style: Style,
+      set: BarSet = BarSet.Eighths,
   ): Unit =
     val height  = bottom - top + 1
     val clamped = math.max(0L, math.min(value, ceiling))
@@ -48,9 +55,21 @@ private[widgets] object BlockLadder:
     var y       = bottom
     while y >= top && eighths > 0 do
       val levelIndex = math.min(eighths, 8)
-      var column     = 0
-      while column < columns do
-        buffer.set(x + column, y, Cell(Eighths(levelIndex - 1), style))
-        column += 1
+      paintRow(buffer, x, columns, y, set.eighths(levelIndex - 1), style)
       eighths -= levelIndex
       y -= 1
+    set.empty.foreach { glyph =>
+      // whatever is left of the column above the fill: from where the loop above stopped up to the chart's top row
+      while y >= top do
+        paintRow(buffer, x, columns, y, glyph, style)
+        y -= 1
+    }
+
+  /** Writes one glyph across the `columns` cells a bar occupies on row `y`. A wide bar is a thin bar repeated sideways,
+    * so there is one loop for it rather than a second algorithm.
+    */
+  private def paintRow(buffer: Buffer, x: Int, columns: Int, y: Int, glyph: String, style: Style): Unit =
+    var column = 0
+    while column < columns do
+      buffer.set(x + column, y, Cell(glyph, style))
+      column += 1
