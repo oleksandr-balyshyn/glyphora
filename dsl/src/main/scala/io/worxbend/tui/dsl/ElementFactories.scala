@@ -23,6 +23,10 @@ private[dsl] trait ElementFactories:
   /** A block of plain text; one row per newline-separated line, clipped at the area's edges. Style it with the usual
     * extensions: `text("hi").bold.fg(Color.Cyan)`. For a single row assembled from differently-styled runs, use
     * [[line]] instead — it measures in display columns rather than needing hand-counted widths.
+    *
+    * `.wrapped` breaks over-long lines onto further rows instead of cutting them off, and `.centered` /
+    * `.rightAligned` / `.aligned(...)` position each line inside the area — see [[TextElement]]. For text taller than
+    * the space it is given, put it in a [[scrollView]]: this node paints what fits and nothing more.
     */
   def text(content: String): TextElement = TextElement(content)
 

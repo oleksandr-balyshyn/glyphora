@@ -113,7 +113,7 @@ final class GrammarSpec extends AnyFunSuite:
     given ReactiveScope = ReactiveScope.generational(() => ())
     val el: Element     = v // applies the context function with the given scope and theme
     el match
-      case TextElement(content, _) => assert(content == "from a view alias")
+      case node: TextElement => assert(node.content == "from a view alias")
       case other                   => fail(s"expected a TextElement, got $other")
 
   /** The point of the spec overload is that one key has one spelling. Every spec below is bound both ways and the two

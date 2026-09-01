@@ -5,14 +5,64 @@ import io.worxbend.tui.widgets as w
 
 import java.time.LocalTime
 
-/** A block of plain text; one row per newline-separated line. */
-final case class TextElement(content: String, props: ElementProps = ElementProps()) extends Element:
+/** A block of plain text; one row per newline-separated line.
+  *
+  * Two things about how the text meets the edges of its area can be asked for here. *Overflow* decides what happens to
+  * a line longer than the area is wide: [[io.worxbend.tui.widgets.Overflow.Clip]], the default, cuts it off at the
+  * right edge, while `.wrapped` breaks it onto as many rows as it needs. *Alignment* decides where a line shorter than
+  * the area sits: at the left edge by default, or in the middle with `.centered`, or against the right edge with
+  * `.rightAligned`.
+  *
+  * Both were already parameters of the `widgets.Paragraph` this node renders through, but the node built that
+  * paragraph with the defaults and offered no way to say otherwise, so a paragraph of prose in the DSL was clipped at
+  * the first screen column it ran past and every heading had to be centred by hand with padding.
+  *
+  * Wrapping also changes what the node claims from its container, and it has to: a wrapping paragraph does not want a
+  * column per character of its longest line — it wants whatever width it is given and however many rows that width
+  * makes it into. A clipping paragraph still claims its exact unwrapped box, which is what makes `row(text("ab"),
+  * text("cd"))` put the two next to each other rather than letting the first eat the row.
+  */
+final case class TextElement(
+    content: String,
+    overflow: w.Overflow = w.Overflow.Clip,
+    alignment: w.Alignment = w.Alignment.Left,
+    props: ElementProps = ElementProps(),
+) extends Element:
   type Self = TextElement
-  def widget: Widget                                           = w.Paragraph(Text.styled(content, props.style))
+  def widget: Widget = w.Paragraph(Text.styled(content, props.style), alignment, overflow)
+
+  /** Breaks lines that do not fit onto further rows instead of cutting them off at the right edge.
+    *
+    * The break happens at a grapheme-cluster boundary — never inside a wide character, an emoji or a combining
+    * sequence — rather than at a word boundary, so a long word is split across rows rather than moved down whole.
+    */
+  def wrapped: TextElement = copy(overflow = w.Overflow.Wrap)
+
+  /** Cuts each line at the right edge of the area, the default. Undoes a `.wrapped` on an element built elsewhere. */
+  def clipped: TextElement = copy(overflow = w.Overflow.Clip)
+
+  /** Positions each line within the area's width: left (the default), centre, or right. */
+  def aligned(alignment: w.Alignment): TextElement = copy(alignment = alignment)
+
+  /** Centres every line in the area — the alignment a title or a placeholder message usually wants. */
+  def centered: TextElement = aligned(w.Alignment.Center)
+
+  /** Pushes every line against the right edge, for a column of numbers or a right-hand caption. */
+  def rightAligned: TextElement = aligned(w.Alignment.Right)
+
   private[dsl] def withProps(props: ElementProps): TextElement = copy(props = props)
-  private[dsl] override def claim: SizeClaim                   =
-    val lines = content.split("\n", -1)
-    SizeClaim.box(lines.map(CharWidth.of).maxOption.getOrElse(0), lines.length)
+
+  /** A clipping paragraph claims the exact box its unwrapped lines measure, in display columns. A wrapping one claims
+    * the container's full width instead: its height is a function of the width it ends up with, which the layout solver
+    * has not decided yet, so the rows are left to `intrinsicHeight` (which asks the paragraph itself, through
+    * `Measured`, once a width exists).
+    */
+  private[dsl] override def claim: SizeClaim =
+    overflow match
+      case w.Overflow.Wrap => SizeClaim.Fill
+      case w.Overflow.Clip =>
+        val lines = content.split("\n", -1)
+        SizeClaim.box(lines.map(CharWidth.of).maxOption.getOrElse(0), lines.length)
 
 /** One terminal row of differently-styled runs — the mixed-style counterpart of [[TextElement]].
   *

@@ -21,7 +21,7 @@ final class DslConstructionSpec extends AnyFunSuite:
       case PanelElement(Some("Hello"), children, BorderType.Rounded, _, _, _, _, _, _, _) =>
         assert(children.size == 3)
         children(0) match
-          case TextElement(content, _) => assert(content == "Welcome!")
+          case node: TextElement => assert(node.content == "Welcome!")
           case other                   => fail(s"expected the first child to be a TextElement, got $other")
         children(1) match
           case _: SpacerElement => ()

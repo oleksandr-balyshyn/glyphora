@@ -180,6 +180,32 @@ write for the wrong side.
 Padding is charged to the panel's measured height too, so a padded panel inside a
 `scrollView` still reports the rows it really occupies.
 
+## Wrap and align text
+
+`text(...)` cuts a line off at the right edge of its area by default, and starts every
+line at the left edge. Two families of builders change that:
+
+```scala
+column(
+  text("A long paragraph of prose that should fill the pane.").wrapped,
+  text("Centered heading").centered,
+  text("42").rightAligned,
+)
+```
+
+- `.wrapped` breaks an over-long line onto further rows; `.clipped` restores the
+  default. Breaks happen at grapheme-cluster boundaries, so a wide CJK character, an
+  emoji, or a letter with a combining accent is never split down the middle.
+- `.centered`, `.rightAligned`, and `.aligned(Alignment.Left)` position each line
+  inside the area's width.
+
+Wrapping also changes what the element claims from its container. A clipping text
+claims exactly the box its longest line measures; a wrapping one claims the full width
+it is offered, and its height is then measured from that width — which is what lets a
+wrapped paragraph size a `scrollView` or an auto-height container correctly. For text
+taller than the space available, put it in a `scrollView`: the element itself paints
+what fits and nothing more.
+
 ## Distribute leftover space
 
 Rows and columns support flex-like packing when their children do not consume all
