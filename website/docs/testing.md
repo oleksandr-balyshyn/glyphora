@@ -173,8 +173,7 @@ pilot.press("tab").waitForIdle().assertGolden("form-focused")
 
 `assertGolden` returns the pilot, so a snapshot sits in the middle of a chain of
 interactions. It fails, rather than matching an empty fixture, when the app has drawn
-nothing yet. `GoldenFrames.assertMatches(name, pilot)` is the same comparison written
-the other way round.
+nothing yet.
 
 ### A golden frame records glyphs, not styling
 

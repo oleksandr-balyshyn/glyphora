@@ -31,8 +31,6 @@ final class PilotGoldenSpec extends AnyFunSuite:
     // the fixture is `test-support/src/test/resources/golden/pilot-app-frame.txt`, which holds exactly "hello"
     val pilot = painting("hello").waitForIdle()
     assert(pilot.assertGolden("pilot-app-frame") eq pilot)
-    // the object-level overload is the same comparison spelled the other way round
-    GoldenFrames.assertMatches("pilot-app-frame", pilot)
 
   test("a frame that does not match the fixture fails, naming the fixture"):
     val pilot = painting("goodbye").waitForIdle()

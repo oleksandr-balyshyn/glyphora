@@ -51,15 +51,6 @@ object GoldenFrames:
         val expected = Using.resource(Source.fromInputStream(stream, "UTF-8"))(_.mkString)
         assertMatchesText(name, buffer, expected)
 
-  /** Snapshots the app's last rendered frame — the whole-app counterpart of the widget-level overload.
-    *
-    * Exactly `assertMatches(name, pilot.lastFrame)`, written once here instead of in every app-level suite. `lastFrame`
-    * fails the test when nothing has been drawn yet, so a snapshot of an app that never painted cannot quietly match an
-    * empty fixture.
-    */
-  def assertMatches(name: String, pilot: Pilot): Unit =
-    assertMatches(name, pilot.lastFrame)
-
   /** The on-disk location of `name`'s fixture under a test-resources `directory`. */
   private[testsupport] def fixtureFile(directory: Path, name: String): Path =
     directory.resolve("golden").resolve(s"$name.txt")

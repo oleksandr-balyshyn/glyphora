@@ -353,8 +353,8 @@ final class Pilot private (
     * pilot.press("tab").waitForIdle().assertGolden("form-focused")
     * }}}
     *
-    * The fluent spelling of `GoldenFrames.assertMatches(name, pilot)`. See [[GoldenFrames]] for the recording workflow
-    * and for what a fixture does and does not record — it is glyphs and layout, never styling.
+    * See [[GoldenFrames]] for the recording workflow and for what a fixture does and does not record — it is glyphs and
+    * layout, never styling.
     */
   def assertGolden(name: String): Pilot =
     GoldenFrames.assertMatches(name, lastFrame)
