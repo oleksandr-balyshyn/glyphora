@@ -293,27 +293,42 @@ trait TuiApp:
 
   protected final def dismissToasts(): Unit = toasts.dismissAll()
 
-  /** This app's toast stack as a value, so a helper written outside the app's own body can raise a toast.
+  /** This app's cross-cutting services as a value, so helpers written outside the app's own body can use them.
     *
-    * [[notify]] is a method on the app, which means only code inside the app can call it. Handing this out instead lets
-    * a helper anywhere take `(using Notifications)` and say something to the user, with no callback threaded down from
-    * the app. It is a `given`, so a call made from any method of this app resolves it with nothing to write; pass it
-    * explicitly when the call site is not lexically inside the app.
+    * Every service — [[notify]], [[pushScreen]], [[quit]] and the rest — is a `protected` method, which means only code
+    * inside the app can call it. Handing this out instead lets a helper anywhere take `(using AppServices)` and
+    * navigate, notify or ask for a repaint, with no callbacks threaded down from the app. Each member delegates to the
+    * app method of the same name, so there is exactly one implementation of every behaviour.
+    *
+    * It is published as a `given` below, so a call made from any method of this app resolves it with nothing to write;
+    * pass it explicitly when the call site is not lexically inside the app. `AppServices` extends [[Notifications]], so
+    * a helper that only needs to raise a toast can ask for that narrower type and still be satisfied by this.
     *
     * {{{
     * // in some other file
     * def saveRow(row: Row)(using n: Notifications): Unit = { repository.save(row); n.success("saved") }
     *
     * // in the app
-    * binding("ctrl+s", "save")(saveRow(selected))   // resolves `notifications` on its own
+    * binding("ctrl+s", "save")(saveRow(selected))   // resolves `services` on its own
     * }}}
     */
-  protected final def notifications: Notifications = new Notifications:
+  protected final lazy val services: AppServices = new AppServices:
     def notify(message: String, level: NoticeLevel, duration: FiniteDuration): Unit =
       TuiApp.this.notify(message, level, duration)
     def dismissToasts(): Unit                                                       = TuiApp.this.dismissToasts()
+    def pushScreen(screen: Screen): Unit                                            = TuiApp.this.pushScreen(screen)
+    def popScreen(): Unit                                                           = TuiApp.this.popScreen()
+    def openPalette(): Unit                                                         = TuiApp.this.openPalette()
+    def closePalette(): Unit                                                        = TuiApp.this.closePalette()
+    def runEffect(effect: Effect): Unit                                             = TuiApp.this.runEffect(effect)
+    def requestRedraw(): Unit                                                       = TuiApp.this.requestRedraw()
+    def copyToClipboard(text: String): Unit                                         = TuiApp.this.copyToClipboard(text)
+    def quit(): Unit                                                                = TuiApp.this.quit()
 
-  protected final given Notifications = notifications
+  /** Just this app's toast stack, for a helper that notifies and does nothing else. The same object as [[services]]. */
+  protected final def notifications: Notifications = services
+
+  protected final given AppServices = services
 
   /** Opens the fuzzy command palette over the declared [[bindings]]. */
   protected final def openPalette(): Unit = palette.open()

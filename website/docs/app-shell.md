@@ -465,6 +465,47 @@ the default duration; `notify(message, level, duration)` and `dismissToasts()` a
 there for anything else. Everything on it runs on the render thread, exactly like the
 app methods it delegates to.
 
+### Every service outside the app class
+
+Toasts are not the only capability locked inside the app's body. `pushScreen`,
+`popScreen`, `openPalette`, `closePalette`, `runEffect`, `requestRedraw`,
+`copyToClipboard` and `quit` are all `protected` methods for the same reason, and a
+helper that needs one of them faces the same plumbing.
+
+`AppServices` is all of them as one value, and it extends `Notifications` — so ask for
+the narrow type when a helper only notifies, and for this one when it navigates:
+
+```scala
+// in any other file
+def statusFooter(using ReactiveScope, Theme, services: AppServices): Element =
+  row(
+    button("Settings")(services.pushScreen(settingsScreen)),
+    button("Copy id")(services.copyToClipboard(currentId)),
+    button("Quit")(services.quit()),
+  )
+```
+
+The app publishes its own as a `given`, so calling that helper from `view` needs
+nothing at the call site:
+
+```scala
+def view(using ReactiveScope, Theme): Element =
+  column(body, statusFooter)
+```
+
+Each member delegates to the app method of the same name, so there is one
+implementation of every behaviour and the render-thread rules are the ones those
+methods already document.
+
+For building an element outside a running app — a unit test, a tool that renders one
+element and prints it — `AppServices.NoOp` supplies a value whose every method does
+nothing, the way `Theme.default` supplies styling with no app around:
+
+```scala
+given AppServices = AppServices.NoOp
+val element = statusFooter   // builds and renders; its buttons simply do nothing
+```
+
 ## Run inline instead of taking the screen
 
 By default an app takes the whole terminal. It does that by switching to the
