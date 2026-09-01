@@ -118,12 +118,9 @@ object BufferAssertions:
   def assertEquals(actual: Buffer, expected: Buffer, label: String): Unit =
     val prefix      = if label.isEmpty then "" else s"$label: "
     if actual.area != expected.area then
-      throw CallSite.attribute(
-        AssertionError(s"${prefix}buffer area ${actual.area} does not match expected ${expected.area}")
-      )
+      CallSite.fail(s"${prefix}buffer area ${actual.area} does not match expected ${expected.area}")
     val differences = cellDifferences(actual, expected)
-    if differences.nonEmpty then
-      throw CallSite.attribute(AssertionError(differenceReport(prefix, actual, expected, differences)))
+    if differences.nonEmpty then CallSite.fail(differenceReport(prefix, actual, expected, differences))
 
   /** Every position where `actual` and `expected` hold a different [[Cell]], in row-major order, each paired with the
     * two cells as `(position, actualCell, expectedCell)`.

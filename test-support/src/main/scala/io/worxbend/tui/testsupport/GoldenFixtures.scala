@@ -81,11 +81,9 @@ object GoldenFixtures:
   def assertNoOrphans(resourcesDirectory: Path, sourcesDirectory: Path): Unit =
     val stale = orphans(resourcesDirectory, sourcesDirectory)
     if stale.nonEmpty then
-      throw CallSite.attribute(
-        AssertionError(
-          s"golden fixtures under $resourcesDirectory/$FixtureDirectory that no test names: ${stale.mkString(", ")}" +
-            " — delete each file, or restore the test that recorded it"
-        )
+      CallSite.fail(
+        s"golden fixtures under $resourcesDirectory/$FixtureDirectory that no test names: ${stale.mkString(", ")}" +
+          " — delete each file, or restore the test that recorded it"
       )
 
   /** The fixture names one source file writes out. */
@@ -99,5 +97,4 @@ object GoldenFixtures:
 
   /** Rejects a path that is not a directory, naming which of the two arguments was wrong. */
   private def requireDirectory(directory: Path, description: String): Unit =
-    if !Files.isDirectory(directory) then
-      throw CallSite.attribute(AssertionError(s"$description does not exist: $directory"))
+    if !Files.isDirectory(directory) then CallSite.fail(s"$description does not exist: $directory")

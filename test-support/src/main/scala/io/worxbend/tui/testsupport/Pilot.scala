@@ -292,7 +292,7 @@ final class Pilot private (
       !thread.isAlive || (backend.pendingEvents == 0 && backend.idleReads > idleReadsBefore)
     while !settled && deadline.hasTimeLeft() do Thread.sleep(Pilot.PollSleep.toMillis)
     rethrowAppFailure()
-    if !settled then throw CallSite.attribute(AssertionError(s"app did not go idle within $timeout"))
+    if !settled then CallSite.fail(s"app did not go idle within $timeout")
     this
 
   /** Waits until `condition` holds, and fails the test naming `description` if it never does.
@@ -317,7 +317,7 @@ final class Pilot private (
     while !condition && deadline.hasTimeLeft() do
       Thread.sleep(Pilot.PollSleep.toMillis)
       rethrowAppFailure()
-    if !condition then throw CallSite.attribute(AssertionError(s"timed out after $timeout waiting for $description"))
+    if !condition then CallSite.fail(s"timed out after $timeout waiting for $description")
     this
 
   /** Waits until the app has drawn at least `count` frames in total since it started.
@@ -344,7 +344,7 @@ final class Pilot private (
     */
   def lastFrame: Buffer =
     rethrowAppFailure()
-    backend.lastDrawn.getOrElse(throw CallSite.attribute(AssertionError("nothing has been drawn yet")))
+    backend.lastDrawn.getOrElse(CallSite.fail("nothing has been drawn yet"))
 
   /** Compares the last rendered frame against the `golden/<name>.txt` fixture, and returns `this` so a snapshot sits in
     * a chain of interactions:
@@ -399,12 +399,8 @@ final class Pilot private (
     val expected = Position(x, y)
     cursorPosition match
       case Some(`expected`) => this
-      case Some(actual)     =>
-        throw CallSite.attribute(AssertionError(s"expected the cursor at $expected, but it is at $actual"))
-      case None             =>
-        throw CallSite.attribute(
-          AssertionError(s"expected the cursor at $expected, but no cursor position was requested")
-        )
+      case Some(actual)     => CallSite.fail(s"expected the cursor at $expected, but it is at $actual")
+      case None             => CallSite.fail(s"expected the cursor at $expected, but no cursor position was requested")
 
   /** Asserts the app asked for no hardware caret at all — the state a view showing no text field should be in.
     *
@@ -415,8 +411,7 @@ final class Pilot private (
   def assertNoCursor(): Pilot =
     cursorPosition match
       case None         => this
-      case Some(actual) =>
-        throw CallSite.attribute(AssertionError(s"expected no cursor position, but the cursor is at $actual"))
+      case Some(actual) => CallSite.fail(s"expected no cursor position, but the cursor is at $actual")
 
   /** Whether the app thread is still running. A thread that died from a throwable is not merely stopped: this fails
     * with that throwable as the cause.
@@ -444,11 +439,10 @@ final class Pilot private (
     */
   private def rethrowAppFailure(): Unit =
     appFailure.get() match
-      case Some(error) => throw CallSite.attribute(AssertionError(s"the tui-pilot-app thread died with $error", error))
+      case Some(error) => CallSite.fail(s"the tui-pilot-app thread died with $error", error)
       case None        =>
         runFailure.get() match
-          case Some(error) =>
-            throw CallSite.attribute(AssertionError(s"the app's runner returned a failure: ${error.message}"))
+          case Some(error) => CallSite.fail(s"the app's runner returned a failure: ${error.message}")
           case None        => ()
 
 object Pilot:

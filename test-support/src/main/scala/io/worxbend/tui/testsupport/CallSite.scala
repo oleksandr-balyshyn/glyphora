@@ -36,7 +36,7 @@ private[testsupport] object CallSite:
 
   /** Returns `error` with this library's own leading frames removed, for throwing at the call site:
     * {{{
-    * throw CallSite.attribute(AssertionError(message))
+    * CallSite.fail(message)
     * }}}
     *
     * The argument is mutated and handed back rather than copied, which is safe because every caller passes a freshly
@@ -47,3 +47,12 @@ private[testsupport] object CallSite:
     val trimmed = frames.dropWhile(isHelperFrame)
     if trimmed.nonEmpty && trimmed.length < frames.length then error.setStackTrace(trimmed)
     error
+
+  /** Throws an [[AssertionError]] carrying `message`, attributed to the caller's line by [[attribute]]. The one way
+    * this library reports a failed assertion — a helper that constructs and throws its own `AssertionError` instead
+    * loses that attribution silently.
+    */
+  def fail(message: String): Nothing = throw attribute(AssertionError(message))
+
+  /** [[fail]] with `cause` recorded as the underlying throwable. */
+  def fail(message: String, cause: Throwable): Nothing = throw attribute(AssertionError(message, cause))
