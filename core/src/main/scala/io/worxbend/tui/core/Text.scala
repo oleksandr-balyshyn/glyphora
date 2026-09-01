@@ -105,15 +105,19 @@ object Text:
     */
   val Empty: Text = Text(Seq.empty)
 
-  /** Splits `content` on newlines, keeping trailing empty lines; each resulting line carries `style`.
+  /** Splits `content` into rows the way every text-shaped widget in this toolkit does: on `\n` alone, with a limit of
+    * `-1` so trailing empty lines survive — "a\n" is two rows, the second blank, not one.
     *
     * The split is on `\n` alone: the caller owns newline normalisation. CRLF (`\r\n`) input therefore leaves a carriage
     * return at the end of every line, and a `\r` occupies zero terminal columns but one [[Cell]], so the rest of that
     * row renders one column off. Route text of unknown provenance — a file, an HTTP body, a Windows-produced source —
     * through [[CharWidth.withoutControls]] first, or strip the `\r` yourself.
     */
+  def splitLines(content: String): Seq[String] = content.split("\n", -1).toSeq
+
+  /** Splits `content` with [[Text.splitLines]]; each resulting row carries `style`. */
   def styled(content: String, style: Style): Text =
-    Text(content.split("\n", -1).toSeq.map(line => Line.styled(line, style)))
+    Text(splitLines(content).map(line => Line.styled(line, style)))
 
   /** [[styled]] with [[Style.Default]]: splits `content` on newlines, each resulting line unstyled. */
   def raw(content: String): Text =

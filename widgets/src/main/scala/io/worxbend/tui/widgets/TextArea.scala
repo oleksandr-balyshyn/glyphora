@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Style}
+import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Style, Text}
 
 import scala.collection.mutable
 
@@ -42,7 +42,7 @@ final class TextAreaState(initial: String = ""):
     * splitting survives — [[newline]] is `insert("\n")`. Reads no field, so the field initializer may call it.
     */
   private def clusterLinesOf(text: String): Vector[Vector[String]] =
-    text.split("\n", -1).toVector.map(seg => CharWidth.graphemeClusters(CharWidth.withoutControls(seg)).toVector)
+    Text.splitLines(text).toVector.map(seg => CharWidth.graphemeClusters(CharWidth.withoutControls(seg)).toVector)
 
   def insert(text: String): Unit =
     pushUndo()

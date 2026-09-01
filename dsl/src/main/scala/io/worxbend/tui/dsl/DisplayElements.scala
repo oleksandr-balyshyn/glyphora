@@ -61,7 +61,7 @@ final case class TextElement(
   private[dsl] override def claim: SizeClaim =
     if overflow.wraps then SizeClaim.Fill
     else
-      val lines = content.split("\n", -1)
+      val lines = Text.splitLines(content)
       SizeClaim.box(lines.map(CharWidth.of).maxOption.getOrElse(0), lines.length)
 
 /** One terminal row of differently-styled runs — the mixed-style counterpart of [[TextElement]].

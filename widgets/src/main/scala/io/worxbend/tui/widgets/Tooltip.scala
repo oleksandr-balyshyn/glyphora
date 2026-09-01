@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Measured, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, CharWidth, Measured, Rect, Style, Text, Widget}
 
 /** A small bordered popup of help text, meant to be layered near the thing it describes.
   *
@@ -16,7 +16,7 @@ final case class Tooltip(
 ) extends Widget
     with Measured:
 
-  private def lines: Seq[String] = text.split("\n", -1).toIndexedSeq
+  private def lines: Seq[String] = Text.splitLines(text).toIndexedSeq
 
   /** Natural width: the widest line plus a padding cell each side and the borders. Independent of the rows given. */
   override def widthAt(height: Int): Option[Int] =

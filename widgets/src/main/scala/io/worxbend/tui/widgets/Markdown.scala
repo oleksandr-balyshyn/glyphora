@@ -45,7 +45,7 @@ private[widgets] object MarkdownParser:
 
   def parse(source: String, theme: MarkdownTheme): Text =
     var fenceLanguage: Option[Language] = None
-    val lines                           = source.split("\n", -1).toSeq.map { raw =>
+    val lines                           = Text.splitLines(source).map { raw =>
       if raw.trim.startsWith("```") then
         fenceLanguage = if fenceLanguage.isDefined then None else Some(Language.of(raw.trim.drop(3)))
         Line(Seq.empty)

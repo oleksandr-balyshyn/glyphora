@@ -37,7 +37,7 @@ object SyntaxHighlighter:
 
   /** Highlights multi-line `code` as a [[Text]] (one [[Line]] per source line). */
   def highlight(code: String, language: Language, theme: SyntaxTheme = SyntaxTheme()): Text =
-    Text(code.split("\n", -1).toIndexedSeq.map(line => highlightLine(line, language, theme)))
+    Text(Text.splitLines(code).toIndexedSeq.map(line => highlightLine(line, language, theme)))
 
   /** Highlights a single line of `code`. */
   def highlightLine(line: String, language: Language, theme: SyntaxTheme = SyntaxTheme()): Line =
