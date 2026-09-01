@@ -61,7 +61,7 @@ final case class Chart(
     xBounds: (Double, Double),
     yBounds: (Double, Double),
     axisStyle: Style = Style.Default,
-    marker: String = "•",
+    marker: String = Marker.Dot,
     resolution: CanvasResolution = CanvasResolution.Cell,
     showLabels: Boolean = false,
     labelAlignment: Alignment = Alignment.Right,

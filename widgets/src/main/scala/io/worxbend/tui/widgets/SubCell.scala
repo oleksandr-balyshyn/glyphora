@@ -83,7 +83,7 @@ private[widgets] object SubCell:
           case _                                          => Cell(FullBlock, upper)
 
   /** Stands in for a marker that is not exactly one column wide. */
-  val FallbackMarker: String = "•"
+  val FallbackMarker: String = Marker.Dot
 
   /** `marker` if it is exactly one column wide, [[FallbackMarker]] otherwise.
     *

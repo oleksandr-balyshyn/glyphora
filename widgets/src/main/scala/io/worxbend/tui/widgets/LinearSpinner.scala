@@ -35,7 +35,7 @@ final case class LinearSpinner(
     trailSlots: Int = 4,
     rail: Double = 0.25,
     resolution: CanvasResolution = CanvasResolution.Braille,
-    marker: String = "●",
+    marker: String = Marker.Circle,
     period: FiniteDuration = 1200.millis,
 ) extends Widget:
 

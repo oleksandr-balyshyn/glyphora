@@ -42,16 +42,16 @@ enum CanvasResolution:
   case Octant
 
 /** A free-form drawing surface: shapes describe themselves in a world coordinate system (`xBounds` right-ward,
-  * `yBounds` up-ward) and the canvas maps them onto its cell grid — at cell, half-block, or braille resolution.
+  * `yBounds` up-ward) and the canvas maps them onto its cell grid, at whichever [[CanvasResolution]] it was given.
   *
   * `marker` is read only at [[CanvasResolution.Cell]], where there is one dot per cell; a marker that is not exactly
-  * one column wide is replaced by [[SubCell.FallbackMarker]] rather than allowed to smear into the next cell.
+  * one column wide is replaced by [[Marker.Dot]] rather than allowed to smear into the next cell.
   */
 final case class Canvas(
     xBounds: (Double, Double),
     yBounds: (Double, Double),
     shapes: Seq[Shape],
-    marker: String = "•",
+    marker: String = Marker.Dot,
     resolution: CanvasResolution = CanvasResolution.Cell,
 ) extends Widget:
 

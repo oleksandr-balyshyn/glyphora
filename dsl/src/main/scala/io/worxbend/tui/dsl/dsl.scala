@@ -203,6 +203,7 @@ export io.worxbend.tui.widgets.{
   ListDirection,
   ListState,
   LogState,
+  Marker,
   MarkdownTheme,
   MenuEntry,
   MenuState,

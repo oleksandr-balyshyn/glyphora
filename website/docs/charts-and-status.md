@@ -170,6 +170,14 @@ widget(
 `widget(...)` is not an escape hatch you should feel bad about — it is the documented
 way down a tier, and the element layer is a convenience over exactly this.
 
+`marker` is the glyph a single dot is drawn with at `CanvasResolution.Cell`. The library
+names the ones it uses itself, so you can say which default you are replacing rather than
+retyping a literal: `Marker.Dot` (`•`, the chart and canvas default), `Marker.Circle`
+(`●`, heavier, the spinner default), `Marker.Block` (`█`, for a solid trail) and
+`Marker.Ascii` (`*`, for a terminal whose font has none of the others). Any glyph exactly
+one column wide works; anything wider is refused and drawn as `Marker.Dot` instead, so a
+two-column emoji cannot smear into the cell next door.
+
 ## Colour a bar by value
 
 `progressBar(...).ramp(...)` and `gauge(...).ramp(...)` both plumb a `ColorRamp`

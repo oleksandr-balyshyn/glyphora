@@ -153,7 +153,7 @@ final case class OrbitSpinner(
     radius: Option[Int] = None,
     thickness: Int = 1,
     resolution: CanvasResolution = CanvasResolution.Braille,
-    marker: String = "●",
+    marker: String = Marker.Circle,
     direction: SpinDirection = SpinDirection.Clockwise,
     period: FiniteDuration = 1600.millis,
 ) extends Widget:

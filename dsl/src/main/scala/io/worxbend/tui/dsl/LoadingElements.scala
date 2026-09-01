@@ -190,7 +190,7 @@ final case class OrbitSpinnerElement(
     radius: Option[Int] = None,
     thickness: Int = 1,
     resolution: w.CanvasResolution = w.CanvasResolution.Braille,
-    marker: String = "●",
+    marker: String = w.Marker.Circle,
     direction: w.SpinDirection = w.SpinDirection.Clockwise,
     period: FiniteDuration = 1600.millis,
     props: ElementProps = ElementProps(),
