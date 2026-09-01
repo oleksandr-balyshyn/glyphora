@@ -44,6 +44,15 @@ Pin `max` to the metric's own scale, not to the data's. The trap is that autosca
 looks fine while you are watching one series — it only misleads once the reader starts
 comparing two frames, or two rows.
 
+`barChart` and `stackedBarChart` take the same `max`, and for the same reason: a stacked
+chart that autoscales to its tallest stack makes an unchanged column appear to shrink the
+moment a taller one arrives beside it. Pin both charts to one ceiling and their heights
+mean the same thing:
+
+```scala
+stackedBarChart(regions, max = Some(capacity))
+```
+
 ## Pin the newest sample to the right edge
 
 A sparkline draws one column per data point. When the series is longer than the pane

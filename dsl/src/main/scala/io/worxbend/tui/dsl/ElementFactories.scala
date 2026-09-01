@@ -267,9 +267,17 @@ private[dsl] trait ElementFactories:
   /** [[barChart]] with each column split into one segment per series: `(label, values)` stacks `values` bottom-up.
     * Columns are scaled against the tallest *stack*, so the columns are comparable to each other. See
     * [[w.StackedBarChart]].
+    *
+    * `max` pins that scale instead of letting it float to the tallest stack present. Two of these charts side by side,
+    * or the same chart across two frames, are only comparable when both are pinned to the same ceiling — otherwise a
+    * stack that has not changed appears to shrink as soon as a taller one arrives.
     */
-  def stackedBarChart(data: Seq[(String, Seq[Long])], barWidth: Int = 3): WidgetElement =
-    WidgetElement(w.StackedBarChart(data, barWidth))
+  def stackedBarChart(
+      data: Seq[(String, Seq[Long])],
+      barWidth: Int = 3,
+      max: Option[Long] = None,
+  ): WidgetElement =
+    WidgetElement(w.StackedBarChart(data, barWidth, max = max))
 
   /** A value grid drawn as shade intensity — outer sequence is rows (top first), inner is columns.
     *
