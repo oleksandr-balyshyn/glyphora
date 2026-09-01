@@ -5,8 +5,9 @@ import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Direction, Rect, Style, Wi
 /** A scrollbar strip: a vertical bar down one of the area's side edges, or a horizontal bar along its top or bottom
   * edge. Which of the two `side` picks; by default it is the conventional right edge or bottom edge.
   *
-  * The thumb's size is proportional to how much of the content the viewport covers; when the content fits entirely,
-  * only the track is drawn.
+  * The thumb's size is proportional to how much of the content the viewport covers. When the content fits entirely
+  * there is nothing to scroll, and by default only the bare track is drawn; `thumbWhenFits` asks for a full-length
+  * thumb instead.
   *
   * Stateless on purpose. In this toolkit a `StatefulWidget` is a widget whose *render* adjusts caller-owned state — a
   * list scrolling itself to keep its selection visible, for instance. A scrollbar adjusts nothing: where the thumb goes
@@ -27,6 +28,10 @@ import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Direction, Rect, Style, Wi
   * @param side
   *   which edge of the area the strip lands on, read along its own axis: `Far` — the default — is the right edge of a
   *   vertical bar and the bottom edge of a horizontal one, `Near` the left edge and the top edge
+  * @param thumbWhenFits
+  *   what to draw when all of the content is on screen. `false` — the default — leaves a bare track. `true` fills the
+  *   whole track with the thumb, which is the conventional "you are seeing all of it" affordance and stops the strip
+  *   flipping between bare track and thumb as the content grows past the viewport by a single row.
   * @param capStyle
   *   the style of the two arrow caps, when there are any
   * @param beginSymbol
@@ -47,6 +52,7 @@ final case class Scrollbar(
     thumbSymbol: String = "█",
     viewportLength: Option[Int] = None,
     side: ScrollbarSide = ScrollbarSide.Far,
+    thumbWhenFits: Boolean = false,
     capStyle: Style = Style.Default,
     beginSymbol: Option[String] = None,
     endSymbol: Option[String] = None,
@@ -107,10 +113,12 @@ final case class Scrollbar(
     *
     * `trackLength` is how many cells the strip is drawn across; `visible` is how much of the content the reader can
     * see. The two are the same number unless the caller overrode `viewportLength`, and only `visible` decides whether
-    * there is anything to scroll at all.
+    * there is anything to scroll at all. When there is not, the answer depends on `thumbWhenFits`: no thumb, or a thumb
+    * covering the whole track.
     */
   private def thumbRange(trackLength: Int, visible: Int): Option[(Int, Int)] =
-    if contentLength <= visible || trackLength == 0 then None
+    if trackLength == 0 then None
+    else if contentLength <= visible then Option.when(thumbWhenFits)((0, trackLength))
     else
       val size            = math.max(1, math.min(trackLength, trackLength * visible / contentLength))
       val maxPosition     = contentLength - visible
@@ -133,6 +141,7 @@ object Scrollbar:
       orientation: Direction = Direction.Vertical,
       viewportLength: Option[Int] = None,
       side: ScrollbarSide = ScrollbarSide.Far,
+      thumbWhenFits: Boolean = false,
       style: Style = Style.Default,
       thumbStyle: Style = Style.Default,
       capStyle: Style = Style.Default,
@@ -147,6 +156,7 @@ object Scrollbar:
       thumbSymbol = symbols.thumb,
       viewportLength = viewportLength,
       side = side,
+      thumbWhenFits = thumbWhenFits,
       capStyle = capStyle,
       beginSymbol = symbols.begin,
       endSymbol = symbols.end,

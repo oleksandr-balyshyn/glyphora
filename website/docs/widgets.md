@@ -127,7 +127,10 @@ the lane it is drawn in moves.
 
 The thumb's length is proportional to how much of the content the viewport covers, and a
 `position` past the end pins it to the end rather than drawing it off the track. When the
-content fits, only the track is drawn.
+content fits, only the track is drawn — unless you ask for a thumb anyway with
+`thumbWhenFits = true`, which fills the whole track. That is the conventional "you are
+seeing all of it" affordance, and it stops the strip flipping between a bare track and a
+thumb as the content grows past the viewport by a single row.
 
 By default the bar assumes the viewport is exactly as long as the bar itself, which is
 right whenever the strip runs the full height of the thing it describes. When it does not

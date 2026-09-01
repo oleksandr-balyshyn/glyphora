@@ -122,3 +122,23 @@ final class ScrollbarSpec extends AnyFunSuite:
     val buffer =
       rendered(Scrollbar(8, 0, side = ScrollbarSide.Near, beginSymbol = Some("↑"), endSymbol = Some("↓")), 2, 4)
     assert(lines(buffer) == Seq("↑ ", "█ ", "│ ", "↓ "))
+
+  test("content that fits fills the whole track when a thumb is asked for"):
+    val buffer = rendered(Scrollbar(contentLength = 3, thumbWhenFits = true), 1, 4)
+    assert(lines(buffer) == Seq("█", "█", "█", "█"))
+
+  test("thumbWhenFits leaves a scrolling thumb alone"):
+    val buffer = rendered(Scrollbar(contentLength = 8, position = 0, thumbWhenFits = true), 1, 4)
+    assert(lines(buffer) == Seq("█", "█", "│", "│"))
+
+  test("a horizontal fitting scrollbar fills its bottom row"):
+    val buffer = rendered(Scrollbar(2, 0, Direction.Horizontal, thumbWhenFits = true), 4, 1)
+    assert(lines(buffer) == Seq("████"))
+
+  test("a full-track thumb stops at the arrow caps rather than covering them"):
+    val buffer = rendered(Scrollbar(2, 0, thumbWhenFits = true, beginSymbol = Some("↑"), endSymbol = Some("↓")), 1, 4)
+    assert(lines(buffer) == Seq("↑", "█", "█", "↓"))
+
+  test("a declared viewport that swallows the content still fills the track"):
+    val buffer = rendered(Scrollbar(6, 0, viewportLength = Some(9), thumbWhenFits = true), 1, 3)
+    assert(lines(buffer) == Seq("█", "█", "█"))
