@@ -118,8 +118,6 @@ import scala.concurrent.duration.Duration
     assertThrows[IllegalArgumentException](backend.scrollRegionUp(0, 9, 1))
 
 
-  private val Esc = "\u001b"
-
   private final class BareBackend extends Backend:
     def size: Either[BackendError, Size]                                  = Right(Size(10, 3))
     def draw(buffer: Buffer): Either[BackendError, Unit]                  =
