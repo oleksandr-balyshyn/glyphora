@@ -88,6 +88,10 @@ final case class Chart(
           case GraphType.Line    => Shape.Polyline(dataset.points, dataset.style)
           case GraphType.Scatter => Shape.Points(dataset.points, dataset.style)
           case GraphType.Bar     => Shape.Bars(dataset.points, dataset.fillToY, dataset.style)
+          // a span needs two ends, so a one-point series has nothing to fill; it still deserves its single bar,
+          // which is what the reader sees on the first tick of a live series
+          case GraphType.Area if dataset.points.sizeIs == 1 =>
+            Shape.Bars(dataset.points, dataset.fillToY, dataset.style)
           case GraphType.Area    => Shape.FilledPolyline(dataset.points, dataset.fillToY, dataset.style)
       }
       Canvas(xBounds, yBounds, shapes, marker, resolution).render(plotArea, buffer)
