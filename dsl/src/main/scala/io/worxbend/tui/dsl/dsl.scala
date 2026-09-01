@@ -191,6 +191,7 @@ export io.worxbend.tui.widgets.{
   DirectoryTreeState,
   GraphType,
   GridPhase,
+  HighlightSpacing,
   Image,
   IndeterminateMotion,
   LinearAxis,

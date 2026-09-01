@@ -386,6 +386,18 @@ Down two rows short of the bottom scrolls the list underneath a highlight that s
 Near the two ends of the list the padding gives way, because there is nothing left to
 reveal: the first and last items still reach the edge rows.
 
+The `> ` marker in front of the selected row needs two columns, and by default a list
+reserves them on every row so that the text never shifts sideways when the selection
+moves. In a narrow pane that is two columns of text given up permanently, so
+`highlightGutter` offers two other policies. `HighlightSpacing.WhenSelected` reserves
+them only while something is selected — a list nobody has picked a row in yet uses its
+full width. `HighlightSpacing.Never` reserves nothing and draws no marker at all,
+leaving the highlight style as the only cue:
+
+```scala
+list(services.get, selected).highlightGutter(HighlightSpacing.Never)
+```
+
 A list normally starts at the top row of its area and grows downward, so a list with
 three entries in a ten-row pane leaves seven blank rows underneath it. A chat transcript
 or a log tail wants the opposite: the newest entry welded to the bottom edge, with the

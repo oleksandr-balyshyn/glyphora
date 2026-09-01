@@ -45,6 +45,31 @@ final class ListViewSpec extends AnyFunSuite:
     state.selectPrevious(4)
     assert(state.selected.contains(0))
 
+  test("the gutter is reserved on every row by default, selection or not"):
+    assert(trimmedLines(rendered(widget, ListState(), 10, 2)) == Seq("  alpha", "  beta"))
+
+  test("WhenSelected gives the two gutter columns back to a list nobody has selected in"):
+    val lazyGutter = widget.copy(highlightSpacing = HighlightSpacing.WhenSelected)
+    assert(trimmedLines(rendered(lazyGutter, ListState(), 10, 2)) == Seq("alpha", "beta"))
+    // and takes them back the moment a row is highlighted, so the marker has somewhere to go
+    val selected   = trimmedLines(rendered(lazyGutter, ListState(selected = Some(0)), 10, 2))
+    assert(selected == Seq("> alpha", "  beta"))
+
+  test("Never reserves nothing and draws no marker, leaving the style as the only cue"):
+    val noGutter = widget.copy(highlightSpacing = HighlightSpacing.Never)
+    val buffer   = rendered(noGutter, ListState(selected = Some(1)), 10, 2)
+    assert(trimmedLines(buffer) == Seq("alpha", "beta"))
+    // the highlighted row still carries the reverse-video highlight style at its first column
+    assert(buffer.get(0, 1).style.modifiers.hasAny(Modifiers.Reverse))
+    assert(!buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("the reclaimed gutter columns go to the text, measured by display width"):
+    // "日本語" is six columns; a six-wide area fits all three only once the two-column gutter is gone
+    val wide = ListView(Seq("日本語"), highlightSpacing = HighlightSpacing.Never)
+    assert(trimmedLines(rendered(wide, ListState(), 6, 1)) == Seq("日本語"))
+    val narrow = ListView(Seq("日本語"))
+    assert(trimmedLines(rendered(narrow, ListState(), 6, 1)) == Seq("  日本"))
+
   test("clearSelection also scrolls back to the top"):
     val state = ListState(selected = Some(3), offset = 2)
     state.clearSelection()

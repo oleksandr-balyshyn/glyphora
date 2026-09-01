@@ -14,6 +14,7 @@ final case class ListElement(
     items: Seq[String],
     state: w.ListState,
     direction: w.ListDirection = w.ListDirection.TopToBottom,
+    highlightSpacing: w.HighlightSpacing = w.HighlightSpacing.Always,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   type Self = ListElement
@@ -24,9 +25,20 @@ final case class ListElement(
     * first item of the sequence is drawn on the bottom row. Feed the items newest-first.
     */
   def bottomToTop: ListElement = copy(direction = w.ListDirection.BottomToTop)
-  def widget: Widget           =
+
+  /** Chooses when the columns holding the `> ` selection marker are reserved; see [[w.HighlightSpacing]]. The default
+    * reserves them always, so the text never shifts sideways.
+    */
+  def highlightGutter(spacing: w.HighlightSpacing): ListElement = copy(highlightSpacing = spacing)
+  def widget: Widget                                            =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
-    val view = w.ListView(items, direction = direction, style = props.style, highlightStyle = props.focusStyle)
+    val view = w.ListView(
+      items,
+      direction = direction,
+      highlightSpacing = highlightSpacing,
+      style = props.style,
+      highlightStyle = props.focusStyle,
+    )
     (area, buffer) => view.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): ListElement               = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =

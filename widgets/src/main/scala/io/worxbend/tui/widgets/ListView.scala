@@ -75,6 +75,7 @@ final class ListState(var selected: Option[Int] = None, var offset: Int = 0, var
 final case class ListView(
     items: Seq[String | Line],
     direction: ListDirection = ListDirection.TopToBottom,
+    highlightSpacing: HighlightSpacing = HighlightSpacing.Always,
     style: Style = Style.Default,
     highlightStyle: Style = Style.Default.reverse,
     highlightSymbol: String = "> ",
@@ -95,13 +96,20 @@ final case class ListView(
       val selected    = state.selected.map(index => math.max(0, math.min(index, items.size - 1)))
       state.selected = selected
       state.offset = ScrollWindow.offsetFor(state.offset, selected, items.size, area.height, state.scrollPadding)
-      val symbolWidth = CharWidth.of(highlightSymbol)
-      val padding     = " ".repeat(symbolWidth)
+      // how many columns the marker gutter takes off the text on *every* row. Nothing is drawn in it on an unselected
+      // row, but the columns still have to be subtracted so the text of the selected row and the text of the others
+      // start in the same place.
+      val gutterWidth = highlightSpacing match
+        case HighlightSpacing.Always       => CharWidth.of(highlightSymbol)
+        case HighlightSpacing.WhenSelected => if selected.isDefined then CharWidth.of(highlightSymbol) else 0
+        case HighlightSpacing.Never        => 0
+      val padding     = " ".repeat(gutterWidth)
       items.slice(state.offset, state.offset + area.height).map(lineOf).zipWithIndex.foreach { (line, row) =>
         val index      = state.offset + row
         val isSelected = selected.contains(index)
         val rowStyle   = if isSelected then style.patch(highlightStyle) else style
-        val prefix     = if isSelected then highlightSymbol else padding
+        // with no gutter reserved there is no room for the marker either, so the highlight style is the only cue
+        val prefix     = if isSelected && gutterWidth > 0 then highlightSymbol else padding
         // `row` counts visible rows away from the anchored edge, so only the edge changes between the two directions
         // and the scroll arithmetic above cannot drift apart from what is drawn. `area.bottom - 1 - row` never falls
         // above the area because the slice is capped at `area.height` rows.
@@ -111,5 +119,5 @@ final case class ListView(
         // clip to the area, not just to the buffer: a highlight symbol wider than a narrow list would otherwise be
         // written straight over whatever owns the columns to the right
         buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, area.width), rowStyle)
-        val _          = LineRenderer.render(buffer, area.x + symbolWidth, y, line, area.width - symbolWidth, rowStyle)
+        val _          = LineRenderer.render(buffer, area.x + gutterWidth, y, line, area.width - gutterWidth, rowStyle)
       }
