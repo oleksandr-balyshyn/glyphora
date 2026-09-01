@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Rect, Style}
+import io.worxbend.tui.core.{Buffer, Rect, Style}
 
 /** A one-cell-thick sub-cell track over one [[Rect]], addressed in slots rather than in cells.
   *
@@ -40,8 +40,6 @@ private[widgets] final class LinearDots(
     case LinearAxis.Horizontal => dotsDown
     case LinearAxis.Vertical   => dotsAcross
 
-  private val safeMarker: String = SubCell.safeMarker(marker)
-
   /** Cells the track occupies along the direction of travel. */
   val cells: Int = axis match
     case LinearAxis.Horizontal => math.max(0, area.width)
@@ -49,6 +47,15 @@ private[widgets] final class LinearDots(
 
   /** Positions the track carries — what [[LinearMotion.intensities]] wants for `slots`. */
   val slots: Int = cells * slotsPerCell
+
+  /** The one-cell-thick rectangle the dots are actually accumulated over.
+    *
+    * A track ignores its cross-axis extent — a horizontal one only ever writes `area.y` — so the surface is given
+    * exactly the row or column that gets drawn, rather than the whole [[Rect]] and a second guard to keep it inside.
+    */
+  private def trackArea: Rect = axis match
+    case LinearAxis.Horizontal => Rect(area.x, area.y, area.width, 1)
+    case LinearAxis.Vertical   => Rect(area.x, area.y, 1, area.height)
 
   /** Writes every cell holding at least one dot, colored `styleFor(brightestSlotInCell)`.
     *
@@ -58,45 +65,39 @@ private[widgets] final class LinearDots(
     */
   def render(intensities: Array[Double], buffer: Buffer, styleFor: Double => Style): Unit =
     if !area.isEmpty then
-      val drawn = math.min(cells, intensities.length / slotsPerCell)
-      var index = 0
+      val surface = SubCellSurface(trackArea, resolution, marker)
+      // brightest intensity seen in each *cell*, which is what decides that cell's one style
+      val peaks   = new Array[Double](surface.cellCount)
+      val drawn   = math.min(cells, intensities.length / slotsPerCell)
+      var index   = 0
       while index < drawn do
-        var mask = 0
-        var peak = 0.0
-        var sub  = 0
+        var sub = 0
         while sub < slotsPerCell do
           val intensity = intensities(index * slotsPerCell + sub)
           val level     = levelFor(intensity)
           if level > 0 then
-            mask |= maskFor(sub, level)
-            peak = math.max(peak, intensity)
+            lightLadder(surface, index, sub, level)
+            peaks(index) = math.max(peaks(index), intensity)
           sub += 1
-        if mask != 0 then
-          val cell = Cell(SubCell.glyphFor(resolution, mask, safeMarker), styleFor(peak))
-          axis match
-            case LinearAxis.Horizontal => buffer.set(area.x + index, area.y, cell)
-            case LinearAxis.Vertical   => buffer.set(area.x, area.y + index, cell)
         index += 1
+      surface.flush(buffer, slot => styleFor(peaks(slot / surface.slotsPerCell)))
 
-  /** `NaN` reads as unlit rather than as a lit cell, so a caller's arithmetic mistake shows up as a gap it can see. */
-  private def levelFor(intensity: Double): Int =
-    if intensity.isNaN || intensity <= 0.0 then 0
-    else math.min(levels, math.max(1, math.ceil(intensity * levels).toInt))
-
-  /** The dot mask a slot at sub-position `sub` contributes at brightness `level`.
+  /** Lights the dots one slot contributes at brightness `level`.
     *
     * A horizontal track fills its dot column from the floor up, which is the direction [[ProgressPreset.Dots]] and
     * [[SpinnerPreset.GrowVertical]] already fill a cell — a linear spinner sitting beside either should grow the same
     * way. At braille that gives the ladder `⣀ ⣤ ⣶ ⣿`, and a half-cell head reads `⡇` or `⢸` before it straddles into
     * `⣿`. A vertical track fills its dot row from the left, matching how a partial block glyph grows.
     */
-  private def maskFor(sub: Int, level: Int): Int =
-    var mask = 0
-    var i    = 0
+  private def lightLadder(surface: SubCellSurface, index: Int, sub: Int, level: Int): Unit =
+    var i = 0
     while i < level do
-      val bit = axis match
-        case LinearAxis.Horizontal => SubCell.bitFor(resolution, sub, dotsDown - 1 - i)
-        case LinearAxis.Vertical   => SubCell.bitFor(resolution, i, sub)
-      mask |= bit
+      val _ = axis match
+        case LinearAxis.Horizontal => surface.light(index * dotsAcross + sub, dotsDown - 1 - i)
+        case LinearAxis.Vertical   => surface.light(i, index * dotsDown + sub)
       i += 1
-    mask
+
+  /** `NaN` reads as unlit rather than as a lit cell, so a caller's arithmetic mistake shows up as a gap it can see. */
+  private def levelFor(intensity: Double): Int =
+    if intensity.isNaN || intensity <= 0.0 then 0
+    else math.min(levels, math.max(1, math.ceil(intensity * levels).toInt))

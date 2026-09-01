@@ -193,7 +193,10 @@ private[widgets] final class SubCellSurface(area: Rect, resolution: CanvasResolu
   /** How many cells the surface covers — the size a caller's per-cell array needs to be. */
   val cellCount: Int = area.area
 
-  private val slotsPerCell = SubCell.slotsPerCell(resolution)
+  /** Colour slots one cell holds — see [[SubCell.slotsPerCell]]. Exposed so a caller keeping something *per cell*
+    * (rather than per slot) can turn a slot index from [[light]] back into the cell it belongs to.
+    */
+  val slotsPerCell: Int = SubCell.slotsPerCell(resolution)
 
   /** How many colour slots a caller's per-slot array needs.
     *
