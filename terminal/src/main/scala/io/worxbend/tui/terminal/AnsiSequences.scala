@@ -201,7 +201,7 @@ private[terminal] object AnsiSequences:
   /** Every text attribute with its SGR code, in the order they are emitted.
     *
     * A `val`, not a table rebuilt inside [[sgr]]: `sgr` runs once per style change on a frame, and allocating this
-    * eight-entry list on each of those calls cost more than everything else the method does.
+    * nine-entry list on each of those calls cost more than everything else the method does.
     */
   private val ModifierCodes: List[(Modifiers, String)] =
     List(
@@ -210,6 +210,7 @@ private[terminal] object AnsiSequences:
       Modifiers.Italic     -> "3",
       Modifiers.Underline  -> "4",
       Modifiers.Blink      -> "5",
+      Modifiers.RapidBlink -> "6",
       Modifiers.Reverse    -> "7",
       Modifiers.Hidden     -> "8",
       Modifiers.CrossedOut -> "9",

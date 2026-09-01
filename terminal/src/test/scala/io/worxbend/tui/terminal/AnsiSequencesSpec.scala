@@ -27,6 +27,12 @@ final class AnsiSequencesSpec extends AnyFunSuite:
     val style = Style.Default.withFg(Color.Red).bold.underline
     assert(AnsiSequences.sgr(style) == s"$Esc[0;31;1;4m")
 
+  test("sgr emits SGR 5 for blink and SGR 6 for rapid blink"):
+    // the two are separate escape codes, so a single Blink flag could never reach SGR 6 whatever the API spelling
+    assert(AnsiSequences.sgr(Style.Default.blink) == s"$Esc[0;5m")
+    assert(AnsiSequences.sgr(Style.Default.rapidBlink) == s"$Esc[0;6m")
+    assert(AnsiSequences.sgr(Style.Default.blink.rapidBlink) == s"$Esc[0;5;6m")
+
   test("sgr encodes a styled underline via the colon SGR-4 extension"):
     import io.worxbend.tui.core.UnderlineStyle
     assert(AnsiSequences.sgr(Style.Default.curlyUnderline) == s"$Esc[0;4:3m")

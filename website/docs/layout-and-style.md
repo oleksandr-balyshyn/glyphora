@@ -222,6 +222,12 @@ The built-in modifiers are `.bold`, `.dim`, `.italic`, `.underline`, `.reverse`,
 `.fg(...)`, and `.bg(...)`. Use `.styled` when you need a complete
 `Style` transformation.
 
+`Style` itself carries two more text attributes that no element shortcut exposes:
+`.blink` and `.rapidBlink`. They are separate escape codes (SGR 5 and SGR 6), not two
+names for one thing, which is why both exist — but terminal support is thin, most
+emulators render them identically, and several ignore both. Treat blinking as a hint and
+never as the thing that carries the meaning.
+
 `.fg`/`.bg` name the same two things `Style.withFg`/`withBg` do, and the same two things
 every other terminal toolkit calls them. On a `Style` the builders keep the `with`
 prefix, because `Style` is a case class whose fields are already called `fg` and `bg` and

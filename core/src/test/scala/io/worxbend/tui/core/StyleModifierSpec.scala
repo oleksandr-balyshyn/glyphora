@@ -34,10 +34,10 @@ final class StyleModifierSpec extends AnyFunSuite:
     assert(Style.Default.notReverse.clearedModifiers.hasAny(Modifiers.Reverse))
 
   /** One `notX` per `x`, so the negative half of the builder set is not missing arbitrary members. Each is checked
-    * against a style carrying *every* modifier, which also pins that clearing one leaves the other seven alone.
+    * against a style carrying *every* modifier, which also pins that clearing one leaves the others alone.
     */
   test("every modifier builder has a matching clearing builder"):
-    val all      = Style.Default.bold.dim.italic.underline.blink.reverse.hidden.crossedOut
+    val all      = Style.Default.bold.dim.italic.underline.blink.reverse.hidden.crossedOut.rapidBlink
     val cleared  = List(
       Modifiers.Bold       -> all.notBold,
       Modifiers.Dim        -> all.notDim,
@@ -47,6 +47,7 @@ final class StyleModifierSpec extends AnyFunSuite:
       Modifiers.Reverse    -> all.notReverse,
       Modifiers.Hidden     -> all.notHidden,
       Modifiers.CrossedOut -> all.notCrossedOut,
+      Modifiers.RapidBlink -> all.notRapidBlink,
     )
     val everyOne = List(
       Modifiers.Bold,
@@ -57,6 +58,7 @@ final class StyleModifierSpec extends AnyFunSuite:
       Modifiers.Reverse,
       Modifiers.Hidden,
       Modifiers.CrossedOut,
+      Modifiers.RapidBlink,
     )
     cleared.foreach { (flag, style) =>
       assert(!style.modifiers.hasAny(flag))
@@ -86,7 +88,17 @@ final class StyleModifierSpec extends AnyFunSuite:
   test("Modifiers.All holds every named flag and stays in step with the name table"):
     assert(Modifiers.All.hasAll(Modifiers.Bold | Modifiers.Italic | Modifiers.Hidden | Modifiers.CrossedOut))
     assert(
-      Modifiers.All.names == Seq("Bold", "Dim", "Italic", "Underline", "Blink", "Reverse", "Hidden", "CrossedOut")
+      Modifiers.All.names == Seq(
+        "Bold",
+        "Dim",
+        "Italic",
+        "Underline",
+        "Blink",
+        "Reverse",
+        "Hidden",
+        "CrossedOut",
+        "RapidBlink",
+      )
     )
     assert(Modifiers.All.without(Modifiers.All).isEmpty)
     assert(!Modifiers.None.hasAny(Modifiers.All))

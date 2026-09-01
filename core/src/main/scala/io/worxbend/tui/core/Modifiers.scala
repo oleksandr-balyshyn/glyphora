@@ -18,6 +18,15 @@ object Modifiers:
   val Hidden: Modifiers     = 1 << 6
   val CrossedOut: Modifiers = 1 << 7
 
+  /** Rapid blink — SGR 6, roughly 150 blinks per minute where [[Blink]] (SGR 5) is under 150.
+    *
+    * A separate flag rather than a spelling of [[Blink]] because they are two different escape codes: without this bit,
+    * no combination of the API could ever emit SGR 6. Support is thin — most terminal emulators render it the same as
+    * [[Blink]], and several ignore both — so treat the difference as a hint, never as the thing that carries meaning.
+    * Bit 8, the first one free after the table above.
+    */
+  val RapidBlink: Modifiers = 1 << 8
+
   /** Every flag paired with its name, in bit order. The single table both [[names]] and [[show]] read, so a new flag is
     * added in one place rather than in one place per rendering.
     */
@@ -30,6 +39,7 @@ object Modifiers:
     Reverse    -> "Reverse",
     Hidden     -> "Hidden",
     CrossedOut -> "CrossedOut",
+    RapidBlink -> "RapidBlink",
   )
 
   /** Every flag at once — the opposite of [[None]] (ratatui spells it `Modifier::all()`).

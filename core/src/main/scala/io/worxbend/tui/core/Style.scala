@@ -41,9 +41,15 @@ final case class Style(
   def italic: Style                = setting(Modifiers.Italic)
   def underline: Style             = setting(Modifiers.Underline)
   def blink: Style                 = setting(Modifiers.Blink)
-  def reverse: Style               = setting(Modifiers.Reverse)
-  def hidden: Style                = setting(Modifiers.Hidden)
-  def crossedOut: Style            = setting(Modifiers.CrossedOut)
+
+  /** Turns on rapid blink (SGR 6) rather than the ordinary [[blink]] (SGR 5). See [[Modifiers.RapidBlink]] for how
+    * thinly terminals support the distinction.
+    */
+  def rapidBlink: Style = setting(Modifiers.RapidBlink)
+
+  def reverse: Style    = setting(Modifiers.Reverse)
+  def hidden: Style     = setting(Modifiers.Hidden)
+  def crossedOut: Style = setting(Modifiers.CrossedOut)
 
   /** Turns `flags` on, and withdraws any earlier request to turn them off, so `style.notBold.bold` is bold. */
   private def setting(flags: Modifiers): Style =
@@ -67,6 +73,7 @@ final case class Style(
   def notReverse: Style    = without(Modifiers.Reverse)
   def notHidden: Style     = without(Modifiers.Hidden)
   def notCrossedOut: Style = without(Modifiers.CrossedOut)
+  def notRapidBlink: Style = without(Modifiers.RapidBlink)
 
   /** Sets the foreground to [[Color.Reset]] — the terminal's default — and, exactly like [[without]] does for text
     * attributes, makes that choice survive [[patch]].
