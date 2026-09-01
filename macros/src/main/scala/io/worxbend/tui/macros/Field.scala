@@ -1,5 +1,8 @@
 package io.worxbend.tui.macros
 
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
+import java.util.UUID
+
 /** A form field with parsing and validation, composing cue4s-style: transforms are stored lazily and run when the
   * field's raw input is submitted.
   */
@@ -32,6 +35,14 @@ final case class Field[A](spec: FieldSpec, parse: String => Either[String, A]):
   *
   * A type of your own needs no factory here: `summon[FormFieldType[Email]].field("email")` builds its field from
   * whatever instance the type supplies.
+  *
+  * One limit is worth knowing before reaching for these on a derived form. `Form` catches "this validator was built for
+  * the wrong type" by comparing the [[FieldSpec.input]] the factory stamped in, and several types deliberately share a
+  * control: `int` and `long` are both the whole-number field, `double` and `bigDecimal` are both the decimal one, and
+  * `text`, `uuid`, `localDate`, `localTime`, `localDateTime` and `duration` are all the plain text field. So attaching
+  * a `Field.int("count")` validator to a field the case class declares as `Long` passes that check and instead fails on
+  * submit with a `ClassCastException` from the case class's constructor — the same residual case [[Field.map]]
+  * describes. Pick the factory named after the field's declared type, not after the control it happens to render as.
   */
 object Field:
 
@@ -42,3 +53,17 @@ object Field:
   def double(name: String): Field[Double] = FormFieldType.decimal.field(name)
 
   def bool(name: String): Field[Boolean] = FormFieldType.bool.field(name)
+
+  def long(name: String): Field[Long] = FormFieldType.long.field(name)
+
+  def bigDecimal(name: String): Field[BigDecimal] = FormFieldType.bigDecimal.field(name)
+
+  def uuid(name: String): Field[UUID] = FormFieldType.uuid.field(name)
+
+  def localDate(name: String): Field[LocalDate] = FormFieldType.localDate.field(name)
+
+  def localTime(name: String): Field[LocalTime] = FormFieldType.localTime.field(name)
+
+  def localDateTime(name: String): Field[LocalDateTime] = FormFieldType.localDateTime.field(name)
+
+  def duration(name: String): Field[Duration] = FormFieldType.duration.field(name)

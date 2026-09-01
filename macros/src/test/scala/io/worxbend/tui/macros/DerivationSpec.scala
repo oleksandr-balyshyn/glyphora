@@ -1,5 +1,8 @@
 package io.worxbend.tui.macros
 
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
+import java.util.UUID
+
 import org.scalatest.funsuite.AnyFunSuite
 
 /** Top level so the snippet compiled by `typeCheckErrors` can name it. `route` is a `java.net.URI`, a type that brings
@@ -68,7 +71,20 @@ private final case class Wide(
     f40: String,
 )
 
+/** A case class mixing the JDK value types, top level so the derivation sees exactly what an application's own model
+  * would look like — nothing imported into scope beyond the types themselves.
+  */
+private final case class Booking(
+    id: UUID,
+    on: LocalDate,
+    price: BigDecimal,
+    seats: Long,
+    hold: Option[Duration],
+)
+
 final class DerivationSpec extends AnyFunSuite:
+
+  private val sampleId: UUID = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
 
   private final case class Signup(username: String, age: Int, subscribe: Boolean)
 
@@ -154,3 +170,66 @@ final class DerivationSpec extends AnyFunSuite:
   test("map transforms a valid value"):
     val upper = Field.text("name").map(_.toUpperCase)
     assert(upper.parse("ada") == Right("ADA"))
+
+  test("the JDK value types each derive as the control that matches how they are typed"):
+    assert(summon[FormFieldType[Long]].input == FieldInput.IntField)
+    assert(summon[FormFieldType[BigDecimal]].input == FieldInput.DecimalField)
+    assert(summon[FormFieldType[UUID]].input == FieldInput.TextField)
+    assert(summon[FormFieldType[LocalDate]].input == FieldInput.TextField)
+    assert(summon[FormFieldType[LocalTime]].input == FieldInput.TextField)
+    assert(summon[FormFieldType[LocalDateTime]].input == FieldInput.TextField)
+    assert(summon[FormFieldType[Duration]].input == FieldInput.TextField)
+
+  test("Long accepts a value that would overflow Int, and trims"):
+    val field = Field.long("bytes")
+    assert(field.parse(" 9223372036854775807 ") == Right(Long.MaxValue))
+    assert(field.parse("2147483648") == Right(2147483648L))
+    assert(field.parse("1.5") == Left("'1.5' is not a whole number"))
+
+  test("BigDecimal keeps exact decimals and reports the text it could not read"):
+    val field = Field.bigDecimal("price")
+    assert(field.parse(" 0.1 ") == Right(BigDecimal("0.1")))
+    assert(field.parse("12345678901234567890.05") == Right(BigDecimal("12345678901234567890.05")))
+    assert(field.parse("1,5") == Left("'1,5' is not a number"))
+
+  test("UUID parses its hyphenated form and rejects anything else without throwing"):
+    val field = Field.uuid("id")
+    assert(field.parse(" 123e4567-e89b-12d3-a456-426614174000 ") == Right(sampleId))
+    assert(field.parse("123e4567").isLeft)
+    assert(field.parse("nope") == Left("'nope' is not a UUID"))
+
+  test("the java.time types parse ISO-8601 text and name the shape they wanted"):
+    assert(Field.localDate("on").parse(" 2026-09-01 ") == Right(LocalDate.of(2026, 9, 1)))
+    assert(Field.localDate("on").parse("01/09/2026") == Left("'01/09/2026' is not a date (YYYY-MM-DD)"))
+    assert(Field.localTime("at").parse("14:30") == Right(LocalTime.of(14, 30)))
+    assert(Field.localTime("at").parse("2.30pm") == Left("'2.30pm' is not a time (HH:MM)"))
+    assert(Field.localDateTime("when").parse("2026-09-01T14:30") == Right(LocalDateTime.of(2026, 9, 1, 14, 30)))
+    assert(Field.localDateTime("when").parse("2026-09-01 14:30").isLeft)
+    assert(Field.duration("hold").parse("PT5M30S") == Right(Duration.ofSeconds(330)))
+    assert(Field.duration("hold").parse("5 minutes") == Left("'5 minutes' is not a duration (ISO-8601, e.g. PT5M30S)"))
+
+  test("a malformed date is a message, not an exception reaching the render thread"):
+    // `LocalDate.parse` signals failure by throwing; the instance has to catch that or a typo would end the app.
+    assert(Field.localDate("on").parse("2026-02-31").isLeft)
+
+  test("a case class of JDK value types derives with no import and rebuilds itself"):
+    val spec    = deriveForm[Booking]
+    assert(
+      spec.fields == Seq(
+        FieldSpec("id", FieldInput.TextField),
+        FieldSpec("on", FieldInput.TextField),
+        FieldSpec("price", FieldInput.DecimalField),
+        FieldSpec("seats", FieldInput.IntField),
+        FieldSpec("hold", FieldInput.TextField),
+      )
+    )
+    assert(spec.defaults.head.parse("123e4567-e89b-12d3-a456-426614174000") == Right(sampleId))
+    val booking = Booking(sampleId, LocalDate.of(2026, 9, 1), BigDecimal("12.50"), 3L, Some(Duration.ofMinutes(15)))
+    assert(spec.assemble(Seq(sampleId, LocalDate.of(2026, 9, 1), BigDecimal("12.50"), 3L, booking.hold)) == booking)
+
+  test("an Option of a JDK value type still reads blank as None"):
+    val spec = deriveForm[Booking]
+    assert(spec.defaults(4).parse("") == Right(None))
+    assert(spec.defaults(4).parse("   ") == Right(None))
+    assert(spec.defaults(4).parse("PT15M") == Right(Some(Duration.ofMinutes(15))))
+    assert(spec.defaults(4).parse("quarter of an hour").isLeft)

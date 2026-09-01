@@ -90,18 +90,42 @@ Field.bool("subscribe").mapValidated { accepted =>
 | `String` | text input | the empty string |
 | `Int` | number input — non-digits are refused as you type | a parse error |
 | `Double` | number input that also takes one decimal point | a parse error |
+| `Long` | the same whole-number input as `Int`, without `Int`'s range limit | a parse error |
+| `BigDecimal` | the same decimal input as `Double`, kept exact rather than rounded to binary | a parse error |
 | `Boolean` | checkbox | — |
+| `java.util.UUID` | text input; the usual hyphenated form, `123e4567-e89b-12d3-a456-426614174000` | a parse error |
+| `java.time.LocalDate` | text input; ISO-8601 `YYYY-MM-DD`, for example `2026-09-01` | a parse error |
+| `java.time.LocalTime` | text input; ISO-8601 `HH:MM` or `HH:MM:SS` | a parse error |
+| `java.time.LocalDateTime` | text input; the two joined by a literal `T`, `2026-09-01T14:30` | a parse error |
+| `java.time.Duration` | text input; ISO-8601 duration, `PT5M30S` is five minutes thirty seconds | a parse error |
 | `Option[A]` | the same control `A` would get | `None` |
 
-Anything else — a `java.time.LocalDate`, a nested case class, a domain type of your own
-— is a compile error rather than a runtime surprise:
+The date, time and identifier types render as a plain text field because this library has
+no calendar picker or masked entry yet. Their text is trimmed before parsing, so a stray
+leading space is not an error, and a value the parser cannot read comes back as the
+message shown next to the field — never as an exception, which on the render thread would
+end the application rather than let the user correct the typo.
+
+Anything else — a `java.net.URI`, a nested case class, a domain type of your own — is a
+compile error rather than a runtime surprise:
 
 ```
-deriveForm: no form control is defined for a field of type java.time.LocalDate. Out of
-the box String, Int, Double, Boolean and Option of those are supported; define a
-`given FormFieldType[java.time.LocalDate]` next to your own type to teach the
+deriveForm: no form control is defined for a field of type java.net.URI. Out of the box
+String, Int, Long, Double, BigDecimal, Boolean, java.util.UUID,
+java.time.LocalDate/LocalTime/LocalDateTime/Duration and Option of those are supported;
+define a `given FormFieldType[java.net.URI]` next to your own type to teach the
 derivation about it.
 ```
+
+One consequence worth knowing when you write a validator by hand: `Form` catches "this
+validator was built for the wrong type" by comparing which control the field wants, and
+several types deliberately share one. `Field.int` and `Field.long` are both the
+whole-number control; `Field.double` and `Field.bigDecimal` are both the decimal one;
+`Field.text`, `Field.uuid`, `Field.localDate`, `Field.localTime`, `Field.localDateTime`
+and `Field.duration` are all the plain text one. Attaching a `Field.int("seats")`
+validator to a field the case class declares as `Long` therefore slips past that check
+and fails on submit instead. Name the factory after the field's declared type, not after
+the control it happens to look like.
 
 ## Teach the derivation about your own type
 

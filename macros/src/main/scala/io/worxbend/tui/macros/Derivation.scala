@@ -5,9 +5,10 @@ import scala.deriving.Mirror
 
 /** Derives a [[FormSpec]] for a case class at compile time via `Mirror.ProductOf` — field names become field specs, and
   * each field's *type* chooses its control and its parser by way of the [[FormFieldType]] summoned for it (`String` →
-  * text, `Int` → whole-number, `Double` → decimal, `Boolean` → checkbox, `Option[A]` → the same control as `A` with
-  * blank meaning `None`). A field type with no instance in scope is a compile error, not a runtime surprise, and a type
-  * of your own joins the set by declaring `given FormFieldType[YourType]` in its companion — see [[FormFieldType]].
+  * text, `Int`/`Long` → whole-number, `Double`/`BigDecimal` → decimal, `Boolean` → checkbox, `java.util.UUID` and the
+  * `java.time` value types → text, `Option[A]` → the same control as `A` with blank meaning `None`). A field type with
+  * no instance in scope is a compile error, not a runtime surprise, and a type of your own joins the set by declaring
+  * `given FormFieldType[YourType]` in its companion — see [[FormFieldType]].
   *
   * The returned spec's `assemble` takes one value per derived field, in declaration order, each already of that field's
   * declared type; see [[FormSpec]] for the full contract. A call with the wrong number of values throws an
@@ -20,7 +21,7 @@ import scala.deriving.Mirror
   * One diagnostic is deliberately weaker than it could be: the compile error names the *type* that has no instance, not
   * the *field* that carries it. Pairing each label with its type so the message could say both makes the compiler print
   * the name as `("age" : String)` followed by several lines of implicit-search trace, which reads worse than the short
-  * message. In a case class with two `LocalDate` fields, look for the type rather than the name.
+  * message. In a case class with two fields of the same unsupported type, look for the type rather than the name.
   */
 inline def deriveForm[A](using m: Mirror.ProductOf[A]): FormSpec[A] =
   val names    = constValueTuple[m.MirroredElemLabels].toList.map(_.toString)
