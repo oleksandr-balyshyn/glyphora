@@ -33,8 +33,8 @@ final case class TerminalCapabilities(
 ):
 
   /** Whether a feature in state `support` should be used. Prefer `support.usable`, which asks the state itself rather
-    * than routing the question through an unrelated capability value; this is kept for source compatibility with
-    * 0.13.0 and answers exactly the same question.
+    * than routing the question through an unrelated capability value; this is kept for source compatibility with 0.13.0
+    * and answers exactly the same question.
     */
   def enabled(support: Support): Boolean = support.usable
 
