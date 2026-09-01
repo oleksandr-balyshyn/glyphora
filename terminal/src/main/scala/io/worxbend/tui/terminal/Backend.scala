@@ -159,6 +159,20 @@ trait Backend:
     val _ = blinking
     Right(())
 
+  /** Selects the shape the terminal draws its hardware cursor in — see [[CursorShape]].
+    *
+    * The affordance this exists for is a modal editor: a block cursor in command mode and a bar in insert mode is how a
+    * user knows which mode they are in without reading a status line.
+    *
+    * The shape is process-global terminal state, not per-frame state, so set it when the mode changes rather than on
+    * every draw, and expect the backend to hand it back to [[CursorShape.Default]] when the app closes or is suspended.
+    * A terminal that does not implement DECSCUSR ignores the request, so this answers `Right(())` whether or not
+    * anything visibly changed; the default here is likewise a no-op for backends with no real terminal.
+    */
+  def setCursorShape(shape: CursorShape): Either[BackendError, Unit] =
+    val _ = shape
+    Right(())
+
   /** Reserves `rows` lines at the bottom of the *primary* screen for an app that is not taking the alternate screen.
     *
     * The complement of [[enterAlternateScreen]]. Instead of switching to a blank second screen, this scrolls whatever

@@ -35,9 +35,12 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   // whether *this* backend turned the caret's blink off. Only what an app suppressed is restored on the way out: a
   // user whose emulator is configured for a steady caret would otherwise have that preference overwritten by every
   // glyphora app that exits, including the ones that never touched blink at all.
-  @volatile private var cursorBlinkSuppressed                        = false
-  @volatile private var suspendedState                               = TerminalState.Undressed
-  @volatile private var inlineRows                                   = 0
+  @volatile private var cursorBlinkSuppressed = false
+
+  /** Whether this backend has moved the cursor's shape away from the user's own configuration, and so owes a reset. */
+  @volatile private var cursorShaped          = false
+  @volatile private var suspendedState        = TerminalState.Undressed
+  @volatile private var inlineRows            = 0
 
   // What the terminal is believed to be showing: the frame `draw` last flushed, kept so the next frame can be sent as
   // a diff against it. Owned by the render thread alone — no other thread may read or write it. A thread that takes the
@@ -237,6 +240,18 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     attempt {
       write(AnsiSequences.ShowCursor)
       cursorHidden = false
+    }
+
+  /** Writes DECSCUSR (`CSI n SP q`) to pick the hardware cursor's shape.
+    *
+    * The flag it keeps is "did this app change the shape", not the shape itself, because that is the only question the
+    * release and reacquire paths ask: whichever shape was chosen, handing the terminal back means asking for
+    * [[CursorShape.Default]], and taking it back means asking for the app's shape again.
+    */
+  override def setCursorShape(shape: CursorShape): Either[BackendError, Unit] =
+    attempt {
+      write(AnsiSequences.cursorShape(shape))
+      cursorShaped = shape != CursorShape.Default
     }
 
   /** Writes CUP (`CSI row ; column H`) to park the terminal's own caret on `position`.
@@ -584,7 +599,8 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * operations ([[enableRawMode]], [[hideCursor]]) write them from outside this monitor.
     */
   private def releaseTerminal(): TerminalRelease = screenOwnership.synchronized:
-    val state = TerminalState(isRawMode, alternateScreenActive, cursorHidden, mouseCaptureActive, cursorBlinkSuppressed)
+    val state    =
+      TerminalState(isRawMode, alternateScreenActive, cursorHidden, cursorShaped, mouseCaptureActive, cursorBlinkSuppressed)
     val failures = Seq.newBuilder[BackendError]
 
     def undress(active: Boolean, step: => Either[BackendError, Unit]): Unit =
@@ -596,7 +612,6 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
     undress(state.mouse.isDefined, disableMouseCapture())
     undress(state.cursorHidden, showCursor())
-    undress(state.cursorBlinkSuppressed, setCursorBlink(true))
     // An inline run leaves its last frame on the primary screen on purpose, so park the cursor on the line below the
     // strip: without this the shell's next prompt would be drawn straight over the frame the app just left behind.
     if inlineRows > 0 then
@@ -621,6 +636,10 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     if state.alternateScreen then bestEffort(enterAlternateScreen())
     if state.cursorHidden then bestEffort(hideCursor())
     if state.cursorBlinkSuppressed then bestEffort(setCursorBlink(false))
+
+    // the shape itself is not remembered, so a resumed app is handed a block: whichever shape it wants, it is a mode
+    // change away from asking for it again, and guessing wrongly here would be worse than a known starting point
+    if state.cursorShaped then bestEffort(setCursorShape(CursorShape.SteadyBlock))
     state.mouse.foreach(mode => bestEffort(enableMouseCapture(mode)))
     requestFullRedraw() // whatever ran in between owned the screen: repaint everything
 
@@ -670,13 +689,16 @@ private[terminal] final case class TerminalState(
     raw: Boolean,
     alternateScreen: Boolean,
     cursorHidden: Boolean,
+    cursorShaped: Boolean,
     mouse: Option[MouseCaptureMode],
     cursorBlinkSuppressed: Boolean,
 )
 
 private[terminal] object TerminalState:
-  /** Nothing was dressed up: cooked mode, primary screen, visible and blinking cursor, no mouse capture. */
-  val Undressed: TerminalState = TerminalState(false, false, false, None, false)
+  /** Nothing was dressed up: cooked mode, primary screen, visible, blinking cursor of the user's own shape, no
+    * mouse capture.
+    */
+  val Undressed: TerminalState = TerminalState(false, false, false, false, None, false)
 
 /** The outcome of handing the terminal back: the modes that were undressed (so they can be re-dressed) and the first
   * step that failed while doing it, if any.

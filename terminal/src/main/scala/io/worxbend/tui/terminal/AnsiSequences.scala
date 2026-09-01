@@ -12,6 +12,9 @@ private[terminal] object AnsiSequences:
   val ClearScreen: String           = clear(ClearType.All)
   val HideCursor: String            = s"$Esc[?25l"
   val ShowCursor: String            = s"$Esc[?25h"
+
+  /** DECSCUSR with parameter 0: hands the cursor's shape back to the user's own terminal configuration. */
+  val ResetCursorShape: String      = s"$Esc[0 q"
   // DECSET/DECRST 12, "cursor blink" — whether the terminal's own caret blinks. Purely cosmetic; a form might blink
   // the caret in the field being typed into and hold it steady while idle. Deliberately *not* part of RestoreAll
   // below: everything in that string is a mode *reset*, which is idempotent and therefore safe to send unconditionally
@@ -48,6 +51,9 @@ private[terminal] object AnsiSequences:
   val ResetScrollRegion: String     = s"$Esc[r"
   val BeginSynchronized: String     = s"$Esc[?2026h"
   val EndSynchronized: String       = s"$Esc[?2026l"
+
+  /** DECSCUSR (`CSI n SP q`): selects the shape the terminal draws its hardware cursor in — see [[CursorShape]]. */
+  def cursorShape(shape: CursorShape): String = s"$Esc[${CursorShape.parameter(shape)} q"
 
   /** The mouse-capture request for `mode` — see [[MouseCaptureMode]] for what each one costs and buys. */
   def enableMouseCapture(mode: MouseCaptureMode): String =
@@ -112,6 +118,8 @@ private[terminal] object AnsiSequences:
     * [[ResetScrollRegion]] is the one member that is not a private-mode reset. It earns its place by the same property:
     * releasing a scroll region that was never set leaves the screen exactly as it was, and a region left clamped
     * outlives the process and turns most of the user's terminal into rows that scrolling refuses to touch.
+    * [[ResetCursorShape]] is here on the same terms: it is DECSCUSR rather than a private-mode reset, but asking for
+    * the user's configured cursor shape when nothing ever changed it leaves the shape exactly where it was.
     *
     * [[EndSynchronized]] leads. A frame is written as one `?2026h` … `?2026l` pair (see `JLine3Backend.draw`), which
     * asks the terminal to hold everything back until the closing half arrives so a half-drawn frame is never shown. A
@@ -120,7 +128,7 @@ private[terminal] object AnsiSequences:
     * at once, and closing one that was never opened does nothing.
     */
   val RestoreAll: String =
-    s"$EndSynchronized$DisableMouseCapture$ShowCursor$LeaveAlternateScreen$ResetScrollRegion$PopKittyKeyboard" +
+    s"$EndSynchronized$DisableMouseCapture$ResetCursorShape$ShowCursor$LeaveAlternateScreen$ResetScrollRegion$PopKittyKeyboard" +
       s"$DisableFocusReporting$DisableBracketedPaste$ResetStyle"
 
   /** OSC 8 hyperlink opener; pair every open with [[LinkClose]].

@@ -23,6 +23,8 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   @volatile private var cursorVisible                          = true
   // blinking is the terminal's own default, so that is where a freshly built backend starts
   @volatile private var cursorBlinking                         = true
+
+  @volatile private var cursorShape: CursorShape               = CursorShape.Default
   @volatile private var lastClipboard: Option[String]          = None
   @volatile private var lastTitle: Option[String]              = None
   @volatile private var caret: Option[Position]                = None
@@ -91,6 +93,13 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     */
   override def setCursorBlink(blinking: Boolean): Either[BackendError, Unit] =
     cursorBlinking = blinking
+    Right(())
+
+  /** Records the requested shape instead of emitting DECSCUSR — there is no device here to obey it. A test asserts on
+    * [[currentCursorShape]], which is the whole point of this backend.
+    */
+  override def setCursorShape(shape: CursorShape): Either[BackendError, Unit] =
+    cursorShape = shape
     Right(())
 
   override def reserveInlineRows(rows: Int): Either[BackendError, Unit] =
@@ -250,6 +259,8 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     mouseCapture = None
     cursorVisible = true
     cursorBlinking = true
+
+    cursorShape = CursorShape.Default
     alternateScreen = false
     rawMode = false
     caret = None
@@ -366,6 +377,11 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     * because blinking is the terminal's own default — so a test asserting `false` is asserting the app really did ask.
     */
   def isCursorBlinking: Boolean = cursorBlinking
+
+  /** The shape last asked for through [[setCursorShape]]; [[CursorShape.Default]] until something asks, and again after
+    * [[close]] — so a test can assert an app handed the user's own cursor shape back on its way out.
+    */
+  def currentCursorShape: CursorShape = cursorShape
 
   /** How many rows an inline run reserved on the primary screen; `0` for a full-screen run. */
   def reservedInlineRows: Int = inlineRows

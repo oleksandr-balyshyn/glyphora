@@ -87,6 +87,19 @@ who is not typing. A backend that has no real terminal — `HeadlessBackend`, or
 custom one — inherits a no-op default and records the request instead, which is what
 a test asserts against.
 
+`Backend.setCursorShape(shape)` picks what that terminal cursor looks like — DECSCUSR,
+`CSI n SP q`. The `CursorShape` cases are `Default`, `BlinkingBlock`, `SteadyBlock`,
+`BlinkingUnderline`, `SteadyUnderline`, `BlinkingBar` and `SteadyBar`. The affordance it
+exists for is a modal editor: a block cursor in command mode and a bar in insert mode is
+how a user knows which mode they are in without reading a status line.
+
+The shape is process-global terminal state rather than per-frame state, so set it when the
+mode changes rather than on every draw. `JLine3Backend` hands it back to the user's own
+configured shape when the app closes or is suspended with `Ctrl+Z`, and the shutdown-hook
+restore does the same, so a process killed mid-edit leaves no bar cursor behind in the
+shell it came from. A terminal that does not implement DECSCUSR ignores the request, so
+the call reports success whether or not anything visibly changed.
+
 ## Test the hard strings
 
 Include a small width corpus in custom widget tests:

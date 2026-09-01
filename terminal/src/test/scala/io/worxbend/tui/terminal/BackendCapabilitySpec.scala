@@ -41,6 +41,8 @@ final class BackendCapabilitySpec extends AnyFunSuite:
     assert(backend.setTitle("anything") == Right(()))
     assert(backend.clearRegion(ClearType.All) == Right(()))
     assert(backend.requestFullRedraw() == ())
+    // a terminal that cannot address the cursor's shape has not failed at anything, so the default reports success
+    assert(backend.setCursorShape(CursorShape.SteadyBar) == Right(()))
 
   test("the headless backend records the last title it was given"):
     val backend = HeadlessBackend(Size(10, 2))
