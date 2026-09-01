@@ -77,5 +77,100 @@ final class Painter private[widgets] (
     val index = surface.light(column, row)
     if index >= 0 then styles(index) = style
 
+  /** Draws the straight segment between two world points, lighting every dot along the way.
+    *
+    * Two things happen here that a caller cannot do for itself, which is why the whole segment — not merely its two
+    * endpoints — is the painter's business.
+    *
+    * First the segment is *clipped* to the world bounds before anything is drawn. Dropping points one at a time, the
+    * way [[paint]] must, throws away a line's continuity as soon as part of it leaves the window: a line running in
+    * from far off-screen used to contribute only the handful of its samples that happened to land inside, instead of a
+    * solid run up to the edge.
+    *
+    * Then the clipped segment is stepped once per *dot* rather than once per world unit. A caller choosing its own
+    * sample count has to guess how many dots a world unit is worth, and the guess is wrong in both directions: under
+    * bounds of `0.0` to `1.0` a full-width line came out as five scattered dots, and under bounds of `0.0` to `1e9` the
+    * same arithmetic asked for billions of samples. Stepping in dot space, the cost is bounded by the size of the grid
+    * and the line is solid at every scale.
+    *
+    * A segment with any non-finite endpoint is not drawn at all: its direction is undefined, so painting the finite end
+    * would put the line somewhere it does not go.
+    */
+  def paintSegment(x1: Double, y1: Double, x2: Double, y2: Double, style: Style): Unit =
+    if x1.isFinite && y1.isFinite && x2.isFinite && y2.isFinite then
+      clipToBounds(x1, y1, x2, y2).foreach { (fromX, fromY, toX, toY) =>
+        getPoint(fromX, fromY).zip(getPoint(toX, toY)).foreach { case ((c0, r0), (c1, r1)) =>
+          traceDots(c0, r0, c1, r1, style)
+        }
+      }
+
+  /** The part of the segment inside the world bounds, as `(x1, y1, x2, y2)`, or `None` when none of it is.
+    *
+    * This is the Liang-Barsky algorithm: rather than test points, it treats the segment as `start + t * delta` for `t`
+    * running 0 to 1 and narrows that range against each of the four bound edges in turn. `p` is how fast the segment
+    * approaches the edge and `q` how far it starts from it; `p == 0` means the segment runs parallel to that edge, so
+    * it is either wholly on the inside (`q >= 0`) or wholly outside. If the range ever inverts, no part of the segment
+    * is visible.
+    *
+    * The surviving endpoints are clamped back onto the bounds: the arithmetic is exact in principle, but
+    * `start + t * delta` in floating point can land a hair past the edge it was solved for.
+    */
+  private def clipToBounds(x1: Double, y1: Double, x2: Double, y2: Double): Option[(Double, Double, Double, Double)] =
+    val (xMin, xMax) = xBounds
+    val (yMin, yMax) = yBounds
+    if xMax <= xMin || yMax <= yMin then None
+    else
+      val dx    = x2 - x1
+      val dy    = y2 - y1
+      val edges = Seq((-dx, x1 - xMin), (dx, xMax - x1), (-dy, y1 - yMin), (dy, yMax - y1))
+      val span  = edges.foldLeft(Option((0.0, 1.0))) { (surviving, edge) =>
+        surviving.flatMap { (t0, t1) =>
+          val (p, q) = edge
+          if p == 0.0 then Option.when(q >= 0.0)((t0, t1))
+          else
+            val crossing = q / p
+            if p < 0.0 then Option.when(crossing <= t1)((math.max(t0, crossing), t1))
+            else Option.when(crossing >= t0)((t0, math.min(t1, crossing)))
+        }
+      }
+      span.map { (t0, t1) =>
+        (
+          clampInto(x1 + dx * t0, xMin, xMax),
+          clampInto(y1 + dy * t0, yMin, yMax),
+          clampInto(x1 + dx * t1, xMin, xMax),
+          clampInto(y1 + dy * t1, yMin, yMax),
+        )
+      }
+
+  private def clampInto(value: Double, low: Double, high: Double): Double = math.min(high, math.max(low, value))
+
+  /** Lights every dot on the grid line from `(c0, r0)` to `(c1, r1)`, endpoints included.
+    *
+    * Bresenham's algorithm, in integer arithmetic: `error` tracks how far the line has drifted from the dot row (or
+    * column) currently being drawn, and each step moves along the longer axis, moving along the shorter one only when
+    * the drift has built up to half a dot. Local `var`s are how this reads in every language it is written in, and the
+    * loop runs once per lit dot on the render thread, so the mutable state is deliberate and does not escape.
+    */
+  private def traceDots(c0: Int, r0: Int, c1: Int, r1: Int, style: Style): Unit =
+    val stepColumn   = if c0 < c1 then 1 else -1
+    val stepRow      = if r0 < r1 then 1 else -1
+    val columnSpan   = math.abs(c1 - c0)
+    val negativeSpan = -math.abs(r1 - r0)
+    var column       = c0
+    var row          = r0
+    var error        = columnSpan + negativeSpan
+    var running      = true
+    while running do
+      paintDot(column, row, style)
+      if column == c1 && row == r1 then running = false
+      else
+        val doubled = 2 * error
+        if doubled >= negativeSpan then
+          error += negativeSpan
+          column += stepColumn
+        if doubled <= columnSpan then
+          error += columnSpan
+          row += stepRow
+
   private[widgets] def flush(buffer: Buffer): Unit =
     surface.flush(buffer, styles.apply)

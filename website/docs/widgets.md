@@ -862,6 +862,18 @@ For custom plots, `canvas(xBounds, yBounds)(shapes*)` provides points, segments,
 polylines, rectangles, and circles. Charts can use braille or half-block resolution
 depending on density.
 
+Segments — and therefore polylines and rectangle outlines — are clipped to the canvas
+bounds and then drawn one dot at a time on the sub-cell grid. Two consequences worth
+knowing. A line that starts far outside the visible world range still draws a solid run
+up to the edge, rather than the few of its samples that happened to land inside. And how
+finely a line is sampled follows the canvas resolution, not the size of your world units:
+bounds of `0.0` to `1.0` and bounds of `0.0` to `1000000.0` draw the same line, and the
+second costs no more than the first.
+
+Coordinates must be finite. A `NaN` or infinite point is dropped rather than clamped, and
+a segment with a non-finite endpoint is skipped entirely — its direction is undefined, so
+drawing from its finite end would put the line somewhere it does not go.
+
 ### Writing your own shape
 
 A `Shape` is one method, `draw(painter: Painter): Unit`. The painter speaks two

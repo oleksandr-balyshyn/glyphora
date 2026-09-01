@@ -12,8 +12,14 @@ object Shape:
     def draw(painter: Painter): Unit =
       points.foreach((x, y) => painter.paint(x, y, style))
 
-  /** A straight segment, painted by parametric stepping (resolution-independent, no Bresenham needed at terminal-cell
-    * densities).
+  /** A straight segment between two world points.
+    *
+    * The drawing is [[Painter.paintSegment]]'s, because only the painter knows the canvas bounds and how many dots a
+    * world unit is worth. The segment is clipped to those bounds first — so a line arriving from off-screen still draws
+    * a solid run up to the edge — and then stepped once per dot, so it is continuous whether the world spans `0.0` to
+    * `1.0` or `0.0` to a billion.
+    *
+    * A segment with any non-finite endpoint is not drawn: its direction is undefined.
     */
   final case class SegmentShape(
       x1: Double,
@@ -22,12 +28,7 @@ object Shape:
       y2: Double,
       style: Style = Style.Default,
   ) extends Shape:
-    def draw(painter: Painter): Unit =
-      val steps = math.max(1, math.max(math.abs(x2 - x1), math.abs(y2 - y1)).ceil.toInt * 4)
-      (0 to steps).foreach { i =>
-        val t = i.toDouble / steps
-        painter.paint(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, style)
-      }
+    def draw(painter: Painter): Unit = painter.paintSegment(x1, y1, x2, y2, style)
 
   /** Consecutive points joined by segments — what a line chart plots. */
   final case class Polyline(points: Seq[(Double, Double)], style: Style = Style.Default) extends Shape:
