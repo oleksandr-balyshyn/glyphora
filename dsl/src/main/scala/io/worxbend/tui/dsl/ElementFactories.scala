@@ -652,12 +652,12 @@ private[dsl] trait ElementFactories:
   def numberInput(state: w.TextInputState): NumberInputElement =
     NumberInputElement(state)
 
-  /** A template-driven field: `#` accepts a digit, `A` a letter, and any other character in `mask` is a literal that
-    * inserts itself (`maskedInput(state, "##/##/####")`). It does not hide anything; for a secret shown on screen use
-    * [[io.worxbend.tui.core.Masked]]. Caller-owned state, created once outside `view`, as for [[input]].
+  /** A template-driven field: `#` accepts a digit, `A` a letter, and any other character in `template` is a literal
+    * that inserts itself (`templateInput(state, "##/##/####")`). It does not hide anything; for a secret shown on
+    * screen use [[io.worxbend.tui.core.Masked]]. Caller-owned state, created once outside `view`, as for [[input]].
     */
-  def maskedInput(state: w.TextInputState, mask: String): MaskedInputElement =
-    MaskedInputElement(state, mask)
+  def templateInput(state: w.TextInputState, template: String): TemplateInputElement =
+    TemplateInputElement(state, template)
 
   /** A page indicator over a caller-owned page index. */
   def paginator(current: Signal[Int], total: Int)(using ReactiveScope): PaginatorElement =

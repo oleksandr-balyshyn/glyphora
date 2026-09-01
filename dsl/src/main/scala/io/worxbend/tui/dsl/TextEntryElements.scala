@@ -143,16 +143,16 @@ final case class NumberInputElement(
     else false
 
 /** A template-driven input (`##/##/####`): `#` accepts a digit, `A` a letter, literals insert themselves. */
-final case class MaskedInputElement(
+final case class TemplateInputElement(
     state: w.TextInputState,
-    mask: String,
+    template: String,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  type Self = MaskedInputElement
+  type Self = TemplateInputElement
   def widget: Widget                                                     =
-    val input = w.TextInput(placeholder = mask, showCursor = props.focused, style = props.style)
+    val input = w.TextInput(placeholder = template, showCursor = props.focused, style = props.style)
     (area, buffer) => input.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): MaskedInputElement    = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): TemplateInputElement  = copy(props = props)
   private[dsl] override def claim: SizeClaim                             = SizeClaim.OneRow
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
     Some(
@@ -162,27 +162,25 @@ final case class MaskedInputElement(
       }
     )
 
-  /** The mask split into grapheme clusters, which is the unit [[currentLength]] counts the typed value in. Indexing the
-    * raw `String` instead would mix UTF-16 code units with clusters and read the wrong slot for any mask holding a
-    * non-BMP or combining character.
+  /** The template split into grapheme clusters, which is the unit [[currentLength]] counts the typed value in. Indexing
+    * the raw `String` instead would mix UTF-16 code units with clusters and read the wrong slot for any template
+    * holding a non-BMP or combining character.
     */
-  private val maskSlots: IndexedSeq[String] = CharWidth.graphemeClusters(mask).toIndexedSeq
+  private val slots: IndexedSeq[String] = CharWidth.graphemeClusters(template).toIndexedSeq
 
   private def typeChar(codePoint: Int): Unit =
     state.moveEnd()
     var position = currentLength
     // literals between fillable slots insert themselves
-    while position < maskSlots.size && !isSlot(maskSlots(position)) do
-      state.insert(maskSlots(position))
+    while position < slots.size && !isSlot(slots(position)) do
+      state.insert(slots(position))
       position += 1
-    if position < maskSlots.size && slotAccepts(maskSlots(position), codePoint) then
-      state.insert(Character.toString(codePoint))
+    if position < slots.size && slotAccepts(slots(position), codePoint) then state.insert(Character.toString(codePoint))
 
   private def eraseSlot(): Unit =
     state.moveEnd()
     state.backspace()
-    while currentLength > 0 && currentLength <= maskSlots.size && !isSlot(maskSlots(currentLength - 1)) do
-      state.backspace()
+    while currentLength > 0 && currentLength <= slots.size && !isSlot(slots(currentLength - 1)) do state.backspace()
 
   private def currentLength: Int = CharWidth.clusterCount(state.value)
 

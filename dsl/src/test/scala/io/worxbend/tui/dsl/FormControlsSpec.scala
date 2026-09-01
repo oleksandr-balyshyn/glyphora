@@ -90,9 +90,9 @@ final class FormControlsSpec extends AnyFunSuite:
     assert(text(1).value == "123", "letters must never reach a derived Int field's state")
     quitApp(pilot)
 
-  test("maskedInput inserts literals automatically and erases whole slots"):
+  test("templateInput inserts literals automatically and erases whole slots"):
     val state = TextInputState()
-    val pilot = startApp(maskedInput(state, "##/##"))
+    val pilot = startApp(templateInput(state, "##/##"))
     pilot.typeText("12x34").waitForIdle()
     assert(state.value == "12/34")
     pilot.pressKey(KeyCode.Backspace).waitForIdle()

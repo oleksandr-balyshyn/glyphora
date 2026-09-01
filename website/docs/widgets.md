@@ -912,7 +912,7 @@ glyph reserves two.
 | `input` | `TextInputState` | one line, horizontal scrolling, paste folds newlines |
 | `textArea` | `TextAreaState` | multiple lines, 2D cursor, scrolling, bounded undo/redo |
 | `numberInput` | `TextInputState` | whole numbers only; add `.decimal` to accept one decimal point |
-| `maskedInput` | `TextInputState` | template field: `#` digit, `A` letter, other characters are literals |
+| `templateInput` | `TextInputState` | template field: `#` digit, `A` letter, other characters are literals |
 | `autocomplete` | `AutocompleteState` | input plus selectable suggestions and accept callback; `.maxSuggestions(n)` caps the list |
 | `filePicker` | `FilePickerState` | navigable file selection |
 
