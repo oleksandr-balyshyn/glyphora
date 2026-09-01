@@ -244,9 +244,9 @@ final case class DataTableElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   type Self = DataTableElement
-  def widget: Widget                                                     =
+  def widget: Widget                                                =
     (area, buffer) => table.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): DataTableElement      = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): DataTableElement = copy(props = props)
 
   // the visible page is filtered and paginated on each call; name it once so a key press computes it once.
   // it stays a `def`: the thunks below run after `state` may already have moved, so the count is read at call time

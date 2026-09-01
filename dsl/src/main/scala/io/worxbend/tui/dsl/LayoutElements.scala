@@ -3,6 +3,15 @@ package io.worxbend.tui.dsl
 import io.worxbend.tui.core.{Cell, Direction, Flex, Line, Rect, Style, Widget}
 import io.worxbend.tui.widgets as w
 
+/** The heights of every child at `width`, or `None` if any one of them cannot say how tall it is.
+  *
+  * `Measured` treats `None` as "unmeasurable", never as zero, so a container whose children are not all measurable has
+  * no measurement of its own to give. Every container in this file answers through this.
+  */
+private def measuredHeights(children: Seq[Element], width: Int): Option[Seq[Int]] =
+  val heights = children.map(_.intrinsicHeight(width))
+  Option.when(heights.forall(_.nonEmpty))(heights.flatten)
+
 /** A container that arranges its children along an axis, so `.gap`/`.center`/`.spaceBetween` can be typed to the
   * containers they actually do something on instead of silently being the identity everywhere else.
   *
@@ -137,11 +146,10 @@ final case class PanelElement(
     // Every drawn border side eats one cell across its own axis, and the padding eats whatever it was asked for on
     // top of that. Counting the sides that are actually drawn, rather than assuming all four, is what keeps a
     // `.borders(Borders.Top)` panel from reserving two rows it never paints.
-    val chrome  = borderCells(w.Borders.Left) + borderCells(w.Borders.Right) + padding.horizontalCells
-    val rows    = borderCells(w.Borders.Top) + borderCells(w.Borders.Bottom) + padding.verticalCells
-    val gaps    = spacing * math.max(0, children.size - 1)
-    val heights = children.map(_.intrinsicHeight(math.max(0, width - chrome)))
-    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + gaps + rows) else None
+    val chrome = borderCells(w.Borders.Left) + borderCells(w.Borders.Right) + padding.horizontalCells
+    val rows   = borderCells(w.Borders.Top) + borderCells(w.Borders.Bottom) + padding.verticalCells
+    val gaps   = spacing * math.max(0, children.size - 1)
+    measuredHeights(children, math.max(0, width - chrome)).map(_.sum + gaps + rows)
 
   /** One cell if that side of the frame is drawn, none if it is not — the same rule `w.Block.inner` applies. */
   private def borderCells(side: w.Borders): Int = if borders.hasAny(side) then 1 else 0
@@ -196,8 +204,7 @@ final case class RowElement(
   private[dsl] def withProps(props: ElementProps): RowElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): RowElement = copy(children = children)
   private[dsl] override def intrinsicHeight(width: Int): Option[Int]         =
-    val heights = children.map(_.intrinsicHeight(width))
-    if heights.forall(_.nonEmpty) then heights.flatten.maxOption else None
+    measuredHeights(children, width).flatMap(_.maxOption)
 
 /** Children stacked top to bottom. */
 final case class ColumnElement(
@@ -211,9 +218,7 @@ final case class ColumnElement(
   def withFlex(mode: Flex): ColumnElement    = copy(flex = mode)
   def withSpacing(cells: Int): ColumnElement = copy(spacing = math.max(0, cells))
   private[dsl] override def intrinsicHeight(width: Int): Option[Int]            =
-    val heights = children.map(_.intrinsicHeight(width))
-    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + spacing * math.max(0, children.size - 1))
-    else None
+    measuredHeights(children, width).map(_.sum + spacing * math.max(0, children.size - 1))
   private[dsl] def withProps(props: ElementProps): ColumnElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): ColumnElement = copy(children = children)
 
