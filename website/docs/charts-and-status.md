@@ -78,10 +78,23 @@ of its true height and never moves.
 
 ## Draw a horizontal histogram
 
-`BarChart` drops any bar that does not fully fit, so a narrow terminal silently loses
+`barChart` drops any bar that does not fully fit, so a narrow terminal silently loses
 buckets off the right-hand edge. For a latency distribution the horizontal form is
 better regardless, because a bucket *range* needs about twelve characters of label and
-a vertical bar has nowhere to put them:
+an upright bar has nowhere to put them — under a three-column bar, "100-250ms" is drawn
+as "100".
+
+`horizontalBarChart(data)` is that layout: the bars grow rightwards, one row each by
+default (`horizontalBarChart(data, barHeight = 2)` makes them thicker), and the labels
+are right-aligned in a gutter down the left edge. The gutter is as wide as the longest
+name and never more than half the area, so the bars always keep half the width:
+
+```scala
+horizontalBarChart(buckets.map(bucket => bucket.label -> bucket.count))
+```
+
+Build the rows by hand instead when you want a number printed beside each bar, which
+the widget does not draw:
 
 ```scala
 private def histogramRows(buckets: Vector[LatencyBucket]): Seq[Element] =

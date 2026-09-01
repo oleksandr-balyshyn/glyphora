@@ -21,6 +21,13 @@ private[widgets] object BlockLadder:
     */
   val Eighths: Vector[String] = BarSet.Eighths.eighths
 
+  /** The eight block elements again, one eighth of a cell wider each, from `▏` (one eighth) to `█` (a full cell).
+    *
+    * The sideways twin of [[Eighths]]: `LeftEighths(n - 1)` is the glyph for `n` eighths of fill, growing rightwards
+    * from the left of the cell — which is why a bar is walked from its left end towards its right.
+    */
+  val LeftEighths: Vector[String] = Vector("▏", "▎", "▍", "▌", "▋", "▊", "▉", "█")
+
   /** Paints one column of the chart: `value` measured against `ceiling`, filling upwards from row `bottom` and stopping
     * at row `top`.
     *
@@ -64,6 +71,43 @@ private[widgets] object BlockLadder:
         paintRow(buffer, x, columns, y, glyph, style)
         y -= 1
     }
+
+  /** Paints one horizontal bar: `value` measured against `ceiling`, filling rightwards from column `left` and stopping
+    * at column `right`.
+    *
+    * The mirror image of [[fillColumn]], sharing its rounding rule so a value drawn sideways and the same value drawn
+    * upright never disagree about how full a cell is. `rows` is how many terminal rows tall the bar is — one for a
+    * single-row bar, more for a thick one — every row painted with the same glyph, so a thick bar is a thin bar
+    * repeated downwards rather than a separate algorithm.
+    *
+    * `value` outside `0..ceiling` is clamped. Cells past the fill are left untouched rather than blanked, which is what
+    * lets a chart draw over an existing background.
+    *
+    * Renders into `buffer` and nothing else, so it carries the same thread constraint as any
+    * [[io.worxbend.tui.core.Widget]]: call it from the render thread that owns the buffer.
+    */
+  def fillRow(
+      buffer: Buffer,
+      y: Int,
+      rows: Int,
+      left: Int,
+      right: Int,
+      value: Long,
+      ceiling: Long,
+      style: Style,
+  ): Unit =
+    val width   = right - left + 1
+    val clamped = math.max(0L, math.min(value, ceiling))
+    var eighths = math.round(clamped.toDouble / ceiling * width * 8).toInt
+    var x       = left
+    while x <= right && eighths > 0 do
+      val levelIndex = math.min(eighths, 8)
+      var row        = 0
+      while row < rows do
+        buffer.set(x, y + row, Cell(LeftEighths(levelIndex - 1), style))
+        row += 1
+      eighths -= levelIndex
+      x += 1
 
   /** Writes one glyph across the `columns` cells a bar occupies on row `y`. A wide bar is a thin bar repeated sideways,
     * so there is one loop for it rather than a second algorithm.

@@ -191,6 +191,17 @@ private[dsl] trait ElementFactories:
   def barChart(data: Seq[(String, Long)], barWidth: Int = 3): WidgetElement =
     WidgetElement(w.BarChart(data, barWidth))
 
+  /** The same bars laid on their side: one per `(label, value)`, growing rightwards, `barHeight` rows thick, with the
+    * labels right-aligned in a gutter down the left edge.
+    *
+    * This is the layout for long category names. In a vertical [[barChart]] a label has only its own bar's columns, so
+    * "authentication" under a three-column bar becomes "aut"; here the names get a strip of their own — up to half the
+    * width — and the bars take the rest. A name still too long for the gutter keeps its beginning, which is the part
+    * that identifies the category. See [[w.BarChart]] for the scale, gap and styling knobs.
+    */
+  def horizontalBarChart(data: Seq[(String, Long)], barHeight: Int = 1): WidgetElement =
+    WidgetElement(w.BarChart(data, direction = Direction.Horizontal, barHeight = barHeight))
+
   /** An x/y plot of one or more [[w.Dataset]]s with axes, over an explicit world window.
     *
     * `xBounds` and `yBounds` are `(min, max)` in the data's own units — they are *not* derived from the points, so a

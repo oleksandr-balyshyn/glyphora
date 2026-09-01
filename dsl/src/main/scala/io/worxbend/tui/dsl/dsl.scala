@@ -29,6 +29,7 @@ export Element.{
   directoryTree,
   gauge,
   heatmap,
+  horizontalBarChart,
   image,
   indeterminateBar,
   indeterminateBarAt,
