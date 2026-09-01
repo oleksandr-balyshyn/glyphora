@@ -302,6 +302,30 @@ Underneath the elements are three plain immutable values from `tui-core`, and on
 one `Style`; a `Line` is a sequence of spans making up one terminal row; a `Text` is a
 sequence of lines.
 
+### Restyle a value you were handed
+
+All three answer `styled(transform)`, which runs every span's `Style` through the
+function and leaves the characters alone, so a value returned by a helper can be
+adjusted instead of taken apart and rebuilt:
+
+```scala
+val label = "OK".styled(_.withFg(Color.Green)) // a Span
+label.styled(_.bold)                           // green and bold
+Text.raw(body).styled(_.italic)                // every line italic
+```
+
+`under(base)` layers the other way round: `base` goes *underneath* what each span already
+chose, so a span that set a colour keeps it and `base` fills in only what was left unset.
+That is the direction a theme colour travels:
+
+```scala
+Text.raw(body).under(theme.muted)
+```
+
+A `Line` and a `Text` hold no style of their own — a line is its spans — so both methods
+are a fold over the spans rather than a field being set. That is why they compose the way
+plain `Style` calls do.
+
 ### Read the characters back out
 
 `plainText` flattens a value back to an ordinary string with every style dropped — the

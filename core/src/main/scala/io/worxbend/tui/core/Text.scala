@@ -15,6 +15,14 @@ final case class Text(lines: Seq[Line]):
     */
   def plainText: String = lines.map(_.plainText).mkString("\n")
 
+  /** Every span of every line put through `transform` — see [[Line.styled]] for why this is a fold over the spans
+    * rather than a style stored on the text.
+    */
+  def styled(transform: Style => Style): Text = Text(lines.map(_.styled(transform)))
+
+  /** `base` laid underneath every span's own style, so a span that chose a setting keeps it — see [[Span.under]]. */
+  def under(base: Style): Text = Text(lines.map(_.under(base)))
+
 object Text:
   /** Splits `content` on newlines, keeping trailing empty lines; each resulting line carries `style`.
     *

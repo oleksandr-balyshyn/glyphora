@@ -70,3 +70,13 @@ final class ParagraphSpec extends AnyFunSuite:
   test("a one-column area clips a centred line instead of starting it off-screen"):
     val buffer = rendered(Paragraph(Text(Seq(Line.raw("ab").centered))), 1, 1)
     assert(trimmedLines(buffer) == Seq("a"))
+
+  test("a Text restyled with styled reaches the rendered cells"):
+    val buffer = rendered(Paragraph(Text.raw("hi").styled(_.withFg(Color.Green).bold)), 4, 1)
+    assert(buffer.get(0, 0).style.fg.contains(Color.Green))
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("restyling a Text leaves its column widths alone"):
+    val buffer = rendered(Paragraph(Text.raw("漢字").styled(_.withFg(Color.Red))), 6, 1)
+    assert(trimmedLines(buffer) == Seq("漢字"))
+    assert(buffer.get(2, 0).symbol == "字") // still two columns for the first character

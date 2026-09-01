@@ -30,6 +30,19 @@ final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None):
     */
   def plainText: String = spans.map(_.content).mkString
 
+  /** Every span's [[Style]] put through `transform`, the spans and their content unchanged.
+    *
+    * A `Line` holds no style of its own — it is its spans — so this is a fold over them rather than a field being
+    * set. That makes the calls compose exactly as two `Style` calls would: `line.styled(_.bold).styled(_.withFg(c))`
+    * gives every span a style that is both bold and coloured.
+    */
+  def styled(transform: Style => Style): Line = Line(spans.map(_.styled(transform)))
+
+  /** `base` laid underneath every span's own style — see [[Span.under]]. The way a theme colour reaches a line built
+    * by a helper that already set a few attributes of its own, without overruling them.
+    */
+  def under(base: Style): Line = Line(spans.map(_.under(base)))
+
 object Line:
   def raw(content: String): Line = Line(Seq(Span.raw(content)))
 

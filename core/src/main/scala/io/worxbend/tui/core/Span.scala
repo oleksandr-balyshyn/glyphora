@@ -4,6 +4,22 @@ package io.worxbend.tui.core
 final case class Span(content: String, style: Style):
   def width: Int = CharWidth.of(content)
 
+  /** This span with its [[Style]] put through `transform`, the content untouched: `span.styled(_.bold)`.
+    *
+    * The point is that a span handed back by a helper can be adjusted instead of taken apart and rebuilt. Before this
+    * method the only way to change one was `span.copy(style = span.style.bold)`, which names the span twice and has to
+    * spell out the field.
+    */
+  def styled(transform: Style => Style): Span = copy(style = transform(style))
+
+  /** This span drawn over `base`: `base.patch(style)`, so the span's own settings win and `base` fills in only what
+    * the span leaves unset.
+    *
+    * This is the direction a theme colour travels — the theme is the floor, and a span that already chose a colour of
+    * its own keeps it. For the opposite direction, where the argument overrules the span, see [[Style.patch]].
+    */
+  def under(base: Style): Span = copy(style = base.patch(style))
+
 object Span:
   def raw(content: String): Span = Span(content, Style.Default)
 
