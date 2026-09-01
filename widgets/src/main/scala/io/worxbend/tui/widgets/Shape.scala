@@ -46,25 +46,57 @@ object Shape:
     def draw(painter: Painter): Unit =
       points.foreach((x, y) => SegmentShape(x, baseline, x, y, style).draw(painter))
 
-  /** The region between a polyline and a horizontal `baseline`, filled in.
+  /** A segment plus the area between it and the horizontal line `baselineY` — one span of an area plot.
     *
-    * Each pair of consecutive points is walked in small steps, and at every step an upright segment is painted from the
-    * baseline to the interpolated height. Stepping along the line rather than dropping one bar per point is what makes
-    * the fill solid even when the series has far fewer points than the plot has columns: a series of three points would
-    * otherwise draw as three lonely bars.
+    * `baselineY` is a world y like the others, so it goes with the coordinates rather than with the styling, and it
+    * does not have to be inside the canvas bounds: a baseline below the visible range fills to the bottom edge. The
+    * fill is a scanline on the dot grid, done by [[Painter.paintFilledSegment]], so it has neither the stripes a
+    * too-coarse step leaves nor the wasted repainting a too-fine one causes.
     */
-  final case class AreaShape(points: Seq[(Double, Double)], baseline: Double, style: Style = Style.Default)
-      extends Shape:
+  final case class FilledLine(
+      x1: Double,
+      y1: Double,
+      x2: Double,
+      y2: Double,
+      baselineY: Double,
+      style: Style = Style.Default,
+  ) extends Shape:
+    def draw(painter: Painter): Unit = painter.paintFilledSegment(x1, y1, x2, y2, baselineY, style)
+
+  /** Consecutive points joined and filled down to `baselineY` — what an area chart plots.
+    *
+    * The area-chart counterpart of [[Polyline]], and built the same way: one [[FilledLine]] per adjacent pair. A single
+    * point on its own fills nothing, because a span needs two ends.
+    */
+  final case class FilledPolyline(
+      points: Seq[(Double, Double)],
+      baselineY: Double,
+      style: Style = Style.Default,
+  ) extends Shape:
     def draw(painter: Painter): Unit =
       points.lazyZip(points.drop(1)).foreach { case ((x1, y1), (x2, y2)) =>
-        val steps = math.max(1, math.max(math.abs(x2 - x1), math.abs(y2 - y1)).ceil.toInt * 4)
-        (0 to steps).foreach { step =>
-          val t = step.toDouble / steps
-          SegmentShape(x1 + (x2 - x1) * t, baseline, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, style).draw(painter)
-        }
+        FilledLine(x1, y1, x2, y2, baselineY, style).draw(painter)
       }
-      // a single-point series has no pair to walk, so it still deserves its one bar
-      if points.sizeIs == 1 then points.foreach((x, y) => SegmentShape(x, baseline, x, y, style).draw(painter))
+
+  /** A solid axis-aligned rectangle — a highlighted band, a selection box, a heat cell.
+    *
+    * A separate shape rather than a `filled` flag on [[RectangleShape]], for two reasons. A boolean parameter tells the
+    * reader of a call site nothing (`RectangleShape(0, 0, 4, 2, true)` is unreadable), and adding one in the middle of
+    * an existing constructor would silently rebind every positional `style` argument already written.
+    *
+    * Negative `width` or `height` describe the same rectangle read from the opposite corner, and fill the same area.
+    */
+  final case class FilledRectangle(
+      x: Double,
+      y: Double,
+      width: Double,
+      height: Double,
+      style: Style = Style.Default,
+  ) extends Shape:
+    def draw(painter: Painter): Unit =
+      val top    = math.max(y, y + height)
+      val bottom = math.min(y, y + height)
+      FilledLine(math.min(x, x + width), top, math.max(x, x + width), top, bottom, style).draw(painter)
 
   final case class RectangleShape(
       x: Double,

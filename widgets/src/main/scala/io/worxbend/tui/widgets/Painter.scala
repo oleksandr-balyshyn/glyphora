@@ -122,6 +122,65 @@ final class Painter private[widgets] (
         }
       }
 
+  /** Draws the segment `(x1, y1)-(x2, y2)` *and* fills the area between it and the horizontal line `baselineY`.
+    *
+    * This is what turns a line plot into an area plot, and it is a scanline rather than a stack of segments: for each
+    * dot column the segment crosses, every dot from the segment down (or up) to the baseline is lit, once. Filling by
+    * emitting many thin rectangles instead would either leave stripes, when the caller's step is coarser than a dot, or
+    * repaint the same dots many times over when it is finer — and a caller has no way to know which, since how many
+    * dots a world unit is worth is the painter's business.
+    *
+    * The baseline is a world y like any other, and it does not have to be inside the bounds: it is pulled onto the
+    * nearest edge, so a baseline below the visible range fills all the way to the bottom of the canvas rather than
+    * drawing nothing. The segment itself is clipped, exactly as [[paintSegment]] clips it.
+    *
+    * Nothing is drawn if any coordinate, the baseline included, is not a finite number.
+    */
+  def paintFilledSegment(x1: Double, y1: Double, x2: Double, y2: Double, baselineY: Double, style: Style): Unit =
+    if x1.isFinite && y1.isFinite && x2.isFinite && y2.isFinite && baselineY.isFinite then
+      clipToBounds(x1, y1, x2, y2).foreach { (fromX, fromY, toX, toY) =>
+        val ends     = getPoint(fromX, fromY).zip(getPoint(toX, toY))
+        val baseline = nearestRow(baselineY)
+        ends.zip(baseline).foreach { case (((c0, r0), (c1, r1)), baselineRow) =>
+          val firstColumn = math.min(c0, c1)
+          val lastColumn  = math.max(c0, c1)
+          (firstColumn to lastColumn).foreach { column =>
+            val (segmentTop, segmentBottom) = rowsAtColumn(c0, r0, c1, r1, column)
+            val top                         = math.min(segmentTop, baselineRow)
+            val bottom                      = math.max(segmentBottom, baselineRow)
+            (top to bottom).foreach(row => paintDot(column, row, style))
+          }
+        }
+      }
+
+  /** The span of dot rows the segment occupies within one dot column, as `(top, bottom)` inclusive.
+    *
+    * A steep line covers several rows inside a single column. Taking only the row at the column's centre would leave
+    * the fill's upper edge as a dotted staircase with holes in it, so the span is measured from one edge of the column
+    * to the other — the same reason [[traceDots]] steps along the longer axis.
+    */
+  private def rowsAtColumn(c0: Int, r0: Int, c1: Int, r1: Int, column: Int): (Int, Int) =
+    if c0 == c1 then (math.min(r0, r1), math.max(r0, r1))
+    else
+      val slope   = (r1 - r0).toDouble / (c1 - c0).toDouble
+      val atLeft  = r0 + slope * (column - 0.5 - c0)
+      val atRight = r0 + slope * (column + 0.5 - c0)
+      val lowest  = math.min(r0, r1)
+      val highest = math.max(r0, r1)
+      val top     = math.max(lowest, math.min(atLeft, atRight).round.toInt)
+      val bottom  = math.min(highest, math.max(atLeft, atRight).round.toInt)
+      (top, math.max(top, bottom))
+
+  /** The dot row for a world y, with the y pulled onto the nearest bound rather than rejected for being outside.
+    *
+    * A fill's baseline is a direction as much as a position — "down to zero" still means "down" when zero is off the
+    * bottom of the view — so clamping is right here where rejection is right in [[getPoint]].
+    */
+  private def nearestRow(y: Double): Option[Int] =
+    val (yMin, yMax) = yBounds
+    val (xMin, _)    = xBounds
+    getPoint(xMin, clampInto(y, yMin, yMax)).map((_, row) => row)
+
   /** The part of the segment inside the world bounds, as `(x1, y1, x2, y2)`, or `None` when none of it is.
     *
     * This is the Liang-Barsky algorithm: rather than test points, it treats the segment as `start + t * delta` for `t`

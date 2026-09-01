@@ -88,7 +88,7 @@ final case class Chart(
           case GraphType.Line    => Shape.Polyline(dataset.points, dataset.style)
           case GraphType.Scatter => Shape.Points(dataset.points, dataset.style)
           case GraphType.Bar     => Shape.Bars(dataset.points, dataset.fillToY, dataset.style)
-          case GraphType.Area    => Shape.AreaShape(dataset.points, dataset.fillToY, dataset.style)
+          case GraphType.Area    => Shape.FilledPolyline(dataset.points, dataset.fillToY, dataset.style)
       }
       Canvas(xBounds, yBounds, shapes, marker, resolution).render(plotArea, buffer)
       if gutter > 0 then

@@ -861,6 +861,31 @@ measured in whole columns and a two-column glyph would spill into the bar next d
 For custom plots, `canvas(xBounds, yBounds)(shapes*)` provides points, segments,
 polylines, rectangles, and circles.
 
+### Filled shapes
+
+Three shapes fill an area rather than trace an outline.
+
+`Shape.FilledLine(x1, y1, x2, y2, baselineY)` draws a segment and everything between it
+and the horizontal line `baselineY`. `Shape.FilledPolyline(points, baselineY)` does the
+same for a whole series — that is an area chart:
+
+```scala
+canvas((0.0, 24.0), (0.0, 100.0))(
+  Shape.FilledPolyline(readings, baselineY = 0.0, style = Style.Default.fg(Color.Cyan)),
+)
+```
+
+The baseline does not have to be inside the canvas bounds. A baseline below the visible
+range fills to the bottom edge rather than drawing nothing, because "down to zero" still
+means "down" when zero is off-screen.
+
+`Shape.FilledRectangle(x, y, width, height)` is a solid box — a highlighted band, a
+selection region, a heat cell. It is a separate shape rather than a flag on
+`Shape.RectangleShape`, which still draws only the four edges.
+
+All three fill by scanline on the canvas's own dot grid, so the fill is solid at every
+resolution and costs one paint per dot rather than one per guessed step.
+
 ### Canvas resolution
 
 A canvas draws sub-pixels — several drawable dots inside one terminal cell — by picking a
