@@ -165,8 +165,8 @@ final class TerminalRunner(
       render: Frame => Unit,
       loop: RenderThread.RenderLoop,
   ): Option[LoopFailure] =
-    val state    = LoopState()
-    var lastTick = nanoTime()
+    val state = LoopState()
+    val ticks = TickSchedule(config.tickRate, nanoTime)
 
     val handle   = BackendHandle(backend, state)
     val composer = FrameComposer(backend, render, config.onFrame, config.viewport)
@@ -229,7 +229,7 @@ final class TerminalRunner(
       RenderThread.drainPending(loop)
       // queued work (runLater/runOnRenderThread) may have invalidated state between events
       if frameOwed() && state.isLive then redraw()
-      backend.readEvent(pollTimeout(lastTick)) match
+      backend.readEvent(ticks.pollTimeout) match
         case Left(error)        => state.fail(error)
         case Right(Some(event)) =>
           // deliberately one event per redraw: the element tree that routes focus and hit-testing is published *by*
@@ -238,12 +238,20 @@ final class TerminalRunner(
           // bounded anyway: a paste arrives as a single `Event.Paste`, and resizes coalesce inside the backend.
           if dispatch(event) && state.isLive then redraw()
         case Right(None)        => ()
-      config.tickRate.foreach { rate =>
-        if nanoTime() - lastTick >= rate.toNanos then
-          lastTick = nanoTime()
-          if guarded(handleEvent(Event.Tick, handle)) == EventOutcome.Redraw && state.isLive then redraw()
-      }
+      // the `&&` chain keeps the original nesting: when no tick is due the handler is not invoked at all
+      if ticks.due() && guarded(handleEvent(Event.Tick, handle)) == EventOutcome.Redraw && state.isLive then redraw()
     state.outcome
+
+/** When the next tick is due, and how long the loop may block on input before then.
+  *
+  * The loop used to carry this as a `lastTick` local threaded through a `pollTimeout` helper: two places that had to
+  * agree about the same instant. Here they are one object, so "a tick is owed" and "how long may I wait" are answered
+  * from the same field.
+  *
+  * `rate` is the app's configured tick rate, `None` when it asked for no ticks at all. Confined to the render thread,
+  * like the loop that owns it.
+  */
+private final class TickSchedule(rate: Option[FiniteDuration], nanoTime: () => Long):
 
   /** How long to block on input when the app asked for no tick rate at all. */
   private val DefaultPollTimeout: FiniteDuration = 100.millis
@@ -251,19 +259,31 @@ final class TerminalRunner(
   /** The floor for any poll: short enough to be indistinguishable from "check now", never zero. */
   private val MinPollNanos: Long = 1_000_000L
 
+  private var lastTick: Long = nanoTime()
+
+  /** Whether a tick is owed now. Re-stamps the schedule as a side effect, so one iteration of the loop must ask exactly
+    * once — asking twice would swallow the second tick.
+    */
+  def due(): Boolean =
+    rate.exists { r =>
+      if nanoTime() - lastTick >= r.toNanos then
+        lastTick = nanoTime()
+        true
+      else false
+    }
+
   /** Block on input at most until the next tick is due (or a coarse default poll when there is no tick rate), so ticks
     * stay on schedule while input stays responsive.
     *
     * Never returns zero: [[Backend.readEvent]] treats a non-positive timeout as "block until an event arrives", so an
     * overrunning frame would otherwise wedge the loop until the user happened to press a key.
     */
-  private def pollTimeout(lastTick: Long): FiniteDuration =
-    config.tickRate match
+  def pollTimeout: FiniteDuration =
+    rate match
       case None       => DefaultPollTimeout
       case Some(rate) =>
         val remainingNanos = rate.toNanos - (nanoTime() - lastTick)
-        val clamped        = math.max(MinPollNanos, math.min(remainingNanos, rate.toNanos))
-        Duration.fromNanos(clamped)
+        Duration.fromNanos(math.max(MinPollNanos, math.min(remainingNanos, rate.toNanos)))
 
 /** Composes one frame into a [[Buffer]] and hands it to the backend to flush, for the lifetime of one
   * [[TerminalRunner]] loop.
