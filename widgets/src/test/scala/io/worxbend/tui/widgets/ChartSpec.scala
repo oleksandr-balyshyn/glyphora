@@ -1,5 +1,6 @@
 package io.worxbend.tui.widgets
 
+import io.worxbend.tui.core.{Color, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -72,3 +73,44 @@ final class ChartSpec extends AnyFunSuite:
     val buffer = rendered(chart, 6, 4)
     assert(buffer.get(0, 0).symbol == "│")
     assert(trimmedLines(buffer).mkString.forall(!_.isDigit))
+
+  test("a legend lists each named dataset in its own style"):
+    val cpu    = Dataset("cpu", Seq((0.0, 0.0)), Style.Default.withFg(Color.Red))
+    val mem    = Dataset("mem", Seq((0.0, 1.0)), Style.Default.withFg(Color.Blue))
+    val buffer = rendered(Chart(Seq(cpu, mem), (0.0, 1.0), (0.0, 1.0), showLegend = true), 30, 8)
+    assert(trimmedLines(buffer)(0).endsWith("■ cpu"))
+    assert(trimmedLines(buffer)(1).endsWith("■ mem"))
+    assert(buffer.get(25, 0).style.fg.contains(Color.Red))
+    assert(buffer.get(25, 1).style.fg.contains(Color.Blue))
+
+  test("a dataset with no name gets no legend entry"):
+    val chart  =
+      Chart(Seq(Dataset("", Seq.empty), Dataset("only", Seq.empty)), (0.0, 1.0), (0.0, 1.0), showLegend = true)
+    val buffer = rendered(chart, 20, 6)
+    assert(trimmedLines(buffer)(0).endsWith("■ only"))
+    assert(!trimmedLines(buffer)(1).contains("■"))
+
+  test("the legend is off unless it is asked for"):
+    val datasets = Seq(Dataset("cpu", Seq.empty))
+    val silent   = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0)), 20, 6)
+    val explicit = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0), showLegend = false), 20, 6)
+    assert(trimmedLines(silent) == trimmedLines(explicit))
+    assert(!trimmedLines(silent).mkString.contains("cpu"))
+
+  test("a legend wider than the plot is truncated rather than painted outside it"):
+    val chart  = Chart(Seq(Dataset("a" * 40, Seq.empty)), (0.0, 1.0), (0.0, 1.0), showLegend = true)
+    val buffer = rendered(chart, 12, 5)
+    // the axis column is untouched and the entry occupies only the plot columns after it
+    assert(buffer.get(0, 0).symbol == "│")
+    assert(trimmedLines(buffer)(0) == "│" + "■ " + "a" * 9)
+
+  test("a chart too short for every entry drops the overflow instead of overwriting the axis"):
+    val datasets = Seq(Dataset("one", Seq.empty), Dataset("two", Seq.empty), Dataset("three", Seq.empty))
+    val buffer   = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0), showLegend = true), 20, 3)
+    assert(trimmedLines(buffer)(2) == "└───────────────────")
+    assert(!trimmedLines(buffer).mkString.contains("three"))
+
+  test("a legend measures a wide-character name in columns, not characters"):
+    // 負荷 is two CJK ideographs, four terminal columns wide; the entry is "■ " plus those four
+    val buffer = rendered(Chart(Seq(Dataset("負荷", Seq.empty)), (0.0, 1.0), (0.0, 1.0), showLegend = true), 12, 5)
+    assert(trimmedLines(buffer)(0) == "│     ■ 負荷")

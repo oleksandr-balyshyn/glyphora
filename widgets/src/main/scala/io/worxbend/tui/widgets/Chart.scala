@@ -26,6 +26,9 @@ final case class Dataset(
   * share a cell. `labelAlignment` places a label inside that gutter: `Right` (the default) presses it against the axis
   * line, `Left` against the frame, `Center` between the two.
   *
+  * With `showLegend` the plot's top-right corner carries a key: one entry per dataset with a non-empty `name`, each
+  * drawn in that dataset's own style, so several series in one plot can be told apart by more than colour alone.
+  *
   * @param labelAlignment
   *   by the widget parameter-order convention this is placement and would belong before `axisStyle`; it sits last
   *   because `Chart` is a published 0.12.0 signature and inserting a parameter in the middle would silently repoint
@@ -40,6 +43,8 @@ final case class Chart(
     resolution: CanvasResolution = CanvasResolution.Cell,
     showLabels: Boolean = false,
     labelAlignment: Alignment = Alignment.Right,
+    showLegend: Boolean = false,
+    legendMarker: String = "■",
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -58,6 +63,24 @@ final case class Chart(
       if gutter > 0 then
         drawLabel(buffer, area.x, gutter, area.y, labels.head)
         drawLabel(buffer, area.x, gutter, area.bottom - 2, labels.last)
+      if showLegend then drawLegend(plotArea, buffer)
+
+  /** Draws one right-aligned entry per named dataset, top-down in the plot area, each in that dataset's own style.
+    *
+    * Every [[Dataset]] already carries a `name`; without a key nothing ever showed it, so three series were three
+    * indistinguishable colours. Entries are clipped to the plot area's width and dropped past its height, so a chart
+    * too small for the whole key shows fewer entries rather than painting outside `area` or over the axes. A dataset
+    * with an empty name gets no entry — that is how a caller keeps a series out of the key.
+    */
+  private def drawLegend(plotArea: Rect, buffer: Buffer): Unit =
+    val named  = datasets.filter(_.name.nonEmpty).take(math.max(0, plotArea.height))
+    val labels = named.map(dataset => s"$legendMarker ${dataset.name}")
+    val width  = math.min(labels.map(CharWidth.of).maxOption.getOrElse(0), plotArea.width)
+    if width > 0 then
+      val x = plotArea.right - width
+      named.zip(labels).zipWithIndex.foreach { case ((dataset, label), index) =>
+        buffer.setString(x, plotArea.y + index, CharWidth.substringByWidth(label, width), dataset.style)
+      }
 
   /** Columns reserved left of the axis for the y-bound labels: the widest label, or none at all when reserving it would
     * leave fewer than two columns of plot.

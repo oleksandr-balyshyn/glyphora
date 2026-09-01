@@ -200,6 +200,9 @@ private[dsl] trait ElementFactories:
     * `showLabels = true` prints the two y bounds in a gutter reserved left of the vertical axis, so the numbers never
     * overwrite the data; `labelAlignment` places each number inside that gutter (`Right`, the default, presses it
     * against the axis line). A pane too narrow to spare the gutter drops the labels and keeps the plot.
+    *
+    * `showLegend = true` draws a key in the top-right of the plot listing every dataset whose `name` is non-empty, each
+    * entry in that dataset's own style.
     */
   def chart(
       datasets: Seq[w.Dataset],
@@ -207,8 +210,18 @@ private[dsl] trait ElementFactories:
       yBounds: (Double, Double),
       showLabels: Boolean = false,
       labelAlignment: w.Alignment = w.Alignment.Right,
+      showLegend: Boolean = false,
   ): WidgetElement =
-    WidgetElement(w.Chart(datasets, xBounds, yBounds, showLabels = showLabels, labelAlignment = labelAlignment))
+    WidgetElement(
+      w.Chart(
+        datasets,
+        xBounds,
+        yBounds,
+        showLabels = showLabels,
+        labelAlignment = labelAlignment,
+        showLegend = showLegend,
+      )
+    )
 
   /** A free-form drawing surface: shapes describe themselves in world coordinates (`xBounds` increasing rightward,
     * `yBounds` increasing *upward*, unlike buffer coordinates) and the canvas maps them onto the cell grid. See

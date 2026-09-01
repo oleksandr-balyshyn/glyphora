@@ -775,6 +775,24 @@ chart(
 A pane too narrow to spare the gutter drops the labels rather than the plot, so a chart
 squeezed into a small pane stays a chart instead of becoming a column of numbers.
 
+Every `Dataset` carries a `name`. With `showLegend = true` the named ones are listed as
+a key in the top-right of the plot, one per row, each entry drawn in that dataset's own
+style — which is what tells three series apart when all you had before was three
+colours. A dataset with an empty name is left out of the key, and a chart too small for
+the whole key shows fewer entries rather than painting over the axes:
+
+```scala
+chart(
+  Seq(
+    Dataset("cpu", cpuPoints, Style.Default.withFg(Color.Red)),
+    Dataset("mem", memPoints, Style.Default.withFg(Color.Blue)),
+  ),
+  xBounds = (0.0, 80.0),
+  yBounds = (0.0, 100.0),
+  showLegend = true,
+)
+```
+
 ### Bar glyphs
 
 A terminal has no pixels, so a bar two and a half cells tall is drawn as two full cells and
