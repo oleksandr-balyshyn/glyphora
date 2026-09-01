@@ -128,6 +128,11 @@ a broken key. Now they fail loudly at declaration time and the message names the
 replacement.
 
 Function keys run `"f1"` through `"f35"`, matching the range the input decoder emits.
+How far up the range your terminal can actually reach depends on what it sends:
+`"f1"`–`"f12"` work everywhere; `"f13"`–`"f20"` work on xterm-family terminals, which
+report them as the legacy `CSI 25~`–`CSI 34~` numbers (that is what the keyboard sends
+for Shift+F1 through Shift+F8); `"f21"`–`"f35"` need a terminal speaking the kitty
+keyboard protocol, because no legacy escape sequence names them.
 
 Six more keys have spec names, and they come with a caveat worth reading before you use
 one:

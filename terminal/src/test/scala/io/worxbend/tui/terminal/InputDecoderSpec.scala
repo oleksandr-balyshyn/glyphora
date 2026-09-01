@@ -79,6 +79,29 @@ final class InputDecoderSpec extends AnyFunSuite:
     assert(decoded(csi("17~")*) == Event.Key(KeyEvent.of(KeyCode.F(6))))
     assert(decoded(csi("24~")*) == Event.Key(KeyEvent.of(KeyCode.F(12))))
 
+  test("the legacy shifted function keys decode to F13-F20"):
+    // xterm sends these when Shift is held with F1-F8. The numbers are not contiguous: 27, 30 and 35 name no key,
+    // which is why the pairs are written out rather than derived from an offset.
+    val expected = Seq(25 -> 13, 26 -> 14, 28 -> 15, 29 -> 16, 31 -> 17, 32 -> 18, 33 -> 19, 34 -> 20)
+    expected.foreach: (tilde, functionKey) =>
+      assert(decoded(csi(s"$tilde~")*) == Event.Key(KeyEvent.of(KeyCode.F(functionKey))))
+
+  test("the tilde numbers xterm leaves unassigned still decode to no key"):
+    Seq(27, 30, 35).foreach: tilde =>
+      assert(decoderFor(csi(s"$tilde~")*).decode(10).isEmpty, s"CSI $tilde~ should name no key")
+
+  test("a shifted function key carries the xterm modifier parameter"):
+    assert(decoded(csi("25;2~")*) == Event.Key(KeyEvent(KeyCode.F(13), KeyModifiers.Shift)))
+    assert(decoded(csi("34;5~")*) == Event.Key(KeyEvent(KeyCode.F(20), KeyModifiers.Ctrl)))
+
+  test("every f13-f20 spec names a key some terminal can actually send"):
+    // The two vocabularies have to agree: `KeyEvent.parse` accepting "f13" while no decoder path ever produces
+    // KeyCode.F(13) on a non-kitty terminal is a binding that silently never fires. This is the assertion that
+    // would have caught that, so it compares the parsed spec against what the legacy sequence decodes to.
+    Seq(25 -> 13, 26 -> 14, 28 -> 15, 29 -> 16, 31 -> 17, 32 -> 18, 33 -> 19, 34 -> 20).foreach: (tilde, n) =>
+      val parsed = KeyEvent.parse(s"f$n").getOrElse(fail(s"f$n should parse"))
+      assert(decoded(csi(s"$tilde~")*) == Event.Key(parsed))
+
   test("shift-tab decodes from CSI Z"):
     assert(decoded(csi("Z")*) == Event.Key(KeyEvent(KeyCode.Tab, KeyModifiers.Shift)))
 

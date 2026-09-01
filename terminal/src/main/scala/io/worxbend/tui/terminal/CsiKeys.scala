@@ -24,5 +24,22 @@ private[terminal] object CsiKeys:
       case n if n >= 17 && n <= 21 => Some(KeyCode.F(n - 11)) // F6-F10, the block skipping 16
       case 23                      => Some(KeyCode.F(11))
       case 24                      => Some(KeyCode.F(12))
-      case 29                      => Some(KeyCode.Menu)      // xterm/rxvt's context-menu key
+      // xterm and rxvt report the shifted function keys — what a keyboard sends for Shift+F1 through Shift+F8 — as
+      // eight further tilde numbers, which an application sees as F13-F20. The numbers 27, 30 and 35 name nothing in
+      // those terminfo tables, so the block is spelled out case by case instead of computed from an offset: the gaps
+      // are in the specification, not in this transcription of it.
+      //
+      // 29 is deliberately absent from that run. Two conventions claim it: xterm's shifted-function block calls it
+      // F16, while the DEC VT220 "Do" key and rxvt's context-menu key both report it as a menu press. Only one
+      // mapping can win, and Menu is the one this decoder already emitted, so changing it would silently break
+      // applications that bind the menu key. F16 is therefore unreachable on terminals that use the tilde encoding;
+      // a terminal speaking the kitty protocol reports it unambiguously and is decoded elsewhere.
+      case 25                      => Some(KeyCode.F(13))
+      case 26                      => Some(KeyCode.F(14))
+      case 28                      => Some(KeyCode.F(15))
+      case 29                      => Some(KeyCode.Menu)      // xterm/rxvt's context-menu key; see the note above
+      case 31                      => Some(KeyCode.F(17))
+      case 32                      => Some(KeyCode.F(18))
+      case 33                      => Some(KeyCode.F(19))
+      case 34                      => Some(KeyCode.F(20))
       case _                       => None
