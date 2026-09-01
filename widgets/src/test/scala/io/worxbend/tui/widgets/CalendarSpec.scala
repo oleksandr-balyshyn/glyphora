@@ -1,8 +1,9 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Modifiers, Rect, Style}
+import io.worxbend.tui.core.{Buffer, CharWidth, Modifiers, Rect, Style}
 
-import java.time.LocalDate
+import java.time.{DayOfWeek, LocalDate}
+import java.util.Locale
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -55,3 +56,42 @@ final class CalendarSpec extends AnyFunSuite:
     val buffer = rendered(Calendar(2026, 7, selected = Some(1), dayStyles = marked), 20, 8)
     assert(buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Reverse))
     assert(buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("switching the title off frees its row instead of blanking it"):
+    val lines = trimmedLines(rendered(Calendar(2026, 7, showTitle = false), 20, 8))
+    assert(lines(0) == "Mo Tu We Th Fr Sa Su")
+    assert(lines(1) == "       1  2  3  4  5")
+
+  test("with neither header the grid starts on the first row of the area"):
+    val calendar = Calendar(2026, 7, showTitle = false, showWeekdays = false)
+    val lines    = trimmedLines(rendered(calendar, 20, 6))
+    assert(lines(0) == "       1  2  3  4  5")
+    assert(lines(4).startsWith("27 28 29 30 31"))
+
+  test("a Sunday-first week moves both the header and the day numbers"):
+    val lines = trimmedLines(rendered(Calendar(2026, 7, firstDayOfWeek = DayOfWeek.SUNDAY), 20, 8))
+    assert(lines(1) == "Su Mo Tu We Th Fr Sa")
+    // 2026-07-01 is a Wednesday: the fourth column when the week starts on Sunday, the third when it starts on Monday
+    assert(lines(2) == "          1  2  3  4")
+
+  test("a week starting mid-week still lands every day in the right column"):
+    val lines = trimmedLines(rendered(Calendar(2026, 7, firstDayOfWeek = DayOfWeek.SATURDAY), 20, 8))
+    assert(lines(1) == "Sa Su Mo Tu We Th Fr")
+    assert(lines(2) == "             1  2  3")
+
+  test("the locale sets the language of the month name and the weekday abbreviations"):
+    val lines = trimmedLines(rendered(Calendar(2026, 7, locale = Locale.FRENCH), 20, 8))
+    assert(lines(0).toLowerCase(Locale.ROOT).contains("juil"))
+    assert(lines(1).startsWith("lu"))
+
+  test("a locale whose abbreviations are wide characters keeps the columns aligned"):
+    val lines = trimmedLines(rendered(Calendar(2026, 7, locale = Locale.JAPANESE), 20, 8))
+    // each abbreviation is one character occupying two columns, so the header is still 7 * 3 - 1 columns wide
+    assert(CharWidth.of(lines(1)) == 20)
+    assert(lines(2) == "       1  2  3  4  5")
+
+  test("the selection follows the configured start of the week"):
+    val buffer = rendered(Calendar(2026, 7, selected = Some(1), firstDayOfWeek = DayOfWeek.SUNDAY), 20, 8)
+    // the 1st is a Wednesday, the fourth Sunday-first column, so its two cells are x = 9..10
+    assert(buffer.get(10, 2).style.modifiers.hasAny(Modifiers.Reverse))
+    assert(!buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Reverse))

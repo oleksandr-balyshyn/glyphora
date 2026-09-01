@@ -1051,6 +1051,22 @@ outermost-last: the calendar's own `style`, then the date's entry, then
 `highlightStyle` for the selected day — so the cursor is still visible when it lands
 on a marked date.
 
+`Calendar` also decides how the grid is framed and which language it speaks:
+
+| Parameter | Default | Effect |
+|---|---|---|
+| `showTitle` | `true` | the `July 2026` row; switching it off gives its row back to the grid |
+| `showWeekdays` | `true` | the `Mo Tu We ...` row, likewise |
+| `firstDayOfWeek` | `DayOfWeek.MONDAY` | which weekday the leftmost column is |
+| `locale` | `Locale.ENGLISH` | language of the month name and weekday abbreviations |
+
+Turning a header off does not blank its row, it removes it: a grid with neither
+header starts its first week on the very first row of the area and needs two rows
+fewer, which is what makes a bare month grid fit a narrow sidebar. `locale` defaults
+to English rather than to `Locale.getDefault` on purpose — a widget whose output
+depends on the machine it runs on cannot be checked by comparing frames — so pass
+`Locale.getDefault` when you do want the machine's language.
+
 ## Feedback and motion
 
 Animations need one thing from you — a tick rate — and nothing else:
