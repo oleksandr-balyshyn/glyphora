@@ -105,3 +105,39 @@ final class TableSpec extends AnyFunSuite:
         flex = mode,
       )
     assert(trimmedLines(rendered(cells(Flex.Center), 8, 1)) == trimmedLines(rendered(cells(Flex.Start), 8, 1)))
+
+  test("the footer is pinned to the bottom of the area, not appended to the rows"):
+    val table  = Table(
+      rows = Seq(row("a", "1")),
+      widths = Seq(Constraint.Length(3), Constraint.Length(3)),
+      header = Some(row("k", "n")),
+      footer = Some(row("sum", "1")),
+      columnSpacing = 0,
+    )
+    val buffer = rendered(table, 6, 5)
+    // two blank rows sit between the single data row and the totals row that owns the bottom line
+    assert(trimmedLines(buffer) == Seq("k  n", "a  1", "", "", "sum1"))
+    assert(buffer.get(0, 4).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("the footer costs a row of body height, so rows clip one line earlier"):
+    val data      = (1 to 10).map(n => row(n.toString))
+    val widths    = Seq(Constraint.Length(2))
+    val plain     = Table(rows = data, widths = widths)
+    val withTotal = plain.copy(footer = Some(row("=")))
+    assert(trimmedLines(rendered(plain, 4, 3)) == Seq("1", "2", "3"))
+    assert(trimmedLines(rendered(withTotal, 4, 3)) == Seq("1", "2", "="))
+
+  test("a one-row area with both a header and a footer keeps the header"):
+    val table = Table(
+      rows = Seq(row("a")),
+      widths = Seq(Constraint.Length(3)),
+      header = Some(row("k")),
+      footer = Some(row("z")),
+    )
+    assert(trimmedLines(rendered(table, 4, 1)) == Seq("k"))
+
+  test("a footer-only table with no widths still derives its column count"):
+    val table  = Table(rows = Seq.empty, widths = Seq.empty, footer = Some(row("a", "b")), columnSpacing = 0)
+    val buffer = rendered(table, 8, 2)
+    assert(buffer.get(0, 1).symbol == "a")
+    assert(buffer.get(4, 1).symbol == "b")

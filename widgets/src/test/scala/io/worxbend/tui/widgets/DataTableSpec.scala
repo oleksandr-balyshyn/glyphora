@@ -153,3 +153,20 @@ final class DataTableSpec extends AnyFunSuite:
     val centred = table.copy(flex = Flex.Center, highlightSymbol = "> ")
     // the gutter takes two columns, so the fifteen columns of content centre in the remaining nineteen
     assert(rendered(centred, DataTableState(), 21, 2).get(4, 0).symbol == "n")
+
+  test("a footer is pinned to the bottom and shortens the scrollable body"):
+    val totals = table.copy(footer = Some(Seq("total", "123")))
+    val lines  = trimmedLines(rendered(totals, DataTableState(), 15, 6))
+    assert(lines == Seq("name     size", "beta     20", "alpha    100", "gamma    3", "", "total    123"))
+
+  test("the body scrolls within the height the footer leaves it"):
+    val totals = table.copy(footer = Some(Seq("total", "123")))
+    val state  = DataTableState()
+    state.selected = Some(2)
+    // four rows of area, one header and one footer: the body has two lines, so the third row scrolls into view
+    val lines  = trimmedLines(rendered(totals, state, 15, 4))
+    assert(lines == Seq("name     size", "alpha    100", "gamma    3", "total    123"))
+
+  test("a one-row area drops the footer rather than overwriting the header"):
+    val totals = table.copy(footer = Some(Seq("total", "123")))
+    assert(trimmedLines(rendered(totals, DataTableState(), 15, 1)) == Seq("name     size"))

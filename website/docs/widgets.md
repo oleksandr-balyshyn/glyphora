@@ -360,6 +360,22 @@ table(rows, Constraint.Length(18), Constraint.Fill(1), Constraint.Length(6))
   .header("Service", "Status", "Replicas")
 ```
 
+`.footer(...)` adds a bold summary row — totals, a record count — pinned to the
+*bottom* of the table's area rather than appended after the last data row:
+
+```scala
+table(rows, Constraint.Length(18), Constraint.Length(9))
+  .header("Service", "Replicas")
+  .footer("Total", replicas.sum.toString)
+```
+
+Pinning is the point. A totals row that simply followed the last row would float in the
+middle of any pane the rows do not fill. It is laid out on the same solved column widths
+as the body, which a second `table` stacked underneath could not promise — that one had
+to repeat the width constraints and drifted the moment they changed. Like the header, it
+costs one row of the area; `DataTable` takes the same `footer` and `footerStyle`, and
+gives up one row of its scrollable body for it.
+
 A `table` is a flex container, like `row` and `column`: `.gap(n)` sets the blank
 columns between neighbouring cells, and `.center` / `.flexEnd` / `.spaceBetween` place
 the block of columns inside the area when fixed widths leave space over. Without one of

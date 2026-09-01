@@ -202,3 +202,14 @@ final class DslConstructionSpec extends AnyFunSuite:
     val buffer = rendered(bare.gap(0).widget, 8, 1)
     assert(buffer.get(0, 0).symbol == "a")
     assert(buffer.get(4, 0).symbol == "b")
+
+  /** `.footer(...)` pins a summary row to the bottom of the area. Before it existed a totals row had to be a second
+    * `table` in a `column`, with the width constraints written out twice and free to drift apart.
+    */
+  test("a table's footer is pinned to the bottom, not appended after the last row"):
+    val totals = table(Seq(Seq("api", "3")), Constraint.Length(4), Constraint.Length(2))
+      .gap(0)
+      .header("svc", "n")
+      .footer("all", "3")
+    assert(totals.footer.contains(Seq("all", "3")))
+    assert(trimmedLines(rendered(totals.widget, 6, 5)) == Seq("svc n", "api 3", "", "", "all 3"))

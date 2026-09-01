@@ -191,13 +191,14 @@ final case class TableElement(
     rows: Seq[Seq[String]],
     widths: Seq[Constraint],
     header: Option[Seq[String]] = None,
+    footer: Option[Seq[String]] = None,
     columnSpacing: Int = 1,
     flex: Flex = Flex.Start,
     props: ElementProps = ElementProps(),
 ) extends FlexContainer:
   type Self = TableElement
   def widget: Widget =
-    w.Table.ofStrings(rows, widths, header, columnSpacing, flex, props.style)
+    w.Table.ofStrings(rows, widths, header, footer, columnSpacing, flex, props.style)
 
   /** This table rebuilt with the leftover width placed differently.
     *
@@ -217,6 +218,15 @@ final case class TableElement(
     * scroll at all. Pass a computed sequence with `.header(labels*)`.
     */
   def header(labels: String*): TableElement = copy(header = Some(labels))
+
+  /** Adds a bold summary row pinned to the *bottom* of the table's area — one cell per column.
+    *
+    * Pinned, not appended: a totals row that followed the last data row would float in the middle of a pane the rows do
+    * not fill. It is laid out on the same solved column widths as the body, which is the thing a second `table` stacked
+    * underneath could not promise — that one had to repeat the width constraints, and drifted the moment they changed.
+    * It costs one row of the area, like `.header(...)`.
+    */
+  def footer(labels: String*): TableElement = copy(footer = Some(labels))
 
   private[dsl] def withProps(props: ElementProps): TableElement = copy(props = props)
 

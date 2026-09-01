@@ -141,6 +141,13 @@ object DataTableState:
   *   of its own that the reversal blends into. A symbol survives both. The default is `""` — an empty symbol reserves a
   *   zero-width gutter, so a table written before this parameter existed draws exactly the same cells in exactly the
   *   same columns as before. [[ListView]] defaults to `"> "` instead, because a list has no column grid to keep still.
+  * @param footer
+  *   an optional summary row — totals, a record count — pinned to the *bottom* of the area rather than following the
+  *   last data row, and laid out on the same solved columns as the body. It costs one row of the scrollable body. A
+  *   `DataTable` always draws its header, so the footer is dropped on an area only one row tall, where the header has
+  *   already taken the only row there is.
+  * @param footerStyle
+  *   the style the footer row is drawn in, bold by default, matching the header.
   * @param widths
   *   one [[Constraint]] per column. An empty sequence means "equal columns": each of the `columns` titles gets an equal
   *   share of the area. Before that fallback existed an empty sequence drew a blank rectangle instead.
@@ -152,10 +159,12 @@ final case class DataTable(
     columns: Seq[String],
     rows: Seq[Seq[String]],
     widths: Seq[Constraint],
+    footer: Option[Seq[String]] = None,
     columnSpacing: Int = 1,
     flex: Flex = Flex.Start,
     style: Style = Style.Default,
     headerStyle: Style = Style.Default.bold,
+    footerStyle: Style = Style.Default.bold,
     highlightStyle: Style = Style.Default.reverse,
     highlightSymbol: String = "",
 ) extends StatefulWidget[DataTableState]:
@@ -229,7 +238,9 @@ final case class DataTable(
       val constraints = TableColumns.resolve(widths, Iterator(columns.size))
       val segments    = Layout(Direction.Horizontal, constraints, columnSpacing, flex).split(grid)
       renderHeader(buffer, segments, state)
-      val bodyHeight  = area.height - 1
+      val footerRows  = if footer.isDefined && area.height > 1 then 1 else 0
+      val bodyHeight  = area.height - 1 - footerRows
+      if footerRows == 1 then footer.foreach(cells => renderRow(buffer, segments, cells, area.bottom - 1, footerStyle))
       if bodyHeight > 0 && view.nonEmpty then
         val selected = state.selected.map(index => math.max(0, math.min(index, view.size - 1)))
         state.selected = selected
