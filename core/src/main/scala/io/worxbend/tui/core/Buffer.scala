@@ -290,21 +290,15 @@ final class Buffer(val area: Rect):
       var primed  = false
       var lastIn  = Style.Default
       var lastOut = Style.Default
-      var y       = clipped.y
-      while y < clipped.bottom do
-        var x = clipped.x
-        while x < clipped.right do
-          val index = indexOf(x, y)
-          if !continuations(index) then
-            val cell = cells(index)
-            // reference equality first: a run of cells written by one call shares the very same `Style` object
-            if !primed || !((cell.style eq lastIn) || cell.style == lastIn) then
-              lastIn = cell.style
-              lastOut = transform(cell.style)
-              primed = true
-            if lastOut != cell.style then cells(index) = cell.copy(style = lastOut)
-          x += 1
-        y += 1
+      forEachIndex(clipped): (_, _, index) =>
+        if !continuations(index) then
+          val cell = cells(index)
+          // reference equality first: a run of cells written by one call shares the very same `Style` object
+          if !primed || !((cell.style eq lastIn) || cell.style == lastIn) then
+            lastIn = cell.style
+            lastOut = transform(cell.style)
+            primed = true
+          if lastOut != cell.style then cells(index) = cell.copy(style = lastOut)
 
   /** Copies `region` of `source` into this buffer with the region's top-left landing at `at`.
     *
@@ -402,12 +396,27 @@ final class Buffer(val area: Rect):
     * and the traversal has already decided which positions it will read.
     */
   def foreachIn(region: Rect)(visit: (Int, Int, Cell) => Unit): Unit =
+    forEachIndex(region)((x, y, index) => visit(x, y, cells(index)))
+
+  /** The private counterpart of [[foreachIn]]: the same clipped row-major walk, under the same contract — the bounds
+    * check happens once on `region` rather than once per cell, and nothing is allocated per position.
+    *
+    * What it yields is the difference. `foreachIn` hands out the [[Cell]], which is all a reader of a finished frame
+    * needs; the walks inside this class mostly want the backing array index instead, because they read or write
+    * [[continuations]] and [[directives]] at that position too and would otherwise recompute [[indexOf]] per plane.
+    *
+    * `inline`, with an `inline` function parameter, so each use is expanded into its caller as the plain nested `while`
+    * pair it was written as: no closure is allocated and no call is made per cell.
+    */
+  private inline def forEachIndex(region: Rect)(inline visit: (Int, Int, Int) => Unit): Unit =
     val clipped = region.intersection(area)
     var y       = clipped.y
     while y < clipped.bottom do
-      var x = clipped.x
+      var index = (y - area.y) * area.width + (clipped.x - area.x)
+      var x     = clipped.x
       while x < clipped.right do
-        visit(x, y, cells(indexOf(x, y)))
+        visit(x, y, index)
+        index += 1
         x += 1
       y += 1
 
@@ -441,15 +450,8 @@ final class Buffer(val area: Rect):
     * and the diff of the next frame against that record is exactly where the directives are read.
     */
   def setDiffDirective(region: Rect, directive: DiffDirective): Unit =
-    val clipped = region.intersection(area)
-    val code    = directive.ordinal.toByte
-    var y       = clipped.y
-    while y < clipped.bottom do
-      var x = clipped.x
-      while x < clipped.right do
-        directives(indexOf(x, y)) = code
-        x += 1
-      y += 1
+    val code = directive.ordinal.toByte
+    forEachIndex(region)((_, _, index) => directives(index) = code)
 
   /** An independent copy of this buffer. Backends snapshot the frame they just flushed so later mutation of the
     * caller's buffer cannot corrupt the next diff.
@@ -644,14 +646,8 @@ final class Buffer(val area: Rect):
     * would erase an image somebody else painted, so the owner of such a region redraws it rather than this buffer.
     */
   def emitAll(emit: (Int, Int, Cell) => Unit): Unit =
-    var y = area.y
-    while y < area.bottom do
-      var x = area.x
-      while x < area.right do
-        val index = indexOf(x, y)
-        if !continuations(index) && directives(index) != Buffer.SkipCode then emit(x, y, cells(index))
-        x += 1
-      y += 1
+    forEachIndex(area): (x, y, index) =>
+      if !continuations(index) && directives(index) != Buffer.SkipCode then emit(x, y, cells(index))
 
   /** Content equality: the same `area`, the same [[Cell]] at every position, and the same continuation flags.
     *
@@ -729,26 +725,16 @@ final class Buffer(val area: Rect):
   private def appendStyleRuns(out: StringBuilder): Unit =
     // `None` is "no run has started yet", so the very first cell always opens one
     var previous: Option[Style] = None
-    var y                       = area.y
-    while y < area.bottom do
-      var x = area.x
-      while x < area.right do
-        val style = cells(indexOf(x, y)).style
-        if !previous.contains(style) then
-          out ++= s"  x: $x, y: $y, $style\n"
-          previous = Some(style)
-        x += 1
-      y += 1
+    forEachIndex(area): (x, y, index) =>
+      val style = cells(index).style
+      if !previous.contains(style) then
+        out ++= s"  x: $x, y: $y, $style\n"
+        previous = Some(style)
 
   /** Appends one line per continuation cell to `out` — the columns a wide grapheme draws over from the left. */
   private def appendHiddenPositions(out: StringBuilder): Unit =
-    var y = area.y
-    while y < area.bottom do
-      var x = area.x
-      while x < area.right do
-        if continuations(indexOf(x, y)) then out ++= s"  x: $x, y: $y, hidden by a two-column grapheme\n"
-        x += 1
-      y += 1
+    forEachIndex(area): (x, y, index) =>
+      if continuations(index) then out ++= s"  x: $x, y: $y, hidden by a two-column grapheme\n"
 
   /** Whether two cells would render identically: a reference-equality fast path before the structural compare, because
     * `Cell.equals` walks a `String`.
