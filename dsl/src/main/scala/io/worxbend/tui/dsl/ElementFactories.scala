@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Constraint, Direction, Line, Size, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{Alignment, Constraint, Direction, Line, Size, Span, Style, Text, Widget}
 import io.worxbend.tui.runtime.{ReactiveScope, Signal}
 import io.worxbend.tui.widgets.TableRow
 import io.worxbend.tui.widgets as w
@@ -322,7 +322,7 @@ private[dsl] trait ElementFactories:
       xBounds: (Double, Double),
       yBounds: (Double, Double),
       showLabels: Boolean = false,
-      labelAlignment: w.Alignment = w.Alignment.Right,
+      labelAlignment: Alignment = Alignment.Right,
       showLegend: Boolean = false,
       xTitle: Option[String] = None,
       yTitle: Option[String] = None,

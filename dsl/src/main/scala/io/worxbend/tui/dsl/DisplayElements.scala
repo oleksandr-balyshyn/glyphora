@@ -26,7 +26,7 @@ import java.time.LocalTime
 final case class TextElement(
     content: String,
     overflow: w.Overflow = w.Overflow.Clip,
-    alignment: w.Alignment = w.Alignment.Left,
+    alignment: Alignment = Alignment.Left,
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = TextElement
@@ -43,13 +43,17 @@ final case class TextElement(
   def clipped: TextElement = copy(overflow = w.Overflow.Clip)
 
   /** Positions each line within the area's width: left (the default), centre, or right. */
-  def aligned(alignment: w.Alignment): TextElement = copy(alignment = alignment)
+  def aligned(alignment: Alignment): TextElement = copy(alignment = alignment)
 
   /** Centres every line in the area — the alignment a title or a placeholder message usually wants. */
-  def centered: TextElement = aligned(w.Alignment.Center)
+  def centered: TextElement = aligned(Alignment.Center)
 
   /** Pushes every line against the right edge, for a column of numbers or a right-hand caption. */
-  def rightAligned: TextElement = aligned(w.Alignment.Right)
+  def rightAligned: TextElement = aligned(Alignment.Right)
+
+  /** Every line pinned to the left edge — the default, spelled out; undoes a `.centered` on an element built elsewhere.
+    */
+  def leftAligned: TextElement = aligned(Alignment.Left)
 
   private[dsl] def withProps(props: ElementProps): TextElement = copy(props = props)
 

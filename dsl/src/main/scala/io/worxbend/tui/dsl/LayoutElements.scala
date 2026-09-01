@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Cell, Direction, Flex, Line, Rect, Style, Widget}
+import io.worxbend.tui.core.{Alignment, Cell, Direction, Flex, Line, Rect, Style, Widget}
 import io.worxbend.tui.widgets as w
 
 /** The heights of every child at `width`, or `None` if any one of them cannot say how tall it is.
@@ -55,8 +55,8 @@ final case class PanelElement(
     flex: Flex = Flex.Start,
     mergeBorders: w.MergeStrategy = w.MergeStrategy.Replace,
     borders: w.Borders = w.Borders.All,
-    titleAlignment: w.Alignment = w.Alignment.Left,
-    titleBottomAlignment: w.Alignment = w.Alignment.Right,
+    titleAlignment: Alignment = Alignment.Left,
+    titleBottomAlignment: Alignment = Alignment.Right,
     extraTitles: Seq[w.BlockTitle] = Seq.empty,
     props: ElementProps = ElementProps(),
 ) extends FlexContainer:
@@ -101,10 +101,10 @@ final case class PanelElement(
   def titleBottom(text: String): PanelElement = copy(titleBottom = Some(text))
 
   /** Moves the top caption along the top border: left (the default), centre, or right. */
-  def titleAligned(alignment: w.Alignment): PanelElement = copy(titleAlignment = alignment)
+  def titleAligned(alignment: Alignment): PanelElement = copy(titleAlignment = alignment)
 
   /** Moves the bottom caption along the bottom border. It starts at the right, where a status belongs. */
-  def titleBottomAligned(alignment: w.Alignment): PanelElement = copy(titleBottomAlignment = alignment)
+  def titleBottomAligned(alignment: Alignment): PanelElement = copy(titleBottomAlignment = alignment)
 
   /** Adds further captions, built by hand as `BlockTitle.top(line, alignment)` / `BlockTitle.bottom(...)`.
     *
