@@ -18,6 +18,7 @@ export const docsNavigation = [
     collapsed: false,
     items: [
       'state-and-signals',
+      'component-state',
       'layout-and-style',
       'responsive',
       'widgets',

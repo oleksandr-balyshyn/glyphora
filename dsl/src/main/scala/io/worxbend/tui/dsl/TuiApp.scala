@@ -40,6 +40,12 @@ private final class RunState(val splash: SplashPlayer):
   var lastTree: Option[Element] = None
   val tracker: FocusTracker     = FocusTracker()
 
+  /** The state `useSignal`/`useState` hand out, keyed by where in the view the call was made. Owned by this run and
+    * touched only while its render thread is evaluating the view, like everything else here — running the same app a
+    * second time therefore starts every component-local value fresh.
+    */
+  val viewState: ViewState = ViewState()
+
   /** This run's render loop, captured in `onStart` while it is still registered, so the exit path can hand the
     * [[AnimationClock]] entry back. `None` until then, and for a run whose `onStart` never happened.
     */
@@ -518,7 +524,13 @@ trait TuiApp:
       // the demand is rebuilt from what *this* frame renders, so an animation that has just gone off screen stops
       // costing ticks as soon as the frame without it is composed
       AnimationClock.beginFrame()
-      val rawTree = ResponsivePass.resolve(effectiveView(using scope), frameSize)
+      // the view is evaluated exactly once per frame, which is what lets `useSignal`/`useState` identify a piece of
+      // state by the order its call is reached in. `sweep` runs after the responsive pass, so a hook reached only while
+      // resolving a `responsive(...)` branch still counts as visited and keeps its slot.
+      run.viewState.beginGeneration()
+      val rawTree =
+        ViewState.during(run.viewState)(ResponsivePass.resolve(effectiveView(using scope), frameSize))
+      run.viewState.sweep()
       syncFocusLayers(run)
       run.tracker.reconcile(FocusPass.focusKeys(rawTree), FocusPass.autofocusRequest(rawTree))
       val tree    = FocusPass.decorate(rawTree, run.tracker, theme.focus)
