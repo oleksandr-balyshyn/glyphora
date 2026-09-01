@@ -996,6 +996,38 @@ Chart(
 )
 ```
 
+### Comparing several series side by side
+
+`barChart` shows one series across a set of categories. When there are several series to
+compare in each category — this quarter against last, two runs of the same benchmark — the
+raw widget `GroupedBarChart` clusters the bars instead:
+
+```scala
+import io.worxbend.tui.widgets.{BarGroup, GroupedBar, GroupedBarChart}
+
+val chart = GroupedBarChart(
+  Seq(
+    BarGroup("q1", Seq(GroupedBar("plan", 40, plan), GroupedBar("actual", 34, actual))),
+    BarGroup("q2", Seq(GroupedBar("plan", 55, plan), GroupedBar("actual", 61, actual))),
+  ),
+  groupGap = 2,
+)
+val element = widget(chart).fill
+```
+
+`barGap` separates the bars inside one group and `groupGap` separates one group from the
+next. The colour is per bar, because in a grouped chart the colour is what says *which
+series* a bar belongs to, and the same series style repeats in every group —
+`SeriesPalette` gives one style per series to use that way. A bar left at `Style.Default`
+takes the chart's own `barStyle`, and `BarGroup.of("q1", "plan" -> 40, "actual" -> 34)` is
+the shorthand for a group whose bars carry no styles at all.
+
+Every bar in the chart is measured against one shared scale — `max`, or the largest value
+anywhere in the data — because a bar's height only means anything next to the bars beside
+it. The group label goes centred under the whole group rather than under one bar, so it has
+the group's width to fit in; a group that does not fit whole in the area is dropped rather
+than half-drawn, the same rule `barChart` follows for a single bar.
+
 ### Bar glyphs
 
 A terminal has no pixels, so a bar two and a half cells tall is drawn as two full cells and
