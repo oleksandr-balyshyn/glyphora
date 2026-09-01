@@ -4,8 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import scala.jdk.CollectionConverters.*
-import scala.util.Using
 
 /** Covers the orphan check itself: a fixture with no test naming it must be reported, and a fixture that is named — in
   * any of the spellings the library offers — must not be.
@@ -96,12 +94,10 @@ final class GoldenFixturesSpec extends AnyFunSuite:
     Files.createDirectories(target.getParent)
     Files.writeString(target, body)
 
-  /** Runs `body` against a throwaway module layout, deleting it afterwards deepest entry first. */
+  /** Runs `body` against a throwaway module layout — the `src/test/{resources,scala}` pair this check reads. */
   private def withWorkspace(body: Path => Unit): Unit =
-    val workspace = Files.createTempDirectory("glyphora-fixtures")
-    Files.createDirectories(workspace.resolve("src/test/resources"))
-    Files.createDirectories(workspace.resolve("src/test/scala"))
-    try body(workspace)
-    finally
-      val entries = Using.resource(Files.walk(workspace))(_.iterator.asScala.toVector)
-      entries.sortBy(_.getNameCount).reverse.foreach(Files.deleteIfExists)
+    TempWorkspace.withWorkspace("glyphora-fixtures") { workspace =>
+      Files.createDirectories(workspace.resolve("src/test/resources"))
+      Files.createDirectories(workspace.resolve("src/test/scala"))
+      body(workspace)
+    }
