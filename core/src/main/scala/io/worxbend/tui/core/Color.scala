@@ -175,6 +175,63 @@ object Color:
   /** `255`, the largest palette index, is three digits long. */
   private val MaxIndexDigits: Int = 3
 
+  /** Builds an [[Rgb]] color from HSL — Hue, Saturation and Lightness, the color notation CSS spells `hsl(30, 65%,
+    * 55%)`.
+    *
+    * `hue` is an angle in degrees around the color wheel (0 red, 120 green, 240 blue) and it '''wraps''': `-30` and
+    * `330` name the same color. `saturation` and `lightness` are fractions clamped to `0.0..1.0` — saturation `0.0` is
+    * grey whatever the hue, lightness `0.0` is black and `1.0` is white. `NaN` in any argument is treated as `0.0`, the
+    * same way [[clampUnit]] already handles it, so a divide-by-zero in a palette generator cannot paint a malformed
+    * cell.
+    *
+    * Reach for HSL when colors have to relate to each other. `n` evenly spaced hues at one saturation and lightness is
+    * a categorical chart palette — six distinguishable series are `Seq.tabulate(6)(i => Color.hsl(i * 60.0, 0.65,
+    * 0.55))` — and moving only the lightness is a tint that keeps the hue, which is exactly what [[lighten]] (fading
+    * toward white, so it washes the hue out) deliberately is not.
+    */
+  def hsl(hue: Double, saturation: Double, lightness: Double): Color =
+    val h         = wrapHue(hue) / 60.0 // the wheel in sixths: one sextant per pair of primaries
+    val s         = clampUnit(saturation)
+    val l         = clampUnit(lightness)
+    // `chroma` is how far this color travels from grey; `x` is the partly-mixed second channel inside the sextant,
+    // and `m` lifts the whole triple to the requested lightness.
+    val chroma    = (1.0 - math.abs(2.0 * l - 1.0)) * s
+    val x         = chroma * (1.0 - math.abs(h % 2.0 - 1.0))
+    val m         = l - chroma / 2.0
+    val (r, g, b) = math.floor(h).toInt match
+      case 0 => (chroma, x, 0.0)
+      case 1 => (x, chroma, 0.0)
+      case 2 => (0.0, chroma, x)
+      case 3 => (0.0, x, chroma)
+      case 4 => (x, 0.0, chroma)
+      case _ => (chroma, 0.0, x)
+    Rgb(channel(r + m), channel(g + m), channel(b + m))
+
+  /** This color as `(hue, saturation, lightness)` — the inverse of [[hsl]]. Hue is in `0.0..360.0` degrees, saturation
+    * and lightness in `0.0..1.0`. A grey has no hue to report, so it answers `0.0` for both hue and saturation.
+    *
+    * Goes through [[approximateRgb]], so a named or [[Indexed]] color answers for its palette approximation rather than
+    * refusing. Round-tripping through [[hsl]] is accurate to within one unit per channel: the trip is through `Double`
+    * arithmetic and back into 8-bit channels, so it rounds rather than reproducing the exact bytes.
+    */
+  def toHsl(color: Color): (Double, Double, Double) =
+    val (ri, gi, bi) = approximateRgb(color)
+    val r            = ri / 255.0
+    val g            = gi / 255.0
+    val b            = bi / 255.0
+    val max          = math.max(r, math.max(g, b))
+    val min          = math.min(r, math.min(g, b))
+    val delta        = max - min
+    val lightness    = (max + min) / 2.0
+    if delta == 0.0 then (0.0, 0.0, lightness)
+    else
+      val saturation = delta / (1.0 - math.abs(2.0 * lightness - 1.0))
+      val sextant    =
+        if max == r then ((g - b) / delta) % 6.0
+        else if max == g then (b - r) / delta + 2.0
+        else (r - g) / delta + 4.0
+      (wrapHue(sextant * 60.0), clampUnit(saturation), lightness)
+
   /** Moves `color` toward white by `amount` in `0.0..1.0` (0 = unchanged, 1 = white). Returns an [[Rgb]]. */
   def lighten(color: Color, amount: Double): Color =
     val (r, g, b) = approximateRgb(color)
@@ -249,6 +306,35 @@ object Color:
 
     /** [[Color.toInt]]: this color packed into one `0x00RRGGBB` integer. */
     def packed: Int = Color.toInt(color)
+
+    /** [[Color.toHsl]]: this color as `(hue, saturation, lightness)`.
+      *
+      * Spelled `asHsl` rather than `toHsl` on purpose: an extension's receiver becomes its first parameter, so an
+      * extension named `toHsl` would be indistinguishable from the companion function `toHsl(color)` — every call
+      * inside this file would be ambiguous. The two names name one derivation.
+      */
+    def asHsl: (Double, Double, Double) = Color.toHsl(color)
+
+    /** This color with its hue rotated by `degrees` around the color wheel, keeping saturation and lightness. `180`
+      * gives the complementary color; a grey has no hue, so rotating it changes nothing.
+      */
+    def rotateHue(degrees: Double): Color =
+      val (h, s, l) = Color.toHsl(color)
+      Color.hsl(h + degrees, s, l)
+
+    /** This color with its lightness replaced by `lightness` in `0.0..1.0`, keeping hue and saturation — a tint that
+      * stays the same color, unlike [[lighten]], which fades toward white and drains the hue as it goes.
+      */
+    def withLightness(lightness: Double): Color =
+      val (h, s, _) = Color.toHsl(color)
+      Color.hsl(h, s, lightness)
+
+    /** This color with its saturation replaced by `saturation` in `0.0..1.0`, keeping hue and lightness. `0.0` is the
+      * grey of the same lightness.
+      */
+    def withSaturation(saturation: Double): Color =
+      val (h, _, l) = Color.toHsl(color)
+      Color.hsl(h, saturation, l)
 
   /** RGB approximation for every color model — good enough for fades and capability downsampling, not for color
     * management. Named colors use common terminal palette values; indexed colors decode the xterm 256-color cube and
@@ -336,6 +422,19 @@ object Color:
     */
   private def clampUnit(value: Double): Double =
     if value.isNaN then 0.0 else math.max(0.0, math.min(1.0, value))
+
+  /** Wraps an angle in degrees into `0.0..360.0`, so `-30` and `330` and `690` all name the same point on the color
+    * wheel. `NaN` becomes `0.0`, for the reason [[clampUnit]] gives.
+    */
+  private def wrapHue(degrees: Double): Double =
+    if degrees.isNaN then 0.0
+    else
+      val remainder = degrees % 360.0
+      if remainder < 0.0 then remainder + 360.0 else remainder
+
+  /** Turns a `0.0..1.0` channel fraction into a `0..255` byte, clamping so rounding at the ends cannot overshoot. */
+  private def channel(value: Double): Int =
+    if value.isNaN then 0 else clampChannel(math.round(value * 255.0).toInt)
 
   /** Interpolates one channel, clamping the result so an out-of-range [[Rgb]] input cannot produce one. */
   private def lerp(from: Int, to: Int, t: Double): Int =

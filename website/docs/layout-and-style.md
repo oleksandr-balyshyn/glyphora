@@ -420,6 +420,40 @@ Do not measure with it. `plainText.length` counts UTF-16 code units, which is no
 number of terminal columns the text occupies: one CJK character is one code unit and two
 columns, and a combining accent is one code unit and no column at all. `width` is the
 accessor that answers in columns, and it goes through `CharWidth`.
+## Derive one color from another
+
+`Color` can compute related colors instead of making you type a second hex literal.
+`Color.lighten(c, amount)` and `Color.darken(c, amount)` fade toward white and black,
+`Color.mix(a, b, t)` blends two colors, and `Color.gradient(from, to, steps)` returns an
+evenly spaced ramp. Each one also reads as a method on the color itself —
+`accent.mixedWith(theme.surface, 0.3).darken(0.1)`.
+
+Fading toward white also drains the color out of a hue: a red lightened by 60% is
+noticeably pinker and greyer than the red it came from. When you want the *same* color
+at a different brightness, work in HSL — Hue (the angle on the color wheel, in degrees),
+Saturation and Lightness (both fractions from `0.0` to `1.0`):
+
+```scala
+val brand = Color.hex("#c83232").getOrElse(Color.Red)
+
+brand.withLightness(0.8)   // same hue, a pale tint of the brand color
+brand.withSaturation(0.2)  // same hue and brightness, nearly grey
+brand.rotateHue(180)       // the complementary color
+brand.asHsl                // (hue, saturation, lightness), for your own arithmetic
+```
+
+Evenly spaced hues at one saturation and lightness make a categorical palette — colors
+that are easy to tell apart but visually belong to one set, which is what a multi-series
+chart wants:
+
+```scala
+val seriesColors = Seq.tabulate(6)(i => Color.hsl(i * 60.0, 0.65, 0.55))
+```
+
+`Color.hsl` wraps the hue (`-30` and `330` are the same red) and clamps saturation and
+lightness, so generated palettes cannot produce an out-of-range color. `Color.toHsl(c)`
+is the inverse, and it answers for named and 256-color values too by going through their
+RGB approximation.
 
 ## Build with themes, not scattered colors
 

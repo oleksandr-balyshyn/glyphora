@@ -222,3 +222,86 @@ final class ColorSpec extends AnyFunSuite:
     val colors = named ++ Seq(Color.Rgb(1, 2, 3), Color.Indexed(0), Color.Indexed(42), Color.Indexed(255))
     colors.foreach: color =>
       assert(Color.parse(color.render) == Right(color), s"round trip failed for $color")
+
+  test("hsl reproduces the six wheel anchors exactly"):
+    assert(Color.hsl(0, 1.0, 0.5) == Color.Rgb(255, 0, 0))
+    assert(Color.hsl(60, 1.0, 0.5) == Color.Rgb(255, 255, 0))
+    assert(Color.hsl(120, 1.0, 0.5) == Color.Rgb(0, 255, 0))
+    assert(Color.hsl(180, 1.0, 0.5) == Color.Rgb(0, 255, 255))
+    assert(Color.hsl(240, 1.0, 0.5) == Color.Rgb(0, 0, 255))
+    assert(Color.hsl(300, 1.0, 0.5) == Color.Rgb(255, 0, 255))
+
+  test("hsl at zero saturation is grey, and the extremes of lightness are black and white"):
+    for hue <- Seq(0.0, 37.0, 180.0, 359.9) do
+      assert(Color.hsl(hue, 0.0, 0.5) == Color.Rgb(128, 128, 128))
+      assert(Color.hsl(hue, 1.0, 0.0) == Color.Rgb(0, 0, 0))
+      assert(Color.hsl(hue, 1.0, 1.0) == Color.Rgb(255, 255, 255))
+
+  test("hsl wraps the hue and clamps saturation and lightness"):
+    assert(Color.hsl(-30, 0.5, 0.5) == Color.hsl(330, 0.5, 0.5))
+    assert(Color.hsl(720 + 40, 0.5, 0.5) == Color.hsl(40, 0.5, 0.5))
+    assert(Color.hsl(40, 2.0, 0.5) == Color.hsl(40, 1.0, 0.5))
+    assert(Color.hsl(40, 0.5, -1.0) == Color.hsl(40, 0.5, 0.0))
+
+  test("hsl treats NaN in any argument as zero rather than painting a malformed cell"):
+    // mirrors what clampUnit already promises for the interpolation factors: a divide-by-zero upstream must not
+    // reach the SGR encoder as an out-of-range channel
+    assert(Color.hsl(Double.NaN, 1.0, 0.5) == Color.hsl(0.0, 1.0, 0.5))
+    assert(Color.hsl(120, Double.NaN, 0.5) == Color.hsl(120, 0.0, 0.5))
+    assert(Color.hsl(120, 1.0, Double.NaN) == Color.Rgb(0, 0, 0))
+
+  test("toHsl reports no hue and no saturation for a grey"):
+    val (hue, saturation, lightness) = Color.toHsl(Color.Rgb(128, 128, 128))
+    assert(hue == 0.0)
+    assert(saturation == 0.0)
+    assert(math.abs(lightness - 128 / 255.0) < 1e-9)
+
+  test("toHsl answers for a named color's palette approximation"):
+    val (hue, saturation, _) = Color.toHsl(Color.Red) // approximateRgb(Red) is (205, 49, 49), not (255, 0, 0)
+    assert(math.abs(hue) < 1.0)
+    assert(saturation > 0.5)
+
+  test("hsl and toHsl round-trip to within one unit per channel"):
+    // the trip goes through Double arithmetic and back into 8-bit channels, so it rounds rather than reproducing
+    // the exact bytes
+    val samples = Seq(
+      Color.Rgb(0, 0, 0),
+      Color.Rgb(255, 255, 255),
+      Color.Rgb(255, 0, 0),
+      Color.Rgb(13, 188, 121),
+      Color.Rgb(200, 50, 50),
+      Color.Rgb(17, 168, 205),
+      Color.Rgb(1, 2, 3),
+      Color.Rgb(254, 253, 252),
+      Color.Rgb(128, 128, 129),
+      Color.Rgb(90, 200, 30),
+    )
+    for sample <- samples do
+      val (h, s, l)    = Color.toHsl(sample)
+      val (r, g, b)    = Color.approximateRgb(Color.hsl(h, s, l))
+      val (er, eg, eb) = Color.approximateRgb(sample)
+      assert(math.abs(r - er) <= 1 && math.abs(g - eg) <= 1 && math.abs(b - eb) <= 1, s"round trip of $sample")
+
+  test("the hue-space fluent transformations agree with the functions they delegate to"):
+    val color     = Color.Rgb(200, 50, 50)
+    assert(color.asHsl == Color.toHsl(color))
+    val (h, s, l) = Color.toHsl(color)
+    assert(color.rotateHue(180) == Color.hsl(h + 180, s, l))
+    assert(color.withLightness(0.8) == Color.hsl(h, s, 0.8))
+    assert(color.withSaturation(0.0) == Color.hsl(h, 0.0, l))
+
+  test("rotating the hue by a full turn returns to the same color"):
+    val color        = Color.Rgb(90, 200, 30)
+    val (r, g, b)    = Color.approximateRgb(color.rotateHue(360))
+    val (er, eg, eb) = (90, 200, 30)
+    assert(math.abs(r - er) <= 1 && math.abs(g - eg) <= 1 && math.abs(b - eb) <= 1)
+
+  test("withLightness keeps the hue where lighten washes it out"):
+    val brand  = Color.Rgb(200, 50, 50)
+    val tinted = brand.withLightness(0.8)
+    val faded  = brand.lighten(0.6)
+    val hueOf  = (c: Color) => Color.toHsl(c)._1
+    val satOf  = (c: Color) => Color.toHsl(c)._2
+    assert(math.abs(hueOf(tinted) - hueOf(brand)) < 1.0)
+    assert(math.abs(satOf(tinted) - satOf(brand)) < 0.01)
+    assert(satOf(faded) < satOf(brand)) // fading toward white drains the saturation
