@@ -330,6 +330,29 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       }
     }
 
+  /** Writes `ESC[6n` and reads the terminal's reply off the input stream.
+    *
+    * The write is taken under `screenOwnership` like every other out-of-band write; the *read* deliberately is not. A
+    * read that held the monitor for the length of the timeout would block the signal handler that hands the terminal
+    * back on Ctrl+Z — exactly the key a user reaches for when something seems stuck. What protects the decoder from a
+    * second reader is the render-thread contract in [[Backend.queryCursorPosition]], not this monitor.
+    *
+    * A terminal that does not implement the report never answers, so the timeout expiring is reported as an unsupported
+    * terminal rather than as an I/O failure: nothing broke, the terminal simply cannot say.
+    */
+  override def queryCursorPosition(timeout: Duration): Either[BackendError, Position] =
+    Backend.requirePositiveTimeout(timeout)
+    val waitMillis = if timeout.isFinite then timeout.toMillis else Long.MaxValue
+    attempt {
+      screenOwnership.synchronized {
+        write(AnsiSequences.RequestCursorPosition)
+      }
+      decoder.readCursorReport(waitMillis)
+    }.flatMap {
+      case Some(position) => Right(position)
+      case None           => Left(BackendError.UnsupportedTerminal("the terminal did not report its cursor position"))
+    }
+
   override def scrollRegionUp(region: RowRange, lines: Int): Either[BackendError, Unit] =
     scrollRegion(region, lines, ScrollDirection.Up)
 

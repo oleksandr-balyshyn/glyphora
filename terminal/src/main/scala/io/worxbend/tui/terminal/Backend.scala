@@ -62,6 +62,33 @@ trait Backend:
     val _ = position
     Right(())
 
+  /** Asks the terminal where its cursor currently is, and waits up to `timeout` for the answer.
+    *
+    * A round trip, not a lookup: the request is a Device Status Report (`ESC[6n`) written to the terminal, and the
+    * reply comes back on the same stream the user's keystrokes travel on. That has three consequences a caller must
+    * know about.
+    *
+    *   - It must run on the render thread, the one thread allowed to read input. A query racing a [[readEvent]] would
+    *     hand the reply to the key decoder, where it decodes to nothing and is dropped.
+    *   - A key pressed while the query is in flight arrives before the reply. Those keys are held and delivered by the
+    *     following [[readEvent]] calls in the order they were typed, so nothing the user does is lost — but the reply
+    *     is not instant, and an app that queries every frame will feel it.
+    *   - A terminal that does not implement the report never answers at all. That is the ordinary outcome, not a
+    *     defect, and it is why there is a timeout rather than a blocking read.
+    *
+    * The position is zero-based, in the same space as every other [[Position]] in glyphora; the wire format is
+    * one-based and is converted once, in the decoder.
+    *
+    * What it is for: anchoring an *inline* viewport. An app that draws below the shell prompt rather than taking the
+    * alternate screen has to know which row the prompt left the cursor on, or it draws over the user's scrollback.
+    *
+    * The default reports [[BackendError.UnsupportedTerminal]]. A backend with no terminal cannot answer, and a guessed
+    * origin — the top-left corner, say — is the specific wrong answer that puts an inline UI over the output above it.
+    */
+  def queryCursorPosition(timeout: Duration): Either[BackendError, Position] =
+    val _ = timeout
+    Left(BackendError.UnsupportedTerminal("this backend cannot report the cursor position"))
+
   /** Asks the terminal itself to shift the rows of `region` up by `lines`, instead of repainting them.
     *
     * What this is for. A list of forty rows scrolled by one costs, through the ordinary frame diff, forty rows of

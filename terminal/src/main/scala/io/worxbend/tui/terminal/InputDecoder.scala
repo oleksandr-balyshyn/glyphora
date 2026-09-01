@@ -35,14 +35,60 @@ private[terminal] final class InputDecoder(
   /** One character of lookahead, so a speculative read can be undone instead of swallowing input. */
   private var pushedBack = NoChar
 
+  /** Events decoded while [[readCursorReport]] was waiting for its reply, waiting their turn.
+    *
+    * A cursor-position query is a round trip: the reply travels back on the same stream the user's keystrokes do, and a
+    * key pressed while it is in flight arrives first. Dropping those keys would make an inline app lose input every
+    * time it anchored itself, so they are held here and handed to the next [[decode]] in the order they arrived.
+    */
+  private val deferred = scala.collection.mutable.Queue.empty[Event]
+
+  /** Whether a `CSI … R` currently means a cursor-position report rather than the F3 key. See [[readCursorReport]]. */
+  private var awaitingCursorReport = false
+
+  /** Where the report that [[readCursorReport]] is waiting for said the cursor was, once one arrives. */
+  private var reportedCursor: Option[Position] = None
+
   /** Decodes the next event, blocking up to `timeoutMillis` for the first character.
     *
     * `None` means "no event": either the timeout elapsed or the bytes read were a sequence with no glyphora meaning.
+    *
+    * An event held back by a cursor-position query is delivered first and costs no read at all, so a key pressed during
+    * that round trip reaches the application in the order it was typed.
     */
   def decode(timeoutMillis: Long): Option[Event] =
+    if deferred.nonEmpty then Some(deferred.dequeue())
+    else decodeOnce(timeoutMillis)
+
+  /** [[decode]] without the deferred queue: one read, one decode. */
+  private def decodeOnce(timeoutMillis: Long): Option[Event] =
     val first = next(timeoutMillis)
     if first < 0 then None
     else decodeFirst(first)
+
+  /** Reads the terminal's reply to a Device Status Report, giving up after `timeoutMillis`.
+    *
+    * Called only by [[JLine3Backend.queryCursorPosition]], immediately after it has written `ESC[6n`. While this is
+    * running, a `CSI row ; column R` is read as that report; at every other moment the same bytes stay the F3 key, and
+    * [[isFunctionKey3]] explains why the two cannot be told apart on their contents alone.
+    *
+    * Anything else that decodes while the reply is awaited is a real event the user produced, so it is queued rather
+    * than dropped and comes back out of the next [[decode]] calls in order. `None` means the terminal did not answer in
+    * time — which is the ordinary outcome on a terminal that does not implement the report, not a failure.
+    *
+    * Subject to the same one-reader rule as [[decode]], and for a sharper reason: a second thread decoding concurrently
+    * would take the reply out of this one's hands and drop it as an unrecognised sequence.
+    */
+  private[terminal] def readCursorReport(timeoutMillis: Long): Option[Position] =
+    awaitingCursorReport = true
+    reportedCursor = None
+    val deadline = System.nanoTime() + timeoutMillis * NanosPerMilli
+    try
+      while reportedCursor.isEmpty && System.nanoTime() < deadline do
+        val remaining = math.max(1L, (deadline - System.nanoTime()) / NanosPerMilli)
+        decodeOnce(remaining).foreach(event => deferred.enqueue(event))
+      reportedCursor
+    finally awaitingCursorReport = false
 
   private def decodeFirst(first: Int): Option[Event] =
     if first == 0x1b then decodeEscape() else decodeControl(first, KeyModifiers.None)
@@ -206,6 +252,10 @@ private[terminal] final class InputDecoder(
       decodeSgrMouse(params.drop(1), finalByte == 'M')
     else if finalByte == 'M' && params.nonEmpty && !params.startsWith("<") then decodeUrxvtMouse(params)
     else if isPrivateReply(params) then None // DA/DECRPM/kitty-query replies: not input, must not surface as keys
+    // A cursor-position report is caught here rather than down in `decodeCsiKey`, because its second parameter is a
+    // *column*, and the modifier extraction below rejects any second parameter above 16 — so a report from anywhere
+    // right of column 16 would never have reached a case at all.
+    else if awaitingCursorReport && finalByte == 'R' then captureCursorReport(parameterNumbers(params))
     else
       val numbers = parameterNumbers(params)
       numbers.drop(1).headOption match
@@ -250,6 +300,22 @@ private[terminal] final class InputDecoder(
       case 'Q' => KeyCode.F(2)
       case 'S' => KeyCode.F(4)
       case _   => KeyCode.F(3)
+
+  /** Records a cursor-position report and reports no event for it.
+    *
+    * Deliberately not an [[Event]]. A cursor report is a reply to something this library asked, not something the user
+    * did, and adding a case for it to the event ADT would put a branch no application ever writes into every exhaustive
+    * `match` over `Event` in every application.
+    *
+    * The wire format is one-based row then column; [[Position]] is zero-based column then row, which is the coordinate
+    * space every other part of glyphora uses. Both conversions happen here, once.
+    */
+  private def captureCursorReport(numbers: Seq[Int]): Option[Event] =
+    numbers match
+      case Seq(row, column) if row >= 1 && column >= 1 =>
+        reportedCursor = Some(Position(column - 1, row - 1))
+        None
+      case _                                           => None
 
   /** Whether a `CSI … R` is F3 rather than a cursor-position report.
     *
@@ -607,6 +673,12 @@ private[terminal] object InputDecoder:
     * cursor-position report, which are otherwise the same shape.
     */
   private val MaxModifierCode = 16
+
+  /** Nanoseconds in a millisecond, for the deadline arithmetic in `readCursorReport`. A named constant so the two
+    * places that convert cannot disagree by a factor of a thousand — which reads as a query that returns instantly or
+    * one that hangs, and neither points at the arithmetic.
+    */
+  private val NanosPerMilli = 1000000L
 
   /** kitty's super, hyper and meta bits, none of which [[KeyModifiers]] can express. */
   private val UnrepresentableModifiers = 8 | 16 | 32

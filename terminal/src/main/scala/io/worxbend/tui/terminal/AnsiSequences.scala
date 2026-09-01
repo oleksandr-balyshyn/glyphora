@@ -183,6 +183,16 @@ private[terminal] object AnsiSequences:
     */
   val PopTitle: String = s"$Esc[23;2t"
 
+  /** DSR 6 — asks the terminal where its cursor is (ECMA-48 §8.3.35, "Device Status Report").
+    *
+    * The terminal answers on the *input* stream, as `CSI row ; column R`, one-based. That reply is indistinguishable on
+    * its contents from a modified F3 key, which is why only [[InputDecoder.readCursorReport]] may read it and only for
+    * as long as a query is actually outstanding.
+    *
+    * A terminal that does not implement the report simply never answers, so every caller needs a timeout.
+    */
+  val RequestCursorPosition: String = s"$Esc[6n"
+
   /** Moves the cursor to an absolute zero-based position (ANSI rows/columns are one-based). */
   def moveTo(x: Int, y: Int): String =
     s"$Esc[${y + 1};${x + 1}H"

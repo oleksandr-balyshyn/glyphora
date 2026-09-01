@@ -213,6 +213,17 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   operations these two default to a `BackendError.UnsupportedTerminal` failure rather
   than a silent success, because the caller's fallback is to repaint the rows itself
   and a no-op claiming success would leave stale rows on screen.
+  `queryCursorPosition(timeout)` asks the terminal where its cursor currently is, by
+  writing a Device Status Report (`ESC[6n`) and reading the reply. It is a round trip
+  on the same stream the user's keystrokes travel on, so it must run on the render
+  thread, keys typed while it is in flight are held and delivered by the following
+  `readEvent` calls in order rather than dropped, and a terminal that does not
+  implement the report simply never answers — which is why there is a timeout and why
+  the failure is `UnsupportedTerminal` rather than an I/O error. It exists for
+  anchoring an inline viewport: an app drawing below the shell prompt has to know
+  which row the prompt left the cursor on, or it paints over the user's scrollback. It
+  too defaults to a failure rather than a guess, because a guessed origin is precisely
+  the wrong answer.
   All the others are defaulted no-ops on the trait, so a backend written before they
   existed still compiles.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`
