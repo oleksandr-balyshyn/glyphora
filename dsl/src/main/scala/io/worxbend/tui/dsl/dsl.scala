@@ -106,7 +106,6 @@ export io.worxbend.tui.core.{
   Flex,
   KeyCode,
   KeyEvent,
-  KeyEventKind,
   Line,
   Masked,
   MediaKey,

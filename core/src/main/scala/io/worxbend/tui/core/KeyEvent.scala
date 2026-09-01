@@ -2,32 +2,18 @@ package io.worxbend.tui.core
 
 import java.util.Locale
 
-/** A key event: which key, which modifier keys were held, and which moment of the keystroke this is.
+/** A key press: which key, plus the modifier keys held.
   *
   * A standalone case class rather than an `Event` enum case so handler signatures like `KeyEvent => Boolean` can take
   * exactly the key payload without partially matching an `Event`.
-  *
-  * `kind` defaults to [[KeyEventKind.Press]] because that is what every terminal but a kitty-protocol one can report,
-  * and because an application that never asked for release reporting never receives anything else — see
-  * [[KeyEventKind]] for the whole of that story.
   */
-final case class KeyEvent(code: KeyCode, modifiers: KeyModifiers, kind: KeyEventKind = KeyEventKind.Press):
-
-  /** Whether this is a key going down, or a report from a terminal that cannot distinguish one. */
-  def isPress: Boolean = kind == KeyEventKind.Press
-
-  /** Whether this is a key coming back up. Only ever true against a terminal asked to report event types. */
-  def isRelease: Boolean = kind == KeyEventKind.Release
+final case class KeyEvent(code: KeyCode, modifiers: KeyModifiers):
 
   /** The derived `toString` prints two integers — the code point behind [[KeyCode.Char]] and the raw bitset behind
     * [[KeyModifiers]] — so `KeyEvent(KeyCode.Char('q'), KeyModifiers.Ctrl)` reads as `KeyEvent(Char(113),2)`. Key
     * events are the payload of nearly every DSL assertion, so both are spelled out here instead.
     */
-  override def toString: String =
-    // the kind is printed only when it is not a plain press, so the overwhelmingly common event keeps the shorter,
-    // more readable spelling and every assertion message written before kinds existed still reads the same
-    val kindText = if kind == KeyEventKind.Press then "" else s", $kind"
-    s"KeyEvent($codeText, ${modifiers.show}$kindText)"
+  override def toString: String = s"KeyEvent($codeText, ${modifiers.show})"
 
   /** The key itself, with a [[KeyCode.Char]]'s code point rendered as the character it stands for. */
   private def codeText: String = code match
@@ -35,18 +21,6 @@ final case class KeyEvent(code: KeyCode, modifiers: KeyModifiers, kind: KeyEvent
     case other                   => other.toString
 
 object KeyEvent:
-
-  /** Matches a key event on the two things nearly every handler asks about — `case KeyEvent(KeyCode.Enter, mods)`.
-    *
-    * Written out rather than left to the compiler so that [[KeyEvent.kind]] could be added without rewriting every
-    * pattern in every application: a synthesised extractor would have grown a third position and turned every existing
-    * `case KeyEvent(code, modifiers)` into a compile error. A handler that cares which moment of the keystroke it is
-    * looking at reads `event.kind`, [[KeyEvent.isPress]] or [[KeyEvent.isRelease]] from the value itself.
-    *
-    * Ignoring the kind here is safe by construction: a terminal only reports repeats and releases to an application
-    * that explicitly asked for them, so a pattern written before this existed cannot start matching twice per key.
-    */
-  def unapply(event: KeyEvent): (KeyCode, KeyModifiers) = (event.code, event.modifiers)
 
   /** A bare printable character with no modifiers.
     *

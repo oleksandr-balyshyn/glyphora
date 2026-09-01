@@ -81,19 +81,9 @@ private[terminal] object AnsiSequences:
     * `CSI 27 u` instead of a bare ESC byte, removing the read-timeout heuristic on terminals that support it.
     * Unsupported terminals ignore the sequence and keep sending legacy encoding.
     */
-  val PushKittyKeyboard: String = pushKittyKeyboard(reportEventTypes = false)
-
-  /** The kitty keyboard protocol push sequence, with or without enhancement flag 2 (`REPORT_EVENT_TYPES`).
-    *
-    * Flag 1 alone (the [[PushKittyKeyboard]] default) only disambiguates escape codes: every event still arrives as a
-    * press. Adding flag 2 asks the terminal to report auto-repeat and key-release events as well, which is what makes
-    * `KeyEventKind.Repeat` and `KeyEventKind.Release` reachable — and which an application has to opt into, because one
-    * that assumed press-only input would otherwise act on every keystroke twice.
-    */
-  def pushKittyKeyboard(reportEventTypes: Boolean): String =
-    s"$Esc[>${if reportEventTypes then 3 else 1}u"
-  val PopKittyKeyboard: String                             = s"$Esc[<u"
-  val LinkClose: String                                    = s"$Esc]8;;$Esc\\"
+  val PushKittyKeyboard: String = s"$Esc[>1u"
+  val PopKittyKeyboard: String  = s"$Esc[<u"
+  val LinkClose: String         = s"$Esc]8;;$Esc\\"
 
   /** DECSC (`ESC 7`), "save cursor": stores the cursor position, and the terminal's own graphic-rendition and
     * character-set state, in a one-slot register.

@@ -21,8 +21,7 @@ import scala.util.control.NonFatal
   * unwinds through its normal teardown; `TSTP`/`CONT` hand the terminal back to the shell and take it again on resume;
   * `WINCH` posts a coalesced resize. See [[JLine3Backend.create]] for why the defaults are unusable.
   */
-final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth, reportKeyEventKinds: Boolean)
-    extends Backend:
+final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) extends Backend:
 
   // written on the render thread, read by JLine's signal-dispatch thread and by the shutdown hook
   // holds the *cooked*-mode attributes captured when raw mode was entered, so it doubles as "are we in raw mode?"
@@ -155,7 +154,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth, r
       // modern input modes; terminals without support ignore them and keep legacy behavior
       write(AnsiSequences.EnableBracketedPaste)
       write(AnsiSequences.EnableFocusReporting)
-      write(AnsiSequences.pushKittyKeyboard(reportKeyEventKinds))
+      write(AnsiSequences.PushKittyKeyboard)
     }
 
   def disableRawMode(): Either[BackendError, Unit] =
@@ -684,28 +683,15 @@ object JLine3Backend:
     * [[create]] is the production entry point; this exists so tests can drive a real backend over a pair of streams,
     * because `create` needs the controlling TTY that CI does not have.
     */
-  private[terminal] def wrapping(
-      terminal: Terminal,
-      colorDepth: ColorDepth,
-      reportKeyEventKinds: Boolean = false,
-  ): JLine3Backend =
-    JLine3Backend(terminal, colorDepth, reportKeyEventKinds)
+  private[terminal] def wrapping(terminal: Terminal, colorDepth: ColorDepth): JLine3Backend =
+    JLine3Backend(terminal, colorDepth)
 
   /** Opens the process's controlling terminal. Fails with `UnsupportedTerminal` when there is no usable TTY.
     *
     * `colorDepth` defaults to environment-based detection (honoring `NO_COLOR`/`CLICOLOR_FORCE`); pass an explicit
     * value to force a palette regardless of the environment.
-    *
-    * `reportKeyEventKinds` asks a terminal that speaks the kitty keyboard protocol to report auto-repeat and key
-    * releases as well as presses, which is what fills in [[io.worxbend.tui.core.KeyEvent.kind]]. It is off by default
-    * and has to be asked for, because an application written for press-only input would otherwise run every handler
-    * twice per keystroke — once going down and once coming up. Terminals that do not speak the protocol ignore the
-    * request and keep sending presses either way.
     */
-  def create(
-      colorDepth: ColorDepth = ColorDepth.detect(),
-      reportKeyEventKinds: Boolean = false,
-  ): Either[BackendError, JLine3Backend] =
+  def create(colorDepth: ColorDepth = ColorDepth.detect()): Either[BackendError, JLine3Backend] =
     try
       val terminal = TerminalBuilder
         .builder()
@@ -726,7 +712,7 @@ object JLine3Backend:
       if terminal.getType == Terminal.TYPE_DUMB || terminal.getType == Terminal.TYPE_DUMB_COLOR then
         terminal.close()
         Left(BackendError.UnsupportedTerminal("dumb terminal (no TTY attached)"))
-      else Right(wrapping(terminal, colorDepth, reportKeyEventKinds))
+      else Right(wrapping(terminal, colorDepth))
     catch case NonFatal(error) => Left(BackendError.Io(error))
 
   /** Stops this process the way the shell expects, after the TSTP handler has handed the terminal back.
