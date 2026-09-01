@@ -436,3 +436,58 @@ final class BufferSpec extends AnyFunSuite:
     assert(merged.area == Rect(0, 0, 3, 1))
     assert(merged.get(0, 0) == Cell.Empty) // 漢 lost the column 字 claimed
     assert(merged.get(1, 0).symbol == "字")
+
+  test("two buffers holding the same content are equal and hash alike"):
+    val one = buffer(6, 2)
+    one.setString(0, 0, "hi", Style.Default.bold)
+    val two = buffer(6, 2)
+    two.setString(0, 0, "hi", Style.Default.bold)
+    assert(one == two)
+    assert(one.hashCode() == two.hashCode())
+    assert(one == one.snapshot)
+
+  test("buffers whose glyphs match but whose styles differ are not equal"):
+    // the regression this closes: a symbols-only comparison (what a test that renders both frames to text does)
+    // calls these two frames identical, so a widget that lost its highlight passes
+    val plain = buffer(6, 1)
+    plain.setString(0, 0, "hi", Style.Default)
+    val bold  = buffer(6, 1)
+    bold.setString(0, 0, "hi", Style.Default.bold)
+    assert(plain != bold)
+
+  test("buffers covering different areas are never equal"):
+    assert(buffer(6, 1) != buffer(6, 2))
+    assert(Buffer(Rect(0, 0, 4, 1)) != Buffer(Rect(1, 0, 4, 1)))
+
+  test("a buffer is not equal to a non-buffer"):
+    assert(!buffer(2, 1).equals("Buffer"))
+
+  test("equality distinguishes a wide grapheme's filler from a plain blank"):
+    // both buffers hold Cell.Empty at column 1; only one of them has the column reserved as 漢's right half
+    val wide  = buffer(4, 1)
+    wide.setString(0, 0, "漢", Style.Default)
+    val blank = buffer(4, 1)
+    blank.set(0, 0, Cell.Empty)
+    assert(wide != blank)
+
+  test("the debug dump prints the rows, the style runs and the hidden columns"):
+    val buf  = buffer(4, 1)
+    buf.setString(0, 0, "漢", Style.Default.withFg(Color.Red))
+    val dump = buf.toString
+    assert(dump.contains("area=" + Rect(0, 0, 4, 1).toString))
+    assert(dump.contains("\"漢   \"")) // the filler and the two untouched columns each print one space
+    assert(dump.contains("x: 0, y: 0, Style(fg=Red)"))
+    assert(dump.contains("x: 1, y: 0, hidden by a two-column grapheme"))
+
+  test("the debug dump lists style runs, not one line per cell"):
+    val buf   = buffer(6, 1)
+    buf.setString(0, 0, "ab", Style.Default.bold)
+    val runs  = buf.toString.linesIterator.filter(_.contains("Style")).toSeq
+    // one line opening the bold run at column 0, one closing it at column 2 where the untouched cells begin
+    assert(runs.size == 2, runs)
+    assert(runs.head.contains("x: 0, y: 0"))
+    assert(runs(1).contains("x: 2, y: 0"))
+
+  test("an empty buffer still produces a well-formed dump"):
+    val dump = Buffer(Rect(0, 0, 0, 0)).toString
+    assert(dump == s"Buffer(area=${Rect(0, 0, 0, 0)}, content=[\n], styles=[\n], hidden=[\n])")

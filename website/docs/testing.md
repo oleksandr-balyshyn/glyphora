@@ -58,6 +58,33 @@ assert(cell.style.fg.contains(Color.Cyan))
 Keep style assertions focused on meaningful semantics; asserting every empty cell
 makes harmless renderer changes noisy.
 
+### Compare a whole buffer, style included
+
+Two buffers are equal when they cover the same area and hold the same cell — symbol
+*and* style — at every position. That makes a whole frame comparable in one assertion,
+which the text snapshots above cannot do: they recover symbols only, so a widget that
+lost its highlight still matches its expected text.
+
+When two frames differ, printing either one gives a dump built for exactly this moment
+instead of an object hash — the rows as quoted strings, then the position of each
+*change* of style (not one line per cell), then the columns hidden under the right half
+of a two-column grapheme:
+
+```text
+Buffer(area=Rect(0,0,5,2), content=[
+  "Total",
+  "   42",
+], styles=[
+  x: 0, y: 0, Style.Default
+  x: 3, y: 1, Style(modifiers=Bold)
+], hidden=[
+])
+```
+
+A `Buffer` is mutable, so this equality — and the matching `hashCode` — changes as a
+frame is rendered into it. Compare buffers that are finished, and never use one as a
+key in a map.
+
 ### Walk a frame
 
 `buffer.foreach((x, y, cell) => …)` visits every cell in row-major order, and

@@ -412,6 +412,103 @@ final class Buffer(val area: Rect):
         x += 1
       y += 1
 
+  /** Content equality: the same `area`, the same [[Cell]] at every position, and the same continuation flags.
+    *
+    * The continuation flags are part of the comparison because they are part of what gets drawn: two buffers whose
+    * cells all match but whose flags differ disagree about which columns a terminal is allowed to paint, and they
+    * produce different diffs.
+    *
+    * '''A `Buffer` is mutable''', so this answer — and [[hashCode]] with it — changes as a frame is rendered into the
+    * buffer. Compare or hash one only while nothing is writing to it, and never use one as a key in a hash map: the
+    * key would move out from under the map on the next `set`.
+    */
+  override def equals(other: Any): Boolean = other match
+    case that: Buffer =>
+      (this eq that) || (area == that.area && sameCells(that) && sameContinuations(that))
+    case _            => false
+
+  private def sameCells(that: Buffer): Boolean =
+    var index = 0
+    var same  = true
+    while same && index < cells.length do
+      same = sameCell(cells(index), that.cells(index))
+      index += 1
+    same
+
+  private def sameContinuations(that: Buffer): Boolean =
+    java.util.Arrays.equals(continuations, that.continuations)
+
+  /** Hashes the area and every cell. See [[equals]] for why a mutable buffer must not be used as a hash-map key. */
+  override def hashCode(): Int =
+    var hash  = area.hashCode()
+    var index = 0
+    while index < cells.length do
+      hash = hash * 31 + cells(index).hashCode()
+      hash = hash * 31 + (if continuations(index) then 1 else 0)
+      index += 1
+    hash
+
+  /** A dump of the whole grid, for the one place a buffer is printed: the message of a failed test.
+    *
+    * The default `toString` of a class is its name and an object hash, which tells a reader nothing about why two
+    * frames differ. This prints three sections instead, following ratatui's `Debug for Buffer`:
+    *
+    *   - `content` — one quoted string per row, every column included. Continuation cells hold [[Cell.Empty]] by
+    *     construction, so they print as a space and the rows stay aligned in the dump even though the wide glyph
+    *     before them takes two columns on a real terminal.
+    *   - `styles` — one line per *change* of style in row-major order, not one line per cell. A frame is usually a few
+    *     long runs of one style, so listing the runs is what makes a wrong colour visible instead of drowned.
+    *   - `hidden` — the positions holding the second column of a two-column grapheme, which the `content` section
+    *     cannot show because they carry no symbol of their own.
+    *
+    * Building the string walks every cell, so this is a debugging aid and not something to call per frame.
+    */
+  override def toString: String =
+    val out = StringBuilder()
+    out ++= s"Buffer(area=$area, content=[\n"
+    var y   = area.y
+    while y < area.bottom do
+      out ++= "  \""
+      var x = area.x
+      while x < area.right do
+        out ++= cells(indexOf(x, y)).symbol
+        x += 1
+      out ++= "\",\n"
+      y += 1
+    out ++= "], styles=[\n"
+    appendStyleRuns(out)
+    out ++= "], hidden=[\n"
+    appendHiddenPositions(out)
+    out ++= "])"
+    out.result()
+
+  /** Appends one line per style run to `out`: the first cell of the buffer, then every cell whose style differs from
+    * the cell before it in row-major order.
+    */
+  private def appendStyleRuns(out: StringBuilder): Unit =
+    // `None` is "no run has started yet", so the very first cell always opens one
+    var previous: Option[Style] = None
+    var y                       = area.y
+    while y < area.bottom do
+      var x = area.x
+      while x < area.right do
+        val style = cells(indexOf(x, y)).style
+        if !previous.contains(style) then
+          out ++= s"  x: $x, y: $y, $style\n"
+          previous = Some(style)
+        x += 1
+      y += 1
+
+  /** Appends one line per continuation cell to `out` — the columns a wide grapheme draws over from the left. */
+  private def appendHiddenPositions(out: StringBuilder): Unit =
+    var y = area.y
+    while y < area.bottom do
+      var x = area.x
+      while x < area.right do
+        if continuations(indexOf(x, y)) then out ++= s"  x: $x, y: $y, hidden by a two-column grapheme\n"
+        x += 1
+      y += 1
+
   /** Whether two cells would render identically: a reference-equality fast path before the structural compare, because
     * `Cell.equals` walks a `String`.
     */
