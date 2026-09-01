@@ -62,6 +62,24 @@ trait Backend:
     val _ = position
     Right(())
 
+  /** Sets whether the terminal's own caret blinks (the DECSET 12 mode).
+    *
+    * Cosmetic, and a companion to [[setCursorPosition]] rather than a replacement for [[hideCursor]]: a form can blink
+    * the caret in the field being typed into and hold it steady while the app is idle, which reads as "the app is
+    * waiting for you" without drawing anything.
+    *
+    * Best-effort in the strongest sense. Terminals that do not implement DECSET 12 ignore the sequence; terminals that
+    * encode blink into the cursor *shape* may overrule it; and some users configure their emulator to ignore it on
+    * purpose. Success here means the request was written, never that the caret changed — so no widget's correctness may
+    * depend on it. Must run on the render thread. Blinking is the DEC default, so a backend that lets an app turn it
+    * off is responsible for turning it back on when the app exits.
+    *
+    * The default is a successful no-op for backends with no real caret.
+    */
+  def setCursorBlink(blinking: Boolean): Either[BackendError, Unit] =
+    val _ = blinking
+    Right(())
+
   /** Reserves `rows` lines at the bottom of the *primary* screen for an app that is not taking the alternate screen.
     *
     * The complement of [[enterAlternateScreen]]. Instead of switching to a blank second screen, this scrolls whatever

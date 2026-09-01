@@ -32,6 +32,10 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   // downgrading a hover-driven app to buttons-only
   @volatile private var mouseCaptureActive: Option[MouseCaptureMode] = None
   @volatile private var cursorHidden                                 = false
+  // whether *this* backend turned the caret's blink off. Only what an app suppressed is restored on the way out: a
+  // user whose emulator is configured for a steady caret would otherwise have that preference overwritten by every
+  // glyphora app that exits, including the ones that never touched blink at all.
+  @volatile private var cursorBlinkSuppressed                        = false
   @volatile private var suspendedState                               = TerminalState.Undressed
   @volatile private var inlineRows                                   = 0
 
@@ -251,6 +255,21 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       }
     }
 
+  /** Writes DECSET/DECRST 12 to switch the caret's blink on or off.
+    *
+    * Taken under `screenOwnership` for the same reason [[setCursorPosition]] is: this is a write to the terminal, and a
+    * Ctrl+Z landing between leaving the alternate screen and this one would aim it at the user's shell.
+    *
+    * The suppression is remembered so that [[releaseTerminal]] can undo it — see `cursorBlinkSuppressed`.
+    */
+  override def setCursorBlink(blinking: Boolean): Either[BackendError, Unit] =
+    attempt {
+      screenOwnership.synchronized {
+        write(if blinking then AnsiSequences.EnableCursorBlink else AnsiSequences.DisableCursorBlink)
+        cursorBlinkSuppressed = !blinking
+      }
+    }
+
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
     Backend.requirePositiveTimeout(timeout)
     if pendingInterrupt.getAndSet(false) then Right(Some(Event.Interrupt))
@@ -446,8 +465,14 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     try
       // deliberately never closed: this wraps the process's own stdout descriptor, and closing the wrapper would close
       // stdout for everything that runs after this hook. The wrapper itself holds no resource beyond that descriptor.
-      val out = FileOutputStream(FileDescriptor.out)
-      out.write(AnsiSequences.RestoreAll.getBytes(UTF_8))
+      val out     = FileOutputStream(FileDescriptor.out)
+      // RestoreAll is mode resets only, which are idempotent and therefore safe to send blind. Re-enabling the caret's
+      // blink is not in that class — it would overwrite the preference of a user who runs a steady caret — so it is
+      // appended only when this backend is the one that turned it off.
+      val restore =
+        if cursorBlinkSuppressed then AnsiSequences.RestoreAll + AnsiSequences.EnableCursorBlink
+        else AnsiSequences.RestoreAll
+      out.write(restore.getBytes(UTF_8))
       out.flush()
     catch case NonFatal(_) => ()
 
@@ -477,7 +502,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * operations ([[enableRawMode]], [[hideCursor]]) write them from outside this monitor.
     */
   private def releaseTerminal(): TerminalRelease = screenOwnership.synchronized:
-    val state    = TerminalState(isRawMode, alternateScreenActive, cursorHidden, mouseCaptureActive)
+    val state = TerminalState(isRawMode, alternateScreenActive, cursorHidden, mouseCaptureActive, cursorBlinkSuppressed)
     val failures = Seq.newBuilder[BackendError]
 
     def undress(active: Boolean, step: => Either[BackendError, Unit]): Unit =
@@ -489,6 +514,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
     undress(state.mouse.isDefined, disableMouseCapture())
     undress(state.cursorHidden, showCursor())
+    undress(state.cursorBlinkSuppressed, setCursorBlink(true))
     // An inline run leaves its last frame on the primary screen on purpose, so park the cursor on the line below the
     // strip: without this the shell's next prompt would be drawn straight over the frame the app just left behind.
     if inlineRows > 0 then
@@ -512,6 +538,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     if state.raw then bestEffort(enableRawMode())
     if state.alternateScreen then bestEffort(enterAlternateScreen())
     if state.cursorHidden then bestEffort(hideCursor())
+    if state.cursorBlinkSuppressed then bestEffort(setCursorBlink(false))
     state.mouse.foreach(mode => bestEffort(enableMouseCapture(mode)))
     requestFullRedraw() // whatever ran in between owned the screen: repaint everything
 
@@ -562,11 +589,12 @@ private[terminal] final case class TerminalState(
     alternateScreen: Boolean,
     cursorHidden: Boolean,
     mouse: Option[MouseCaptureMode],
+    cursorBlinkSuppressed: Boolean,
 )
 
 private[terminal] object TerminalState:
-  /** Nothing was dressed up: cooked mode, primary screen, visible cursor, no mouse capture. */
-  val Undressed: TerminalState = TerminalState(false, false, false, None)
+  /** Nothing was dressed up: cooked mode, primary screen, visible and blinking cursor, no mouse capture. */
+  val Undressed: TerminalState = TerminalState(false, false, false, None, false)
 
 /** The outcome of handing the terminal back: the modes that were undressed (so they can be re-dressed) and the first
   * step that failed while doing it, if any.

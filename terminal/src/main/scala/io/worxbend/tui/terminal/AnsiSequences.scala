@@ -12,6 +12,14 @@ private[terminal] object AnsiSequences:
   val ClearScreen: String           = clear(ClearType.All)
   val HideCursor: String            = s"$Esc[?25l"
   val ShowCursor: String            = s"$Esc[?25h"
+  // DECSET/DECRST 12, "cursor blink" — whether the terminal's own caret blinks. Purely cosmetic; a form might blink
+  // the caret in the field being typed into and hold it steady while idle. Deliberately *not* part of RestoreAll
+  // below: everything in that string is a mode *reset*, which is idempotent and therefore safe to send unconditionally
+  // from a shutdown hook that cannot know what was enabled. Re-enabling blink is not idempotent in the way that
+  // matters — a user whose emulator is configured for a steady caret would have that preference overwritten by an app
+  // that never touched blink at all. JLine3Backend therefore restores it only when it was the one that turned it off.
+  val EnableCursorBlink: String     = s"$Esc[?12h"
+  val DisableCursorBlink: String    = s"$Esc[?12l"
   // Why four modes, in that order. 1000 asks for presses and releases and 1002 adds motion while a button is held;
   // 1003 (see MouseCaptureMode) adds motion with none held. The other two are *encodings* of the report rather than
   // requests for more of them. The original X10 encoding writes each coordinate as one byte biased by 32, which cannot

@@ -180,10 +180,20 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   while a live interface below stays exactly where it is and is never repainted. The
   band is set, scrolled and released inside the one call — a region left set makes the
   user's own shell scroll inside a sub-rectangle of their terminal after the app exits
-  — and setting one homes the cursor on most terminals, so the implementation puts the
-  cursor back itself. A band that is not on the screen is a programmer error and
-  throws; a scroll distance of zero or less is a no-op. Terminals that do not honour
-  DECSTBM ignore the sequence, so this is best-effort.
+  — and setting one homes the cursor on most terminals, so the implementation leaves
+  the cursor at a position it names rather than wherever the region change left it. A
+  band that is not on the screen is a programmer error and throws; a scroll distance of
+  zero or less is a no-op. Terminals that do not honour DECSTBM ignore the sequence, so
+  this is best-effort.
+  `setCursorBlink(blinking)` says whether that caret blinks (the DECSET 12 terminal
+  mode) — a form can blink it in the field being typed into and hold it steady while
+  the app is idle. It is cosmetic and best-effort in the strongest sense: terminals
+  that do not implement the mode ignore it, some encode blink into the cursor shape
+  instead, and some users switch it off on purpose, so nothing's correctness may
+  depend on it. Blinking is the terminal's own default, so `JLine3Backend` puts it
+  back on the way out — but only when the app was the one that turned it off, because
+  re-enabling it unasked would overwrite the preference of a user who runs a steady
+  caret.
   All of these are defaulted no-ops on the trait, so a backend written before they
   existed still compiles.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`

@@ -21,6 +21,8 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   @volatile private var alternateScreen                        = false
   @volatile private var mouseCapture: Option[MouseCaptureMode] = None
   @volatile private var cursorVisible                          = true
+  // blinking is the terminal's own default, so that is where a freshly built backend starts
+  @volatile private var cursorBlinking                         = true
   @volatile private var lastClipboard: Option[String]          = None
   @volatile private var lastTitle: Option[String]              = None
   @volatile private var caret: Option[Position]                = None
@@ -78,6 +80,14 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   def showCursor(): Either[BackendError, Unit] =
     cursorVisible = true
+    Right(())
+
+  /** Records the requested blink state. A real terminal may ignore DECSET 12 entirely, and this one deliberately does
+    * not model that: the question a test asks is what the app *requested*, since that is the only half the app
+    * controls.
+    */
+  override def setCursorBlink(blinking: Boolean): Either[BackendError, Unit] =
+    cursorBlinking = blinking
     Right(())
 
   override def reserveInlineRows(rows: Int): Either[BackendError, Unit] =
@@ -199,6 +209,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   def close(): Either[BackendError, Unit] =
     mouseCapture = None
     cursorVisible = true
+    cursorBlinking = true
     alternateScreen = false
     rawMode = false
     caret = None
@@ -299,6 +310,11 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     */
   def mouseCaptureMode: Option[MouseCaptureMode] = mouseCapture
   def isCursorVisible: Boolean                   = cursorVisible
+
+  /** Whether the app last asked for a blinking caret (see [[setCursorBlink]]). `true` for a backend nothing has asked,
+    * because blinking is the terminal's own default — so a test asserting `false` is asserting the app really did ask.
+    */
+  def isCursorBlinking: Boolean = cursorBlinking
 
   /** How many rows an inline run reserved on the primary screen; `0` for a full-screen run. */
   def reservedInlineRows: Int = inlineRows
