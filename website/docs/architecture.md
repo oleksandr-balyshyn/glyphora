@@ -49,6 +49,9 @@ maximum-stability tier everything else builds on:
 - **Frame buffer**: `Buffer` (mutable cell grid, absolute coordinates, silent
   clipping), `Cell` (a `String` symbol, because one cell can hold a multi-codepoint
   grapheme cluster).
+- **Per-cell diff directives**: `DiffDirective`, declared on a buffer position with
+  `buffer.setDiffDirective(rect, directive)` and read back with
+  `buffer.diffDirective(x, y)`. See "Cells another program paints" below.
 - **Styling**: `Style`, `Color`, `Modifiers` (allocation-free bitset).
 - **Text**: `Text` / `Line` / `Span`.
 - **`CharWidth`**: terminal display-width arithmetic (CJK, combining marks, emoji ZWJ
@@ -141,6 +144,45 @@ The line is written where it is told and nowhere else: centring or right-alignin
 inside a wider area is a layout decision, made by the widget drawing it through
 `Alignment`, not by the buffer.
 
+### Cells another program paints
+
+A frame is flushed by comparing it against the previous frame and writing only the
+cells that differ. That is correct for exactly as long as glyphora is the only thing
+writing to the terminal, and there are two ways for that to stop being true. Both are
+answered per position, by a `DiffDirective` declared on the `Buffer`:
+
+- `DiffDirective.Skip` — *do not paint here.* A terminal image protocol (Sixel, the
+  kitty graphics protocol, iTerm2 inline images) fills a rectangle with an escape
+  sequence that has no cell-by-cell form, so re-emitting any column of it tears a hole
+  in the picture. Skipped positions are left alone on every path that writes cells,
+  including the full repaint after a resize — which means the owner of the region is
+  the one responsible for redrawing it once the terminal changes size.
+- `DiffDirective.AlwaysUpdate` — *paint here whether or not anything changed.* A
+  subprocess that wrote to the same terminal, or an image that has just been torn down,
+  leaves the screen showing something the buffer never wrote; because the buffer's own
+  memory of those cells is unchanged, the comparison says "nothing to do" and the wrong
+  pixels survive. This is the narrow version of `Backend.requestFullRedraw()`: repaint
+  the rectangle you know was damaged instead of ten thousand cells.
+
+A directive belongs to the frame that declares it. `Buffer.reset()` clears it, so a
+widget that owns a region re-declares it on every render — the frame that stops drawing
+an image is exactly the frame whose cells must be flushed again. Declaring one changes
+only what is *flushed*: `set` still writes to a skipped cell, so a widget can keep a
+text fallback in the grid and have it appear the moment the region is released.
+
+Showing a picture is therefore two halves, both inside an ordinary `Widget`:
+
+```scala
+import io.worxbend.tui.core.*
+
+def sixel(payload: String, send: String => Unit): Widget = (area, buffer) =>
+  buffer.setDiffDirective(area, DiffDirective.Skip)
+  send(payload)
+```
+
+The second half — getting the payload to the terminal untouched — is
+`Backend.writeRaw(sequence)`, described under `tui-terminal` below.
+
 ## tui-terminal
 
 The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks to
@@ -153,7 +195,11 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   only from the cursor down, or only the current line — what an app that does not own
   the whole screen needs), `requestFullRedraw()` (throw away the diff baseline, so the
   next frame repaints every cell — the recovery path when something other than this
-  app wrote to the terminal), `copyToClipboard`, `suspend`, `printAbove` and
+  app wrote to the terminal), `writeRaw(sequence)` (hand an escape sequence to the
+  terminal verbatim, past the frame diff — the partner of `DiffDirective.Skip`, and the
+  one optional operation whose default *fails* rather than quietly succeeding, because a
+  caller whose image never appeared has to be told nothing was written),
+  `copyToClipboard`, `suspend`, `printAbove` and
   `insertBefore(height, widget)` (the same durable scrollback output, drawn by a widget
   so that it keeps its styling). Each has
   a default body that succeeds and does nothing, so a backend can implement as much or

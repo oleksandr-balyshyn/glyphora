@@ -228,6 +228,44 @@ events do not arrive today; a terminal already put into report-all-keys mode by
 something else will deliver them, and the decoder now names them correctly instead of
 dropping them on the floor.
 
+## Press, repeat and release
+
+Every `KeyEvent` carries a `kind`, which is a `KeyEventKind`: `Press` (the key went
+down), `Repeat` (the keyboard's own auto-repeat fired while it was held) or `Release`
+(the key came back up). `event.isPress` and `event.isRelease` are the two shorthands.
+
+The default is `Press`, and on nearly every terminal it is the only value you will ever
+see. The legacy encodings terminals speak send one sequence per character produced and
+say nothing about a key coming back up, so a decoder that cannot tell reports `Press`.
+Read that as "a press, or a terminal that cannot say" — never as a promise that a
+release will follow.
+
+Two things have to be true before anything else arrives. The terminal must speak the
+kitty keyboard protocol, and the application must have asked for event-type reporting
+when it built its backend:
+
+```scala
+JLine3Backend.create(reportKeyEventKinds = true)
+```
+
+That flag is off by default on purpose. An application written for press-only input
+runs its handlers once per keystroke; the moment releases start arriving, every one of
+those handlers fires twice — once going down, once coming up. Turning the flag on is
+therefore also a promise to check the kind:
+
+```scala
+.onKeyEvent { event =>
+  if !event.isPress then false // let the release bubble past this handler
+  else event.code match
+    case KeyCode.Char(' ') => fire(); true
+    case _                 => false
+}
+```
+
+Pattern matching a key event is unaffected: `case KeyEvent(KeyCode.Enter, mods)` still
+matches on the code and the modifiers alone, and reads the kind from `event.kind` when
+it cares. That is why the two-position pattern in every example still compiles.
+
 ## One command, several keys
 
 When a command answers to more than one key — a vim-flavoured app where `j` and the
