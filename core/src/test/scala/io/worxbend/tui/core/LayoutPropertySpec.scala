@@ -35,6 +35,30 @@ final class LayoutPropertySpec extends AnyFunSuite with ScalaCheckPropertyChecks
       rects.zip(rects.drop(1)).foreach { (a, b) => assert(b.x >= a.right, s"$b overlaps $a") }
     }
 
+  /** The non-overlap property above pins the default rule; an explicit `Spacing.Overlap(k)` is the one way to opt out
+    * of it, and it must opt out by exactly `k` and no further.
+    */
+  test("an overlap shares at most the cells it asked for, and still fits the area"):
+    val genOverlapCase: Gen[(Seq[Constraint], Int, Int)] =
+      for
+        constraints <- Gen.nonEmptyListOf(genConstraint).map(_.take(6))
+        total       <- Gen.chooseNum(0, 120)
+        overlap     <- Gen.chooseNum(0, 4)
+      yield (constraints, total, overlap)
+
+    forAll(genOverlapCase) { case (constraints, total, overlap) =>
+      val area  = Rect(3, 5, total, 4)
+      val rects = Layout(Direction.Horizontal, constraints).spaced(Spacing.Overlap(overlap)).split(area)
+      assert(rects.size == constraints.size)
+      rects.foreach { r =>
+        assert(r.x >= area.x && r.right <= area.right, s"$r outside $area")
+        assert(r.width >= 0)
+      }
+      rects.zip(rects.drop(1)).foreach { (a, b) =>
+        assert(b.x >= a.right - overlap, s"$b shares more than $overlap cells with $a")
+      }
+    }
+
   test("solving is deterministic"):
     forAll(genCase) { case (constraints, total, spacing) =>
       val area = Rect(0, 0, total, 1)

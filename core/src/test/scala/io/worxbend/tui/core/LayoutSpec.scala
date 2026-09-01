@@ -93,3 +93,58 @@ final class LayoutSpec extends AnyFunSuite:
     val (v, wide, x, y, z) = layout.split5(area)
     assert(Seq(a, b, c, d) == segments.take(4))
     assert(Seq(v, wide, x, y, z) == segments)
+
+  test("Spacing.Overlap makes adjacent segments share cells"):
+    // two 4-wide segments in a 7-wide area: the second starts at 3, so column 3 belongs to both. That shared column is
+    // where two bordered blocks put one border line instead of two.
+    val rects = Layout(Direction.Horizontal, Seq(Constraint.Length(4), Constraint.Length(4)))
+      .spaced(Spacing.Overlap(1))
+      .split(Rect(0, 0, 7, 1))
+    assert(rects == Seq(Rect(0, 0, 4, 1), Rect(3, 0, 4, 1)))
+
+  test("Spacing.Overlap works the same way down a column"):
+    val rects = Layout(Direction.Vertical, Seq(Constraint.Length(3), Constraint.Length(3)))
+      .spaced(Spacing.Overlap(1))
+      .split(Rect(2, 1, 6, 5))
+    assert(rects == Seq(Rect(2, 1, 6, 3), Rect(2, 3, 6, 3)))
+
+  test("Spacing.Overlap(0) and Spacing.Gap(0) are the same layout"):
+    val constraints = Seq(Constraint.Length(3), Constraint.Length(3))
+    val area        = Rect(0, 0, 8, 1)
+    val overlap     = Layout(Direction.Horizontal, constraints).spaced(Spacing.Overlap(0))
+    val gap         = Layout(Direction.Horizontal, constraints).spaced(Spacing.Gap(0))
+    assert(overlap.split(area) == gap.split(area))
+    assert(overlap.split(area) == Layout(Direction.Horizontal, constraints).split(area))
+
+  test("Spacing.Gap behaves exactly like the spacing field"):
+    val constraints = Seq(Constraint.Length(2), Constraint.Length(2))
+    val area        = Rect(0, 0, 9, 1)
+    val explicit    = Layout(Direction.Horizontal, constraints).spaced(Spacing.Gap(3))
+    val field       = Layout(Direction.Horizontal, constraints, spacing = 3)
+    assert(explicit.split(area) == field.split(area))
+
+  test("a negative cell count in either Spacing case is clamped to zero"):
+    // the sign lives in the case you chose, never in the number, so nobody gets an overlap from a stray minus
+    assert(Spacing.Gap(-4).signed == 0)
+    assert(Spacing.Overlap(-4).signed == 0)
+    assert(Spacing.none.signed == 0)
+
+  test("an overlap deeper than a segment never places one outside the area"):
+    val rects = Layout(Direction.Horizontal, Seq(Constraint.Length(2), Constraint.Length(2), Constraint.Length(2)))
+      .spaced(Spacing.Overlap(9))
+      .split(Rect(4, 0, 6, 1))
+    assert(rects.forall(rect => rect.x >= 4 && rect.right <= 10 && rect.width >= 0))
+
+  test("an overlap stays inside the area under a centring flex mode"):
+    for mode <- Seq(Flex.Center, Flex.End, Flex.SpaceBetween, Flex.SpaceAround, Flex.SpaceEvenly) do
+      val rects = Layout(Direction.Horizontal, Seq(Constraint.Length(4), Constraint.Length(4)), flex = mode)
+        .spaced(Spacing.Overlap(2))
+        .split(Rect(0, 0, 10, 1))
+      assert(rects.forall(rect => rect.x >= 0 && rect.right <= 10), s"$mode placed a segment outside the area")
+
+  test("overlapping segments report no room between them"):
+    val (_, spacers) = Layout(Direction.Horizontal, Seq(Constraint.Length(4), Constraint.Length(4)))
+      .spaced(Spacing.Overlap(1))
+      .splitWithSpacers(Rect(0, 0, 7, 1))
+    // the shared column belongs to both neighbours; it is not a gap, so the spacer between them is empty
+    assert(spacers.map(_.width) == Seq(0, 0, 0))

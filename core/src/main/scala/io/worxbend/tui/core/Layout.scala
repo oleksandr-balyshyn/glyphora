@@ -8,26 +8,40 @@ package io.worxbend.tui.core
   *
   * When the fixed demands exceed the available space, trailing segments are truncated (possibly to zero width) rather
   * than failing — consistent with the library-wide silent-clipping philosophy. A negative `spacing` is treated as zero
-  * for the same reason: segments that overlap are not a layout anyone can render, and `LayoutSolver` already clamps
+  * for the same reason: a negative number in that field is almost always a mistake, and `LayoutSolver` already clamps
   * every constraint input it reads rather than propagating a negative.
+  *
+  * Overlapping segments *are* reachable, but only by asking for them by name. Set `between` to a [[Spacing.Overlap]]
+  * and each segment is pulled back over the one before it so the two share that many columns or rows — which is how two
+  * bordered blocks come to share one border line instead of drawing two adjacent ones. `between` takes precedence over
+  * `spacing` when it is set, and `spacing` is what every layout that has not heard of `between` keeps using.
   */
 final case class Layout(
     direction: Direction,
     constraints: Seq[Constraint],
     spacing: Int = 0,
     flex: Flex = Flex.Start,
+    between: Option[Spacing] = None,
 ):
 
-  /** [[spacing]] as the layout actually spends it. Read by every step that budgets or places a gap, so a negative
-    * spacing cannot deduct space in one step and hand it back as an overlap in the next.
-    */
+  /** [[spacing]] as the layout actually spends it, when no [[between]] was given. */
   private val gap: Int = math.max(0, spacing)
+
+  /** How far the layout advances past the end of one segment before starting the next.
+    *
+    * Positive inserts a gap, negative shares cells. Every step that budgets or places a gap reads this one value, so a
+    * layout cannot deduct space in one step and hand it back as an overlap in the next — which is exactly the bug the
+    * negative-`spacing` clamp was written to prevent.
+    */
+  private val step: Int = between.map(_.signed).getOrElse(gap)
 
   def split(area: Rect): Seq[Rect] =
     if constraints.isEmpty then Seq.empty
     else
       val total     = axisExtent(area)
-      val available = math.max(0, total - gap * (constraints.size - 1))
+      // a negative step is an overlap, which hands the solver *more* room than the axis has, because the segments will
+      // be laid down sharing cells rather than each taking their own
+      val available = math.max(0, total - step * (constraints.size - 1))
       val sizes     = LayoutSolver.solve(constraints, available)
       layOutSegments(area, sizes, total)
 
@@ -46,6 +60,9 @@ final case class Layout(
     * A zero-extent spacer is normal and needs no special case at the call site: it is what adjacent segments with no
     * spacing produce, and every widget renders an empty rectangle as nothing. When `constraints` is empty both results
     * are empty — there are no segments, so there is nothing for a gap to sit between.
+    *
+    * Under a [[Spacing.Overlap]] every inner spacer is zero-extent, because overlapping segments leave no room between
+    * them to report. The shared cells belong to both neighbours and are not a gap.
     *
     * @return
     *   the segments, then the spacers.
@@ -135,7 +152,8 @@ final case class Layout(
     var offset               = axisStart + leading
     sizes.indices.map { i =>
       val size        = sizes(i)
-      val start       = math.min(offset, axisEnd)
+      // clamped at both ends: an overlap deeper than the previous segment must not walk the cursor back out of the area
+      val start       = math.max(axisStart, math.min(offset, axisEnd))
       val clampedSize = math.max(0, math.min(size, axisEnd - start))
       val gapAfter    = if i < sizes.size - 1 then gaps(i) else 0
       offset = start + size + gapAfter
@@ -149,9 +167,9 @@ final case class Layout(
     */
   private def flexOffsets(sizes: IndexedSeq[Int], total: Int): (Int, IndexedSeq[Int]) =
     val segmentCount = sizes.size
-    val baseGaps     = gap * math.max(0, segmentCount - 1)
+    val baseGaps     = step * math.max(0, segmentCount - 1)
     val free         = math.max(0, total - sizes.sum - baseGaps)
-    val betweens     = IndexedSeq.fill(math.max(0, segmentCount - 1))(gap)
+    val betweens     = IndexedSeq.fill(math.max(0, segmentCount - 1))(step)
     if free == 0 then (0, betweens)
     else
       flex match
@@ -178,7 +196,12 @@ final case class Layout(
       val extra = LayoutSolver.distributeRemainder(total % parts, IndexedSeq.fill(parts)(0.0))
       (0 until parts).map(i => base + extra(i)).toIndexedSeq
 
-  private def addSpacing(gaps: IndexedSeq[Int]): IndexedSeq[Int] = gaps.map(_ + gap)
+  private def addSpacing(gaps: IndexedSeq[Int]): IndexedSeq[Int] = gaps.map(_ + step)
+
+  /** This layout with `spacing` replaced by an explicit [[Spacing]], so `Layout.horizontal(4, 4).spaced(Overlap(1))`
+    * reads at the call site as what it does.
+    */
+  def spaced(spacing: Spacing): Layout = copy(between = Some(spacing))
 
 object Layout:
   /** Constraint shorthand: a plain `Int` means `Length(cells)`, a `Double` means a fraction of the whole (`0.5` →

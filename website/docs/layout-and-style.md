@@ -232,6 +232,40 @@ spacing produce, and every widget renders an empty rectangle as nothing, so ther
 nothing to special-case. A layout with no constraints returns no segments and no
 spacers.
 
+## Share a border between two blocks
+
+Two bordered blocks placed next to each other draw two border lines that sit side by
+side — a doubled-up seam down the middle. The usual fix in a terminal UI is to let them
+*share* one column, so the right block's left border lands exactly on the left block's
+right border. That is what `Spacing.Overlap` does:
+
+```scala
+import io.worxbend.tui.core.*
+import io.worxbend.tui.widgets.{Block, Borders}
+
+val (left, right) = Layout
+  .horizontal(Constraint.Length(10), Constraint.Length(10))
+  .spaced(Spacing.Overlap(1))
+  .split2(buffer.area)
+
+Block(borders = Borders.All).render(left, buffer)
+Block(borders = Borders.All).render(right, buffer)
+```
+
+Two ten-wide blocks then occupy nineteen columns rather than twenty, and column 9 holds
+one vertical line instead of two.
+
+`Spacing` has two cases and no sign convention: `Gap(n)` inserts `n` empty cells between
+segments — the same thing `Layout`'s `spacing` field has always done — and `Overlap(n)`
+pulls them together by `n`. A negative number in either case is clamped to zero, because
+the direction is carried by the case you picked, never by the sign of the number. That
+also means `Layout(…, spacing = -2)` still means "no spacing", as it always has; asking
+for an overlap is something you have to say out loud.
+
+An overlap can never place a segment outside the area, however deep it is or whichever
+`Flex` mode is in play. And `splitWithSpacers` reports every inner spacer as empty under
+an overlap: the shared cells belong to both neighbours, so they are not a gap.
+
 ## Style elements fluently
 
 Styling calls return a new element, so they chain naturally and never mutate a
