@@ -20,8 +20,8 @@ import io.worxbend.tui.core.{KeyEvent, MouseEvent, MouseEventKind, Rect}
   *
   * Where overlapping *handler-carrying* siblings compete, the last-painted one wins: containers paint children in
   * order, so the position filter walks them in reverse and the pointer resolves to the topmost subtree covering it.
-  * That ordering does not extend to focusables — those are resolved by `FocusTracker.hitTest`, which picks the smallest
-  * covering area and knows nothing of z-order.
+  * Focusables follow the same rule by a different route: `FocusTracker` stamps every area it records with the paint
+  * sequence it was recorded at, and `FocusTracker.hitTest` returns the last-painted focusable covering the pointer.
   *
   * A subtree marked `props.inert` — every layer a modal or the command palette covers — is skipped by all four walks:
   * it receives no event and supplies neither a focus path nor a hit-test path.

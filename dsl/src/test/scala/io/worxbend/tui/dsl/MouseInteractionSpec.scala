@@ -181,7 +181,7 @@ final class MouseInteractionSpec extends AnyFunSuite:
     assert(tracker.areaOf(0).contains(Rect(4, 1, 36, 11))) // the scroll view's own area is already a screen area
     assert(tracker.areaOf(2).contains(Rect(4, 4, 35, 1)))  // button A, translated onto the screen
     assert(tracker.areaOf(1).isEmpty)                      // button TOP is scrolled above the viewport
-    assert(tracker.hitTest(Position(6, 4)).contains(2))    // and beats the enclosing scroll view on area
+    assert(tracker.hitTest(Position(6, 4)).contains(2))    // and beats the enclosing scroll view on paint order
     assert(tracker.hitTest(Position(1, 8)).isEmpty) // the old content-space coordinates hit nothing
 
   test("a slider inside a scrollView positions from its on-screen area"):

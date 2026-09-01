@@ -417,3 +417,55 @@ final class FocusSpec extends AnyFunSuite:
   test("a FilledElement measures what it wraps unless it carries a length of its own"):
     assert(FilledElement(text("a\nb\nc"), Style.Default).intrinsicHeight(20).contains(3))
     assert(FilledElement(text("a\nb\nc"), Style.Default).length(1).intrinsicHeight(20).contains(1))
+
+  test("a click resolves to the focusable painted last, not the one with the smallest area"):
+    // Paint order, not rectangle size, decides which focusable a pointer lands on. Index 0 here is a small rectangle
+    // recorded first (something drawn underneath) and index 1 a large one recorded after it that covers the same cell
+    // (an overlay drawn on top). The overlay is what the user sees at (3, 3), so it is what the click belongs to.
+    val tracker = FocusTracker()
+    tracker.record(0, Rect(2, 2, 4, 2))
+    tracker.record(1, Rect(0, 0, 20, 10))
+    assert(tracker.hitTest(Position(3, 3)).contains(1))
+
+  test("reversing the paint order reverses which focusable a click resolves to"):
+    // The same two rectangles recorded the other way round: the small one is now painted last, so it wins. Without
+    // this pair the previous test would also pass under the old "smallest covering area" rule for the wrong reason.
+    val tracker = FocusTracker()
+    tracker.record(0, Rect(0, 0, 20, 10))
+    tracker.record(1, Rect(2, 2, 4, 2))
+    assert(tracker.hitTest(Position(3, 3)).contains(1))
+
+  test("a focusable painted inside another still wins the click, because a child paints after its parent"):
+    // The nesting case the old rule got right has to keep working: rendering a real tree assigns the enclosing panel
+    // its area before the button inside it, so the button carries the greater paint sequence.
+    val tracker = FocusTracker()
+    val root    = scrollView(column(button("press me")(())), contentHeight = 2, ScrollViewState())
+    tracker.reconcile(FocusPass.focusKeys(root), FocusPass.autofocusRequest(root))
+    val tree    = FocusPass.decorate(root, tracker, Style.Default)
+    val area    = Rect(0, 0, 20, 4)
+    tree.widget.render(area, Buffer(area))
+    assert(tracker.hitTest(Position(2, 0)).contains(1)) // 0 is the scroll view, 1 the button drawn inside it
+
+  test("clearing the recorded areas restarts the paint sequence for the next frame"):
+    // The counter has to be reset with the areas. If it kept climbing across frames the comparison would still be
+    // correct, but the first frame after a very long session could overflow; resetting keeps it bounded by the number
+    // of focusables in one frame.
+    val tracker = FocusTracker()
+    tracker.record(0, Rect(0, 0, 20, 10))
+    tracker.record(1, Rect(2, 2, 4, 2))
+    tracker.clearAreas()
+    tracker.record(0, Rect(0, 0, 20, 10))
+    assert(tracker.hitTest(Position(3, 3)).contains(0))
+    assert(tracker.areaOf(1).isEmpty)
+
+  test("an area recorded through a scroll viewport is hit-testable at its screen position"):
+    // A record that clips to nothing is not stored and must not consume a paint sequence either; one that survives the
+    // clip is stored at its translated screen rectangle.
+    val tracker = FocusTracker()
+    tracker.pushViewport(ViewportTransform(0, -5, Rect(0, 0, 20, 4)))
+    tracker.record(0, Rect(0, 6, 20, 1)) // content row 6, two rows into the viewport once the offset is applied
+    tracker.record(1, Rect(0, 0, 20, 1)) // content row 0 is scrolled above the viewport and clips away
+    tracker.popViewport()
+    assert(tracker.areaOf(0).contains(Rect(0, 1, 20, 1)))
+    assert(tracker.areaOf(1).isEmpty)
+    assert(tracker.hitTest(Position(3, 1)).contains(0))

@@ -22,6 +22,16 @@ private[dsl] final case class ViewportTransform(dx: Int, dy: Int, viewport: Rect
   */
 private[dsl] final case class MouseHit(focusIndex: Int, area: Rect)
 
+/** Where a focusable rendered this frame, and *when* in the frame's paint order it rendered.
+  *
+  * `sequence` is a counter that [[FocusTracker.record]] bumps on every recorded area and [[FocusTracker.clearAreas]]
+  * resets at the start of each frame. A container paints itself before its children and paints its children in order,
+  * so a larger `sequence` means "painted later", and on a terminal — where every cell holds exactly one character —
+  * painted later means painted *over*. That makes the greatest sequence covering a cell the thing the user actually
+  * sees there, which is the rule [[FocusTracker.hitTest]] resolves a click by.
+  */
+private[dsl] final case class PaintedArea(area: Rect, sequence: Int)
+
 /** An element in the tree about to render asking to be given focus: where it sits in the tab order, and what identifies
   * it across renders.
   *
@@ -58,9 +68,12 @@ private[dsl] final class FocusTracker:
     */
   private var focusKeysSeen = Vector.empty[Option[String]]
   private var lastAutofocus = Option.empty[AutofocusRequest]
-  private val areas         = mutable.Map[Int, Rect]()
+  private val areas         = mutable.Map[Int, PaintedArea]()
   private val pointerAreas  = mutable.Map[Int, Rect]()
   private var viewports     = List.empty[ViewportTransform]
+
+  /** How many areas have been recorded so far this frame; the paint sequence the next [[record]] stamps. */
+  private var paintCounter = 0
 
   /** Records where `index` rendered, mapped out of any offscreen scroll buffers it rendered inside: translated into
     * screen coordinates and clipped to every enclosing viewport. A focusable scrolled out of view clips to nothing and
@@ -69,7 +82,9 @@ private[dsl] final class FocusTracker:
     */
   def record(index: Int, area: Rect): Unit =
     val onScreen = onScreenArea(area)
-    if !onScreen.isEmpty then areas(index) = onScreen
+    if !onScreen.isEmpty then
+      areas(index) = PaintedArea(onScreen, paintCounter)
+      paintCounter += 1
 
   /** Records where an element that carries an `onMouseEvent` but is not focusable rendered, so mouse delivery can be
     * filtered by pointer position the way click-to-focus already is. Keyed by the pointer id the decoration pass
@@ -96,6 +111,7 @@ private[dsl] final class FocusTracker:
   def clearAreas(): Unit =
     areas.clear()
     pointerAreas.clear()
+    paintCounter = 0
     viewports = Nil
 
   /** Re-anchors focus against the focus keys of the tree that is about to render (depth-first order, `None` for unkeyed
@@ -224,16 +240,23 @@ private[dsl] final class FocusTracker:
     focusedIndex = if focusableCount > 0 then math.max(0, math.min(index, focusableCount - 1)) else 0
     focusedKey = None
 
-  def areaOf(index: Int): Option[Rect] = areas.get(index)
+  def areaOf(index: Int): Option[Rect] = areas.get(index).map(_.area)
 
   def pointerAreaOf(id: Int): Option[Rect] = pointerAreas.get(id)
 
-  /** The innermost focusable rendered at `pos`, if any. `pos` is absolute, the same coordinate space a
-    * [[io.worxbend.tui.core.MouseEvent]] reports in.
+  /** The focusable the user can actually *see* at `pos`, if any: of every focusable covering that cell, the one painted
+    * last. `pos` is absolute, the same coordinate space a [[io.worxbend.tui.core.MouseEvent]] reports in.
+    *
+    * Before, this picked the smallest covering rectangle instead. That rule assumes the innermost rectangle is also the
+    * visible one, which holds inside a single subtree — a button nested in a panel is both smaller and painted later —
+    * but fails between `layers`: a modal panel drawn over a small button underneath it is the *larger* rectangle, so a
+    * click on the modal was handed to the button the modal hides. Paint order answers both cases with one rule, and it
+    * is the same rule [[EventRouter]] already uses for overlapping handler-carrying siblings, so the two halves of hit
+    * testing no longer disagree.
     */
   def hitTest(pos: Position): Option[Int] =
-    val hits = areas.filter((_, area) => area.contains(pos))
-    hits.minByOption((_, area) => area.area).map((index, _) => index)
+    val hits = areas.filter((_, painted) => painted.area.contains(pos))
+    hits.maxByOption((_, painted) => painted.sequence).map((index, _) => index)
 
 private[dsl] object FocusPass:
 
