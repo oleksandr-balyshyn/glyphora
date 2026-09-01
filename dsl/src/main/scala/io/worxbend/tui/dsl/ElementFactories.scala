@@ -208,7 +208,7 @@ private[dsl] trait ElementFactories:
     * An item is either a plain `String` or a styled [[Line]], and the two may be mixed in one call, so a single row can
     * be red or dimmed without splitting the list. Call `.highlightSymbol("→ ")` to replace the `> ` selection marker.
     */
-  def list(items: Seq[String | Line], state: w.ListState): ListElement =
+  def list(items: Seq[String | Line | Text], state: w.ListState): ListElement =
     ListElement(items, state)
 
   /** A collapsible tree over caller-owned [[w.TreeState]] — same state ownership rules as [[list]]. */

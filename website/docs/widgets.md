@@ -584,10 +584,10 @@ reserved on every row, counted in terminal columns rather than in characters, so
 two-column marker such as `"▶ "` gives up two columns of text and nothing shifts sideways
 when the selection moves.
 
-An item in a list is either a plain `String` or a styled `Line`, and the two may be mixed
-in the same call. A plain string is drawn in the element's own style; a `Line` carries its
-own — that is how one row goes red while the rest stay as they were, without splitting the
-list in two:
+An item in a list is a plain `String`, a styled `Line`, or a whole `Text`, and the three
+may be mixed in the same call. A plain string is drawn in the element's own style; a `Line`
+carries its own — that is how one row goes red while the rest stay as they were, without
+splitting the list in two:
 
 ```scala
 list(
@@ -599,6 +599,27 @@ list(
   selected,
 ).highlightSymbol("▶ ")
 ```
+
+A `Text` item is how one entry takes several rows — a title with a dimmed subtitle under
+it being the usual reason. Everything the list counts still counts *items*, not rows: one
+press of Down moves past the whole block, and the scroll offset is an item index.
+
+```scala
+list(
+  Seq[String | Line | Text](
+    Text(Seq(Line.raw("deploy"), Line(Seq(Span("finished 4m ago", Style.Default.dim))))),
+    "rollback",
+  ),
+  selected,
+)
+```
+
+An entry that occupies more rows than the pane has left is drawn from its top and cut off
+at the bottom edge, so it is never hidden entirely. The `> ` marker points at the item, so
+it is drawn on the entry's first row only; pass `repeatHighlightSymbol = true` to
+`ListView` for a marker on every row of the selection instead, which suits an entry whose
+rows are a list of their own. An empty `Text` still takes one blank row, because an item
+that drew nothing could still be selected and an invisible selection is worse than a blank.
 
 A list normally starts at the top row of its area and grows downward, so a list with
 three entries in a ten-row pane leaves seven blank rows underneath it. A chat transcript

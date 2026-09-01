@@ -43,3 +43,50 @@ private[widgets] object ScrollWindow:
         // the selection is caller-owned, so clamp rather than trust it: an index outside the content must never become
         // an offset outside the content, because callers index their content with the result directly.
         math.max(0, math.min(nudged, maxOffset))
+
+  /** The offset to render at when the items are not all the same height — [[offsetFor]]'s counterpart for a list whose
+    * rows come in blocks, such as a [[ListView]] carrying multi-line items.
+    *
+    * `heights` is one row count per item, in order, and the answer is still an *item* index, not a row: the caller
+    * slices its items with it exactly as it would with [[offsetFor]]. The rule is the same one — clamp, then nudge by
+    * the smallest amount that brings the selection into view — expressed in rows rather than in indices:
+    *
+    *   - the offset is clamped to the last item at which the remaining items still fill the viewport, so the list never
+    *     scrolls past its own end and leave blank rows below with content above;
+    *   - with a selection above the window, the window moves up to start at the selection;
+    *   - with a selection whose last row falls below the window, the offset advances one item at a time until the
+    *     selection's last row fits, stopping at the selection itself so an item taller than the whole viewport still
+    *     shows its top rather than scrolling off entirely.
+    *
+    * With every height equal to one this returns exactly what [[offsetFor]] with no padding returns; a list of uniform
+    * items cannot tell the two apart. Padding has no counterpart here on purpose: "keep two more items visible" is not
+    * a fixed number of rows when items differ in height, so a caller that wants it should reach for [[offsetFor]] on a
+    * uniform list rather than get a rule that means something different on every frame.
+    */
+  def offsetForItems(offset: Int, selected: Option[Int], heights: Seq[Int], viewportHeight: Int): Int =
+    val count = heights.size
+    if count == 0 || viewportHeight <= 0 then 0
+    else
+      val rows      = heights.map(height => math.max(1, height)).toArray
+      // the largest offset whose remaining items still fill the viewport: walk back from the end while they fit
+      val maxOffset =
+        var index = count
+        var taken = 0
+        while index > 0 && taken + rows(index - 1) <= viewportHeight do
+          taken += rows(index - 1)
+          index -= 1
+        index
+      val clamped   = math.max(0, math.min(offset, maxOffset))
+      selected match
+        case None        => clamped
+        case Some(index) =>
+          val target = math.max(0, math.min(index, count - 1))
+          if clamped > target then target
+          else
+            // rows between the window start and the end of the selected item; advance the window until they fit
+            var start = clamped
+            var span  = (start to target).map(rows).sum
+            while span > viewportHeight && start < target do
+              span -= rows(start)
+              start += 1
+            start

@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{KeyCode, KeyEvent, Line, MouseEvent, MouseEventKind, Rect, Widget}
+import io.worxbend.tui.core.{KeyCode, KeyEvent, Line, MouseEvent, MouseEventKind, Rect, Text, Widget}
 import io.worxbend.tui.widgets as w
 
 import java.nio.file.Path
@@ -10,12 +10,14 @@ import java.nio.file.Path
   *
   * `direction` says which edge the rows are anchored to — call [[bottomToTop]] for the chat-transcript shape.
   *
-  * An item is either a plain `String` or a styled [[Line]], and the two may be mixed in one list — the same union
-  * [[w.ListView]] itself accepts. A plain string is the common case and needs no ceremony; a `Line` is how a single row
-  * carries its own colour (a red failure, a dimmed disabled entry) or several styles at once.
+  * An item is a plain `String`, a styled [[Line]], or a whole [[Text]], and the three may be mixed in one list — the
+  * same union [[w.ListView]] itself accepts. A plain string is the common case and needs no ceremony; a `Line` is how a
+  * single row carries its own colour (a red failure, a dimmed disabled entry) or several styles at once; a `Text` is
+  * how one item takes several rows, a title with a dimmed subtitle under it being the usual reason. Selection and the
+  * keyboard moves count items, not rows, so one press of Down still moves past a whole multi-row item.
   */
 final case class ListElement(
-    items: Seq[String | Line],
+    items: Seq[String | Line | Text],
     state: w.ListState,
     direction: w.ListDirection = w.ListDirection.TopToBottom,
     highlightSpacing: w.HighlightSpacing = w.HighlightSpacing.Always,

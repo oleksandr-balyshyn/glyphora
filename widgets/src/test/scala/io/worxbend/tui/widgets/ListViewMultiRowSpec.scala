@@ -1,0 +1,106 @@
+package io.worxbend.tui.widgets
+
+import io.worxbend.tui.core.{Color, Line, Style, Text}
+import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
+
+import org.scalatest.funsuite.AnyFunSuite
+
+/** Items that occupy more than one row: how they are drawn, where the marker goes, and how the scroll offset — which
+  * counts items, not rows — keeps a tall selection on screen.
+  */
+final class ListViewMultiRowSpec extends AnyFunSuite:
+
+  private def text(lines: String*): Text = Text(lines.map(Line.raw))
+
+  private val mixed = ListView(Seq("one", text("two", "two-sub"), "three"))
+
+  test("a multi-line item takes one row per line and pushes the next item down"):
+    val buffer = rendered(mixed, ListState(), 12, 4)
+    assert(trimmedLines(buffer) == Seq("  one", "  two", "  two-sub", "  three"))
+
+  test("an empty text still takes one row, so the item stays selectable"):
+    val widget = ListView(Seq("one", Text.Empty, "three"))
+    val buffer = rendered(widget, ListState(selected = Some(1)), 12, 3)
+    assert(trimmedLines(buffer) == Seq("  one", ">", "  three"))
+
+  test("the marker is drawn once per selected item by default"):
+    val buffer = rendered(mixed, ListState(selected = Some(1)), 12, 4)
+    assert(trimmedLines(buffer) == Seq("  one", "> two", "  two-sub", "  three"))
+
+  test("repeatHighlightSymbol draws the marker on every row of the selected item"):
+    val widget = mixed.copy(repeatHighlightSymbol = true)
+    val buffer = rendered(widget, ListState(selected = Some(1)), 12, 4)
+    assert(trimmedLines(buffer) == Seq("  one", "> two", "> two-sub", "  three"))
+
+  test("the highlight style covers every row of a selected multi-row item"):
+    val widget = ListView(Seq("one", text("two", "two-sub")), highlightStyle = Style.fg(Color.Red))
+    val buffer = rendered(widget, ListState(selected = Some(1)), 12, 3)
+    assert(buffer.get(2, 1).style.fg.contains(Color.Red))
+    assert(buffer.get(2, 2).style.fg.contains(Color.Red))
+    assert(!buffer.get(2, 0).style.fg.contains(Color.Red))
+
+  test("an item taller than the viewport renders from its top rather than disappearing"):
+    val widget = ListView(Seq("head", text("a", "b", "c", "d", "e")))
+    val state  = ListState(selected = Some(1))
+    val buffer = rendered(widget, state, 12, 3)
+    assert(state.offset == 1)
+    assert(trimmedLines(buffer) == Seq("> a", "  b", "  c"))
+
+  test("selecting a later item scrolls until its last row is visible"):
+    val widget = ListView(Seq(text("a", "a2"), text("b", "b2"), "c"))
+    val state  = ListState(selected = Some(2))
+    val buffer = rendered(widget, state, 12, 3)
+    assert(state.offset == 1)
+    assert(trimmedLines(buffer) == Seq("  b", "  b2", "> c"))
+
+  test("a wide-character item is clipped by display width, not by character count"):
+    val widget = ListView(Seq(text("你好世界")))
+    val buffer = rendered(widget, ListState(), 6, 1)
+    assert(trimmedLines(buffer) == Seq("  你好"))
+
+  test("a one-row-per-item list is unaffected by the multi-row arithmetic"):
+    val widget = ListView(Seq("alpha", "beta", "gamma", "delta"))
+    val state  = ListState(selected = Some(3))
+    val buffer = rendered(widget, state, 10, 3)
+    assert(state.offset == 1)
+    assert(trimmedLines(buffer) == Seq("  beta", "  gamma", "> delta"))
+
+  test("a zero-height area draws nothing and does not throw"):
+    val buffer = rendered(mixed, ListState(selected = Some(1)), 12, 0)
+    assert(trimmedLines(buffer).isEmpty)
+
+  test("heightAt reports the summed item heights"):
+    assert(mixed.heightAt(20).contains(4))
+
+/** The row-counting scroll rule on its own. */
+final class ScrollWindowItemsSpec extends AnyFunSuite:
+
+  test("uniform heights agree with the index-based rule"):
+    val heights = Seq.fill(10)(1)
+    (0 until 10).foreach { selected =>
+      assert(
+        ScrollWindow.offsetForItems(0, Some(selected), heights, 4) ==
+          ScrollWindow.offsetFor(0, Some(selected), heights.size, 4)
+      )
+    }
+
+  test("no selection leaves a clamped offset alone"):
+    assert(ScrollWindow.offsetForItems(1, None, Seq(2, 2, 2), 4) == 1)
+    assert(ScrollWindow.offsetForItems(9, None, Seq(2, 2, 2), 4) == 1)
+
+  test("an empty list and a zero-height viewport answer zero"):
+    assert(ScrollWindow.offsetForItems(3, Some(1), Seq.empty, 5) == 0)
+    assert(ScrollWindow.offsetForItems(3, Some(1), Seq(1, 1), 0) == 0)
+
+  test("a selection above the window pulls the window up to it"):
+    assert(ScrollWindow.offsetForItems(2, Some(0), Seq(1, 1, 1, 1), 2) == 0)
+
+  test("a selection taller than the viewport stops at its own top"):
+    assert(ScrollWindow.offsetForItems(0, Some(1), Seq(1, 5), 3) == 1)
+
+  test("an out-of-range selection is clamped rather than trusted"):
+    assert(ScrollWindow.offsetForItems(0, Some(99), Seq(1, 1, 1), 2) == 1)
+    assert(ScrollWindow.offsetForItems(0, Some(-4), Seq(1, 1, 1), 2) == 0)
+
+  test("a height of zero is treated as one row so an item is never skipped"):
+    assert(ScrollWindow.offsetForItems(0, Some(2), Seq(0, 0, 0), 2) == 1)
