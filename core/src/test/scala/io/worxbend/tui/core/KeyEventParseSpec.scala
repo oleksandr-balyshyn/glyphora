@@ -163,3 +163,19 @@ final class KeyEventParseSpec extends AnyFunSuite:
     assert(KeyEvent.parse("ctrl+menu") == Right(KeyEvent(KeyCode.Menu, KeyModifiers.Ctrl)))
     assert(KeyCode.Menu.text.isEmpty)
     assert(KeyCode.CapsLock.text.isEmpty)
+
+  test("'backtab' names the same event as 'shift+tab'"):
+    assert(KeyEvent.parse("backtab") == Right(KeyEvent(KeyCode.Tab, KeyModifiers.Shift)))
+    assert(KeyEvent.parse("backtab") == KeyEvent.parse("shift+tab"))
+
+  test("'backtab' is case-insensitive and unchanged by an explicit shift"):
+    assert(KeyEvent.parse("BackTab") == KeyEvent.parse("backtab"))
+    assert(KeyEvent.parse("shift+backtab") == KeyEvent.parse("backtab"))
+
+  test("'ctrl+backtab' keeps ctrl alongside the shift the alias implies"):
+    assert(KeyEvent.parse("ctrl+backtab") == Right(KeyEvent(KeyCode.Tab, KeyModifiers.Ctrl | KeyModifiers.Shift)))
+    assert(KeyEvent.parse("ctrl+backtab") == KeyEvent.parse("ctrl+shift+tab"))
+
+  test("'backtab' is an alias, not a new key: nothing else changes about tab"):
+    assert(KeyEvent.parse("tab") == Right(KeyEvent(KeyCode.Tab, KeyModifiers.None)))
+    assert(KeyEvent.parse("backtabx").isLeft)

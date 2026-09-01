@@ -22,6 +22,13 @@ final class GrammarSpec extends AnyFunSuite:
     assert(Key.f(5).shift == KeyEvent(KeyCode.F(5), KeyModifiers.Shift))
     assert(Key.shift(Key.Tab) == Key.BackTab)
 
+  /** The `Key` constants and the string spec vocabulary are two names for the same events, and they drift apart
+    * silently: a binding written with a spec no parser understands never fires and never complains.
+    */
+  test("both spec spellings of back-tab name the Key.BackTab constant"):
+    assert(KeyEvent.parse("backtab") == Right(Key.BackTab))
+    assert(KeyEvent.parse("shift+tab") == Right(Key.BackTab))
+
   test("modifier suffixes compose and are idempotent"):
     assert(Key.char('p').ctrl.shift == KeyEvent(KeyCode.Char('p'), KeyModifiers.Ctrl | KeyModifiers.Shift))
     assert(Key.char('p').ctrl.shift == Key.char('p').shift.ctrl)

@@ -93,7 +93,8 @@ One `KeyBinding` supplies:
 Descriptions should be short verbs: “open project” is easier to scan than “project
 opening functionality.” `KeyEvent.parse` — the one parser in `tui-core` that reads
 these strings — accepts printable keys, named keys, and modifiers such as `ctrl+s`,
-`alt+enter`, and `shift+tab`. `Pilot.press` in a test takes the same strings, so a
+`alt+enter`, and `shift+tab` (which also answers to `backtab`, the name most terminals
+give that key). `Pilot.press` in a test takes the same strings, so a
 test presses what the app declared rather than a hand-translated `KeyEvent`.
 
 Two characters are both syntax and keys, and the parser resolves each in favour of the

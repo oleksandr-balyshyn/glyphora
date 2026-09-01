@@ -7,13 +7,18 @@ import io.worxbend.tui.core.{KeyCode, KeyEvent, KeyModifiers, Style}
   */
 object Key:
 
-  val Up: KeyEvent        = KeyEvent.of(KeyCode.Up)
-  val Down: KeyEvent      = KeyEvent.of(KeyCode.Down)
-  val Left: KeyEvent      = KeyEvent.of(KeyCode.Left)
-  val Right: KeyEvent     = KeyEvent.of(KeyCode.Right)
-  val Enter: KeyEvent     = KeyEvent.of(KeyCode.Enter)
-  val Escape: KeyEvent    = KeyEvent.of(KeyCode.Escape)
-  val Tab: KeyEvent       = KeyEvent.of(KeyCode.Tab)
+  val Up: KeyEvent     = KeyEvent.of(KeyCode.Up)
+  val Down: KeyEvent   = KeyEvent.of(KeyCode.Down)
+  val Left: KeyEvent   = KeyEvent.of(KeyCode.Left)
+  val Right: KeyEvent  = KeyEvent.of(KeyCode.Right)
+  val Enter: KeyEvent  = KeyEvent.of(KeyCode.Enter)
+  val Escape: KeyEvent = KeyEvent.of(KeyCode.Escape)
+  val Tab: KeyEvent    = KeyEvent.of(KeyCode.Tab)
+
+  /** Shift+Tab, the key that moves focus backwards. `KeyEvent.parse` names this same event from either of two spec
+    * spellings: `"shift+tab"`, which describes what the terminal reports, and `"backtab"`, the name most terminals and
+    * toolkits give the key.
+    */
   val BackTab: KeyEvent   = KeyEvent(KeyCode.Tab, KeyModifiers.Shift)
   val Backspace: KeyEvent = KeyEvent.of(KeyCode.Backspace)
   val Delete: KeyEvent    = KeyEvent.of(KeyCode.Delete)

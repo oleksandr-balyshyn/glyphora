@@ -190,8 +190,8 @@ assert(pilot.awaitTermination())
 ```
 
 `press` takes **the same key specs `binding` takes** — `"q"`, `"ctrl+s"`,
-`"shift+tab"`, `"esc"`, `"f2"`, `"up"`, `"+"`. Both go through the one parser in
-`tui-core`, so a test presses the string the application was written against instead
+`"shift+tab"` (or its alias `"backtab"`), `"esc"`, `"f2"`, `"up"`, `"+"`. Both go
+through the one parser in `tui-core`, so a test presses the string the application was written against instead
 of a hand-translated `KeyEvent` that can drift away from it. Pass several specs to
 post several key events in order. A spec that does not parse throws
 `IllegalArgumentException` naming the spec and what is wrong with it, exactly as a

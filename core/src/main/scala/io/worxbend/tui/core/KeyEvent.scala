@@ -62,6 +62,9 @@ object KeyEvent:
     * Surrounding whitespace is stripped as a formatting convenience, with the same caveat `+` has: the space bar is a
     * key, so `" "` names it and so does the tail of `"ctrl+ "`. `"space"` remains the readable spelling.
     *
+    * One key name is an alias rather than a key of its own: `"backtab"` is the widely used name for Shift+Tab, and
+    * parses to exactly what `"shift+tab"` parses to — see [[backTabAlias]].
+    *
     * Five Ctrl combinations are rejected rather than parsed — see [[UnreachableCtrlKeys]].
     *
     * @return
@@ -83,10 +86,26 @@ object KeyEvent:
       val keyName                 = dropPadding(rawKeyName, leadingOnly = false)
       if keyName.isEmpty then Left("no key name (only modifiers)")
       else
-        keyCodeFor(keyName).flatMap { code =>
-          val folded = foldCtrl(code, modifiers)
-          unreachable(folded, modifiers).toLeft(KeyEvent(folded, modifiers))
-        }
+        backTabAlias(keyName, modifiers) match
+          case Some(event) => Right(event)
+          case None        =>
+            keyCodeFor(keyName).flatMap { code =>
+              val folded = foldCtrl(code, modifiers)
+              unreachable(folded, modifiers).toLeft(KeyEvent(folded, modifiers))
+            }
+
+  /** `backtab` is the name terminals and most other toolkits use for Shift+Tab — the key that moves focus backwards.
+    *
+    * glyphora reports that key as [[KeyCode.Tab]] with [[KeyModifiers.Shift]], which `"shift+tab"` already names, so
+    * this is an alias and not a new key. It exists so that a reader who knows the key by its other name writes a spec
+    * that fires rather than one the parser rejects as an unknown key.
+    *
+    * It is resolved here, in [[parse]], rather than in [[keyCodeFor]], because it names a code *and* a modifier and a
+    * `KeyCode` result cannot carry the modifier half. Any modifiers written in front of it are kept, so
+    * `"ctrl+backtab"` is Ctrl+Shift+Tab — exactly what `"ctrl+shift+tab"` already produces.
+    */
+  private def backTabAlias(keyName: String, modifiers: KeyModifiers): Option[KeyEvent] =
+    Option.when(keyName.equalsIgnoreCase("backtab"))(KeyEvent(KeyCode.Tab, modifiers | KeyModifiers.Shift))
 
   /** Strips a spec's whitespace padding — but never all of it, because a value that is *only* whitespace is the space
     * key rather than padding. Leading padding comes off before the modifier scan so `"ctrl+ "` keeps its trailing space
