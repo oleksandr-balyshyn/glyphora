@@ -66,6 +66,13 @@ private[terminal] object AnsiSequences:
   val PopKittyKeyboard: String  = s"$Esc[<u"
   val LinkClose: String         = s"$Esc]8;;$Esc\\"
 
+  /** DECSTBM with no parameters: the scrolling region becomes the whole screen again.
+    *
+    * Idempotent, like the mode resets it sits beside in [[RestoreAll]] — resetting a region that was never set does
+    * nothing at all.
+    */
+  val ResetScrollRegion: String = s"$Esc[r"
+
   /** DECSC (`ESC 7`), "save cursor": stores the cursor position, and the terminal's own graphic-rendition and
     * character-set state, in a one-slot register.
     *
@@ -88,9 +95,13 @@ private[terminal] object AnsiSequences:
   /** Every mode the backend can turn on, turned off, in reverse acquisition order.
     *
     * Emitted verbatim by the shutdown hook straight to the process's stdout descriptor, so a terminal left dressed up
-    * by a signal-terminated process is still handed back usable. Every sequence here is a DEC private-mode *reset*
-    * (XTerm `ctlseqs.ms`, "DEC Private Mode Reset"), which is idempotent — resetting a mode that was never set is a
-    * no-op, so the hook needs no knowledge of what was actually enabled.
+    * by a signal-terminated process is still handed back usable. Almost every sequence here is a DEC private-mode
+    * *reset* (XTerm `ctlseqs.ms`, "DEC Private Mode Reset"), which is idempotent — resetting a mode that was never set
+    * is a no-op, so the hook needs no knowledge of what was actually enabled. [[ResetScrollRegion]] is the exception in
+    * form only: DECSTBM with no parameters is not a private-mode reset, but it is idempotent in exactly the same way,
+    * and it belongs here for exactly the same reason. A process killed while a scrolling region was set would otherwise
+    * leave the user's *shell* scrolling inside a sub-rectangle of their terminal, which is the class of damage this
+    * string exists to prevent.
     *
     * [[EndSynchronized]] leads. A frame is written as one `?2026h` … `?2026l` pair (see `JLine3Backend.draw`), which
     * asks the terminal to hold everything back until the closing half arrives so a half-drawn frame is never shown. A
@@ -99,7 +110,7 @@ private[terminal] object AnsiSequences:
     * at once, and closing one that was never opened does nothing.
     */
   val RestoreAll: String =
-    s"$EndSynchronized$DisableMouseCapture$ShowCursor$LeaveAlternateScreen$PopKittyKeyboard" +
+    s"$EndSynchronized$DisableMouseCapture$ShowCursor$LeaveAlternateScreen$ResetScrollRegion$PopKittyKeyboard" +
       s"$DisableFocusReporting$DisableBracketedPaste$ResetStyle"
 
   /** OSC 8 hyperlink opener; pair every open with [[LinkClose]].
@@ -161,6 +172,26 @@ private[terminal] object AnsiSequences:
     * cursor is and does not move it. `n <= 0` produces the empty string, so a caller computing a delta needs no guard.
     */
   def scrollUp(n: Int): String = if n <= 0 then "" else s"$Esc[${n}S"
+
+  /** SD — scrolls the whole screen (or the current scrolling region) down by `n` rows, blanking the rows exposed at the
+    * top (XTerm `ctlseqs.ms`, "Scroll Down"). The mirror of [[scrollUp]]; rows pushed off the bottom are lost, since
+    * only the top of the screen has scrollback. `n <= 0` produces the empty string.
+    */
+  def scrollDown(n: Int): String = if n <= 0 then "" else s"$Esc[${n}T"
+
+  /** DECSTBM — confines scrolling to rows `top`..`bottom` inclusive, zero-based (the sequence itself is one-based).
+    *
+    * A "scrolling region" is the band of rows a scroll is allowed to move. With one set, [[scrollUp]] shifts only the
+    * rows inside the band and leaves everything above and below exactly as it was. That is what lets lines be inserted
+    * above a live interface without repainting the interface: confine the scroll to the rows above it, scroll them, and
+    * write into the space that opened up.
+    *
+    * Two things every caller has to know. Setting a region homes the cursor (DEC STD 070), so follow this with an
+    * explicit [[moveTo]] rather than assuming the cursor stayed where it was. And a region left set makes the *user's
+    * shell* scroll inside a sub-rectangle of their terminal after the app exits, so pair every call with
+    * [[ResetScrollRegion]] — which is why [[RestoreAll]] carries one too.
+    */
+  def setScrollRegion(top: Int, bottom: Int): String = s"$Esc[${top + 1};${bottom + 1}r"
 
   /** Full SGR sequence for `style`, starting from a reset so no previous attribute leaks through; colors are
     * downsampled to what `depth` can display.

@@ -174,8 +174,18 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   an *inline* viewport is built from — a UI that lives below the shell prompt on the
   primary screen instead of taking over the terminal — and it is meaningless on the
   alternate screen, which has no scrollback.
-  Both are defaulted no-ops on the trait, so a backend written before they existed
-  still compiles.
+  `scrollRegionUp(top, bottom, lines)` and `scrollRegionDown(...)` do the same thing
+  to a *band* of rows: a scrolling region (DECSTBM) tells the terminal that only rows
+  `top`..`bottom` may move, so lines can be pushed off the top of part of the screen
+  while a live interface below stays exactly where it is and is never repainted. The
+  band is set, scrolled and released inside the one call — a region left set makes the
+  user's own shell scroll inside a sub-rectangle of their terminal after the app exits
+  — and setting one homes the cursor on most terminals, so the implementation puts the
+  cursor back itself. A band that is not on the screen is a programmer error and
+  throws; a scroll distance of zero or less is a no-op. Terminals that do not honour
+  DECSTBM ignore the sequence, so this is best-effort.
+  All of these are defaulted no-ops on the trait, so a backend written before they
+  existed still compiles.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`
   and `org.jline:jline-terminal-jni` 3.30.x, pinned. Those two rather than the
   `org.jline:jline` bundle: this layer uses four JLine types and never asks JLine to

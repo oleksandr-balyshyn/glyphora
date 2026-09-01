@@ -373,6 +373,50 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
         requestFullRedraw()
       }
 
+  override def scrollRegionUp(top: Int, bottom: Int, lines: Int): Either[BackendError, Unit] =
+    scrollRegion(top, bottom, lines, AnsiSequences.scrollUp)
+
+  override def scrollRegionDown(top: Int, bottom: Int, lines: Int): Either[BackendError, Unit] =
+    scrollRegion(top, bottom, lines, AnsiSequences.scrollDown)
+
+  /** The shared body of the two scrolling-region operations: confine, scroll, release, repaint.
+    *
+    * Three details carry the whole thing.
+    *
+    * The region is reset in the same write as it was set. A terminal left with a scrolling region belongs to the app
+    * that set it for as long as the terminal lives, and this library must never be the reason a user's shell scrolls
+    * inside a box after the app exits.
+    *
+    * The cursor is put back afterwards. Setting a region homes the cursor on essentially every terminal (DEC STD 070),
+    * so without the closing `moveTo` the next frame's first cell would be written relative to a cursor that had
+    * silently jumped to the top-left corner.
+    *
+    * A full repaint is requested. The scroll moves rows the diff baseline still describes in their old places, and a
+    * diff against that baseline would leave every moved row unwritten — the same reasoning, and the same mechanism, as
+    * [[appendLines]].
+    *
+    * Under `screenOwnership` for the same reason [[draw]] is: this must not land between the two halves of someone
+    * else's screen handover.
+    */
+  private def scrollRegion(
+      top: Int,
+      bottom: Int,
+      lines: Int,
+      scroll: Int => String,
+  ): Either[BackendError, Unit] =
+    Backend.checkScrollRegion(top, bottom, currentSize.height)
+    if lines <= 0 then Right(())
+    else
+      attempt {
+        screenOwnership.synchronized {
+          write(
+            AnsiSequences.setScrollRegion(top, bottom) + scroll(lines) + AnsiSequences.ResetScrollRegion +
+              AnsiSequences.moveTo(0, top)
+          )
+        }
+        requestFullRedraw()
+      }
+
   /** Restores the terminal and releases the JLine handle, reporting the first step that failed.
     *
     * Every step is attempted whatever the earlier ones did — stopping at the first failure would leave the terminal

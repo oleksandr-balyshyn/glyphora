@@ -209,6 +209,37 @@ trait Backend:
     val _ = n
     Right(())
 
+  /** Scrolls rows `top`..`bottom` (inclusive, zero-based) up by `lines`, leaving every row outside that band alone.
+    *
+    * A *scrolling region* is a band of rows the terminal treats as the only rows a scroll may move — DECSTBM in the
+    * standards, `CSI top;bottom r` on the wire. It is what makes it possible to push content off the top of part of the
+    * screen without repainting the rest: confine the scroll to the rows above a live interface, scroll them, and the
+    * interface below is untouched. [[appendLines]] is the same operation with no band at all, which moves everything.
+    *
+    * The band is set, scrolled and reset inside this one call, so no caller can leave the terminal confined to it — a
+    * region left set is a terminal whose *shell* scrolls inside a sub-rectangle after the app exits. Setting a region
+    * also homes the cursor on most terminals, so an implementation must restore the cursor itself and callers must not
+    * assume it stayed where it was.
+    *
+    * Must run on the render thread. `lines <= 0` is a no-op rather than a failure, so a caller computing a delta needs
+    * no guard of its own; a band that is not on the screen at all is a programmer error and is rejected by
+    * [[Backend.checkScrollRegion]], which every implementation with a real screen calls so that they all reject the
+    * same nonsense identically. The default is a successful no-op, for a backend with no screen to scroll; a terminal
+    * that does not honour DECSTBM ignores the sequence, so this is best-effort even where it is implemented.
+    */
+  def scrollRegionUp(top: Int, bottom: Int, lines: Int): Either[BackendError, Unit] =
+    val _ = (top, bottom, lines)
+    Right(())
+
+  /** As [[scrollRegionUp]], in the other direction: the band's rows move down and the blank rows appear at `top`.
+    *
+    * What leaves the bottom of the band is gone — only the top of the screen has scrollback — so this is for making
+    * room, not for preserving anything.
+    */
+  def scrollRegionDown(top: Int, bottom: Int, lines: Int): Either[BackendError, Unit] =
+    val _ = (top, bottom, lines)
+    Right(())
+
   /** Restores the terminal and releases everything this backend owns.
     *
     * Fallible like every other operation here, because the failure it can report is the most user-visible one the
@@ -234,6 +265,21 @@ private[terminal] object Backend:
     */
   def requirePositiveTimeout(timeout: Duration): Unit =
     require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
+
+  /** Enforces the band [[Backend.scrollRegionUp]] and [[Backend.scrollRegionDown]] document: `top` on the screen,
+    * `bottom` at or below `top`, and `bottom` still on a screen `height` rows tall.
+    *
+    * A `throw` rather than a `Left` because none of these is a condition a caller can recover from — the numbers name a
+    * band that does not exist, which is a bug in the code that computed them, and a terminal handed such a band puts
+    * the user's shell into a scrolling region of its own invention. It lives here, next to
+    * [[Backend.requirePositiveTimeout]], for the same reason that one does: every implementation must reject the
+    * identical set of arguments, or a band that slipped past one backend and not the other becomes a defect that only
+    * reproduces on a real terminal.
+    */
+  def checkScrollRegion(top: Int, bottom: Int, height: Int): Unit =
+    require(top >= 0, s"a scrolling region starts on the screen, got top=$top")
+    require(bottom >= top, s"a scrolling region's last row is not above its first, got top=$top bottom=$bottom")
+    require(bottom < height, s"a scrolling region ends on the screen, got bottom=$bottom for a height of $height")
 
   /** The text of `buffer`, one string per row, with trailing blanks removed.
     *
