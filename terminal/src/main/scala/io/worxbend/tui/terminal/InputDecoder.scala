@@ -82,10 +82,20 @@ private[terminal] final class InputDecoder(
   private[terminal] def readCursorReport(timeoutMillis: Long): Option[Position] =
     awaitingCursorReport = true
     reportedCursor = None
-    val deadline = System.nanoTime() + timeoutMillis * NanosPerMilli
+    // An infinite timeout arrives here as `Long.MaxValue` milliseconds, and `Long.MaxValue * 1_000_000` does not fit
+    // in a `Long`: it wraps round to a small negative number. The deadline was then a moment about a millisecond in
+    // the *past*, the loop below never ran a single time, and the query answered "the terminal cannot report its
+    // cursor position" without ever having waited for the answer. So a wait too large to express in nanoseconds is
+    // treated as what it means — wait until the reply arrives — rather than converted into a negative one.
+    val unbounded = timeoutMillis >= InputDecoder.MaxWaitMillis
+    val deadline  = if unbounded then Long.MaxValue else System.nanoTime() + timeoutMillis * NanosPerMilli
     try
-      while reportedCursor.isEmpty && System.nanoTime() < deadline do
-        val remaining = math.max(1L, (deadline - System.nanoTime()) / NanosPerMilli)
+      while reportedCursor.isEmpty && (unbounded || System.nanoTime() < deadline) do
+        // an unbounded wait still reads in bounded steps, so the loop keeps its shape and each read has a sane
+        // timeout to hand the terminal
+        val remaining =
+          if unbounded then InputDecoder.UnboundedPollMillis
+          else math.max(1L, (deadline - System.nanoTime()) / NanosPerMilli)
         decodeOnce(remaining).foreach(event => deferred.enqueue(event))
       reportedCursor
     finally awaitingCursorReport = false
@@ -679,6 +689,17 @@ private[terminal] object InputDecoder:
     * one that hangs, and neither points at the arithmetic.
     */
   private val NanosPerMilli = 1000000L
+
+  /** The largest millisecond wait that still converts to nanoseconds inside a `Long`. Anything at or above it — an
+    * infinite timeout above all, which reaches [[readCursorReport]] as `Long.MaxValue` — is treated as "wait until the
+    * reply arrives" rather than multiplied into a negative deadline.
+    */
+  private val MaxWaitMillis = Long.MaxValue / NanosPerMilli
+
+  /** How long one read of an unbounded wait blocks for before looping. Long enough that waiting costs nothing, short
+    * enough that a thread parked here is not parked in a way a debugger cannot make sense of.
+    */
+  private val UnboundedPollMillis = 1000L
 
   /** kitty's super, hyper and meta bits, none of which [[KeyModifiers]] can express. */
   private val UnrepresentableModifiers = 8 | 16 | 32

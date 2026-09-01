@@ -104,3 +104,17 @@ final class CursorReportSpec extends AnyFunSuite:
     // it has no terminal to ask, and inventing a position would let a test pass while the real app drew in the wrong
     // place — the failure has to be visible
     assert(HeadlessBackend(Size(20, 5)).queryCursorPosition(50.millis).isLeft)
+
+  test("an unbounded wait still reads the reply that arrives after a few empty reads"):
+    // `Duration.Inf` reaches the decoder as Long.MaxValue milliseconds. Multiplying that by a million to get nanos
+    // does not fit in a Long: it wrapped round to a small negative number, so the deadline was about a millisecond
+    // in the *past*, the wait loop never ran once, and the query reported "this terminal cannot answer" instantly.
+    val script  = Seq.fill(3)(-2) ++ csi("5;9R") // three timed-out reads, then the report
+    val chars   = script.iterator
+    val decoder = InputDecoder(_ => if chars.hasNext then chars.next() else -2)
+    assert(decoder.readCursorReport(Long.MaxValue) == Some(Position(8, 4)))
+
+  test("Duration.Inf reaches the decoder as a wait that actually waits"):
+    // the backend converts an infinite timeout to Long.MaxValue milliseconds, so that is the value the fix has to
+    // survive; anything above roughly 292 years overflows the same way
+    assert(Long.MaxValue * 1000000L < 0) // the overflow itself, stated so the reason for the guard is on the record
