@@ -45,6 +45,27 @@ final class ListViewSpec extends AnyFunSuite:
     state.selectPrevious(4)
     assert(state.selected.contains(0))
 
+  test("clearSelection also scrolls back to the top"):
+    val state = ListState(selected = Some(3), offset = 2)
+    state.clearSelection()
+    assert(state.selected.isEmpty)
+    assert(state.offset == 0)
+
+  test("rendering an emptied list clears the stale selection instead of keeping it for later"):
+    val state = ListState(selected = Some(2), offset = 1)
+    val _     = rendered(ListView(Seq.empty), state, 10, 3)
+    assert(state.selected.isEmpty)
+    assert(state.offset == 0)
+    // and when items come back the highlight starts from nothing rather than reappearing on an unrelated row
+    val buffer = rendered(widget, state, 10, 3)
+    assert(trimmedLines(buffer) == Seq("  alpha", "  beta", "  gamma"))
+
+  test("an empty area leaves the state alone, because the list was never drawn"):
+    val state = ListState(selected = Some(2), offset = 1)
+    val _     = rendered(ListView(Seq.empty), state, 0, 0)
+    assert(state.selected.contains(2))
+    assert(state.offset == 1)
+
   test("selectLast scrolls to the bottom without the state ever touching the offset"):
     val fifty = ListView((0 until 50).map(index => s"item-$index"))
     val state = ListState()

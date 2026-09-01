@@ -25,6 +25,18 @@ final class ListState(var selected: Option[Int] = None, var offset: Int = 0, var
   def selectPrevious(itemCount: Int): Unit =
     if itemCount > 0 then selected = Selection.previous(selected, itemCount)
 
+  /** Drops the selection *and* scrolls back to the top.
+    *
+    * Setting `selected = None` on its own leaves `offset` wherever the last selection had scrolled it, so a list the
+    * app has just deselected — after deleting the highlighted row, or clearing a search — keeps showing whatever page
+    * it happened to be on with nothing highlighted on it. "No selection" and "back to the top" are the same intent in
+    * every case this library has seen, so this method does both; an app that genuinely wants one without the other
+    * can still write the two fields directly.
+    */
+  def clearSelection(): Unit =
+    selected = None
+    offset = 0
+
   /** Selects the first item — the Home key's move. A no-op on an empty list. */
   def selectFirst(itemCount: Int): Unit =
     if itemCount > 0 then selected = Selection.first(itemCount)
@@ -74,7 +86,12 @@ final case class ListView(
       case line: Line      => line
 
   def render(area: Rect, buffer: Buffer, state: ListState): Unit =
-    if !area.isEmpty && items.nonEmpty then
+    if !area.isEmpty && items.isEmpty then
+      // a list that has been emptied — a filter matched nothing, the last row was deleted — used to keep its stale
+      // selection and offset, which reappeared the moment items came back and pointed at whatever now sat at that
+      // index. Nothing can be selected in an empty list, so repair the state rather than leaving it to the app.
+      state.clearSelection()
+    else if !area.isEmpty then
       val selected    = state.selected.map(index => math.max(0, math.min(index, items.size - 1)))
       state.selected = selected
       state.offset = ScrollWindow.offsetFor(state.offset, selected, items.size, area.height, state.scrollPadding)

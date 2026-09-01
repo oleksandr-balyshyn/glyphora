@@ -372,7 +372,9 @@ the first and last item, and PageUp/PageDown move it ten rows at a time. Those f
 jumps are also available on the state object as `selectFirst`, `selectLast` and
 `selectBy` (which takes a signed number of rows), so an app can bind its own keys to
 them. None of them touches the scroll offset: the list re-derives that during the next
-render, which is what scrolls the chosen row into view. A `dataTable` gains the
+render, which is what scrolls the chosen row into view. `clearSelection()` drops the
+selection *and* scrolls back to the top — setting `selected = None` on its own would
+leave the list parked on a page with nothing highlighted on it. A `dataTable` gains the
 same four moves, except that a table with paging turned on keeps PageUp/PageDown for
 turning pages.
 
