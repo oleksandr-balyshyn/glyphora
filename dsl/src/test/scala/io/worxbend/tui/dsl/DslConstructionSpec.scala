@@ -132,9 +132,15 @@ final class DslConstructionSpec extends AnyFunSuite:
     assert(ticker.claim.vertical == Constraint.Length(1))
 
   test("onKeyEvent attaches a handler without disturbing the rest of the props"):
-    val handler: KeyEvent => Boolean = _ => true
+    // the stored handler is not the one passed in: `onKeyEvent` composes with whatever the element already carried,
+    // so what is asserted is that the handler runs, not that the same function object is in the slot
+    var ran                          = false
+    val handler: KeyEvent => Boolean = _ =>
+      ran = true
+      true
     val element                      = text("x").bold.onKeyEvent(handler)
-    assert(element.props.onKey.contains(handler))
+    assert(element.props.onKey.exists(_(Key.Enter)))
+    assert(ran)
     assert(element.style.modifiers.hasAny(Modifiers.Bold))
 
   test("key events route to the innermost handler first and consumption stops propagation"):

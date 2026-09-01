@@ -351,12 +351,21 @@ extension [E <: Element](element: E)
   def bg(c: Color): element.Self = element.styled(_.withBg(c))
 
   /** A handler returning `true` consumes the event; `false` lets it continue to the next candidate.
+    *
+    * Handlers compose rather than replace one another: the most recently added runs first, and its `false` falls
+    * through to whatever was already on the element. That is what lets a helper hand back an element with a binding on
+    * it and a call site add a second binding without silently erasing the first — which is what a plain overwrite did,
+    * with no error and no warning to say so. `onKey` in [[Grammar]] has always composed this way; this is the raw
+    * builder catching up with it.
     */
   def onKeyEvent(handler: KeyEvent => Boolean): element.Self =
-    element.withProps(element.props.copy(onKey = Some(handler)))
+    val previous = element.props.onKey
+    element.withProps(element.props.copy(onKey = Some(event => handler(event) || previous.exists(_(event)))))
 
+  /** A mouse handler, composing with any already on the element exactly as [[onKeyEvent]] does. */
   def onMouseEvent(handler: MouseEvent => Boolean): element.Self =
-    element.withProps(element.props.copy(onMouse = Some(handler)))
+    val previous = element.props.onMouse
+    element.withProps(element.props.copy(onMouse = Some(event => handler(event) || previous.exists(_(event)))))
 
   /** Opts a non-interactive element into the tab order (interactive elements are focusable by default). */
   def focusable: element.Self =

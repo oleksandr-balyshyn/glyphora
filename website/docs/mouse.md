@@ -248,6 +248,41 @@ release as well as the press, so a right-button drag-and-release reports `Right`
 Built-in click behavior — a `button`, a `checkbox`, a `toggle` — fires on `MouseButton.Left`
 only. A right-click over one of those controls is left unconsumed and keeps bubbling, so your
 own handler, or an ancestor's, can open a menu instead of the button firing underneath it.
+### One kind at a time
+
+Most handlers care about exactly one kind of action, and writing that as a `match` means
+remembering to return `false` for everything else — forget it and the element swallows
+the wheel and every drag. A set of builders does the matching for you. Each runs on its
+kinds and consumes them, and hands everything else to the handler the element already
+carried, so it keeps travelling:
+
+```scala
+panel("Canvas")(canvasView)
+  .onClickAt(position => selectedCell.set((position.x, position.y)))
+  .onScroll(up = zoom.update(_ + 1), down = zoom.update(_ - 1))
+```
+
+| Builder | Fires on |
+|---|---|
+| `.onClick` | a button press (`Down`), with no argument |
+| `.onClickAt` | the same press, told which cell it landed on |
+| `.onScroll` | a wheel turn — both directions are taken together, because a wheel that scrolls one way only is a bug |
+| `.onDrag` | motion with a button held (`Drag`) |
+| `.onDragEnd` | the release that ends a drag (`Up`) |
+| `.onHover` | motion with no button held (`Moved`) |
+
+`.onHover` only ever fires under all-motion tracking, which the backend requests when an
+app asks for it; under plain button-event tracking a terminal reports motion only while a
+button is down, so a hover cue must never be the only way to reach something.
+
+### Handlers compose
+
+Two `.onKeyEvent` or `.onMouseEvent` calls on one element both run. The most recently
+added goes first, and its `false` falls through to the one already there; the first
+`true` stops the chain. The per-kind builders follow the same rule, so they compose with
+each other and with a raw handler. That is what lets a helper hand back an element with a
+binding on it and a call site add a second binding without erasing the first.
+
 
 ## Built-in mouse behavior
 
