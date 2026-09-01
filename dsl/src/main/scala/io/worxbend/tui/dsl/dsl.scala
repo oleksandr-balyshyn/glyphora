@@ -44,7 +44,6 @@ export Element.{
   markdown,
   marquee,
   marqueeAt,
-  maskedInput,
   menu,
   notice,
   numberInput,
