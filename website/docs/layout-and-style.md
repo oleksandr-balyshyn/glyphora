@@ -262,6 +262,53 @@ progress-and-spinner family reads `loading`, and `markdown` renders through
 because the focus pass stamps the theme's cue onto the whole tree rather than onto the
 one element holding the keyboard. See [The app shell](./app-shell) for live switching.
 
+## Colors from text, and back again
+
+A color does not have to be written in Scala. `Color.parse` reads the three
+spellings a configuration or theme file is likely to contain, and returns
+`Either[String, Color]` — a `Left` carries a message naming what it could not
+read, so a bad line is something your program reports rather than an exception
+it has to catch:
+
+```scala
+Color.parse("bright cyan")  // Right(Color.BrightCyan)
+Color.parse("#1e88e5")      // Right(Color.Rgb(30, 136, 229))
+Color.parse("214")          // Right(Color.Indexed(214))
+Color.parse("puce")         // Left("'puce' is not a color name, a hex color like #rrggbb, ...")
+```
+
+Names ignore case and the separators a hand-written name may carry, so
+`BrightRed`, `bright red`, `bright-red`, `light_red` and `brightred` are all the
+same color. `light` is accepted anywhere `bright` is; `grey`, `gray` and
+`dark grey` name `BrightBlack`, and `silver` names `White`.
+
+A run of one to three digits is always read as an xterm palette index, never as
+a hex color: `120` is `Indexed(120)`. Write the `#` when you mean the color
+`#120`.
+
+The `.render` method is the inverse — it writes a color in the spelling `parse`
+reads back, which is what you want when saving a theme rather than the
+compiler-generated `toString`:
+
+```scala
+Color.BrightBlue.render      // "BrightBlue"
+Color.rgb(255, 136, 0).render // "#ff8800"
+Color.Indexed(214).render     // "214"
+```
+
+Every string `.render` writes parses back to an equal color. The other direction
+is lossy, because many spellings name one color.
+
+For a table of palette constants written as hex literals, `Color.fromInt` is the
+total counterpart of `Color.hex`: it takes a packed `0x00RRGGBB` integer and
+always succeeds, so no `Option` has to be unwrapped to initialise a `val`.
+`Color.toInt` (or the `.packed` method) goes the other way.
+
+```scala
+val Surface = Color.fromInt(0x1e293b)
+val Accent  = Color.fromInt(0xf8fafc)
+```
+
 ## Avoid common layout surprises
 
 - A constraint applies along the **parent container's direction**: `.length(10)` is

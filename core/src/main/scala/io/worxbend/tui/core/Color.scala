@@ -1,5 +1,7 @@
 package io.worxbend.tui.core
 
+import java.util.Locale
+
 import scala.annotation.targetName
 
 /** A terminal color: the 16 named ANSI colors (8 standard + 8 bright), a 24-bit RGB value, or a 256-color palette
@@ -37,6 +39,141 @@ object Color:
       // #rgb expands each nibble to a byte: `f` -> `ff`
       Some(Rgb(expandNibble(digits.charAt(0)), expandNibble(digits.charAt(1)), expandNibble(digits.charAt(2))))
     else None
+
+  /** Builds an [[Rgb]] color from a packed `0x00RRGGBB` integer — the shape a hex literal takes in source code:
+    * `Color.fromInt(0xf8fafc)`. The top eight bits are ignored, so every `Int` names a color and this never fails,
+    * unlike [[hex]], which reads text and answers `None` for anything malformed. Being total is what lets it fill in a
+    * table of palette constants without an unsafe `.get` on an `Option`.
+    */
+  def fromInt(packed: Int): Color =
+    Rgb((packed >> 16) & 0xff, (packed >> 8) & 0xff, packed & 0xff)
+
+  /** The `0x00RRGGBB` packing of `color`, taken through [[approximateRgb]] — so a named or indexed color answers with
+    * the palette value it approximates to, and the top byte is always zero. Round-trips with [[fromInt]] for any
+    * [[Rgb]] whose channels are already in `0..255`.
+    */
+  def toInt(color: Color): Int =
+    val (r, g, b) = approximateRgb(color)
+    (r << 16) | (g << 8) | b
+
+  /** Reads a color written the way a configuration or theme file writes one. Three forms are accepted:
+    *
+    *   - '''A name''': `reset`, `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, and the eight
+    *     bright variants. Matching ignores case and the separators a hand-written name may carry, so `BrightRed`,
+    *     `bright red`, `bright-red`, `light_red` and `brightred` are one and the same [[BrightRed]]. `light` is
+    *     accepted everywhere `bright` is, because both spellings are in common use. `grey`, `gray`, `dark grey` and
+    *     `dark gray` name [[BrightBlack]] — the mid grey a terminal shows for "bright black" — and `silver` names
+    *     [[White]].
+    *   - '''A hex color''', exactly what [[hex]] accepts: `#rrggbb`, `rrggbb`, `#rgb`, `rgb`.
+    *   - '''A bare xterm palette index''' in `0..255`, such as `42`, giving an [[Indexed]].
+    *
+    * A string of one to three decimal digits is always read as a palette index, never as hex: `120` is `Indexed(120)`,
+    * and a caller who means the color `#120` writes the `#`. That ordering is what the author of a configuration file
+    * expects, and it is why `999` is rejected rather than quietly becoming the grey `#999`.
+    *
+    * Failure is a `Left` carrying a message that names the rejected input — the same shape `KeyEvent.parse` uses — so a
+    * bad line in a theme file is something the caller reports rather than an exception it has to catch. Every string
+    * the `render` extension method writes parses back to an equal color; the reverse is lossy, since many spellings
+    * share one color.
+    */
+  def parse(value: String): Either[String, Color] =
+    val trimmed = value.trim
+    if trimmed.isEmpty then Left("cannot read a color from an empty string")
+    else if isDecimalRun(trimmed) then
+      // a run of up to three digits is read as a palette index and nothing else, so `999` is an out-of-range index
+      // rather than the grey `#999` — the reading the writer of the string did not ask for
+      paletteIndex(trimmed).toRight(s"'$value' is not a palette index in 0..255")
+    else
+      namedColor(canonicalName(trimmed))
+        .orElse(hex(trimmed))
+        .toRight(s"'$value' is not a color name, a hex color like #rrggbb, or a palette index in 0..255")
+
+  /** Writes a color in the spelling [[parse]] reads back — the implementation behind the `render` extension method
+    * below, which is how callers reach it. It is private and separately named because an extension method in this
+    * companion is itself a one-argument `render`, so a public `Color.render(color)` beside it would be an ambiguous
+    * overload of the very method delegating to it.
+    */
+  private def renderText(color: Color): String =
+    color match
+      case Rgb(r, g, b)   =>
+        val (cr, cg, cb) = approximateRgb(Rgb(r, g, b))
+        f"#$cr%02x$cg%02x$cb%02x"
+      case Indexed(index) => math.max(0, math.min(255, index)).toString
+      case Reset          => "Reset"
+      case Black          => "Black"
+      case Red            => "Red"
+      case Green          => "Green"
+      case Yellow         => "Yellow"
+      case Blue           => "Blue"
+      case Magenta        => "Magenta"
+      case Cyan           => "Cyan"
+      case White          => "White"
+      case BrightBlack    => "BrightBlack"
+      case BrightRed      => "BrightRed"
+      case BrightGreen    => "BrightGreen"
+      case BrightYellow   => "BrightYellow"
+      case BrightBlue     => "BrightBlue"
+      case BrightMagenta  => "BrightMagenta"
+      case BrightCyan     => "BrightCyan"
+      case BrightWhite    => "BrightWhite"
+
+  /** Lowercases a written name and drops the separators it may carry, so `Bright_Red`, `bright red` and `bright-red`
+    * all reduce to the one key [[namedColor]] matches on.
+    *
+    * `Locale.ROOT`, not the default locale: in a Turkish locale `"Indexed".toLowerCase` is `"ındexed"`, with a dotless
+    * i, which would match nothing — the same trap `KeyEvent.parse` avoids the same way.
+    */
+  private def canonicalName(value: String): String =
+    value.toLowerCase(Locale.ROOT).filterNot(c => c == ' ' || c == '-' || c == '_')
+
+  private def namedColor(key: String): Option[Color] =
+    key match
+      case "reset"                                   => Some(Reset)
+      case "black"                                   => Some(Black)
+      case "red"                                     => Some(Red)
+      case "green"                                   => Some(Green)
+      case "yellow"                                  => Some(Yellow)
+      case "blue"                                    => Some(Blue)
+      case "magenta"                                 => Some(Magenta)
+      case "cyan"                                    => Some(Cyan)
+      case "white" | "silver"                        => Some(White)
+      case "grey" | "gray" | "darkgrey" | "darkgray" => Some(BrightBlack)
+      case other                                     => brightVariant(other)
+
+  /** The `bright`/`light` half of the sixteen-color set. Both prefixes name the SGR 90–97 codes; terminals and
+    * configuration files disagree about which word to use, so both are read. `bright grey`/`light grey` are the one
+    * pair that is not a `Bright*` case: a terminal's "bright grey" is plain [[White]].
+    */
+  private def brightVariant(key: String): Option[Color] =
+    val base =
+      if key.startsWith("bright") then Some(key.drop("bright".length))
+      else if key.startsWith("light") then Some(key.drop("light".length))
+      else None
+    base.flatMap:
+      case "black"         => Some(BrightBlack)
+      case "red"           => Some(BrightRed)
+      case "green"         => Some(BrightGreen)
+      case "yellow"        => Some(BrightYellow)
+      case "blue"          => Some(BrightBlue)
+      case "magenta"       => Some(BrightMagenta)
+      case "cyan"          => Some(BrightCyan)
+      case "white"         => Some(BrightWhite)
+      case "grey" | "gray" => Some(White)
+      case _               => None
+
+  /** Whether `value` is written the way a palette index is: one to three decimal digits and nothing else. A sign or any
+    * non-digit disqualifies it, so `#12` and `-1` are read as the other forms instead of quietly becoming palette
+    * entries, and a six-digit run like `123456` is still read as hex.
+    */
+  private def isDecimalRun(value: String): Boolean =
+    value.nonEmpty && value.length <= MaxIndexDigits && value.forall(c => c >= '0' && c <= '9')
+
+  /** The palette entry `value` names, or `None` when the number is outside `0..255`. */
+  private def paletteIndex(value: String): Option[Color] =
+    value.toIntOption.filter(index => index >= 0 && index <= 255).map(Indexed.apply)
+
+  /** `255`, the largest palette index, is three digits long. */
+  private val MaxIndexDigits: Int = 3
 
   /** Moves `color` toward white by `amount` in `0.0..1.0` (0 = unchanged, 1 = white). Returns an [[Rgb]]. */
   def lighten(color: Color, amount: Double): Color =
@@ -98,6 +235,20 @@ object Color:
 
     /** [[Color.gradient]]: `steps` evenly-spaced colors from this one to `to`, inclusive. */
     def gradientTo(to: Color, steps: Int): Seq[Color] = Color.gradient(color, to, steps)
+
+    /** This color written in the spelling [[Color.parse]] reads back: a named color as the name it has in this enum
+      * (`"BrightBlue"`, `"Reset"`), an [[Color.Rgb]] as lowercase `#rrggbb`, an [[Color.Indexed]] as its bare decimal
+      * index.
+      *
+      * Channels and indexes are clamped on the way out the same way [[Color.approximateRgb]] clamps them, so an
+      * unchecked `Rgb(999, 0, 0)` writes `#ff0000` rather than a value nothing can read back. This is the inverse of
+      * [[Color.parse]]; the compiler-generated `toString` is not — it writes `Rgb(255,136,0)`, which no configuration
+      * file wants.
+      */
+    def render: String = Color.renderText(color)
+
+    /** [[Color.toInt]]: this color packed into one `0x00RRGGBB` integer. */
+    def packed: Int = Color.toInt(color)
 
   /** RGB approximation for every color model — good enough for fades and capability downsampling, not for color
     * management. Named colors use common terminal palette values; indexed colors decode the xterm 256-color cube and
