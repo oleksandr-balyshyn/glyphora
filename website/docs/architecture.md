@@ -151,7 +151,13 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   reports as the insertion point. Position and visibility are separate calls, so a
   repaint can move the caret without flashing it. Call it *after* `draw` — a frame
   flush is a stream of cursor moves and would walk away from a caret parked before
-  it. It is a defaulted no-op on the trait, so a backend written before it existed
+  it.
+  `appendLines(n)` scrolls the screen up by `n` rows, pushing the top rows into the
+  terminal's scrollback and leaving `n` blank rows at the bottom. It is the primitive
+  an *inline* viewport is built from — a UI that lives below the shell prompt on the
+  primary screen instead of taking over the terminal — and it is meaningless on the
+  alternate screen, which has no scrollback.
+  Both are defaulted no-ops on the trait, so a backend written before they existed
   still compiles.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`
   and `org.jline:jline-terminal-jni` 3.30.x, pinned. Those two rather than the

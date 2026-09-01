@@ -25,6 +25,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   @volatile private var lastTitle: Option[String]              = None
   @volatile private var caret: Option[Position]                = None
   private val caretMoveCounter                                 = AtomicLong(0)
+  private val appendedLineCounter                             = AtomicLong(0)
   private val drawCounter                                      = AtomicLong(0)
   private val idleReadCounter                                  = AtomicLong(0)
   private val suspendCounter                                   = AtomicLong(0)
@@ -136,6 +137,16 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     printedLines.synchronized { printedLines ++= lines }
     Right(())
 
+  /** Adds `n` to the running total a test asserts on. There is no simulated scrollback to move rows into, so the count
+    * is the whole observable effect — which is exactly the question an inline-viewport test asks: how much room did the
+    * app ask the shell for?
+    */
+  override def appendLines(n: Int): Either[BackendError, Unit] =
+    if n <= 0 then Right(())
+    else
+      val _ = appendedLineCounter.addAndGet(n.toLong)
+      Right(())
+
   /** Releases the simulated terminal, so a test can assert the runner tore everything down on its way out. There is no
     * device to fail, so this always succeeds.
     */
@@ -182,6 +193,9 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** The lines emitted above the app via [[printAbove]], in order. */
   def printedAbove: Seq[String] = printedLines.synchronized(printedLines.toSeq)
+
+  /** Total rows scrolled off the top via [[appendLines]] — how much room an inline viewport asked the shell for. */
+  def appendedLineCount: Long = appendedLineCounter.get()
 
   /** Where the hardware caret was last parked by [[setCursorPosition]], or `None` if it never was (or the backend has
     * been closed).

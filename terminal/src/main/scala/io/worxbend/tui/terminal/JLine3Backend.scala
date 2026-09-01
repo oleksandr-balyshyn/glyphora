@@ -281,6 +281,26 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       terminal.writer().flush()
     }
 
+  /** Scrolls the screen up by `n` rows with SU (`CSI n S`).
+    *
+    * SU rather than "move to the last row and write `n` newlines": it does not depend on where the cursor is, does not
+    * move it, and needs no knowledge of the terminal's height. What it *does* do is move every row that stays on
+    * screen, so the diff baseline no longer describes what is displayed — hence the forced repaint, raised through the
+    * same [[requestFullRedraw]] the alternate screen and SIGCONT use rather than a second mechanism.
+    *
+    * Under `screenOwnership` for the same reason [[draw]] is: the scroll must not land between the two halves of
+    * someone else's screen handover.
+    */
+  override def appendLines(n: Int): Either[BackendError, Unit] =
+    if n <= 0 then Right(())
+    else
+      attempt {
+        screenOwnership.synchronized {
+          write(AnsiSequences.scrollUp(n))
+        }
+        requestFullRedraw()
+      }
+
   /** Restores the terminal and releases the JLine handle, reporting the first step that failed.
     *
     * Every step is attempted whatever the earlier ones did — stopping at the first failure would leave the terminal

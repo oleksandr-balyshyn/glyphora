@@ -153,6 +153,22 @@ trait Backend:
     */
   def requestFullRedraw(): Unit = ()
 
+  /** Scrolls the terminal up by `n` rows: the top `n` rows leave the screen into the terminal's scrollback and `n`
+    * blank rows appear at the bottom.
+    *
+    * This is the primitive an *inline* viewport is built from — a UI that lives below the shell prompt on the primary
+    * screen rather than taking over the whole terminal. Reserving room for such a UI is "scroll the shell up by the
+    * height I need"; letting a finished chunk of output become permanent scrollback is the same operation. Where
+    * [[printAbove]] emits text the backend formats for you, this only makes room, and the caller then draws into it.
+    *
+    * Meaningless on the alternate screen, which has no scrollback: call it only while the primary screen is current.
+    * Must run on the render thread. `n <= 0` is a no-op rather than a failure, so a caller computing a delta needs no
+    * guard of its own. The default is a no-op for backends with no real terminal.
+    */
+  def appendLines(n: Int): Either[BackendError, Unit] =
+    val _ = n
+    Right(())
+
   /** Restores the terminal and releases everything this backend owns.
     *
     * Fallible like every other operation here, because the failure it can report is the most user-visible one the

@@ -154,6 +154,14 @@ private[terminal] object AnsiSequences:
   def moveTo(x: Int, y: Int): String =
     s"$Esc[${y + 1};${x + 1}H"
 
+  /** SU — scrolls the whole screen up by `n` rows (XTerm `ctlseqs.ms`, "Scroll Up").
+    *
+    * On the primary screen the rows that leave the top go into the terminal's scrollback, where the user can scroll
+    * back to them; `n` blank rows appear at the bottom. Unlike writing `n` newlines this does not depend on where the
+    * cursor is and does not move it. `n <= 0` produces the empty string, so a caller computing a delta needs no guard.
+    */
+  def scrollUp(n: Int): String = if n <= 0 then "" else s"$Esc[${n}S"
+
   /** Full SGR sequence for `style`, starting from a reset so no previous attribute leaks through; colors are
     * downsampled to what `depth` can display.
     */
