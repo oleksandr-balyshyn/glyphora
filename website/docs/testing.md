@@ -244,6 +244,7 @@ Scroll and drag have their own methods, so no test has to hand-build a `MouseEve
 
 ```scala
 pilot.scrollDown(20, 4).waitForIdle()          // one wheel notch; `times` posts several
+pilot.scrollLeft(20, 4).waitForIdle()          // horizontal wheel: `scrollLeft`/`scrollRight`
 pilot.drag(20, 4, 20, 9).waitForIdle()         // press, move, release
 pilot.mouseDown(20, 4).mouseMove(20, 9).mouseUp(20, 9).waitForIdle()
 ```

@@ -161,9 +161,16 @@ final class InputFixtureSpec extends AnyFunSuite:
     val session = text("a") ++ dcs ++ text("b") ++ apc ++ text("c")
     assert(replay(session) == List(key(KeyCode.Char('a')), key(KeyCode.Char('b')), key(KeyCode.Char('c'))))
 
-  test("a horizontal wheel swipe between keystrokes produces no events"):
+  test("a horizontal wheel swipe between keystrokes stays aligned with the typing around it"):
     val session = text("a") ++ csi("<66;5;5M") ++ csi("<67;5;5M") ++ text("b")
-    assert(replay(session) == List(key(KeyCode.Char('a')), key(KeyCode.Char('b'))))
+    assert(
+      replay(session) == List(
+        key(KeyCode.Char('a')),
+        Event.Mouse(MouseEvent(Position(4, 4), MouseEventKind.ScrollLeft, KeyModifiers.None, MouseButton.Unknown)),
+        Event.Mouse(MouseEvent(Position(4, 4), MouseEventKind.ScrollRight, KeyModifiers.None, MouseButton.Unknown)),
+        key(KeyCode.Char('b')),
+      )
+    )
 
   test("alt-modified control keys interleave with typing"):
     val session = text("a") ++ Seq(Esc, 0x7f) ++ text("b") ++ Seq(Esc, 0x0d) ++ text("c")

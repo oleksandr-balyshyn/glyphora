@@ -124,6 +124,39 @@ final class MouseInteractionSpec extends AnyFunSuite:
     assert(pilot.screenLines.head.startsWith("row 1"))
     quitApp(pilot)
 
+  test("a sideways swipe over a list does not move the selection"):
+    // the horizontal wheel is not a row move; a list must decline it so it can bubble to whoever does want it
+    val state = ListState(selected = Some(0))
+    var kinds = List.empty[MouseEventKind]
+    val pilot = startApp(
+      list(Seq("alpha", "beta", "gamma"), state).onMouseEvent { event =>
+        kinds = kinds :+ event.kind
+        false
+      }
+    )
+    pilot.scrollLeft(2, 1).scrollRight(2, 1).waitForIdle()
+    assert(state.selected == Some(0))
+    assert(kinds == List(MouseEventKind.ScrollLeft, MouseEventKind.ScrollRight))
+    // the vertical wheel over the same list still does move it, so nothing about scrolling regressed
+    pilot.scrollDown(2, 1).waitForIdle()
+    assert(state.selected == Some(1))
+    quitApp(pilot)
+
+  test("a sideways swipe reaches an application handler and can change the frame"):
+    val offset = Signal(0)
+    val pilot  = startApp(
+      column(text(s"offset")).onMouseEvent { event =>
+        event.kind match
+          case MouseEventKind.ScrollRight =>
+            offset.update(_ + 1)
+            true
+          case _                          => false
+      }
+    )
+    pilot.scrollRight(2, 0, times = 3).waitForIdle()
+    assert(offset.peek == 3)
+    quitApp(pilot)
+
   test("a button inside a scrolled scrollView activates where it is drawn, not at its content coordinates"):
     val fixture = ScrollFixture()
     val pilot   = startAppOn(Size(40, 12))(fixture.root)

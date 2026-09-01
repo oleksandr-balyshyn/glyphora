@@ -117,7 +117,11 @@ private[dsl] object EventRouter:
     * effectively the divider or dead space. Drag-selecting inside a `textInput` in a pane must not yank the divider.
     */
   private def reachesOuterBuiltin(kind: MouseEventKind): Boolean =
-    kind == MouseEventKind.ScrollUp || kind == MouseEventKind.ScrollDown
+    kind match
+      case MouseEventKind.ScrollUp | MouseEventKind.ScrollDown | MouseEventKind.ScrollLeft |
+          MouseEventKind.ScrollRight =>
+        true
+      case _ => false
 
   private def pathToTracked(element: Element, index: Int): Option[List[Element]] =
     if element.props.inert then None

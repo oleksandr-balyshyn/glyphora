@@ -241,10 +241,18 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     dropped(csi("24;80R")*)
     dropped(csi("1;80R")*) // row 1, column 80: the column is not a plausible modifier code
 
-  test("a horizontal wheel report is dropped rather than reported as vertical scrolling"):
-    // xterm buttons 66/67 are wheel-left/right; reporting them as ScrollUp/Down scrolls a list on every sideways swipe
-    dropped(csi("<66;1;1M")*)
-    dropped(csi("<67;1;1M")*)
+  test("a horizontal wheel report is never reported as vertical scrolling"):
+    // xterm buttons 66/67 are wheel-left/right; reporting them as ScrollUp/Down scrolls a list on every sideways swipe.
+    // They used to be dropped for that reason; now they have kinds of their own, and the rule they were protecting
+    // still holds: neither of them may come back as a vertical scroll.
+    assert(
+      decoded(csi("<66;1;1M")*) ==
+        Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollLeft, KeyModifiers.None, MouseButton.Unknown))
+    )
+    assert(
+      decoded(csi("<67;1;1M")*) ==
+        Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollRight, KeyModifiers.None, MouseButton.Unknown))
+    )
     // the vertical wheel still works
     assert(
       decoded(csi("<64;1;1M")*) ==

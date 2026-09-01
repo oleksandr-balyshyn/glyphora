@@ -108,7 +108,23 @@ panel("Canvas")(canvasView).onMouseEvent {
 }
 ```
 
-Kinds are `Down`, `Up`, `Drag`, `Moved`, `ScrollUp`, and `ScrollDown`. The position is
+Kinds are `Down`, `Up`, `Drag`, `Moved`, `ScrollUp`, `ScrollDown`, `ScrollLeft`, and
+`ScrollRight`. The last two are the horizontal wheel — what a sideways trackpad swipe
+sends. No built-in element consumes them, because no widget in this library scrolls
+sideways, so they bubble untouched all the way out and are yours to act on:
+
+```scala
+dataTable(columns, rows, tableState).onMouseEvent { event =>
+  event.kind match {
+    case MouseEventKind.ScrollLeft  => columnOffset.update(n => math.max(0, n - 1)); true
+    case MouseEventKind.ScrollRight => columnOffset.update(_ + 1); true
+    case _                          => false
+  }
+}
+```
+
+A vertical wheel notch over a list still moves its selection; a sideways one deliberately
+does not, because a swipe is not a row move. The position is
 in absolute screen cells and zero-based, the same coordinate space a `Rect` uses — so a
 handler that wants coordinates relative to its own area subtracts that area's origin
 (`event.position.x - area.x`). Custom widgets should compare the position with the

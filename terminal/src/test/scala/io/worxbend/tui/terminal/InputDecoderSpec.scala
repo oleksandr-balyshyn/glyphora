@@ -102,6 +102,32 @@ final class InputDecoderSpec extends AnyFunSuite:
         Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollDown, KeyModifiers.None, MouseButton.Unknown))
     )
 
+  test("horizontal wheel reports decode to the sideways scroll kinds"):
+    // xterm buttons 66 and 67 are wheel-left and wheel-right, what a sideways trackpad swipe sends
+    assert(
+      decoded(csi("<66;5;3M")*) ==
+        Event.Mouse(MouseEvent(Position(4, 2), MouseEventKind.ScrollLeft, KeyModifiers.None, MouseButton.Unknown))
+    )
+    assert(
+      decoded(csi("<67;5;3M")*) ==
+        Event.Mouse(MouseEvent(Position(4, 2), MouseEventKind.ScrollRight, KeyModifiers.None, MouseButton.Unknown))
+    )
+
+  test("a modified horizontal wheel report keeps its modifier"):
+    // 66 plus the shift bit (4) is 70: the modifier shift applies to horizontal reports like any other
+    assert(
+      decoded(csi("<70;5;3M")*) ==
+        Event.Mouse(MouseEvent(Position(4, 2), MouseEventKind.ScrollLeft, KeyModifiers.Shift, MouseButton.Unknown))
+    )
+
+  test("the legacy X10 encoding reports horizontal wheel notches too"):
+    // decodeX10Mouse shares the same button decoding, with every byte biased by 32
+    val leftSwipe = Seq(0x1b, '['.toInt, 'M'.toInt, 32 + 66, 32 + 1, 32 + 1)
+    assert(
+      decoded(leftSwipe*) ==
+        Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollLeft, KeyModifiers.None, MouseButton.Unknown))
+    )
+
   test("the low two button bits name the button that was pressed"):
     def buttonOf(report: String): MouseButton =
       decoded(csi(report)*) match

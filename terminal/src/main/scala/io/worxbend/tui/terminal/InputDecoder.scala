@@ -417,13 +417,13 @@ private[terminal] final class InputDecoder(
   private def mouseEvent(button: Int, x: Int, y: Int, isPress: Boolean): Option[Event] =
     val kind      =
       if (button & 64) != 0 then wheelKind(button)
-      else if (button & 32) != 0 then Some(MouseEventKind.Drag)
-      else if isPress then Some(MouseEventKind.Down)
-      else Some(MouseEventKind.Up)
+      else if (button & 32) != 0 then MouseEventKind.Drag
+      else if isPress then MouseEventKind.Down
+      else MouseEventKind.Up
     // a mouse report carries the same shift/alt/ctrl bitmask as a CSI modifier parameter, shifted up by two positions
     val modifiers = modifiersFromBits(button >> MouseModifierShift)
     val pressed   = pressedButton(button)
-    kind.map(k => Event.Mouse(MouseEvent(Position(math.max(0, x), math.max(0, y)), k, modifiers, pressed)))
+    Some(Event.Mouse(MouseEvent(Position(math.max(0, x), math.max(0, y)), kind, modifiers, pressed)))
 
   /** Which button the report names.
     *
@@ -443,18 +443,19 @@ private[terminal] final class InputDecoder(
         case 2 => MouseButton.Right
         case _ => MouseButton.Unknown
 
-  /** Wheel buttons 64 and 65 are wheel-up and wheel-down; 66 and 67 are wheel-left and wheel-right, which
-    * [[MouseEventKind]] has no vocabulary for.
+  /** Wheel buttons 64 and 65 are wheel-up and wheel-down; 66 and 67 are wheel-left and wheel-right, the horizontal
+    * wheel a sideways trackpad swipe sends.
     *
-    * A horizontal report is therefore dropped rather than folded onto the vertical kinds — reading the low bit alone
-    * turned every sideways trackpad swipe into a scroll of the focused list, and doing nothing is the honest answer
-    * until the event ADT grows horizontal variants.
+    * All four are distinct kinds rather than the low bit folded onto the vertical pair: reading the low bit alone
+    * turned every sideways swipe into a scroll of the focused list. They used to be dropped instead, which was the
+    * honest answer only while [[MouseEventKind]] had no horizontal vocabulary — it has one now.
     */
-  private def wheelKind(button: Int): Option[MouseEventKind] =
+  private def wheelKind(button: Int): MouseEventKind =
     button & 3 match
-      case 0 => Some(MouseEventKind.ScrollUp)
-      case 1 => Some(MouseEventKind.ScrollDown)
-      case _ => None
+      case 0 => MouseEventKind.ScrollUp
+      case 1 => MouseEventKind.ScrollDown
+      case 2 => MouseEventKind.ScrollLeft
+      case _ => MouseEventKind.ScrollRight
 
   /** xterm modifier parameter: `code - 1` is a bitmask of shift/alt/ctrl.
     *

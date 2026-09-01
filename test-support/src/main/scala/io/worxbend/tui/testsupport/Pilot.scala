@@ -148,6 +148,17 @@ final class Pilot private (
   def scrollDown(x: Int, y: Int, times: Int = 1, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
     scroll(x, y, MouseEventKind.ScrollDown, times, modifiers)
 
+  /** Posts `times` horizontal wheel notches to the left at `(x, y)` — what a sideways trackpad swipe sends.
+    *
+    * No built-in element consumes these, so a test uses them to drive an application's own `onMouseEvent`.
+    */
+  def scrollLeft(x: Int, y: Int, times: Int = 1, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
+    scroll(x, y, MouseEventKind.ScrollLeft, times, modifiers)
+
+  /** Posts `times` horizontal wheel notches to the right at `(x, y)`. */
+  def scrollRight(x: Int, y: Int, times: Int = 1, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
+    scroll(x, y, MouseEventKind.ScrollRight, times, modifiers)
+
   private def scroll(x: Int, y: Int, kind: MouseEventKind, times: Int, modifiers: KeyModifiers): Pilot =
     var remaining = times
     while remaining > 0 do
