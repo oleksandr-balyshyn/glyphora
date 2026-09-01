@@ -27,6 +27,24 @@ private val DefaultToastDuration: FiniteDuration = 3.seconds
 /** How many rounds of portal draining one frame allows — see `TuiApp.drainPortals`. */
 private val MaxPortalRounds: Int = 8
 
+/** How many layers covered the app's own view when the last frame was composed — pushed screens plus the command
+  * palette — and which screen was on top. Compared against the current state on every frame to decide whether focus
+  * should move into an incoming layer or back out of one that has gone; see `TuiApp.syncFocusLayers`.
+  *
+  * One value rather than two fields because the count and the top screen are only ever read and written together: a
+  * count without the screen it was taken with cannot tell a swap at the same depth from no change at all.
+  */
+private final case class LayerSnapshot(count: Int, top: Option[Screen]):
+
+  /** Reference identity, not `==`: two screens can be equal values and still be different pushes. */
+  def sameTopAs(other: LayerSnapshot): Boolean = (top, other.top) match
+    case (Some(mine), Some(theirs)) => mine eq theirs
+    case (None, None)               => true
+    case _                          => false
+
+private object LayerSnapshot:
+  val Empty: LayerSnapshot = LayerSnapshot(0, None)
+
 /** The mutable state of a single [[TuiApp.runWith]] invocation: whether a redraw is pending, the focus-decorated tree
   * the last frame produced (events are routed against that tree, not against a freshly evaluated one), the focus
   * tracker, and the intro player.
@@ -60,12 +78,8 @@ private final class RunState(val splash: SplashPlayer):
     */
   var renderLoop: Option[RenderThread.RenderLoop] = None
 
-  /** How many layers covered the app's own view when the last frame was composed — pushed screens plus the command
-    * palette — and which screen was on top. Compared against the current state on every frame to decide whether focus
-    * should move into an incoming layer or back out of one that has gone; see `TuiApp.syncFocusLayers`.
-    */
-  var layerCount: Int           = 0
-  var topScreen: Option[Screen] = None
+  /** What covered the app's own view when the last frame was composed; see [[LayerSnapshot]]. */
+  var layers: LayerSnapshot = LayerSnapshot.Empty
 
   /** Whether the runner itself is producing ticks for this run — that is, whether the app configured a `tickRate`. When
     * it is, the ambient ticker below stays out of the way entirely and nothing about ticking changes.
@@ -719,27 +733,21 @@ trait TuiApp:
     */
   private def syncFocusLayers(run: RunState): Unit =
     val screens = screenStack.allNow
-    val layers  = screens.size + (if palette.isOpenNow then 1 else 0)
-    val top     = screens.headOption
-    // reference identity, not `==`: two screens can be equal values and still be different pushes
-    val sameTop = (top, run.topScreen) match
-      case (Some(now), Some(before)) => now eq before
-      case (None, None)              => true
-      case _                         => false
+    val now     = LayerSnapshot(screens.size + (if palette.isOpenNow then 1 else 0), screens.headOption)
+    val was     = run.layers
     // a swap at the same depth: the layer that was covering the view has gone and a different one has taken over
-    if layers == run.layerCount && layers > 0 && !sameTop then
+    if now.count == was.count && now.count > 0 && !now.sameTopAs(was) then
       run.tracker.popLayer()
       run.tracker.pushLayer()
     else
-      var count = run.layerCount
-      while count < layers do
+      var count = was.count
+      while count < now.count do
         run.tracker.pushLayer()
         count += 1
-      while count > layers do
+      while count > now.count do
         run.tracker.popLayer()
         count -= 1
-    run.layerCount = layers
-    run.topScreen = top
+    run.layers = now
 
   /** The runner's single event entry point: dispatches one event and answers whether the frame must be redrawn.
     *
