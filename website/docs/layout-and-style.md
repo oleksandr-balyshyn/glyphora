@@ -476,6 +476,30 @@ lightness, so generated palettes cannot produce an out-of-range color. `Color.to
 is the inverse, and it answers for named and 256-color values too by going through their
 RGB approximation.
 
+## Write a hex color the compiler checks
+
+`Color.hex("#ff8800")` returns an `Option`, because the string it is handed might come
+from a config file or a command-line flag and might be malformed. For a literal you typed
+yourself that `Option` is pure friction — every call site ends in `.get` — and a typo is
+still only found when that line happens to run.
+
+The `hex"…"` interpolator moves both to compile time:
+
+```scala
+import io.worxbend.tui.core.hex
+
+val brand = hex"#c83232"   // expands to Color.Rgb(200, 50, 50) — no Option, no parsing at runtime
+val short = hex"#f80"      // the three-digit form, same as Color.hex accepts
+```
+
+A malformed literal — `hex"#ff88"`, `hex"nothex"` — fails the build with an error naming
+the string, rather than returning `None` at runtime. Interpolating a value
+(`hex"#$computed"`) is rejected, because a value that is not known until the program runs
+cannot be checked while it is compiled; use `Color.hex(value)` there and handle the
+`None`. This is the one thing an application imports from `io.worxbend.tui.core`
+directly: it is a literal notation rather than a name any DSL signature mentions, so it is
+not part of the `io.worxbend.tui.dsl.*` re-export.
+
 ## Check that text will be readable
 
 Accessibility guidance is written in *contrast ratios* — a number from 1 (two colors you
