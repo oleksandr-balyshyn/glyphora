@@ -63,6 +63,14 @@ private[widgets] object Selection:
       val noSelectionStart = if delta > 0 then -1 else 0
       Some(math.max(0, math.min(current.getOrElse(noSelectionStart) + delta, count - 1)))
 
+  /** `current` brought back inside a list of `count` items — the repair a render pass makes to a selection the caller
+    * set, or that survived the list shrinking under it. An index past the last row is pulled to the last row, a
+    * negative one to index 0, and `None` comes back unchanged. `None` also when `count` is 0: nothing can be selected
+    * in an empty list, and returning `Some(0)` there would point the highlight at a row that does not exist.
+    */
+  def clamped(current: Option[Int], count: Int): Option[Int] =
+    if count <= 0 then None else current.map(index => math.max(0, math.min(index, count - 1)))
+
   /** The first index of a list of `count` items — the Home key's answer, and `None` when the list is empty. */
   def first(count: Int): Option[Int] =
     if count <= 0 then None else Some(0)

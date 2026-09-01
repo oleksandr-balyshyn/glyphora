@@ -331,12 +331,12 @@ final case class DataTable(
       if footerRows == 1 then
         footer.foreach(cells => renderRow(buffer, segments, cells, area.bottom - 1, _ => footerStyle))
       if bodyHeight > 0 && view.nonEmpty then
-        val selected = state.selected.map(index => math.max(0, math.min(index, view.size - 1)))
+        val selected = Selection.clamped(state.selected, view.size)
         state.selected = selected
         state.offset = ScrollWindow.offsetFor(state.offset, selected, view.size, bodyHeight)
         val padding  = " ".repeat(symbolWidth)
         // a column index past the last column would highlight nothing and hide the fact that it was set wrong
-        val cursor   = state.selectedColumn.map(index => math.max(0, math.min(index, segments.size - 1)))
+        val cursor   = Selection.clamped(state.selectedColumn, segments.size)
         state.selectedColumn = cursor
         view.slice(state.offset, state.offset + bodyHeight).zipWithIndex.foreach { (cells, row) =>
           val index      = state.offset + row

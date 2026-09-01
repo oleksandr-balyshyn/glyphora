@@ -122,7 +122,7 @@ final case class ListView(
       // index. Nothing can be selected in an empty list, so repair the state rather than leaving it to the app.
       state.clearSelection()
     else if !area.isEmpty then
-      val selected    = state.selected.map(index => math.max(0, math.min(index, items.size - 1)))
+      val selected    = Selection.clamped(state.selected, items.size)
       state.selected = selected
       // Uniform lists take the padding-aware rule they always did; a list with a multi-row item takes the row-counting
       // one, which has no padding to offer because "two more items" is not a fixed number of rows there.

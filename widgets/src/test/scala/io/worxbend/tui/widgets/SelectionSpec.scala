@@ -38,6 +38,12 @@ final class SelectionSpec extends AnyFunSuite:
     assert(Selection.last(0).isEmpty)
   }
 
+  test("clamped pulls a stale selection back inside the list, and empties it on an empty one") {
+    assert(Selection.clamped(Some(5), 3) == Some(2))
+    assert(Selection.clamped(Some(5), 0) == None)
+    assert(Selection.clamped(None, 3) == None)
+  }
+
   test("a page-sized move clamps at both ends") {
     assert(Selection.by(Some(1), 10, +10) == Some(9))
     assert(Selection.by(Some(8), 10, -10) == Some(0))
