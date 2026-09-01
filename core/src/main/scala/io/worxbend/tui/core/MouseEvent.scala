@@ -2,9 +2,11 @@ package io.worxbend.tui.core
 
 /** What the mouse did.
   *
-  * `Drag` is motion with a button held; `Moved` is motion with none. The terminal backend requests button-event
-  * tracking (DEC modes 1000/1002/1006), under which terminals only report motion while a button is down — so `Moved` is
-  * part of the vocabulary but no decoder in this library currently produces it.
+  * `Drag` is motion with a button held; `Moved` is motion with none. Which of the two a terminal can even report
+  * depends on how the backend asked for the mouse: under button-event tracking (DEC modes 1000/1002/1006, the default)
+  * a terminal reports motion only while a button is down, so `Moved` never arrives. A backend asked for all-motion
+  * tracking (DEC mode 1003 as well) reports every pointer movement, which is what makes hover highlighting and tooltips
+  * possible — and a great deal more input traffic, which is why it is opt-in.
   *
   * `ScrollUp`/`ScrollDown` are the vertical wheel. `ScrollLeft`/`ScrollRight` are the horizontal one (xterm buttons 66
   * and 67), which is what a sideways trackpad swipe sends. No built-in element consumes the horizontal pair, because no

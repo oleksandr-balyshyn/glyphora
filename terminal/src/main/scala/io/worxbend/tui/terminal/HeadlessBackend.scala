@@ -14,21 +14,21 @@ import scala.concurrent.duration.Duration
   */
 final class HeadlessBackend(initialSize: Size) extends Backend:
 
-  private val events                                  = LinkedBlockingQueue[Event]()
-  @volatile private var terminalSize                  = initialSize
-  @volatile private var lastFrame: Option[Buffer]     = None
-  @volatile private var rawMode                       = false
-  @volatile private var alternateScreen               = false
-  @volatile private var mouseCapture                  = false
-  @volatile private var cursorVisible                 = true
-  @volatile private var lastClipboard: Option[String] = None
-  @volatile private var lastTitle: Option[String]     = None
-  private val drawCounter                             = AtomicLong(0)
-  private val idleReadCounter                         = AtomicLong(0)
-  private val suspendCounter                          = AtomicLong(0)
-  private val wakeCounter                             = AtomicLong(0)
-  private val fullRedrawCounter                       = AtomicLong(0)
-  private val printedLines                            = scala.collection.mutable.ArrayBuffer.empty[String]
+  private val events                                           = LinkedBlockingQueue[Event]()
+  @volatile private var terminalSize                           = initialSize
+  @volatile private var lastFrame: Option[Buffer]              = None
+  @volatile private var rawMode                                = false
+  @volatile private var alternateScreen                        = false
+  @volatile private var mouseCapture: Option[MouseCaptureMode] = None
+  @volatile private var cursorVisible                          = true
+  @volatile private var lastClipboard: Option[String]          = None
+  @volatile private var lastTitle: Option[String]              = None
+  private val drawCounter                                      = AtomicLong(0)
+  private val idleReadCounter                                  = AtomicLong(0)
+  private val suspendCounter                                   = AtomicLong(0)
+  private val wakeCounter                                      = AtomicLong(0)
+  private val fullRedrawCounter                                = AtomicLong(0)
+  private val printedLines                                     = scala.collection.mutable.ArrayBuffer.empty[String]
 
   def size: Either[BackendError, Size] = Right(terminalSize)
 
@@ -55,12 +55,14 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     alternateScreen = false
     Right(())
 
-  def enableMouseCapture(): Either[BackendError, Unit] =
-    mouseCapture = true
+  def enableMouseCapture(): Either[BackendError, Unit] = enableMouseCapture(MouseCaptureMode.Buttons)
+
+  override def enableMouseCapture(mode: MouseCaptureMode): Either[BackendError, Unit] =
+    mouseCapture = Some(mode)
     Right(())
 
   def disableMouseCapture(): Either[BackendError, Unit] =
-    mouseCapture = false
+    mouseCapture = None
     Right(())
 
   def hideCursor(): Either[BackendError, Unit] =
@@ -122,7 +124,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     * device to fail, so this always succeeds.
     */
   def close(): Either[BackendError, Unit] =
-    mouseCapture = false
+    mouseCapture = None
     cursorVisible = true
     alternateScreen = false
     rawMode = false
@@ -163,8 +165,13 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   def isRawMode: Boolean         = rawMode
   def isAlternateScreen: Boolean = alternateScreen
-  def isMouseCaptured: Boolean   = mouseCapture
-  def isCursorVisible: Boolean   = cursorVisible
+  def isMouseCaptured: Boolean   = mouseCapture.isDefined
+
+  /** Which capture mode was last requested, or `None` while capture is off — so a test can assert that an app asking
+    * for hover really did ask for all-motion tracking, not merely for "the mouse".
+    */
+  def mouseCaptureMode: Option[MouseCaptureMode] = mouseCapture
+  def isCursorVisible: Boolean                   = cursorVisible
 
   /** The text most recently sent to the clipboard via [[copyToClipboard]], if any. */
   def clipboardContents: Option[String] = lastClipboard

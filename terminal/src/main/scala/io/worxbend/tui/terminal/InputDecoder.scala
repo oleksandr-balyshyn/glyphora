@@ -417,7 +417,12 @@ private[terminal] final class InputDecoder(
   private def mouseEvent(button: Int, x: Int, y: Int, isPress: Boolean): Option[Event] =
     val kind      =
       if (button & 64) != 0 then wheelKind(button)
-      else if (button & 32) != 0 then MouseEventKind.Drag
+      else if (button & MotionBit) != 0 then
+        // bit 5 says "this report is motion". The low two bits then name the button that is held, and the value 3
+        // means "none" — so 3 is the pointer moving over the window with nothing pressed, which is a hover, and
+        // anything else is a drag. Only a terminal asked for `MouseCaptureMode.AllMotion` sends the hover form; under
+        // buttons-only tracking this branch never sees a 3, which is why `Moved` used to be unreachable.
+        if (button & ButtonMask) == NoButtonHeld then MouseEventKind.Moved else MouseEventKind.Drag
       else if isPress then MouseEventKind.Down
       else MouseEventKind.Up
     // a mouse report carries the same shift/alt/ctrl bitmask as a CSI modifier parameter, shifted up by two positions
@@ -525,6 +530,15 @@ private[terminal] object InputDecoder:
     * modifier bitmask uses 1/2/4.
     */
   private val MouseModifierShift = 2
+
+  /** Bit 5 of a mouse report's button byte: set when the report describes motion rather than a press or a release. */
+  private val MotionBit = 32
+
+  /** The low two bits of a mouse report's button byte, which name the button involved. */
+  private val ButtonMask = 3
+
+  /** The button-bits value that means "no button" — a motion report carrying it is a hover, not a drag. */
+  private val NoButtonHeld = 3
 
   /** How much of an oversized paste is read (and discarded) while looking for the terminator, so that a payload whose
     * terminator never arrives cannot hold the event loop indefinitely.

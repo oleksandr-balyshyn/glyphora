@@ -54,7 +54,7 @@ final class EscapeSanitizingSpec extends AnyFunSuite:
 
   test("the emergency restore sequence resets every mode the backend can set"):
     val restore = AnsiSequences.RestoreAll
-    Seq("[?2026l", "[?25h", "[?1049l", "[?2004l", "[?1004l", "[?1006l", "[?1002l", "[?1000l", "[<u")
+    Seq("[?2026l", "[?25h", "[?1049l", "[?2004l", "[?1004l", "[?1006l", "[?1003l", "[?1002l", "[?1000l", "[<u")
       .foreach(sequence => assert(restore.contains(s"$Esc$sequence"), s"restore is missing $sequence"))
 
   test("the emergency restore closes a synchronized update before anything else it writes"):
@@ -63,6 +63,7 @@ final class EscapeSanitizingSpec extends AnyFunSuite:
     val restore = AnsiSequences.RestoreAll
     assert(restore.startsWith(AnsiSequences.EndSynchronized))
     assert(restore.indexOf(AnsiSequences.EndSynchronized) < restore.indexOf(AnsiSequences.ShowCursor))
+
   test("a window title cannot terminate its own OSC string"):
     val emitted = AnsiSequences.setTitle(s"report$Esc\\$Esc]52;c;cHduZWQ=$Esc\\")
     // exactly two ESC bytes survive: the OSC 2 opener and its ST terminator, both ours

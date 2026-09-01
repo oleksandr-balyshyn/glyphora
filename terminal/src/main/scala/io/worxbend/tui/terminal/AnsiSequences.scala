@@ -13,7 +13,11 @@ private[terminal] object AnsiSequences:
   val HideCursor: String            = s"$Esc[?25l"
   val ShowCursor: String            = s"$Esc[?25h"
   val EnableMouseCapture: String    = s"$Esc[?1000h$Esc[?1002h$Esc[?1006h"
-  val DisableMouseCapture: String   = s"$Esc[?1006l$Esc[?1002l$Esc[?1000l"
+  val EnableMouseAllMotion: String  = s"$Esc[?1000h$Esc[?1002h$Esc[?1003h$Esc[?1006h"
+  // resets 1003 as well, whether or not it was ever set: a DEC private-mode reset for a mode that is already off is a
+  // no-op on every terminal, and sending it unconditionally means no path can leave all-motion tracking stuck on,
+  // flooding the user's shell with reports after the app has exited
+  val DisableMouseCapture: String   = s"$Esc[?1006l$Esc[?1003l$Esc[?1002l$Esc[?1000l"
   val ResetStyle: String            = s"$Esc[0m"
   val EnableBracketedPaste: String  = s"$Esc[?2004h"
   val DisableBracketedPaste: String = s"$Esc[?2004l"
@@ -21,6 +25,12 @@ private[terminal] object AnsiSequences:
   val DisableFocusReporting: String = s"$Esc[?1004l"
   val BeginSynchronized: String     = s"$Esc[?2026h"
   val EndSynchronized: String       = s"$Esc[?2026l"
+
+  /** The mouse-capture request for `mode` — see [[MouseCaptureMode]] for what each one costs and buys. */
+  def enableMouseCapture(mode: MouseCaptureMode): String =
+    mode match
+      case MouseCaptureMode.Buttons   => EnableMouseCapture
+      case MouseCaptureMode.AllMotion => EnableMouseAllMotion
 
   /** Kitty keyboard protocol, progressive enhancement flag 1 (disambiguate escape codes): a lone Esc arrives as
     * `CSI 27 u` instead of a bare ESC byte, removing the read-timeout heuristic on terminals that support it.

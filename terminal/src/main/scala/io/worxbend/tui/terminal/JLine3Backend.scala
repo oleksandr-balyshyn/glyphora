@@ -25,11 +25,14 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   // written on the render thread, read by JLine's signal-dispatch thread and by the shutdown hook
   // holds the *cooked*-mode attributes captured when raw mode was entered, so it doubles as "are we in raw mode?"
-  @volatile private var cookedAttributes: Option[Attributes] = None
-  @volatile private var alternateScreenActive                = false
-  @volatile private var mouseCaptureActive                   = false
-  @volatile private var cursorHidden                         = false
-  @volatile private var suspendedState                       = TerminalState.Undressed
+  @volatile private var cookedAttributes: Option[Attributes]         = None
+  @volatile private var alternateScreenActive                        = false
+  // which capture mode is in force, or `None` for "capture is off" — the mode has to be remembered, not just the fact
+  // of capture, so that taking the terminal back after Ctrl+Z re-requests all-motion tracking rather than silently
+  // downgrading a hover-driven app to buttons-only
+  @volatile private var mouseCaptureActive: Option[MouseCaptureMode] = None
+  @volatile private var cursorHidden                                 = false
+  @volatile private var suspendedState                               = TerminalState.Undressed
 
   // owned by the render thread alone — no other thread may read or write it. A thread that takes the screen away (the
   // SIGCONT handler re-entering the alternate screen) raises `fullRedrawRequested` instead: a reset written here from
@@ -149,16 +152,18 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       alternateScreenActive = false
     }
 
-  def enableMouseCapture(): Either[BackendError, Unit] =
+  def enableMouseCapture(): Either[BackendError, Unit] = enableMouseCapture(MouseCaptureMode.Buttons)
+
+  override def enableMouseCapture(mode: MouseCaptureMode): Either[BackendError, Unit] =
     attempt {
-      write(AnsiSequences.EnableMouseCapture)
-      mouseCaptureActive = true
+      write(AnsiSequences.enableMouseCapture(mode))
+      mouseCaptureActive = Some(mode)
     }
 
   def disableMouseCapture(): Either[BackendError, Unit] =
     attempt {
       write(AnsiSequences.DisableMouseCapture)
-      mouseCaptureActive = false
+      mouseCaptureActive = None
     }
 
   def hideCursor(): Either[BackendError, Unit] =
@@ -306,7 +311,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
           failures += error
         }
 
-    undress(state.mouse, disableMouseCapture())
+    undress(state.mouse.isDefined, disableMouseCapture())
     undress(state.cursorHidden, showCursor())
     undress(state.alternateScreen, leaveAlternateScreen())
     undress(state.raw, disableRawMode())
@@ -324,7 +329,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     if state.raw then bestEffort(enableRawMode())
     if state.alternateScreen then bestEffort(enterAlternateScreen())
     if state.cursorHidden then bestEffort(hideCursor())
-    if state.mouse then bestEffort(enableMouseCapture())
+    state.mouse.foreach(mode => bestEffort(enableMouseCapture(mode)))
     requestFullRedraw() // whatever ran in between owned the screen: repaint everything
 
   private def onResize(): Unit =
@@ -373,12 +378,12 @@ private[terminal] final case class TerminalState(
     raw: Boolean,
     alternateScreen: Boolean,
     cursorHidden: Boolean,
-    mouse: Boolean,
+    mouse: Option[MouseCaptureMode],
 )
 
 private[terminal] object TerminalState:
   /** Nothing was dressed up: cooked mode, primary screen, visible cursor, no mouse capture. */
-  val Undressed: TerminalState = TerminalState(false, false, false, false)
+  val Undressed: TerminalState = TerminalState(false, false, false, None)
 
 /** The outcome of handing the terminal back: the modes that were undressed (so they can be re-dressed) and the first
   * step that failed while doing it, if any.

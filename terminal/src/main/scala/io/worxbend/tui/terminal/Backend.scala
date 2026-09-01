@@ -28,6 +28,17 @@ trait Backend:
   def hideCursor(): Either[BackendError, Unit]
   def showCursor(): Either[BackendError, Unit]
 
+  /** Starts mouse capture in `mode`, which decides whether pointer motion with no button held is reported at all.
+    *
+    * The no-argument [[enableMouseCapture]] is `MouseCaptureMode.Buttons`. Overriding this one is what lets an app ask
+    * for `MouseCaptureMode.AllMotion` and receive [[io.worxbend.tui.core.MouseEventKind.Moved]] — hover. The default
+    * body ignores the mode and requests buttons-only, so a backend written before all-motion tracking existed keeps
+    * compiling and keeps behaving exactly as it did.
+    */
+  def enableMouseCapture(mode: MouseCaptureMode): Either[BackendError, Unit] =
+    val _ = mode
+    enableMouseCapture()
+
   /** Blocks up to `timeout` for the next input event; `Right(None)` means nothing arrived.
     *
     * `timeout` must be **strictly positive**, or infinite to block until an event arrives. Zero is rejected rather than
