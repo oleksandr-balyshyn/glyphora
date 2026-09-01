@@ -41,6 +41,25 @@ final class DocumentedFactorySpec extends AnyFunSuite:
   private def mentionOf(name: String): scala.util.matching.Regex =
     s"""(?<![A-Za-z0-9_.])${java.util.regex.Pattern.quote(name)}(?=\\(|`)""".r
 
+  test("the exported factory block is in alphabetical order"):
+    val root      = DocumentationSources.repoRoot
+      .getOrElse(cancel("not running from a checkout: no build.mill above the working directory"))
+    val factories = exportedFactories(root)
+    assert(
+      factories.sizeIs > 50,
+      s"read ${factories.size} names out of the `export Element.{…}` block in dsl.scala — the block moved or was " +
+        "renamed, and this suite is no longer checking anything",
+    )
+
+    val sorted     = factories.sortBy(_.toLowerCase)
+    val firstWrong = factories.zip(sorted).collectFirst { case (actual, expected) if actual != expected => actual }
+    assert(
+      firstWrong.isEmpty,
+      s"`${firstWrong.getOrElse("")}` is out of place in the `export Element.{…}` block in dsl.scala. The block is " +
+        "the list a reader scans to find out whether a factory exists, so it is kept in case-insensitive alphabetical " +
+        "order — insert your new factory at its alphabetical position rather than at the end.",
+    )
+
   test("every exported element factory is mentioned in the published documentation"):
     val root      = DocumentationSources.repoRoot
       .getOrElse(cancel("not running from a checkout: no build.mill above the working directory"))
