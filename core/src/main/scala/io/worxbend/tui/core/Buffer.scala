@@ -549,6 +549,12 @@ final class Buffer(val area: Rect):
   private def indexOf(x: Int, y: Int): Int =
     (y - area.y) * area.width + (x - area.x)
 
+/** Ways of building a buffer from content that is already laid out, rather than from an empty rectangle.
+  *
+  * `Buffer(rect)` — the class's own constructor — remains how a render target is allocated. These factories are for
+  * the other direction: a test that wants to write the frame it expects as a literal, instead of allocating a `Rect`
+  * of the right size by hand and calling `setString` once per row.
+  */
 object Buffer:
 
   /** A fresh buffer covering `area` with every cell already set to `cell` — the starting point for a layer that is
@@ -559,3 +565,33 @@ object Buffer:
     val buffer = Buffer(area)
     buffer.fill(area, cell)
     buffer
+
+  /** A buffer as tall as `lines` and as wide as the widest of them, with each line's spans painted left to right at
+    * their own styles, starting at the origin.
+    *
+    * Column advance comes from `Span.width`, which measures display columns rather than characters, so a two-column
+    * grapheme takes two columns here exactly as it does when a widget draws it — an expectation written with CJK or
+    * emoji in it lines up with the frame under test instead of drifting one column per wide cluster. Cells no line
+    * reaches keep [[Cell.Empty]].
+    *
+    * Example — the expected frame for a two-row widget whose second row is highlighted:
+    * {{{
+    * val expected = Buffer.withLines(Line.raw("Total"), Line.styled("  42", Style.Default.bold))
+    * }}}
+    *
+    * A caller holding a `Seq[Line]` splats it: `Buffer.withLines(rows*)`.
+    */
+  def withLines(lines: Line*): Buffer =
+    val height = lines.size
+    val width  = if lines.isEmpty then 0 else lines.map(_.width).max
+    val buffer = Buffer(Rect(0, 0, width, height))
+    lines.zipWithIndex.foreach { (line, y) =>
+      var x = 0
+      line.spans.foreach { span =>
+        x += buffer.setString(x, y, span.content, span.style, width - x)
+      }
+    }
+    buffer
+
+  /** [[withLines]] for a whole [[Text]] value, for a caller that already has one. */
+  def withText(text: Text): Buffer = withLines(text.lines*)

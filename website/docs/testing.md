@@ -65,6 +65,21 @@ Two buffers are equal when they cover the same area and hold the same cell — s
 which the text snapshots above cannot do: they recover symbols only, so a widget that
 lost its highlight still matches its expected text.
 
+Write the expected frame as a list of `Line`s and let `Buffer.withLines` size and paint
+it. Each span is drawn at its own style, and the buffer comes out as tall as the list
+and as wide as the widest line:
+
+```scala
+import io.worxbend.tui.core.{Buffer, Line, Style}
+
+val expected = Buffer.withLines(
+  Line.raw("Total"),
+  Line.styled("   42", Style.Default.bold),
+)
+
+assert(actual == expected)
+```
+
 When two frames differ, printing either one gives a dump built for exactly this moment
 instead of an object hash — the rows as quoted strings, then the position of each
 *change* of style (not one line per cell), then the columns hidden under the right half

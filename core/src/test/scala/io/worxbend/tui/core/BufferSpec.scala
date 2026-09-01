@@ -491,3 +491,27 @@ final class BufferSpec extends AnyFunSuite:
   test("an empty buffer still produces a well-formed dump"):
     val dump = Buffer(Rect(0, 0, 0, 0)).toString
     assert(dump == s"Buffer(area=${Rect(0, 0, 0, 0)}, content=[\n], styles=[\n], hidden=[\n])")
+
+  test("withLines sizes the buffer from the widest line and keeps each span's style"):
+    val built = Buffer.withLines(Line.raw("hi"), Line.styled("total", Style.Default.bold))
+    assert(built.area == Rect(0, 0, 5, 2))
+    assert(built.get(0, 0) == Cell("h", Style.Default))
+    assert(built.get(2, 0) == Cell.Empty) // the short line's untouched tail
+    assert(built.get(0, 1) == Cell("t", Style.Default.bold))
+
+  test("withLines advances by display columns, so a wide grapheme does not shift the rest of the line"):
+    val built = Buffer.withLines(Line(Seq(Span.raw("漢"), Span("ok", Style.Default.withFg(Color.Red)))))
+    assert(built.area == Rect(0, 0, 4, 1))
+    assert(built.get(0, 0).symbol == "漢")
+    assert(built.isContinuation(1, 0))
+    assert(built.get(2, 0) == Cell("o", Style.Default.withFg(Color.Red)))
+
+  test("withLines of nothing is an empty buffer"):
+    assert(Buffer.withLines().area == Rect(0, 0, 0, 0))
+
+  test("withText builds the same buffer as withLines over the text's lines"):
+    val text = Text(Seq(Line.raw("a"), Line.raw("bb")))
+    assert(Buffer.withText(text) == Buffer.withLines(Line.raw("a"), Line.raw("bb")))
+
+  test("adding the companion did not shadow the buffer constructor"):
+    assert(Buffer(Rect(1, 2, 3, 4)).area == Rect(1, 2, 3, 4))
