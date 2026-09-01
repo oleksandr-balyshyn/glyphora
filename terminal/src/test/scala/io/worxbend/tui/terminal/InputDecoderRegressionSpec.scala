@@ -1,6 +1,10 @@
 package io.worxbend.tui.terminal
 
+<<<<<<< HEAD
 import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
+=======
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, ModifierKey, MouseEvent, MouseEventKind, Position}
+>>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -159,6 +163,7 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     assert(decoded(csi("57376u")*) == Event.Key(KeyEvent.of(KeyCode.F(13))))     // F13
     assert(decoded(csi("57398u")*) == Event.Key(KeyEvent.of(KeyCode.F(35)))) // F35
 
+<<<<<<< HEAD
   test("kitty modifier-only keys are not reported as keys"):
     dropped(csi("57441u")*) // LEFT_SHIFT: holding a modifier is not a key event in this model
     dropped(csi("57344u")*) // an unassigned code point at the foot of the functional block
@@ -169,6 +174,26 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     // whether the lock is now on.
     assert(decoded(csi("57358u")*) == Event.Key(KeyEvent.of(KeyCode.CapsLock)))
     assert(decoded(csi("57363u")*) == Event.Key(KeyEvent.of(KeyCode.Menu)))
+=======
+  test("kitty lock and media keys are not reported as keys"):
+    dropped(csi("57358u")*) // CAPS_LOCK
+    dropped(csi("57428u")*) // MEDIA_PLAY
+>>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
+
+  test("kitty reports a bare modifier press as its own key"):
+    assert(decoded(csi("57441u")*) == Event.Key(KeyEvent.of(KeyCode.Modifier(ModifierKey.LeftShift))))
+    assert(decoded(csi("57449u")*) == Event.Key(KeyEvent.of(KeyCode.Modifier(ModifierKey.RightAlt))))
+    assert(decoded(csi("57454u")*) == Event.Key(KeyEvent.of(KeyCode.Modifier(ModifierKey.IsoLevel5Shift))))
+
+  test("a bare modifier press still carries the modifiers held with it"):
+    // Pressing Shift while Ctrl is already down: the key is Shift, and Ctrl is in the modifier set.
+    assert(
+      decoded(csi("57441;5u")*) == Event.Key(KeyEvent(KeyCode.Modifier(ModifierKey.LeftShift), KeyModifiers.Ctrl))
+    )
+
+  test("the code points on either side of the modifier block are still not keys"):
+    dropped(csi("57440u")*) // MENU's neighbour, unassigned
+    dropped(csi("57455u")*) // the first media key past ISO_LEVEL5_SHIFT
 
   test("kitty modifier parameters follow the 1 + bitmask encoding"):
     assert(decoded(csi("97;5u")*) == Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.Ctrl)))

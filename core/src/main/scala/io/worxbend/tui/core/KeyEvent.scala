@@ -179,6 +179,10 @@ object KeyEvent:
       case "mute"                                 => Right(KeyCode.Media(MediaKey.MuteVolume))
       case f if f.startsWith("f") && f.drop(1).toIntOption.exists(n => n >= 1 && n <= MaxFunctionKey) =>
         Right(KeyCode.F(f.drop(1).toInt))
+      // There is deliberately no spelling for a bare modifier key here — no "shift", no "leftctrl" — even though
+      // `KeyCode.Modifier` exists and the decoder can produce it. A binding on a bare modifier would fire while the
+      // user was part-way through typing every chord that starts with it, which is never what the author meant. An
+      // application that genuinely wants "Ctrl is being held" reads `KeyCode.Modifier` from its own key handler.
       case _ if name.codePointCount(0, name.length) == 1 => Right(KeyCode.Char(name.codePointAt(0)))
       case _                                             => Left(s"unknown key '$name'")
 

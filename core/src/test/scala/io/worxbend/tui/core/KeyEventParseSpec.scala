@@ -139,6 +139,18 @@ final class KeyEventParseSpec extends AnyFunSuite:
     assert(KeyEvent.parse("a+b").isLeft)
     assert(KeyEvent.parse("ab").isLeft)
 
+  test("a bare modifier key has no spec spelling"):
+    // KeyCode.Modifier exists and the input decoder can produce it, but binding one would fire part-way through
+    // every chord that starts with that modifier. An application that wants "Ctrl is held" reads the key event.
+    assert(KeyEvent.parse("shift").isLeft)
+    assert(KeyEvent.parse("ctrl").isLeft)
+    assert(KeyEvent.parse("leftshift").isLeft)
+
+  test("a bare modifier key produces no text and prints readably"):
+    val event = KeyEvent.of(KeyCode.Modifier(ModifierKey.LeftControl))
+    assert(event.code.text.isEmpty)
+    assert(event.toString == "KeyEvent(Modifier(LeftControl), None)")
+
   private val parseCtrlShiftTab  = Right(KeyEvent(KeyCode.Tab, KeyModifiers.Ctrl | KeyModifiers.Shift))
   private val parseCtrlAltDelete = Right(KeyEvent(KeyCode.Delete, KeyModifiers.Ctrl | KeyModifiers.Alt))
 

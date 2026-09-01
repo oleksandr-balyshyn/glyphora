@@ -102,6 +102,7 @@ export io.worxbend.tui.core.{
   Line,
   Masked,
   MediaKey,
+  ModifierKey,
   MouseButton,
   MouseEvent,
   MouseEventKind,

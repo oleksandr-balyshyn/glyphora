@@ -26,6 +26,15 @@ enum KeyCode:
   case CapsLock, ScrollLock, NumLock, PrintScreen, Pause, Menu
   case Media(key: MediaKey)
 
+  /** A modifier key — Shift, Ctrl, Alt, Super — pressed on its own, rather than held while another key was pressed.
+    *
+    * Holding Ctrl and pressing `a` is *not* this: that arrives as `Char('a')` with the `Ctrl` bit set in the event's
+    * [[KeyModifiers]], the way it always has. This case is only ever produced when a terminal speaking the kitty
+    * keyboard protocol has been asked to report every key, and it is what lets an application show a "Ctrl held" hint
+    * instead of inferring one. On every other terminal a bare modifier press is invisible.
+    */
+  case Modifier(key: ModifierKey)
+
   /** The text this key produces: the code point as a string for [[Char]], empty for every named key. */
   def text: String = this match
     case Char(codePoint) => Character.toString(codePoint)

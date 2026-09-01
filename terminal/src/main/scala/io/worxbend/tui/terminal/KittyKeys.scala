@@ -1,6 +1,10 @@
 package io.worxbend.tui.terminal
 
+<<<<<<< HEAD
 import io.worxbend.tui.core.{KeyCode, MediaKey}
+=======
+import io.worxbend.tui.core.{KeyCode, ModifierKey}
+>>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
 
 /** The kitty keyboard protocol's key vocabulary, mapped onto glyphora's [[KeyCode]] vocabulary.
   *
@@ -28,6 +32,7 @@ private[terminal] object KittyKeys:
   /** The functional-key block.
     *
     * Keypad keys report as their non-keypad equivalents (`KP_7` is `Home`, `KP_ENTER` is `Enter`, `KP_3` is `3`) —
+<<<<<<< HEAD
     * glyphora has no separate keypad concept and an application almost never wants one. Media keys and the
     * modifier-only keys (a bare Shift press) are dropped: they are not key events in this model.
     *
@@ -35,6 +40,12 @@ private[terminal] object KittyKeys:
     * A lock key reports the press itself, not the state it leaves behind — glyphora never claims to know whether Caps
     * Lock is currently on. So are the media keys, as `KeyCode.Media`. What is still dropped is the modifier-only keys —
     * a bare Shift press is not a key event in this model — and the unassigned code points.
+=======
+    * glyphora has no separate keypad concept and an application almost never wants one. Media keys are dropped: they
+    * are not key events in this model. The modifier-only keys — a bare Shift press, with no other key involved — decode
+    * to [[KeyCode.Modifier]], and reach an application only on a terminal that has been asked to report every key; on
+    * any other terminal the sequence is never sent in the first place.
+>>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
     */
   private def functionalKey(codePoint: Int): Option[KeyCode] =
     codePoint match
@@ -66,8 +77,37 @@ private[terminal] object KittyKeys:
       case KeypadEnd                                                  => Some(KeyCode.End)
       case KeypadInsert                                               => Some(KeyCode.Insert)
       case KeypadDelete                                               => Some(KeyCode.Delete)
+<<<<<<< HEAD
       case cp if MediaKeys.contains(cp)                               => MediaKeys.get(cp).map(KeyCode.Media.apply)
       case _                                                          => None // modifier-only keys, unassigned
+=======
+      case cp if cp >= LeftShiftKey && cp <= IsoLevel5ShiftKey        =>
+        modifierKey(cp).map(KeyCode.Modifier.apply)
+      case _                                                          => None // media keys, unassigned
+
+  /** The modifier-only block, in the code-point order the kitty keyboard-protocol specification lists it.
+    *
+    * Written out one code point at a time rather than indexed into a sequence so that a reader checking this against
+    * the specification can compare it line by line.
+    */
+  private def modifierKey(codePoint: Int): Option[ModifierKey] =
+    codePoint match
+      case 57441 => Some(ModifierKey.LeftShift)
+      case 57442 => Some(ModifierKey.LeftControl)
+      case 57443 => Some(ModifierKey.LeftAlt)
+      case 57444 => Some(ModifierKey.LeftSuper)
+      case 57445 => Some(ModifierKey.LeftHyper)
+      case 57446 => Some(ModifierKey.LeftMeta)
+      case 57447 => Some(ModifierKey.RightShift)
+      case 57448 => Some(ModifierKey.RightControl)
+      case 57449 => Some(ModifierKey.RightAlt)
+      case 57450 => Some(ModifierKey.RightSuper)
+      case 57451 => Some(ModifierKey.RightHyper)
+      case 57452 => Some(ModifierKey.RightMeta)
+      case 57453 => Some(ModifierKey.IsoLevel3Shift)
+      case 57454 => Some(ModifierKey.IsoLevel5Shift)
+      case _     => None
+>>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
 
   /** Whether `codePoint` is a character a string can actually hold.
     *
@@ -109,6 +149,8 @@ private[terminal] object KittyKeys:
   private val KeypadEnd            = 57424
   private val KeypadInsert         = 57425
   private val KeypadDelete         = 57426
+  private val LeftShiftKey         = 57441 // LEFT_SHIFT; the modifier-only block runs to ISO_LEVEL5_SHIFT
+  private val IsoLevel5ShiftKey    = 57454
 
   /** The media block, 57428-57440, by the names the kitty keyboard-protocol spec gives these code points. */
   private val MediaKeys: Map[Int, MediaKey] = Map(

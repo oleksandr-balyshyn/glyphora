@@ -1,6 +1,10 @@
 package io.worxbend.tui.terminal
 
+<<<<<<< HEAD
 import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
+=======
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, ModifierKey, MouseEvent, MouseEventKind, Position}
+>>>>>>> c0afd27 (feat(core): report a bare modifier press as KeyCode.Modifier)
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -113,8 +117,8 @@ final class InputFixtureSpec extends AnyFunSuite:
         key(KeyCode.Enter),
         key(KeyCode.Char('a'), KeyModifiers.Ctrl),
         key(KeyCode.Char(0x1f600)),
-        key(KeyCode.Enter), // KP_ENTER
-        // LEFT_SHIFT produces nothing: a bare modifier press is not a key event in this model
+        key(KeyCode.Enter),                          // KP_ENTER
+        key(KeyCode.Modifier(ModifierKey.LeftShift)), // a bare Shift press, reported as a key of its own
       )
     )
 

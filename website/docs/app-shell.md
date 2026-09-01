@@ -159,6 +159,40 @@ when the light changes for any other reason.
 A spec that names no key (`"ctrl+"`) or no known key (`"banana"`) is a programmer error
 and throws from `binding` at declaration time.
 
+## Modifier keys held on their own
+
+A modifier is normally visible only as part of another key's event: holding Ctrl and
+pressing `a` arrives as `KeyCode.Char('a')` with the `Ctrl` bit set in
+`event.modifiers`, and the Ctrl key itself produces nothing. That is what almost every
+application wants, and it is the only thing a terminal without the kitty keyboard
+protocol can report.
+
+Some terminals can also report a modifier press as a key in its own right. When they
+do, it arrives as `KeyCode.Modifier(key)`, where `key` is a `ModifierKey` —
+`LeftShift`, `RightControl`, `LeftAlt`, and so on, with left and right kept apart
+because the protocol distinguishes them. Read it from an element or app key handler if
+you want to show a “Ctrl held” hint:
+
+```scala
+.onKeyEvent { event =>
+  event.code match
+    case KeyCode.Modifier(ModifierKey.LeftControl) => showCtrlHint(); true
+    case _                                         => false
+}
+```
+
+There is deliberately no key spec for a bare modifier: `"shift"` is not a valid key
+name, so declaring a binding on it fails at declaration time the same way `"banana"`
+does. A binding on a bare modifier would fire part-way through every chord that begins
+with that modifier, which is never what the author meant.
+
+Note what the terminal has to do for any of this to happen: the modifier press must be
+reported, and glyphora currently asks a kitty-capable terminal only to disambiguate
+escape codes, not to report every key. So on a terminal glyphora set up itself these
+events do not arrive today; a terminal already put into report-all-keys mode by
+something else will deliver them, and the decoder now names them correctly instead of
+dropping them on the floor.
+
 ## One command, several keys
 
 When a command answers to more than one key — a vim-flavoured app where `j` and the
