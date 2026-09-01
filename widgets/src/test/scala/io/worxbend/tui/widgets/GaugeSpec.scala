@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Cell, Modifiers, Rect, Style}
+import io.worxbend.tui.core.{Cell, Color, Modifiers, Rect, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{line, rendered, renderedInto, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -12,7 +12,8 @@ final class GaugeSpec extends AnyFunSuite:
     assert(trimmedLines(buffer) == Seq("   50%"))
 
   test("the filled region carries the filled style up to the ratio"):
-    val buffer = rendered(Gauge(0.5), 10, 1)
+    // the caption is hidden so that the columns under it report the bar's own style and not the caption's
+    val buffer = rendered(Gauge(0.5, label = ProgressLabel.Hidden), 10, 1)
     assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
     assert(buffer.get(4, 0).style.modifiers.hasAny(Modifiers.Reverse))
     assert(!buffer.get(5, 0).style.modifiers.hasAny(Modifiers.Reverse))
@@ -103,3 +104,27 @@ final class GaugeSpec extends AnyFunSuite:
   test("a preset bar clipped to no columns draws nothing and does not throw"):
     val buffer = renderedInto(Gauge(0.5, preset = Some(ProgressPreset.Blocks)), Rect(0, 0, 0, 1), 4, 1)
     assert(trimmedLines(buffer) == Seq(""))
+
+  test("the caption over the fill is drawn in the fill's colours swapped"):
+    // "50%" is centred at columns 3..5 of a 10-column bar whose first five columns are filled
+    val buffer = rendered(Gauge(0.5), 10, 1)
+    assert(buffer.get(3, 0).symbol == "5")
+    assert(!buffer.get(3, 0).style.modifiers.hasAny(Modifiers.Reverse))
+    // column 5 is past the fill, so that cluster keeps the widget's own style
+    assert(buffer.get(5, 0).symbol == "%")
+    assert(!buffer.get(5, 0).style.modifiers.hasAny(Modifiers.Reverse))
+    // and the bar either side of the caption is untouched
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("a caption over a non-reversed fill is reversed, so it never matches its own background"):
+    val gauge  = Gauge(1.0, filledStyle = Style.Default.withBg(Color.Blue), preset = None)
+    val buffer = rendered(gauge, 10, 1)
+    // "100%" is four columns wide, so it starts at column 3 of a 10-column bar
+    assert(buffer.get(3, 0).symbol == "1")
+    assert(buffer.get(3, 0).style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("an explicit labelStyle overrides the swap everywhere along the bar"):
+    val buffer = rendered(Gauge(0.5, labelStyle = Some(Style.Default.bold)), 10, 1)
+    assert(buffer.get(3, 0).style.modifiers.hasAny(Modifiers.Bold))
+    assert(buffer.get(5, 0).style.modifiers.hasAny(Modifiers.Bold))
+    assert(!buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Bold))

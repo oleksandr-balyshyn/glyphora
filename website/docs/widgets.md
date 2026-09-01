@@ -1159,6 +1159,13 @@ captioned the same way whichever one a view reaches for. They also draw the same
 colours: both read `track` and `fill` from the theme's `loading` palette, so a gauge
 next to a progress bar cannot come out in a different scheme.
 
+`Gauge`'s caption sits *on* the bar, so its colours have to be derived from the bar
+rather than fixed. Where the caption overlaps the fill it is drawn in the fill's own
+two colours swapped over; where it overhangs the track it keeps the widget's `style`.
+That is what stops a caption from disappearing into a reversed bar or into a bright
+`fillRamp` colour. Pass `labelStyle = Some(...)` to override both cases with one
+style of your own.
+
 ### Theming the animations
 
 Colors come from the ambient `Theme`'s `loading` palette, resolved where the element

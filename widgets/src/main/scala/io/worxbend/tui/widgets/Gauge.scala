@@ -10,6 +10,9 @@ import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Modifiers, Rect, Style, Wi
   * `fillRamp` colors the fill by how far along it is. Which part of the style it colors depends on how the bar is
   * drawn, described next.
   *
+  * `labelStyle` fixes the caption's colours in one go. Left unset, the caption over the fill is written in the fill's
+  * own two colours swapped, which is what keeps it readable; see `captionStyleAt` below.
+  *
   * There are two ways to draw the bar, and `preset` picks between them:
   *
   *   - '''No preset (the default).''' The bar is blank cells wearing `filledStyle`, whose own default is
@@ -29,6 +32,7 @@ final case class Gauge(
     filledStyle: Style = Style.Default.reverse,
     fillRamp: Option[ColorRamp] = None,
     preset: Option[ProgressPreset] = None,
+    labelStyle: Option[Style] = None,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -56,8 +60,27 @@ final case class Gauge(
         val labelY = area.y + area.height / 2
         var x      = Alignment.Center.originAt(area.x, area.width, CharWidth.of(fitted))
         CharWidth.graphemeClusters(fitted).foreach { cluster =>
-          x = ClusterRow.put(buffer, x, labelY, cluster, styleAt(x), area.right)
+          x = ClusterRow.put(buffer, x, labelY, cluster, captionStyleAt(x - area.x < filled, fill), area.right)
         }
+
+  /** The style one cluster of the caption is written with.
+    *
+    * An explicit `labelStyle` wins everywhere. Without one, the caption over the *track* keeps the widget's `style`,
+    * as it always has, while the caption over the *fill* wears the fill's own style with `Reverse` toggled — which is
+    * a terminal's way of saying "swap this cell's foreground and background".
+    *
+    * That swap is what makes the caption legible. Before it, the caption inherited the fill style unchanged: with the
+    * default reversed fill the glyphs were reversed text drawn on an already-reversed cell, which some terminals
+    * resolve back to invisible, and with a `fillRamp` the glyphs kept the default foreground over whatever colour the
+    * ramp had chosen — white on pale yellow at the end of a heat ramp. Swapping guarantees the caption is drawn in the
+    * two colours the cell already has, the other way round, so it can never collide with its own background.
+    */
+  private def captionStyleAt(overFill: Boolean, fill: Style): Style =
+    labelStyle.getOrElse(if overFill then swapped(fill) else style)
+
+  /** `cell` with `Reverse` toggled — set if it was clear, cleared if it was set. */
+  private def swapped(cell: Style): Style =
+    if cell.modifiers.hasAny(Modifiers.Reverse) then cell.without(Modifiers.Reverse) else cell.reverse
 
   /** The style the filled part of the bar wears, with `fillRamp` applied to whichever half of it carries the color: the
     * background for the blank-cell bar, the foreground for a preset's glyphs.
