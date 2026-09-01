@@ -302,6 +302,36 @@ dot masks so the ring never erodes, which means its **glyphs are identical at ev
 moment** and the entire animation lives in the per-cell style — a glyph-only assertion
 would call it static.
 
+## Render a view without a terminal
+
+Everything above runs an app. Sometimes there is nothing to run: you want the pixels a
+view *would* produce at a given size, from a plain unit test, or from an application's
+own "export what is on screen" command.
+
+```scala
+val buffer = Snapshot.render(Size(80, 24))(myView)
+println(BufferAssertions.text(buffer))
+```
+
+`Snapshot.render` composes one frame into a fresh `Buffer` with no runner, no backend
+and no event loop. It runs the same two passes a live frame does, in the same order —
+the responsive resolve, so a `responsive` node picks the branch for that size, and the
+focus decoration — so what comes back is what an app would paint, not an
+approximation. A test in `dsl.test` asserts exactly that against a live `Pilot` run,
+which is what stops the two from drifting apart.
+
+Two optional arguments: a `theme` (`Theme.Dark` when you do not say), and a
+`focusedKey` naming the element drawn as focused. `None` focuses the first focusable
+element, which is where a freshly started app puts focus, and a key that matches
+nothing falls back to the same place rather than failing.
+
+`Snapshot.renderInto(buffer, area, theme, focusedKey)(view)` is the same thing into a
+buffer you already own, for composing a view into part of a larger frame.
+
+What it is not is interactive or animated: there is no clock and no event loop, and
+reactive reads subscribe nothing, so a snapshot is a single still image. Drive
+anything time- or input-dependent through `Pilot` instead.
+
 ## Capture frames outside tests
 
 Everything above reads frames through `Pilot` and `HeadlessBackend`, which exist for
