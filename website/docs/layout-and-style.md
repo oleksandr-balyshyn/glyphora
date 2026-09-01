@@ -533,6 +533,23 @@ label.styled(_.bold)                           // green and bold
 Text.raw(body).styled(_.italic)                // every line italic
 ```
 
+### Shorthands on strings
+
+Two or three transforms turn up in nearly every view, and spelling them out makes a row
+of text harder to read than the row itself. Each has a one-word name on a `String`, which
+gives back the same `Span` the long form does:
+
+```scala
+line("press ", "q".bold, " to quit")     // instead of "q".styled(_.bold)
+line("status: ", "down".fg(Color.Red))   // instead of "down".styled(_.withFg(Color.Red))
+```
+
+The shorthands are `bold`, `dim`, `italic`, `underline`, `reverse`, `crossedOut`, and the
+two colours `fg(color)` and `bg(color)`. They exist on the resulting `Span` too, so they
+chain — `"q".bold.fg(Color.Cyan)` — and each step layers onto the style the span already
+has rather than starting over from the default. Anything past this short list still goes
+through `styled`, which is the general form and is not going anywhere.
+
 `under(base)` layers the other way round: `base` goes *underneath* what each span already
 chose, so a span that set a colour keeps it and `base` fills in only what was left unset.
 That is the direction a theme colour travels:

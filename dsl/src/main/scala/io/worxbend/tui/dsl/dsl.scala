@@ -288,7 +288,46 @@ type View = (ReactiveScope, Theme) ?=> Element
   * declared in `core` it would need a second import at every view, which is precisely the ceremony
   * `import io.worxbend.tui.dsl.*` exists to remove.
   */
-extension (content: String) def styled(transform: Style => Style): Span = Span(content, transform(Style.Default))
+extension (content: String)
+  def styled(transform: Style => Style): Span = Span(content, transform(Style.Default))
+
+  /** Shorthands for the handful of transforms that appear in nearly every view, so `line("press ", "q".bold, " to
+    * quit")` reads as the sentence it is rather than as `"q".styled(_.bold)`. Anything past these — a blink, a
+    * background *and* a foreground and two attributes — goes through [[styled]], which is the general form and is not
+    * going anywhere.
+    */
+  def bold: Span       = styled(_.bold)
+  def dim: Span        = styled(_.dim)
+  def italic: Span     = styled(_.italic)
+  def underline: Span  = styled(_.underline)
+  def reverse: Span    = styled(_.reverse)
+  def crossedOut: Span = styled(_.crossedOut)
+
+  /** Foreground colour, spelled `fg`/`bg` as it is on an element and on `Style` itself. */
+  def fg(color: Color): Span = styled(_.withFg(color))
+
+  /** Background colour. */
+  def bg(color: Color): Span = styled(_.withBg(color))
+
+/** The same shorthands one step along, so a marked-up run can be marked up again: `"q".bold.fg(Color.Cyan)`.
+  *
+  * They are on [[Span]] rather than only on `String` because `"q".bold` is already a `Span`, and without this block the
+  * second call in that chain would have nothing to attach to. Each one layers onto the style the span already carries
+  * instead of starting from `Style.Default`, which is what `Span.styled` — a real member, not an extension — does.
+  */
+extension (span: Span)
+  def bold: Span       = span.styled(_.bold)
+  def dim: Span        = span.styled(_.dim)
+  def italic: Span     = span.styled(_.italic)
+  def underline: Span  = span.styled(_.underline)
+  def reverse: Span    = span.styled(_.reverse)
+  def crossedOut: Span = span.styled(_.crossedOut)
+
+  /** Foreground colour, layered over whatever the span already had. */
+  def fg(color: Color): Span = span.styled(_.withFg(color))
+
+  /** Background colour, layered over whatever the span already had. */
+  def bg(color: Color): Span = span.styled(_.withBg(color))
 
 /** Alignment and inter-child spacing for the containers that lay children out along an axis — `row`, `column`, and
   * `panel`, which stacks its children with the same widget `column` does.
