@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Symbols, Widget}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
@@ -16,8 +16,8 @@ final case class Skeleton(
     elapsed: FiniteDuration,
     style: Style = Style.Default.dim,
     bandStyle: Style = Style.Default,
-    baseSymbol: String = "░",
-    bandSymbol: String = "▒",
+    baseSymbol: String = Symbols.Shade.Light,
+    bandSymbol: String = Symbols.Shade.Medium,
     bandWidth: Option[Int] = None,
     period: FiniteDuration = 1200.millis,
 ) extends Widget:

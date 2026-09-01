@@ -1,5 +1,7 @@
 package io.worxbend.tui.widgets
 
+import io.worxbend.tui.core.Symbols
+
 /** The glyph vocabulary a progress bar draws with: what a filled cell looks like, what an empty one looks like, and
   * optionally how to draw the cell the boundary falls inside.
   *
@@ -79,15 +81,25 @@ object ProgressPreset:
 
   /** Full blocks with eighth-block partials — the smoothest bar available, and the best default for wide bars. */
   val Blocks: ProgressPreset =
-    ProgressPreset("blocks", fill = "█", track = " ", partials = Vector("▏", "▎", "▍", "▌", "▋", "▊", "▉"))
+    ProgressPreset("blocks", fill = Symbols.Block.Full, track = " ", partials = Symbols.Block.HorizontalPartials)
 
   /** Full blocks over a shaded track, so the bar's extent is visible even where it is empty. */
   val BlocksShaded: ProgressPreset =
-    ProgressPreset("blocks-shaded", fill = "█", track = "░", partials = Vector("▏", "▎", "▍", "▌", "▋", "▊", "▉"))
+    ProgressPreset(
+      "blocks-shaded",
+      fill = Symbols.Block.Full,
+      track = Symbols.Shade.Light,
+      partials = Symbols.Block.HorizontalPartials,
+    )
 
   /** Three shading levels stepping up to a full block — reads well without a color-capable terminal. */
   val Shaded: ProgressPreset =
-    ProgressPreset("shaded", fill = "█", track = "░", partials = Vector("▒", "▓"))
+    ProgressPreset(
+      "shaded",
+      fill = Symbols.Block.Full,
+      track = Symbols.Shade.Light,
+      partials = Vector(Symbols.Shade.Medium, Symbols.Shade.Dark),
+    )
 
   /** ASCII only: `#` over `-`. Safe anywhere, including a log file. */
   val Ascii: ProgressPreset = ProgressPreset("ascii", fill = "#", track = "-")

@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Style}
+import io.worxbend.tui.core.{Buffer, Cell, Style, Symbols}
 
 /** The bottom-up eighth-block ladder every column chart in this module draws with.
   *
@@ -16,7 +16,7 @@ private[widgets] object BlockLadder:
     * Ordered so that `Eighths(n - 1)` is the glyph for `n` eighths of fill, with the fill growing upwards from the
     * bottom of the cell — which is why a column is walked from its bottom row towards its top.
     */
-  val Eighths: Vector[String] = Vector("▁", "▂", "▃", "▄", "▅", "▆", "▇", "█")
+  val Eighths: Vector[String] = Symbols.Block.VerticalEighths
 
   /** Paints one column of the chart: `value` measured against `ceiling`, filling upwards from row `bottom` and stopping
     * at row `top`.

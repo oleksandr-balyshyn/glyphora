@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Symbols, Widget}
 
 /** A value grid rendered as shade intensity: each cell maps its value (against the grid's max) onto a shade ramp — rows
   * are y (top first), columns are x.
@@ -22,4 +22,8 @@ final case class Heatmap(
       }
 
 object Heatmap:
-  private val Ramp: Vector[String] = Vector(" ", "░", "▒", "▓", "█")
+
+  /** The shade ramp a cell's value is mapped onto, empty to full. The shared vocabulary in `core.Symbols` rather than
+    * four literals here, so a heat map, a loading placeholder and a progress track all step through the same glyphs.
+    */
+  private val Ramp: Vector[String] = Symbols.Shade.Ramp
