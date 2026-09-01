@@ -140,6 +140,86 @@ final class Buffer(val area: Rect):
       column += 1
       index += 1
 
+  /** Writes `cell` into every column of `region` that falls inside `area`; anything outside is clipped away, exactly as
+    * [[set]] clips a single write.
+    *
+    * This is the one owner of "blank a box". An overlay — a dialog, a popup, a menu — has to paint its whole rectangle
+    * in its own style so that whatever was drawn underneath cannot show through, and before this method every such
+    * widget wrote its own pair of `while` loops to do it, which is how one ends up a column short on one edge.
+    *
+    * The cell's display width is measured once for the whole region instead of once per column, and a two-column symbol
+    * advances two columns at a time so that the continuation cell [[set]] reserves is not immediately painted over. If
+    * the region's width is not a whole multiple of that symbol's width, the leftover column at the right edge is stored
+    * as a blank in `cell`'s style — that is [[set]]'s existing rule for a wide symbol with no room to its right, and it
+    * keeps a background fill continuous to the edge.
+    */
+  def fill(region: Rect, cell: Cell): Unit =
+    val clipped = region.intersection(area)
+    // a zero-width symbol (a lone combining mark, say) claims no column, and stepping by zero would never terminate
+    val step    = math.max(1, CharWidth.ofCluster(cell.symbol))
+    var y       = clipped.y
+    while y < clipped.bottom do
+      var x = clipped.x
+      while x < clipped.right do
+        // A two-column grapheme starting in the last column of an odd-width region would paint its second half
+        // *outside* the region: `setMeasured` only refuses to leave the buffer, and the column past the region is
+        // usually still inside it. Blank that column in the fill's own style instead, the same way `blit` blanks a
+        // grapheme the window edge cuts in half. The region keeps its background and the neighbour keeps its glyph.
+        if x + step > clipped.right then setMeasured(x, y, Cell(" ", cell.style), 1)
+        else setMeasured(x, y, cell, step)
+        x += step
+      y += 1
+
+  /** Replaces the style of every cell of `region` that falls inside `area`, leaving the symbols exactly as they are.
+    *
+    * This is the "patch over the top" write. A widget draws its content first, and then a caller tints the rectangle
+    * for a selection highlight, a disabled overlay or a focus ring without needing to know which symbols happen to be
+    * there. Neither [[set]] nor [[setString]] can do that: both take the symbol as an argument, so restyling through
+    * them means overwriting the content.
+    *
+    * Blank cells are restyled too. That is deliberate — it is what makes a background tint reach the whole rectangle
+    * rather than only the columns that carry a glyph.
+    *
+    * Continuation cells (the second column of a two-column grapheme) are left alone: the terminal paints the wide
+    * grapheme across both columns from the *left* cell's style, so restyling the right one changes nothing on screen
+    * while breaking the invariant that a flagged cell holds [[Cell.Empty]] — the test [[set]] uses to tell a caller's
+    * own filler apart from real content landing on a reserved column.
+    */
+  def setStyle(region: Rect, style: Style): Unit =
+    mapStyle(region)(_ => style)
+
+  /** [[setStyle]] with the replacement derived from each cell's current style — a dim, a tint, a background swap that
+    * keeps the foreground it finds.
+    *
+    * `transform` must be a pure function of the style it is handed, because it is not called once per cell:
+    * neighbouring cells nearly always share one style, so the most recent input and its result are remembered and the
+    * transform re-run only where the style actually changes. Without that, a full-frame pass would build a fresh
+    * `Style` for each of ten thousand cells to arrive at the same answer ten thousand times.
+    */
+  def mapStyle(region: Rect)(transform: Style => Style): Unit =
+    val clipped = region.intersection(area)
+    if !clipped.isEmpty then
+      // `primed` distinguishes "no cell seen yet" from "the last cell happened to carry Style.Default", so the
+      // transform is never run on a style no cell in the region actually has
+      var primed  = false
+      var lastIn  = Style.Default
+      var lastOut = Style.Default
+      var y       = clipped.y
+      while y < clipped.bottom do
+        var x = clipped.x
+        while x < clipped.right do
+          val index = indexOf(x, y)
+          if !continuations(index) then
+            val cell = cells(index)
+            // reference equality first: a run of cells written by one call shares the very same `Style` object
+            if !primed || !((cell.style eq lastIn) || cell.style == lastIn) then
+              lastIn = cell.style
+              lastOut = transform(cell.style)
+              primed = true
+            if lastOut != cell.style then cells(index) = cell.copy(style = lastOut)
+          x += 1
+        y += 1
+
   /** Copies `region` of `source` into this buffer with the region's top-left landing at `at`.
     *
     * Writes outside this buffer's area are clipped like any other write — this is how offscreen-rendered content
@@ -251,3 +331,14 @@ final class Buffer(val area: Rect):
 
   private def indexOf(x: Int, y: Int): Int =
     (y - area.y) * area.width + (x - area.x)
+
+object Buffer:
+
+  /** A fresh buffer covering `area` with every cell already set to `cell` — the starting point for a layer that is
+    * opaque rather than transparent. The plain constructor `Buffer(area)` still starts out as [[Cell.Empty]]
+    * everywhere, which is what a frame that composes onto other content wants.
+    */
+  def filled(area: Rect, cell: Cell): Buffer =
+    val buffer = Buffer(area)
+    buffer.fill(area, cell)
+    buffer

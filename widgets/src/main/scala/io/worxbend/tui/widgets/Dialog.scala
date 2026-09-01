@@ -22,7 +22,7 @@ final case class Dialog(
   def render(area: Rect, buffer: Buffer): Unit =
     val box = area.centered(math.min(area.width, math.max(message.width + 4, 20)), message.height + 4)
     if box.width >= 4 && box.height >= 4 then
-      clear(box, buffer)
+      buffer.fill(box, Cell(" ", style))
       Block(Seq(BlockTitle.top(Line.styled(title, style))), borderStyle = style, borderType = borderType)
         .render(box, buffer)
       val inner = box.inset(1)
@@ -31,15 +31,6 @@ final case class Dialog(
         buffer,
       )
       renderButtons(inner, buffer)
-
-  private def clear(box: Rect, buffer: Buffer): Unit =
-    var y = box.y
-    while y < box.bottom do
-      var x = box.x
-      while x < box.right do
-        buffer.set(x, y, Cell(" ", style))
-        x += 1
-      y += 1
 
   private def renderButtons(inner: Rect, buffer: Buffer): Unit =
     val labels     = buttons.map(label => s"[ $label ]")

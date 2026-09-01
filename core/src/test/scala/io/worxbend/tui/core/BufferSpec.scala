@@ -206,3 +206,124 @@ final class BufferSpec extends AnyFunSuite:
     assert(buf.get(2, 0) == Cell.Empty) // continuation of 你, not overwritten by X
     assert(buf.get(3, 0).symbol == "X")
     assert(buf.get(4, 0).symbol == "Y")
+
+  test("fill writes the cell across the region and leaves its neighbours untouched"):
+    val buf = buffer(4, 3)
+    buf.fill(Rect(1, 1, 2, 1), Cell("#", Style.Default.bold))
+    assert(buf.get(1, 1) == Cell("#", Style.Default.bold))
+    assert(buf.get(2, 1) == Cell("#", Style.Default.bold))
+    assert(buf.get(0, 1) == Cell.Empty)
+    assert(buf.get(3, 1) == Cell.Empty)
+    assert(buf.get(1, 0) == Cell.Empty)
+    assert(buf.get(1, 2) == Cell.Empty)
+
+  test("fill clips a region that reaches past the area instead of failing"):
+    val buf = buffer(2, 2)
+    buf.fill(Rect(-3, -3, 20, 20), Cell("#", Style.Default))
+    assert(buf.get(0, 0).symbol == "#")
+    assert(buf.get(1, 1).symbol == "#")
+
+  test("fill of an empty region writes nothing"):
+    val buf = buffer(2, 2)
+    buf.fill(Rect(0, 0, 0, 2), Cell("#", Style.Default))
+    buf.fill(Rect(0, 0, 2, 0), Cell("#", Style.Default))
+    buf.fill(Rect(9, 9, 2, 2), Cell("#", Style.Default))
+    assert(buf.get(0, 0) == Cell.Empty)
+    assert(buf.get(1, 1) == Cell.Empty)
+
+  test("fill with a two-column symbol advances by two and reserves each continuation"):
+    // stepping one column at a time would paint over the continuation cell the previous write just claimed, which
+    // leaves the buffer claiming a wide glyph that no longer owns the column beside it
+    val buf = buffer(5, 1)
+    buf.fill(Rect(0, 0, 5, 1), Cell("你", Style.Default))
+    assert(buf.get(0, 0).symbol == "你")
+    assert(buf.get(1, 0) == Cell.Empty)
+    assert(buf.get(2, 0).symbol == "你")
+    assert(buf.get(3, 0) == Cell.Empty)
+    // the odd column at the right edge has no room for a second half, so `set` stores a blank in the same style
+    assert(buf.get(4, 0) == Cell(" ", Style.Default))
+
+  test("fill keeps a two-column symbol inside an odd-width region"):
+    // the region ends at column 5, but the buffer is wider, so nothing stops a wide glyph starting at column 4 from
+    // painting column 5 as well. The column past the region belongs to whoever drew there, not to the fill.
+    val buf = buffer(8, 1)
+    buf.set(5, 0, Cell("X", Style.Default))
+    buf.fill(Rect(0, 0, 5, 1), Cell("你", Style.Default.bold))
+    assert(buf.get(0, 0).symbol == "你")
+    assert(buf.get(2, 0).symbol == "你")
+    // column 4 is the odd one out: a blank carrying the fill's style, never half a glyph
+    assert(buf.get(4, 0) == Cell(" ", Style.Default.bold))
+    // and the neighbour outside the region is untouched
+    assert(buf.get(5, 0) == Cell("X", Style.Default))
+
+  test("Buffer.filled is a new buffer already filled"):
+    val cell = Cell("·", Style.Default.dim)
+    val buf  = Buffer.filled(Rect(0, 0, 2, 2), cell)
+    assert(buf.get(0, 0) == cell)
+    assert(buf.get(1, 1) == cell)
+
+  test("setStyle restyles a region without touching its symbols"):
+    val buf = buffer(4, 2)
+    buf.setString(0, 0, "abcd", Style.Default)
+    buf.setStyle(Rect(1, 0, 2, 1), Style.Default.bold)
+    assert(buf.get(1, 0) == Cell("b", Style.Default.bold))
+    assert(buf.get(2, 0) == Cell("c", Style.Default.bold))
+    assert(buf.get(0, 0) == Cell("a", Style.Default))
+    assert(buf.get(3, 0) == Cell("d", Style.Default))
+
+  test("setStyle also restyles blank cells, so a background reaches the whole rectangle"):
+    val buf = buffer(3, 1)
+    buf.setString(0, 0, "a", Style.Default)
+    buf.setStyle(Rect(0, 0, 3, 1), Style.Default.withBg(Color.Blue))
+    assert(buf.get(1, 0) == Cell(Cell.Empty.symbol, Style.Default.withBg(Color.Blue)))
+    assert(buf.get(2, 0).style == Style.Default.withBg(Color.Blue))
+
+  test("setStyle clips to the area and a fully outside region is a no-op"):
+    val buf = buffer(2, 1)
+    buf.setString(0, 0, "ab", Style.Default)
+    buf.setStyle(Rect(1, 0, 10, 1), Style.Default.bold)
+    assert(buf.get(0, 0).style == Style.Default)
+    assert(buf.get(1, 0).style == Style.Default.bold)
+    buf.setStyle(Rect(50, 50, 3, 3), Style.Default.italic)
+    assert(buf.get(0, 0).style == Style.Default)
+
+  test("setStyle leaves the continuation cell of a wide grapheme empty"):
+    // a styled continuation stops comparing equal to Cell.Empty, which is the test `set` uses to tell a caller's own
+    // filler apart from real content landing on a reserved column — restyling it would break that invariant
+    val buf = buffer(4, 1)
+    buf.setString(0, 0, "你好", Style.Default)
+    buf.setStyle(Rect(0, 0, 4, 1), Style.Default.bold)
+    assert(buf.get(0, 0) == Cell("你", Style.Default.bold))
+    assert(buf.get(1, 0) == Cell.Empty)
+    assert(buf.get(2, 0) == Cell("好", Style.Default.bold))
+    assert(buf.get(3, 0) == Cell.Empty)
+    // and the pair still survives a caller writing its own filler over the reserved column
+    buf.set(1, 0, Cell.Empty)
+    assert(buf.get(0, 0).symbol == "你")
+
+  test("mapStyle derives each new style from the current one and writes nothing when it is unchanged"):
+    val buf    = buffer(3, 1)
+    buf.setString(0, 0, "a", Style.Default.withFg(Color.Red))
+    buf.setString(1, 0, "b", Style.Default.withFg(Color.Green))
+    buf.mapStyle(Rect(0, 0, 3, 1))(_.bold)
+    assert(buf.get(0, 0).style == Style.Default.withFg(Color.Red).bold)
+    assert(buf.get(1, 0).style == Style.Default.withFg(Color.Green).bold)
+    assert(buf.get(2, 0).style == Style.Default.bold)
+    val before = buf.snapshot
+    buf.mapStyle(Rect(0, 0, 3, 1))(identity)
+    assert(buf.diff(before).isEmpty)
+
+  test("mapStyle re-runs the transform only when the style changes"):
+    // consecutive cells almost always share one style; the cached last input is what keeps a full-frame pass from
+    // building ten thousand identical Style values
+    val buf   = buffer(4, 1)
+    buf.setString(0, 0, "aa", Style.Default.withFg(Color.Red))
+    buf.setString(2, 0, "bb", Style.Default.withFg(Color.Blue))
+    var calls = 0
+    buf.mapStyle(Rect(0, 0, 4, 1)) { style =>
+      calls += 1
+      style.bold
+    }
+    assert(calls == 2)
+    assert(buf.get(1, 0).style == Style.Default.withFg(Color.Red).bold)
+    assert(buf.get(3, 0).style == Style.Default.withFg(Color.Blue).bold)

@@ -96,6 +96,17 @@ val buffer = Buffer(Rect(0, 0, 20, 3))
 val (titleArea, body) = Layout.vertical(1, Constraint.fill).split2(buffer.area)
 buffer.setString(titleArea.x, titleArea.y, "Title", Style.Default.bold.withFg(Color.Cyan))
 buffer.setString(body.x, body.y, "Body", Style.Default)
+
+// blank a rectangle in one style — this is how an overlay stops the content underneath
+// showing through, instead of hand-writing a loop per widget
+buffer.fill(body, Cell(" ", Style.Default.withBg(Color.Black)))
+// Buffer.filled(area, cell) is the same thing as a constructor, for a layer that starts opaque
+
+// patch the style of a rectangle without knowing which symbols are in it — a selection
+// highlight, a focus tint, a disabled overlay. setStyle replaces it, mapStyle derives it
+// from whatever each cell already had
+buffer.setStyle(titleArea, Style.Default.reverse)
+buffer.mapStyle(body)(_.dim)
 ```
 
 ## tui-terminal
