@@ -293,6 +293,11 @@ after the content and get the same frame. `borderStyle` is layered on `style` ra
 replacing it, so it only has to say what is *different* about the frame; a block left at
 the default `style` paints no fill at all.
 
+A third style, `titleStyle`, applies to the captions alone and layers over `borderStyle` in
+turn — bold panel names against a plain frame, say. It saves restyling each `BlockTitle`'s
+line one at a time and keeping them in step by hand, and a span inside a title still layers
+over it, so one word of a caption can differ from the rest.
+
 ### Border sets
 
 `borderType` picks the glyphs the frame is drawn from. Every built-in set is one terminal

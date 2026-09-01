@@ -74,6 +74,11 @@ object BlockTitle:
   * titles, so it only has to say what is *different* about the frame. A block left at the default `style` paints no
   * fill at all and behaves exactly as it did before the parameter existed.
   *
+  * [[titleStyle]] is a third style, layered over the border's, for the titles alone. Without it the only way to give
+  * every caption on a block the same emphasis — bold panel names, a dimmed status line — was to restyle each
+  * [[BlockTitle]]'s [[io.worxbend.tui.core.Line]] one at a time and keep them in step by hand. A title's own spans
+  * still layer over it, so one word of a caption can differ from the rest.
+  *
   * [[borderType]] names one of the built-in frames. [[borderSet]] is the escape hatch under it: hand it a
   * [[BorderGlyphs]] of your own and it wins over `borderType`, which is how a frame nothing in the enum describes gets
   * drawn without waiting for the enum to grow a case.
@@ -105,6 +110,7 @@ final case class Block(
     // Appended rather than placed in the layout-and-behaviour slot the widget conventions ask for: inserting a
     // parameter mid-list would silently change what every positional caller written against 0.12.0 means.
     mergeBorders: MergeStrategy = MergeStrategy.Replace,
+    titleStyle: Style = Style.Default,
 ) extends Widget:
 
   /** The rectangle the frame itself occupies inside `area`: everything except the rows and columns given up to the
@@ -239,7 +245,7 @@ final case class Block(
       case TitlePosition.Bottom => area.bottom - 1
     val width  = math.min(line.width, available)
     val startX = alignment.originAt(area.x + insetLeft, available, width)
-    val _      = LineRenderer.render(buffer, startX, y, line, available - (startX - area.x - insetLeft), edgeStyle)
+    val _      = LineRenderer.render(buffer, startX, y, line, available - (startX - area.x - insetLeft), captionStyle)
 
   /** The style the border glyphs and titles are drawn in: the whole-area [[style]] with [[borderStyle]] layered on top.
     *
@@ -249,6 +255,17 @@ final case class Block(
     * *different* about the border.
     */
   private def edgeStyle: Style = style.patch(borderStyle)
+
+  /** The style the titles are drawn in: the border's own style with [[titleStyle]] layered on top.
+    *
+    * Titles start from the border style rather than from the block's fill because a title is written *into* the border
+    * row and has to sit on the same background as the frame around it. `titleStyle` then says only what is different
+    * about the caption — bold for a panel name, dim for a status — without having to restate the colours of the frame,
+    * and a block that leaves it at `Style.Default` draws its titles exactly as it did before the field existed. A
+    * [[io.worxbend.tui.core.Span]] inside the title line still layers over this, so one word of a caption can be
+    * coloured without touching the rest.
+    */
+  private def captionStyle: Style = edgeStyle.patch(titleStyle)
 
   private def borderWidth(side: Borders): Int =
     if borders.hasAny(side) then 1 else 0

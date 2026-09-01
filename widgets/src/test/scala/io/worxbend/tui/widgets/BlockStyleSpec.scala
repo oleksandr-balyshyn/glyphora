@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Color, Line, Modifiers, Rect, Style}
+import io.worxbend.tui.core.{Buffer, Cell, Color, Line, Modifiers, Rect, Span, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.rendered
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -69,3 +69,34 @@ final class BlockStyleSpec extends AnyFunSuite:
   test("modifiers in the area style reach the interior"):
     val buffer = rendered(Block(style = Style.Default.bold), 3, 3)
     assert(buffer.get(1, 1).style.modifiers.hasAll(Modifiers.Bold))
+
+  test("titleStyle reaches every title without touching the border glyphs"):
+    val block  = Block(
+      titles = Seq(BlockTitle.top(Line.raw("name")), BlockTitle.bottom(Line.raw("ok"), Alignment.Right)),
+      borderStyle = Style.Default.withFg(Color.Blue),
+      titleStyle = Style.Default.bold,
+    )
+    val buffer = rendered(block, 8, 3)
+    assert(buffer.get(1, 0).style.modifiers.hasAny(Modifiers.Bold))  // the top title
+    assert(buffer.get(5, 2).style.modifiers.hasAny(Modifiers.Bold))  // the bottom one
+    assert(!buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Bold)) // the corner glyph is untouched
+    assert(buffer.get(1, 0).style.fg.contains(Color.Blue)) // and the border colour still carries the title
+
+  test("a title's own spans layer over titleStyle"):
+    val title  = BlockTitle.top(Line(Seq(Span("a", Style.Default.withFg(Color.Red)), Span.raw("b"))))
+    val buffer = rendered(Block(titles = Seq(title), titleStyle = Style.Default.italic), 6, 3)
+    assert(buffer.get(1, 0).style.fg.contains(Color.Red))
+    assert(buffer.get(1, 0).style.modifiers.hasAny(Modifiers.Italic))
+    assert(buffer.get(2, 0).style.fg.isEmpty)
+    assert(buffer.get(2, 0).style.modifiers.hasAny(Modifiers.Italic))
+
+  test("a block that leaves titleStyle alone draws its titles as it always did"):
+    val titles   = Seq(BlockTitle.top(Line.raw("name")))
+    val styled   = rendered(Block(titles = titles, borderStyle = Style.Default.withFg(Color.Blue)), 8, 3)
+    val explicit = rendered(
+      Block(titles = titles, borderStyle = Style.Default.withFg(Color.Blue), titleStyle = Style.Default),
+      8,
+      3,
+    )
+    assert(styled.get(1, 0) == explicit.get(1, 0))
+    assert(styled.get(1, 0).style.fg.contains(Color.Blue))
