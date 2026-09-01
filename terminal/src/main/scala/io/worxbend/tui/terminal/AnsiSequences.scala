@@ -71,6 +71,30 @@ private[terminal] object AnsiSequences:
     val encoded = java.util.Base64.getEncoder.encodeToString(text.getBytes(java.nio.charset.StandardCharsets.UTF_8))
     s"$Esc]52;c;$encoded$Esc\\"
 
+  /** OSC 2 window/tab title.
+    *
+    * Controls are stripped for exactly the reason [[linkOpen]] strips them: an OSC string ends at BEL or ST, so an
+    * `ESC \` inside a document name would close the title early and leave the rest of the name to run as terminal
+    * commands. Titles come from the same untrusted places link targets do — a filename, a branch name, a fetched page's
+    * `<title>`.
+    */
+  def setTitle(title: String): String = s"$Esc]2;${stripControls(title)}$Esc\\"
+
+  /** XTerm `CSI 22;2t` — pushes the terminal's current window title onto its own title stack.
+    *
+    * Emitted once, before the first [[setTitle]], so that [[PopTitle]] can hand the shell's own title back on exit
+    * without this library ever having to read the title (there is no reliable, non-blocking way to do that).
+    */
+  val PushTitle: String = s"$Esc[22;2t"
+
+  /** XTerm `CSI 23;2t` — pops the title pushed by [[PushTitle]], restoring whatever the shell had set.
+    *
+    * Deliberately absent from [[RestoreAll]]: everything in that string is a DEC private-mode *reset*, which is
+    * idempotent and therefore safe for a shutdown hook that cannot know what was enabled. A pop is not idempotent — an
+    * unmatched one would discard a title stack entry that belonged to something else.
+    */
+  val PopTitle: String = s"$Esc[23;2t"
+
   /** Moves the cursor to an absolute zero-based position (ANSI rows/columns are one-based). */
   def moveTo(x: Int, y: Int): String =
     s"$Esc[${y + 1};${x + 1}H"

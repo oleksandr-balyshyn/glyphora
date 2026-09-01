@@ -63,3 +63,17 @@ final class EscapeSanitizingSpec extends AnyFunSuite:
     val restore = AnsiSequences.RestoreAll
     assert(restore.startsWith(AnsiSequences.EndSynchronized))
     assert(restore.indexOf(AnsiSequences.EndSynchronized) < restore.indexOf(AnsiSequences.ShowCursor))
+  test("a window title cannot terminate its own OSC string"):
+    val emitted = AnsiSequences.setTitle(s"report$Esc\\$Esc]52;c;cHduZWQ=$Esc\\")
+    // exactly two ESC bytes survive: the OSC 2 opener and its ST terminator, both ours
+    assert(emitted.count(_ == Esc) == 2)
+    assert(emitted.startsWith(s"$Esc]2;"))
+    assert(emitted.endsWith(s"$Esc\\"))
+    assert(!emitted.contains(s"$Esc]52"))
+
+  test("BEL and C1 controls are stripped from a window title"):
+    assert(!AnsiSequences.setTitle(s"a${Bel}0;PWNED").contains(Bel))
+    assert(!AnsiSequences.setTitle(s"a${Csi}31m").contains(Csi))
+
+  test("an ordinary title, including non-ASCII, is passed through untouched"):
+    assert(AnsiSequences.setTitle("glyphora — 日本語 ✓") == s"$Esc]2;glyphora — 日本語 ✓$Esc\\")

@@ -46,6 +46,10 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   private val frameEncoder = FrameEncoder(colorDepth)
 
+  // whether the shell's own window title has been pushed onto the terminal's title stack. Raised lazily by the first
+  // `setTitle`, so an app that never sets a title emits nothing at all and leaves no stack entry for `close()` to pop.
+  private val titlePushed = AtomicBoolean(false)
+
   private val pendingResize    = AtomicReference[Option[Size]](None)
   private val pendingInterrupt = AtomicBoolean(false)
   private val woken            = AtomicBoolean(false)
@@ -203,6 +207,14 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     attempt(write(AnsiSequences.clipboardCopy(text)))
 
+  override def setTitle(title: String): Either[BackendError, Unit] =
+    attempt {
+      // the push has to happen before the first change, because that is the last moment the stack top is still the
+      // title the shell set; `compareAndSet` makes it happen exactly once however many times the app retitles itself
+      if titlePushed.compareAndSet(false, true) then write(AnsiSequences.PushTitle)
+      write(AnsiSequences.setTitle(title))
+    }
+
   override def suspend[A](body: => A): Either[BackendError, A] =
     attempt {
       val released = releaseTerminal()
@@ -228,9 +240,13 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * and the undressing failure is what gets reported because it is the one the user can see.
     */
   def close(): Either[BackendError, Unit] =
-    val released = releaseTerminal()
-    val closed   = attempt(terminal.close())
-    released.failure.toLeft(()).flatMap(_ => closed)
+    val released     = releaseTerminal()
+    // only if this backend actually pushed one: popping a stack this app never wrote to would discard someone else's
+    // title. `getAndSet` makes a second `close()` — the shutdown hook racing the runner's teardown — pop nothing.
+    val titleFailure =
+      if titlePushed.getAndSet(false) then attempt(write(AnsiSequences.PopTitle)).left.toOption else None
+    val closed       = attempt(terminal.close())
+    released.failure.orElse(titleFailure).toLeft(()).flatMap(_ => closed)
 
   /** Last-resort restore, for a shutdown hook that may be racing JLine's own terminal closer.
     *

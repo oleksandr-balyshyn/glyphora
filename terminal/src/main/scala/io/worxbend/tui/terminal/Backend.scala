@@ -65,6 +65,19 @@ trait Backend:
     val _ = text
     Right(())
 
+  /** Sets the terminal's window or tab title (the OSC 2 sequence).
+    *
+    * Best-effort, like [[copyToClipboard]]: a terminal that does not understand OSC 2 ignores the sequence, so success
+    * here means "the write went out", not "the title changed". Where the terminal supports XTerm's title stack the
+    * previous title is pushed before the first change and popped by `close()`, so the shell's own title comes back when
+    * the app exits.
+    *
+    * The default implementation is a no-op for backends without a real terminal.
+    */
+  def setTitle(title: String): Either[BackendError, Unit] =
+    val _ = title
+    Right(())
+
   /** Temporarily hands the real terminal back so `body` can own it — leave the alternate screen, drop raw mode and
     * mouse capture, run `body` (e.g. launch `$EDITOR`), then restore the app's screen and force a full repaint. Must
     * run on the render thread. The default just runs `body` without touching the terminal, so headless/basic backends

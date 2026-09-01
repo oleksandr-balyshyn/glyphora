@@ -22,6 +22,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   @volatile private var mouseCapture                  = false
   @volatile private var cursorVisible                 = true
   @volatile private var lastClipboard: Option[String] = None
+  @volatile private var lastTitle: Option[String]     = None
   private val drawCounter                             = AtomicLong(0)
   private val idleReadCounter                         = AtomicLong(0)
   private val suspendCounter                          = AtomicLong(0)
@@ -90,6 +91,10 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     lastClipboard = Some(text)
     Right(())
 
+  override def setTitle(title: String): Either[BackendError, Unit] =
+    lastTitle = Some(title)
+    Right(())
+
   override def suspend[A](body: => A): Either[BackendError, A] =
     val _      = suspendCounter.incrementAndGet()
     val wasAlt = alternateScreen
@@ -152,3 +157,6 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** The text most recently sent to the clipboard via [[copyToClipboard]], if any. */
   def clipboardContents: Option[String] = lastClipboard
+
+  /** The window title most recently requested via [[setTitle]], if any. */
+  def titleContents: Option[String] = lastTitle
