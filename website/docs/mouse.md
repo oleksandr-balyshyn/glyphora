@@ -203,11 +203,41 @@ underneath it. Focusable elements are resolved differently — by smallest cover
 which has no notion of z-order — so give an overlay's controls their own layer rather
 than relying on paint order to shadow a focusable beneath them.
 
+## Hover and all-motion tracking
+
+`Moved` — the pointer moving with **no** button held — is the one kind you do not get
+by default. A terminal reports only the mouse activity it has been asked for, and the
+default request is *button-event tracking*: presses, releases, the wheel, and motion
+only while a button is down. Under that setting a terminal never sends a hover, so
+`Moved` never arrives and `Drag` covers all motion you can see.
+
+Asking for `MouseCaptureMode.AllMotion` adds the terminal mode that reports every
+pointer movement over the window, which is what hover highlighting, tooltips and
+drop-target previews need:
+
+```scala
+backend.enableMouseCapture(MouseCaptureMode.AllMotion)
+```
+
+It is opt-in because it is not free: the terminal sends a report for every cell the
+pointer crosses, which costs nothing locally and is noticeable over a slow ssh link.
+`MouseCaptureMode.Buttons` is the default and is what the no-argument
+`enableMouseCapture()` requests.
+
 ## Backend support
 
 `TuiApp` and `JLine3Backend` negotiate mouse capture for you. A custom runner owns
 that backend lifecycle itself. Input decoding belongs in the backend—application
 code should never parse escape sequences.
+
+The backend asks the terminal for four modes: `1000` (press and release), `1002`
+(motion while a button is held), `1015` and `1006`. The last two are *encodings* — the
+original one writes each coordinate as a single byte and cannot name a column past
+223, so both of the newer forms are requested and a terminal that understands the
+better one (`1006`, which names which button was released) settles on it. Pixel
+reporting (`1016`) is deliberately not requested: its coordinates are pixels, and
+everything above the backend addresses cells. `MouseCaptureMode.AllMotion` adds mode
+`1003` on top.
 
 Headless tests can click exact cells and post any mouse kind. See
 [Testing](./testing#test-mouse-and-resize) for examples, and

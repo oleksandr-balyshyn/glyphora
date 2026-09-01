@@ -133,7 +133,14 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
 
 - **`Backend`** — raw mode, alternate screen, cursor visibility, mouse capture,
   diff-based `draw(buffer)`, `readEvent(timeout)`. All fallible operations return
-  `Either[BackendError, A]`.
+  `Either[BackendError, A]`. A second group of operations is optional: `setTitle`
+  (the window or tab title), `clearRegion(ClearType)` (erase the whole display, or
+  only from the cursor down, or only the current line — what an app that does not own
+  the whole screen needs), `requestFullRedraw()` (throw away the diff baseline, so the
+  next frame repaints every cell — the recovery path when something other than this
+  app wrote to the terminal), `copyToClipboard`, `suspend` and `printAbove`. Each has
+  a default body that succeeds and does nothing, so a backend can implement as much or
+  as little of it as its device supports.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`
   and `org.jline:jline-terminal-jni` 3.30.x, pinned. Those two rather than the
   `org.jline:jline` bundle: this layer uses four JLine types and never asks JLine to
