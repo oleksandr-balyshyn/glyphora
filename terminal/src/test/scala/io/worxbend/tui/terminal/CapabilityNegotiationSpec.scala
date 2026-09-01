@@ -27,6 +27,10 @@ final class CapabilityNegotiationSpec extends AnyFunSuite:
     */
   test("everything except an explicit denial counts as enabled"):
     val unknown = TerminalCapabilities.unknown
+    assert(Support.Unknown.usable)
+    assert(Support.Yes.usable)
+    assert(!Support.No.usable)
+    // the retained `TerminalCapabilities.enabled` forwarder answers the same question, for 0.13.0 callers
     assert(unknown.enabled(Support.Unknown))
     assert(unknown.enabled(Support.Yes))
     assert(!unknown.enabled(Support.No))

@@ -9,6 +9,11 @@ package io.worxbend.tui.terminal
 enum Support:
   case Yes, No, Unknown
 
+  /** Whether a feature in this state should be used. Everything except an explicit [[No]] is a yes — see
+    * [[TerminalCapabilities]] for why silence means "carry on".
+    */
+  def usable: Boolean = this != Support.No
+
 /** What the terminal said about itself when it was asked, once, at start-up.
   *
   * Every field starts at [[Support.Unknown]], and every caller must read `Unknown` as "go ahead and use the feature".
@@ -27,8 +32,11 @@ final case class TerminalCapabilities(
     focusReporting: Support = Support.Unknown,
 ):
 
-  /** Whether a feature in state `support` should be used. Everything except an explicit [[Support.No]] is a yes. */
-  def enabled(support: Support): Boolean = support != Support.No
+  /** Whether a feature in state `support` should be used. Prefer `support.usable`, which asks the state itself rather
+    * than routing the question through an unrelated capability value; this is kept for source compatibility with
+    * 0.13.0 and answers exactly the same question.
+    */
+  def enabled(support: Support): Boolean = support.usable
 
 object TerminalCapabilities:
 

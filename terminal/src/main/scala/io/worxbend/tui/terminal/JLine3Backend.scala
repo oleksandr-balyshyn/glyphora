@@ -158,7 +158,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
         // one atomic update: the terminal shows the previous frame until the whole batch has arrived
         val frame = AnsiSequences.frame(
           (if erasing then AnsiSequences.ClearScreen else "") + body,
-          probed.enabled(probed.synchronizedOutput),
+          probed.synchronizedOutput.usable,
         )
         // under the monitor, so a Ctrl+Z landing mid-frame cannot leave the alternate screen between the two writes
         // and spill this frame's cursor moves and box-drawing over the user's shell
@@ -201,9 +201,9 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       // modern input modes; a terminal that answered nothing still gets them, because an unsupported private mode is
       // ignored by an overwhelming majority of terminals and switching the feature off on silence would disable it
       // almost everywhere. Only an explicit denial skips one.
-      if probed.enabled(probed.bracketedPaste) then write(AnsiSequences.EnableBracketedPaste)
-      if probed.enabled(probed.focusReporting) then write(AnsiSequences.EnableFocusReporting)
-      if probed.enabled(probed.kittyKeyboard) then write(AnsiSequences.PushKittyKeyboard)
+      if probed.bracketedPaste.usable then write(AnsiSequences.EnableBracketedPaste)
+      if probed.focusReporting.usable then write(AnsiSequences.EnableFocusReporting)
+      if probed.kittyKeyboard.usable then write(AnsiSequences.PushKittyKeyboard)
     }
 
   /** Writes the capability queries and reads what comes back, or skips the round trip entirely.
