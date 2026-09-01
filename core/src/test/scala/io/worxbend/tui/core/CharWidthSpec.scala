@@ -71,6 +71,36 @@ final class CharWidthSpec extends AnyFunSuite:
   test("substringByWidth returns the whole string when it fits"):
     assert(CharWidth.substringByWidth("hi", 10) == "hi")
 
+  test("dropByWidth of zero or fewer columns returns the input unchanged"):
+    assert(CharWidth.dropByWidth("hello", 0) == "hello")
+    assert(CharWidth.dropByWidth("hello", -3) == "hello")
+
+  test("dropByWidth removes ASCII up to the exact column"):
+    assert(CharWidth.dropByWidth("hello", 3) == "lo")
+
+  test("dropByWidth returns the empty string once the whole text has scrolled off"):
+    assert(CharWidth.dropByWidth("hello", 5) == "")
+    assert(CharWidth.dropByWidth("hello", 99) == "")
+    assert(CharWidth.dropByWidth("\u4f60\u597d", 4) == "")
+    assert(CharWidth.dropByWidth("\u4f60\u597d", 99) == "")
+
+  test("dropByWidth never leaves half of a wide character"):
+    // one column of budget lands inside the first ideograph; the whole cluster goes rather than half of it
+    assert(CharWidth.dropByWidth("\u4f60\u597d", 1) == "\u597d")
+    assert(CharWidth.dropByWidth("\u4f60\u597d", 2) == "\u597d")
+
+  test("dropByWidth keeps a combining mark with its base"):
+    assert(CharWidth.dropByWidth("\u00e9x", 1) == "x")
+    assert(CharWidth.dropByWidth("e\u0301x", 1) == "x")
+
+  test("dropByWidth treats an emoji ZWJ sequence as one unit"):
+    val family = "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67" // man-woman-girl, two columns in total
+    assert(CharWidth.dropByWidth(family + "ab", 2) == "ab")
+    assert(CharWidth.dropByWidth(family + "ab", 1) == "ab")
+
+  test("dropByWidth of the empty string is the empty string"):
+    assert(CharWidth.dropByWidth("", 4) == "")
+
   test("isWideCodePoint recognizes CJK, emoji, and hangul jamo starts"):
     assert(CharWidth.isWideCodePoint(0x4e00))
     assert(CharWidth.isWideCodePoint(0x1f600))

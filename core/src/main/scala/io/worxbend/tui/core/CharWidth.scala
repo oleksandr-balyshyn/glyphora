@@ -74,6 +74,38 @@ object CharWidth:
         used += width
     prefix.result()
 
+  /** The suffix of `text` that remains after the first `skipWidth` display columns; never splits a grapheme cluster.
+    *
+    * The mirror image of [[substringByWidth]]: that method answers "what fits in N columns", this one answers "what is
+    * left once N columns have scrolled off the left edge". It is the primitive a horizontally scrolled view needs —
+    * without it, code outside this file would have to reach for `String.substring`, which counts UTF-16 code units
+    * rather than columns and which this library forbids everywhere else.
+    *
+    * A cluster that straddles the boundary is dropped whole rather than half-drawn. For example a two-column CJK
+    * character whose first column falls before `skipWidth` and whose second falls after is discarded: half of a wide
+    * glyph is not a character a terminal can print. One consequence worth knowing before relying on the result:
+    * `of(substringByWidth(t, n)) + of(dropByWidth(t, n))` can be one column less than `of(t)`, and exactly one, because
+    * at most one cluster can straddle a single boundary.
+    *
+    * A `skipWidth` of zero or less returns `text` itself; a `skipWidth` at or beyond the text's width returns `""`.
+    */
+  def dropByWidth(text: String, skipWidth: Int): String =
+    if skipWidth <= 0 then text
+    else if isPrintableAscii(text) then
+      // one column per character on this path, so the column index is also the char index
+      text.substring(
+        math.min(text.length, skipWidth)
+      ) // scalafix:ok DisableSyntax; ASCII fast path: exactly one column per char, so columns and chars coincide
+    else
+      val clusters  = graphemeClusters(text)
+      val remainder = StringBuilder()
+      var skipped   = 0
+      while clusters.hasNext do
+        val cluster = clusters.next()
+        if skipped >= skipWidth then remainder ++= cluster
+        else skipped += clusterWidth(cluster)
+      remainder.result()
+
   /** `text` with every grapheme cluster whose base code point is a control character (C0, DEL, C1) removed.
     *
     * The input-side counterpart of the `width > 0` guard in [[Buffer.setString]], for the editable-text models that

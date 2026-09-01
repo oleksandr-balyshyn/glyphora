@@ -51,6 +51,25 @@ final class CharWidthFastPathSpec extends AnyFunSuite, ScalaCheckPropertyChecks:
     assert(CharWidth.substringByWidth("漢字", 4) == "漢字")
     assert(CharWidth.substringByWidth("漢字", 1) == "")
 
+  test("dropByWidth drops ASCII the same way as the general path"):
+    forAll(Gen.stringOf(Gen.choose(0x20.toChar, 0x7e.toChar)), Gen.choose(0, 40)) { (text, width) =>
+      val suffix = CharWidth.dropByWidth(text, width)
+      assert(text.endsWith(suffix))
+      assert(suffix.length == math.max(0, text.length - math.max(0, width)))
+    }
+
+  test("prefix and suffix rejoin into the original when no cluster straddles the boundary"):
+    // every cluster below is one column wide, so no boundary can fall inside one
+    forAll(Gen.stringOf(Gen.oneOf(Gen.choose(0x20.toChar, 0x7e.toChar), Gen.const('\u00e9'))), Gen.choose(0, 40)) {
+      (text, width) =>
+        assert(CharWidth.substringByWidth(text, width) + CharWidth.dropByWidth(text, width) == text)
+    }
+
+  test("dropByWidth forfeits at most one column to a straddled wide cluster"):
+    assert(CharWidth.dropByWidth("\u6f22\u5b57", 1) == "\u5b57")
+    assert(CharWidth.dropByWidth("\u6f22\u5b57", 2) == "\u5b57")
+    assert(CharWidth.dropByWidth("\u6f22\u5b57", 3) == "")
+
   test("asciiSymbol returns shared instances and nothing outside the printable range"):
     assert(CharWidth.asciiSymbol('a') eq CharWidth.asciiSymbol('a'))
     assert(CharWidth.asciiSymbol('a') == "a")
