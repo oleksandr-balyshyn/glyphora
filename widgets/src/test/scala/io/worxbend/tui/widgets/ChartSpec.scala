@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Color, Style}
+import io.worxbend.tui.core.{Color, Constraint, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -77,40 +77,54 @@ final class ChartSpec extends AnyFunSuite:
   test("a legend lists each named dataset in its own style"):
     val cpu    = Dataset("cpu", Seq((0.0, 0.0)), Style.Default.withFg(Color.Red))
     val mem    = Dataset("mem", Seq((0.0, 1.0)), Style.Default.withFg(Color.Blue))
-    val buffer = rendered(Chart(Seq(cpu, mem), (0.0, 1.0), (0.0, 1.0), showLegend = true), 30, 8)
-    assert(trimmedLines(buffer)(0).endsWith("■ cpu"))
-    assert(trimmedLines(buffer)(1).endsWith("■ mem"))
-    assert(buffer.get(25, 0).style.fg.contains(Color.Red))
-    assert(buffer.get(25, 1).style.fg.contains(Color.Blue))
+    val buffer = rendered(Chart(Seq(cpu, mem), (0.0, 1.0), (0.0, 1.0), showLegend = true), 40, 12)
+    assert(trimmedLines(buffer)(0).endsWith("\u25a0 cpu"))
+    assert(trimmedLines(buffer)(1).endsWith("\u25a0 mem"))
+    assert(buffer.get(35, 0).style.fg.contains(Color.Red))
+    assert(buffer.get(35, 1).style.fg.contains(Color.Blue))
 
   test("a dataset with no name gets no legend entry"):
-    val chart  =
-      Chart(Seq(Dataset("", Seq.empty), Dataset("only", Seq.empty)), (0.0, 1.0), (0.0, 1.0), showLegend = true)
-    val buffer = rendered(chart, 20, 6)
-    assert(trimmedLines(buffer)(0).endsWith("■ only"))
-    assert(!trimmedLines(buffer)(1).contains("■"))
+    val datasets = Seq(Dataset("", Seq.empty), Dataset("only", Seq.empty))
+    val buffer   = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0), showLegend = true), 40, 12)
+    assert(trimmedLines(buffer)(0).endsWith("\u25a0 only"))
+    assert(!trimmedLines(buffer)(1).contains("\u25a0"))
 
   test("the legend is off unless it is asked for"):
     val datasets = Seq(Dataset("cpu", Seq.empty))
-    val silent   = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0)), 20, 6)
-    val explicit = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0), showLegend = false), 20, 6)
+    val silent   = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0)), 40, 12)
+    val explicit = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0), showLegend = false), 40, 12)
     assert(trimmedLines(silent) == trimmedLines(explicit))
     assert(!trimmedLines(silent).mkString.contains("cpu"))
 
-  test("a legend wider than the plot is truncated rather than painted outside it"):
-    val chart  = Chart(Seq(Dataset("a" * 40, Seq.empty)), (0.0, 1.0), (0.0, 1.0), showLegend = true)
-    val buffer = rendered(chart, 12, 5)
-    // the axis column is untouched and the entry occupies only the plot columns after it
-    assert(buffer.get(0, 0).symbol == "│")
-    assert(trimmedLines(buffer)(0) == "│" + "■ " + "a" * 9)
-
-  test("a chart too short for every entry drops the overflow instead of overwriting the axis"):
-    val datasets = Seq(Dataset("one", Seq.empty), Dataset("two", Seq.empty), Dataset("three", Seq.empty))
-    val buffer   = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0), showLegend = true), 20, 3)
-    assert(trimmedLines(buffer)(2) == "└───────────────────")
-    assert(!trimmedLines(buffer).mkString.contains("three"))
-
   test("a legend measures a wide-character name in columns, not characters"):
-    // 負荷 is two CJK ideographs, four terminal columns wide; the entry is "■ " plus those four
-    val buffer = rendered(Chart(Seq(Dataset("負荷", Seq.empty)), (0.0, 1.0), (0.0, 1.0), showLegend = true), 12, 5)
-    assert(trimmedLines(buffer)(0) == "│     ■ 負荷")
+    // \u8ca0\u8377 is two CJK ideographs, four terminal columns wide, so the entry is six columns of the plot's 39
+    val chart  = Chart(Seq(Dataset("\u8ca0\u8377", Seq.empty)), (0.0, 1.0), (0.0, 1.0), showLegend = true)
+    val buffer = rendered(chart, 40, 12)
+    assert(trimmedLines(buffer)(0).endsWith("\u25a0 \u8ca0\u8377"))
+    assert(buffer.get(34, 0).symbol == "\u25a0")
+
+  test("a legend wider than a quarter of the plot is dropped, not truncated"):
+    val chart  = Chart(Seq(Dataset("a" * 20, Seq.empty)), (0.0, 1.0), (0.0, 1.0), showLegend = true)
+    val buffer = rendered(chart, 40, 12)
+    // 22 columns of key against a 39-column plot: the data wins and the key is not drawn at all
+    assert(!trimmedLines(buffer).mkString.contains("a"))
+    assert(buffer.get(0, 0).symbol == "\u2502")
+
+  test("a legend taller than a quarter of the plot is dropped as a whole"):
+    val datasets = (1 to 5).map(index => Dataset(s"series $index", Seq.empty))
+    val buffer   = rendered(Chart(datasets, (0.0, 1.0), (0.0, 1.0), showLegend = true), 40, 12)
+    // five rows of key against an 11-row plot: no half key, because a reader cannot tell what is missing
+    assert(!trimmedLines(buffer).mkString.contains("series"))
+
+  test("relaxing the constraints lets an otherwise hidden legend through"):
+    val datasets = (1 to 5).map(index => Dataset(s"series $index", Seq.empty))
+    val chart    = Chart(
+      datasets,
+      (0.0, 1.0),
+      (0.0, 1.0),
+      showLegend = true,
+      hiddenLegendConstraints = (Constraint.Percentage(100), Constraint.Percentage(100)),
+    )
+    val buffer   = rendered(chart, 40, 12)
+    assert(trimmedLines(buffer)(0).endsWith("\u25a0 series 1"))
+    assert(trimmedLines(buffer)(4).endsWith("\u25a0 series 5"))

@@ -778,8 +778,7 @@ squeezed into a small pane stays a chart instead of becoming a column of numbers
 Every `Dataset` carries a `name`. With `showLegend = true` the named ones are listed as
 a key in the top-right of the plot, one per row, each entry drawn in that dataset's own
 style — which is what tells three series apart when all you had before was three
-colours. A dataset with an empty name is left out of the key, and a chart too small for
-the whole key shows fewer entries rather than painting over the axes:
+colours. A dataset with an empty name is left out of the key:
 
 ```scala
 chart(
@@ -790,6 +789,24 @@ chart(
   xBounds = (0.0, 80.0),
   yBounds = (0.0, 100.0),
   showLegend = true,
+)
+```
+
+The key is painted over the plot, so it costs the data no space — but only while it
+stays small. The widget-level `Chart` carries `hiddenLegendConstraints`, a pair of
+`Constraint`s for `(width, height)`, and the key is dropped entirely unless it satisfies
+both. The default lets it claim up to a quarter of the plot in either direction, so a
+pane that shrinks loses its key rather than its data. Dropping it is all-or-nothing on
+purpose: half a key says less than none, because a reader cannot tell which series the
+missing rows belonged to. Widen the allowance when you would rather keep the names:
+
+```scala
+Chart(
+  datasets,
+  xBounds = (0.0, 80.0),
+  yBounds = (0.0, 100.0),
+  showLegend = true,
+  hiddenLegendConstraints = (Constraint.Percentage(50), Constraint.Percentage(50)),
 )
 ```
 

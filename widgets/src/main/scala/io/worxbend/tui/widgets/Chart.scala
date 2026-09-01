@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Constraint, Rect, Style, Widget}
 
 /** How a [[Dataset]]'s points are drawn: `Line` joins consecutive points with segments, `Scatter` plots them alone.
   *
@@ -27,7 +27,10 @@ final case class Dataset(
   * line, `Left` against the frame, `Center` between the two.
   *
   * With `showLegend` the plot's top-right corner carries a key: one entry per dataset with a non-empty `name`, each
-  * drawn in that dataset's own style, so several series in one plot can be told apart by more than colour alone.
+  * drawn in that dataset's own style, so several series in one plot can be told apart by more than colour alone. The
+  * key is drawn over the plot, so it costs the data no space — but only while it stays small: `hiddenLegendConstraints`
+  * is `(horizontal, vertical)` and the whole key is dropped unless it satisfies both. The default allows it a quarter
+  * of the plot in either direction, so a chart that shrinks loses its key and keeps its data.
   *
   * @param labelAlignment
   *   by the widget parameter-order convention this is placement and would belong before `axisStyle`; it sits last
@@ -44,6 +47,7 @@ final case class Chart(
     showLabels: Boolean = false,
     labelAlignment: Alignment = Alignment.Right,
     showLegend: Boolean = false,
+    hiddenLegendConstraints: (Constraint, Constraint) = (Constraint.Ratio(1, 4), Constraint.Ratio(1, 4)),
     legendMarker: String = "■",
 ) extends Widget:
 
@@ -68,18 +72,21 @@ final case class Chart(
   /** Draws one right-aligned entry per named dataset, top-down in the plot area, each in that dataset's own style.
     *
     * Every [[Dataset]] already carries a `name`; without a key nothing ever showed it, so three series were three
-    * indistinguishable colours. Entries are clipped to the plot area's width and dropped past its height, so a chart
-    * too small for the whole key shows fewer entries rather than painting outside `area` or over the axes. A dataset
-    * with an empty name gets no entry — that is how a caller keeps a series out of the key.
+    * indistinguishable colours. A dataset with an empty name gets no entry — that is how a caller keeps a series out of
+    * the key.
+    *
+    * The whole key is dropped when it would be larger than `hiddenLegendConstraints` allows, so a chart in a pane too
+    * small for both shows the data rather than the names. Dropping the key is deliberately all-or-nothing: half a key
+    * says less than none, because a reader cannot tell which series the missing entries belonged to.
     */
   private def drawLegend(plotArea: Rect, buffer: Buffer): Unit =
-    val named  = datasets.filter(_.name.nonEmpty).take(math.max(0, plotArea.height))
+    val named  = datasets.filter(_.name.nonEmpty)
     val labels = named.map(dataset => s"$legendMarker ${dataset.name}")
-    val width  = math.min(labels.map(CharWidth.of).maxOption.getOrElse(0), plotArea.width)
-    if width > 0 then
+    val width  = LegendFit.width(labels, padding = 0)
+    if LegendFit.fits(plotArea, width, named.size, hiddenLegendConstraints) then
       val x = plotArea.right - width
       named.zip(labels).zipWithIndex.foreach { case ((dataset, label), index) =>
-        buffer.setString(x, plotArea.y + index, CharWidth.substringByWidth(label, width), dataset.style)
+        buffer.setString(x, plotArea.y + index, label, dataset.style)
       }
 
   /** Columns reserved left of the axis for the y-bound labels: the widest label, or none at all when reserving it would
