@@ -1,13 +1,13 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Style}
+import io.worxbend.tui.core.{Buffer, Style}
 
 /** A left-to-right write head over one row of a [[Buffer]], carrying the column it has reached and the column it must
   * stop before.
   *
   * Every widget that lays a row out as "one piece of text after another" needs the same rule: clip the next string to
   * the columns still left, write it, and advance by the width that was *actually* written rather than by the width that
-  * was asked for. Written out by hand that rule is a running `x`, a `CharWidth.substringByWidth` against `right - x`,
+  * was asked for. Written out by hand that rule is a running `x`, a budget of `right - x` handed to `Buffer.setString`,
   * and an `if x < right` guard in front of every segment — and the guard is exactly the part that is easy to get subtly
   * wrong, because a caller-supplied wide (CJK) or emoji string is the case it exists for. Stating it once means the
   * widgets below cannot disagree about it.
@@ -41,11 +41,11 @@ private[widgets] final class RowCursor(buffer: Buffer, y: Int, private var x: In
 
   /** Writes as much of `text` as fits in the columns still left and advances the head by the width written.
     *
-    * Clipping goes through [[io.worxbend.tui.core.CharWidth.substringByWidth]], so a two-column cluster that would only
-    * half-fit is dropped whole rather than split. With no room left this does nothing and the head does not move.
+    * Clipping is [[io.worxbend.tui.core.Buffer.setString]]'s budgeted overload, which already owns this rule: a
+    * two-column cluster that would only half-fit inside the budget is dropped whole rather than split, and a
+    * non-positive budget writes nothing. The head then advances by the columns that were *actually* written, so a
+    * cursor whose `right` reaches past the buffer's own area advances only as far as the buffer accepted rather than as
+    * far as the text would have gone.
     */
   def write(text: String, style: Style): Unit =
-    if remaining > 0 then
-      val fitted = CharWidth.substringByWidth(text, remaining)
-      buffer.setString(x, y, fitted, style)
-      x += CharWidth.of(fitted)
+    x += buffer.setString(x, y, text, style, remaining)
