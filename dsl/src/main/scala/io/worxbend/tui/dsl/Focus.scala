@@ -43,6 +43,22 @@ private[dsl] final case class PaintedArea(area: Rect, sequence: Int)
   */
 private[dsl] final case class AutofocusRequest(index: Int, key: Option[String])
 
+/** Where focus stands: a position in the depth-first tab order, and the focus key of the element that was at that
+  * position when focus landed there.
+  *
+  * The two travel together because they are only ever written together — moving focus sets both, and a key without the
+  * index it was resolved from says nothing about which element renders focused. Also what [[FocusTracker.pushLayer]]
+  * remembers: focus as it stood before a layer covered it, to put the cursor back when that layer goes away.
+  */
+private final case class FocusAnchor(index: Int, key: Option[String])
+
+private object FocusAnchor:
+
+  /** Nothing focused — see the `-1` note on [[FocusTracker.focusedIndex]]. Named `Cleared` rather than `None` so it
+    * cannot be misread as `Option.None` in a file whose focus keys are themselves `Option[String]`.
+    */
+  val Cleared: FocusAnchor = FocusAnchor(-1, scala.None)
+
 /** Per-app focus bookkeeping, owned by a single `TuiApp.runWith` invocation and touched only on the render thread:
   * which focusable (by depth-first order index) has focus, how many exist, and where each rendered last frame (for
   * click-to-focus hit-testing).
@@ -53,15 +69,22 @@ private[dsl] final case class AutofocusRequest(index: Int, key: Option[String])
   */
 private[dsl] final class FocusTracker:
 
+  private var anchor: FocusAnchor = FocusAnchor(0, scala.None)
+
+  var focusableCount: Int = 0
+
   /** Which focusable holds focus, as a position in the depth-first tab order — or `-1`, meaning nothing does.
     *
     * `-1` is a real state, not an "uninitialised" marker: [[clearFocus]] puts the tracker there deliberately, and while
     * it lasts no element renders focused and every key goes straight past the tree to the app's bindings. `Tab` from
     * there lands on the first focusable and `Shift+Tab` on the last.
     */
-  var focusedIndex: Int          = 0
-  var focusableCount: Int        = 0
-  var focusedKey: Option[String] = None
+  def focusedIndex: Int = anchor.index
+
+  /** The focus key of the element focus is anchored to, if it declared one. */
+  def focusedKey: Option[String] = anchor.key
+
+  def focusedKey_=(key: Option[String]): Unit = anchor = anchor.copy(key = key)
 
   /** The focus keys of the tree the last [[reconcile]] saw, in tab order (`None` for an unkeyed focusable). Kept so
     * [[focusToKey]] can answer "which index is the element named `email`?" without walking the tree again.
@@ -130,17 +153,17 @@ private[dsl] final class FocusTracker:
   def reconcile(keys: Seq[Option[String]], autofocus: Option[AutofocusRequest]): Unit =
     focusKeysSeen = keys.toVector
     focusableCount = keys.size
-    if focusedIndex < 0 then focusedKey = None
+    if anchor.index < 0 then anchor = FocusAnchor.Cleared
     else
-      focusedKey.map(key => keys.indexOf(Some(key))).filter(_ >= 0).foreach(focusedIndex = _)
-      focusedIndex = clampedIndex(focusedIndex)
-      focusedKey = keys.lift(focusedIndex).flatten
+      val reanchored = anchor.key.map(key => keys.indexOf(Some(key))).filter(_ >= 0).getOrElse(anchor.index)
+      val index      = clampedIndex(reanchored)
+      anchor = FocusAnchor(index, keys.lift(index).flatten)
     val appeared = autofocus.filterNot(request => lastAutofocus.contains(request))
     lastAutofocus = autofocus
     // an element that has just appeared takes focus even from the cleared state: asking for it is the whole point
     appeared.foreach { request =>
-      focusedIndex = clampedIndex(request.index)
-      focusedKey = keys.lift(focusedIndex).flatten
+      val index = clampedIndex(request.index)
+      anchor = FocusAnchor(index, keys.lift(index).flatten)
     }
     clearAreas()
 
@@ -159,21 +182,16 @@ private[dsl] final class FocusTracker:
     val index = focusKeysSeen.indexOf(Some(key))
     if index < 0 then false
     else
-      focusedIndex = index
-      focusedKey = Some(key)
+      anchor = FocusAnchor(index, Some(key))
       true
 
   /** Drops focus entirely: no element renders focused, and keys go past the tree straight to the app's bindings until
     * `Tab`, a mouse press or [[focusToKey]] puts focus back.
     */
-  def clearFocus(): Unit =
-    focusedIndex = -1
-    focusedKey = None
+  def clearFocus(): Unit = anchor = FocusAnchor.Cleared
 
-  /** Focus as it stood before a layer covered it: where to put the cursor back when that layer goes away. */
-  private final case class CoveredFocus(index: Int, key: Option[String])
-
-  private var covered = List.empty[CoveredFocus]
+  /** Focus as each covering layer found it — see [[pushLayer]]; innermost layer first. */
+  private var covered = List.empty[FocusAnchor]
 
   /** Called when a layer goes over the current tree — a modal or full screen is pushed, the command palette opens.
     *
@@ -182,9 +200,8 @@ private[dsl] final class FocusTracker:
     * three-field dialog while the app's fifth control was focused used to land the cursor on the dialog's last field.
     */
   def pushLayer(): Unit =
-    covered = CoveredFocus(focusedIndex, focusedKey) :: covered
-    focusedIndex = 0
-    focusedKey = None
+    covered = anchor :: covered
+    anchor = FocusAnchor(0, scala.None)
 
   /** Called when that layer goes away. Puts focus back where the layer found it.
     *
@@ -197,12 +214,9 @@ private[dsl] final class FocusTracker:
   def popLayer(): Unit =
     covered match
       case frame :: rest =>
-        focusedIndex = frame.index
-        focusedKey = frame.key
+        anchor = frame
         covered = rest
-      case Nil           =>
-        focusedIndex = 0
-        focusedKey = None
+      case Nil           => anchor = FocusAnchor(0, scala.None)
 
   /** `Tab`. From the no-focus state this lands on the *first* focusable rather than the second one. */
   def focusNext(): Boolean =
@@ -237,8 +251,7 @@ private[dsl] final class FocusTracker:
   def focusTo(index: Int): Unit =
     // clamped here as well as in `reconcile`, so the class holds its own invariant no matter which caller moves focus:
     // an index outside the range would render a frame with nothing focused at all
-    focusedIndex = if focusableCount > 0 then math.max(0, math.min(index, focusableCount - 1)) else 0
-    focusedKey = None
+    anchor = FocusAnchor(clampedIndex(index), scala.None)
 
   def areaOf(index: Int): Option[Rect] = areas.get(index).map(_.area)
 
