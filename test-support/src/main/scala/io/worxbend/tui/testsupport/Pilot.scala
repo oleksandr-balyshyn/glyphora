@@ -314,3 +314,26 @@ object Pilot:
     thread.setDaemon(true)
     thread.start()
     Pilot(backend, thread, appFailure, runFailure)
+
+  /** Starts an app against a backend this method owns: it builds a [[HeadlessBackend]] of `size`, hands that backend to
+    * `app`, and leaves it reachable afterwards as `pilot.backend`.
+    *
+    * Every pilot test used to write the same three lines — construct the backend, pass it to `start`, then name it a
+    * second time inside the block as `app.runWith(backend)`. Here the block takes the backend as its parameter, so a
+    * test that has no other use for it never has to name it:
+    *
+    * {{{
+    * val app   = CounterApp()
+    * val pilot = Pilot.start(Size(40, 10))(app.runWith).waitForIdle()
+    * }}}
+    *
+    * Failure reporting is exactly [[start(backend:io\.worxbend\.tui\.terminal\.HeadlessBackend)*]]'s: this overload
+    * owns nothing but the backend's construction.
+    *
+    * The parameter is a function of the backend rather than an application object because `tui-test` is built on
+    * `tui-core`, `tui-terminal` and `tui-runtime` and on nothing above them. An overload taking a `TuiApp` would point
+    * this module's dependency edge upward at `tui-dsl`.
+    */
+  def start(size: Size)(app: HeadlessBackend => Either[RunnerError, Unit]): Pilot =
+    val backend = HeadlessBackend(size)
+    start(backend)(app(backend))
