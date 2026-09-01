@@ -224,6 +224,9 @@ private[dsl] trait ElementFactories:
     *
     * `showLegend = true` draws a key in the top-right of the plot listing every dataset whose `name` is non-empty, each
     * entry in that dataset's own style.
+    *
+    * `xTitle` and `yTitle` name what the axes measure. Each takes one row from the plot — the y title above it, the x
+    * title below the axis — rather than being written over the data, so a title never hides a point.
     */
   def chart(
       datasets: Seq[w.Dataset],
@@ -232,6 +235,8 @@ private[dsl] trait ElementFactories:
       showLabels: Boolean = false,
       labelAlignment: w.Alignment = w.Alignment.Right,
       showLegend: Boolean = false,
+      xTitle: Option[String] = None,
+      yTitle: Option[String] = None,
   ): WidgetElement =
     WidgetElement(
       w.Chart(
@@ -241,6 +246,8 @@ private[dsl] trait ElementFactories:
         showLabels = showLabels,
         labelAlignment = labelAlignment,
         showLegend = showLegend,
+        xTitle = xTitle,
+        yTitle = yTitle,
       )
     )
 

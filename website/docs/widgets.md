@@ -787,6 +787,21 @@ chart(
 A pane too narrow to spare the gutter drops the labels rather than the plot, so a chart
 squeezed into a small pane stays a chart instead of becoming a column of numbers.
 
+The numbers say how much; `xTitle` and `yTitle` say of what. Each takes a row of its own
+— the y title above the plot, the x title below the axis — rather than being written over
+the data, so a title can never hide a point. An area with no rows to spare for them draws
+nothing at all rather than a chart with no plot in it:
+
+```scala
+chart(
+  Seq(Dataset("latency", points)),
+  xBounds = (0.0, 60.0),
+  yBounds = (0.0, 250.0),
+  xTitle = Some("seconds"),
+  yTitle = Some("ms"),
+)
+```
+
 Every `Dataset` carries a `name`. With `showLegend = true` the named ones are listed as
 a key in the top-right of the plot, one per row, each entry drawn in that dataset's own
 style — which is what tells three series apart when all you had before was three

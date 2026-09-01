@@ -159,3 +159,34 @@ final class ChartSpec extends AnyFunSuite:
     val dataset = Dataset("d", Seq.empty, graphType = GraphType.Area)
     val buffer  = rendered(Chart(Seq(dataset), (0.0, 3.0), (0.0, 3.0)), 5, 5)
     assert(trimmedLines(buffer) == Seq("│", "│", "│", "│", "└────"))
+
+  test("axis titles take a row each from the plot rather than covering it"):
+    val chart  = Chart(
+      Seq(Dataset("d", Seq((0.0, 0.0), (3.0, 3.0)))),
+      (0.0, 3.0),
+      (0.0, 3.0),
+      xTitle = Some("s"),
+      yTitle = Some("ms"),
+    )
+    val buffer = rendered(chart, 5, 7)
+    // row 0 is the y title at the axis column, row 6 the x title at the far end, the axes in between
+    assert(trimmedLines(buffer)(0) == "ms")
+    assert(trimmedLines(buffer)(5) == "└────")
+    assert(trimmedLines(buffer)(6) == "    s")
+    // the diagonal is drawn in the four rows left over, never on a title row
+    assert(buffer.get(1, 4).symbol == "•")
+    assert(buffer.get(4, 1).symbol == "•")
+
+  test("one title alone reserves one row"):
+    val chart = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), yTitle = Some("ms"))
+    assert(trimmedLines(rendered(chart, 5, 5)) == Seq("ms", "│", "│", "│", "└────"))
+
+  test("an area too short for its titles draws nothing at all"):
+    val chart = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xTitle = Some("s"), yTitle = Some("ms"))
+    assert(trimmedLines(rendered(chart, 5, 4)).forall(_.isEmpty))
+
+  test("a title wider than the area is truncated in columns, not characters"):
+    val chart  = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), yTitle = Some("負荷率"))
+    val buffer = rendered(chart, 5, 5)
+    // five columns hold two of the three ideographs; the third is dropped whole, never half-drawn
+    assert(trimmedLines(buffer)(0) == "負荷")

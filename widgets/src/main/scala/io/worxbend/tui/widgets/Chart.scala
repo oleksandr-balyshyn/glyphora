@@ -46,6 +46,11 @@ final case class Dataset(
   * is `(horizontal, vertical)` and the whole key is dropped unless it satisfies both. The default allows it a quarter
   * of the plot in either direction, so a chart that shrinks loses its key and keeps its data.
   *
+  * `xTitle` and `yTitle` name what the axes measure — the units a plotted series otherwise leaves the reader to guess.
+  * Each takes a row of its own: the y title on the row above the plot, starting at the axis column, and the x title on
+  * the row below the axis, right-aligned at the axis's far end. The rows are *taken from* the plot rather than written
+  * over it, so a title can never cover a point.
+  *
   * @param labelAlignment
   *   by the widget parameter-order convention this is placement and would belong before `axisStyle`; it sits last
   *   because `Chart` is a published 0.12.0 signature and inserting a parameter in the middle would silently repoint
@@ -63,15 +68,21 @@ final case class Chart(
     showLegend: Boolean = false,
     hiddenLegendConstraints: (Constraint, Constraint) = (Constraint.Ratio(1, 4), Constraint.Ratio(1, 4)),
     legendMarker: String = "■",
+    xTitle: Option[String] = None,
+    yTitle: Option[String] = None,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    if area.width >= 3 && area.height >= 3 then
+    // one row for the axis, plus one for each title present: below that there is no plot left to draw
+    val titleRows = xTitle.size + yTitle.size
+    if area.width >= 3 && area.height >= 3 + titleRows then
       val labels   = if showLabels then Seq(formatBound(yBounds._2), formatBound(yBounds._1)) else Seq.empty
       val gutter   = labelGutter(area, labels)
       val axisX    = area.x + gutter
-      drawAxes(area, axisX, buffer)
-      val plotArea = Rect(axisX + 1, area.y, area.width - gutter - 1, area.height - 1)
+      val plotTop  = area.y + yTitle.size
+      val axisRow  = area.bottom - 1 - xTitle.size
+      drawAxes(axisX, plotTop, axisRow, area.right, buffer)
+      val plotArea = Rect(axisX + 1, plotTop, area.width - gutter - 1, axisRow - plotTop)
       val shapes   = datasets.map { dataset =>
         dataset.graphType match
           case GraphType.Line    => Shape.Polyline(dataset.points, dataset.style)
@@ -81,9 +92,21 @@ final case class Chart(
       }
       Canvas(xBounds, yBounds, shapes, marker, resolution).render(plotArea, buffer)
       if gutter > 0 then
-        drawLabel(buffer, area.x, gutter, area.y, labels.head)
-        drawLabel(buffer, area.x, gutter, area.bottom - 2, labels.last)
+        drawLabel(buffer, area.x, gutter, plotTop, labels.head)
+        drawLabel(buffer, area.x, gutter, axisRow - 1, labels.last)
       if showLegend then drawLegend(plotArea, buffer)
+      drawTitles(buffer, area, axisX)
+
+  /** Writes the axis titles on the rows reserved for them: the y title above the plot at the axis column, the x title
+    * below the axis at its far end. Both are truncated to the columns available rather than running off the area.
+    */
+  private def drawTitles(buffer: Buffer, area: Rect, axisX: Int): Unit =
+    val room = area.right - axisX
+    yTitle.foreach(title => buffer.setString(axisX, area.y, CharWidth.substringByWidth(title, room), axisStyle))
+    xTitle.foreach { title =>
+      val fitted = CharWidth.substringByWidth(title, room)
+      buffer.setString(Alignment.Right.originAt(axisX, room, CharWidth.of(fitted)), area.bottom - 1, fitted, axisStyle)
+    }
 
   /** Draws one right-aligned entry per named dataset, top-down in the plot area, each in that dataset's own style.
     *
@@ -123,13 +146,16 @@ final case class Chart(
   private def formatBound(value: Double): String =
     if value == value.floor && math.abs(value) < 1e9 then value.toLong.toString else f"$value%.1f"
 
-  private def drawAxes(area: Rect, axisX: Int, buffer: Buffer): Unit =
-    var y = area.y
-    while y < area.bottom - 1 do
+  /** Draws the two axis rules: the upright one down column `axisX` from row `top`, and the horizontal one along
+    * `axisRow` out to `right`, meeting at the corner.
+    */
+  private def drawAxes(axisX: Int, top: Int, axisRow: Int, right: Int, buffer: Buffer): Unit =
+    var y = top
+    while y < axisRow do
       buffer.set(axisX, y, Cell("│", axisStyle))
       y += 1
     var x = axisX + 1
-    while x < area.right do
-      buffer.set(x, area.bottom - 1, Cell("─", axisStyle))
+    while x < right do
+      buffer.set(x, axisRow, Cell("─", axisStyle))
       x += 1
-    buffer.set(axisX, area.bottom - 1, Cell("└", axisStyle))
+    buffer.set(axisX, axisRow, Cell("└", axisStyle))
