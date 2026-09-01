@@ -881,6 +881,34 @@ a step that is not in the ramp, rather than guessing a neighbour), and
 `Tailwind.Black` and `Tailwind.White` are true black and white, again independent of the
 terminal theme.
 
+### The Material palette
+
+The same design work exists in a second published form, and it is here too: the Material
+Design 2014 palette, 16 hue ramps with accent shades, 3 without (`Brown`, `Gray`,
+`BlueGray`), plus its own `Black` and `White`.
+
+```scala
+import io.worxbend.tui.core.palette.Material
+
+val warn     = Material.Amber.c700
+val urgent   = Material.Red.a400 // an accent
+val surfaces = Seq(Material.BlueGray.c900, Material.BlueGray.c800, Material.BlueGray.c700)
+```
+
+A Material ramp runs `c50` to `c900` — ten steps, where a Tailwind ramp has eleven and
+carries a further `c950` — and `all`, `shade(step)` and the step-means-the-same-weight
+rule work exactly as they do there. `shade(950)` on a Material ramp is `None`, because
+that step is Tailwind's and not Material's.
+
+The four accents (`a100`, `a200`, `a400`, `a700`) are the part with no Tailwind
+counterpart. They are not extra steps of the ramp: they are deliberately more vivid than
+any ordinary shade, and Material uses them for the one thing on a screen that has to be
+noticed — a selection, an alert. As a surface or body colour they are exhausting, which
+is why `all` lists the ten ordinary shades and `accents` lists the four separately.
+
+Which palette to use is taste rather than capability. Material's ramps are warmer and its
+accents far more saturated, so a Material accent shouts where a Tailwind `c500` speaks.
+
 ## Build with themes, not scattered colors
 
 For application chrome and reusable components, take the `Theme` as a context
