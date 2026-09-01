@@ -27,7 +27,7 @@ output has the same shape and two runs diff cleanly in a terminal.
 ```
 
 Neither prints anything but a table. Neither asserts anything, and neither is run by any
-suite — see [why they are not gates](#why-none-of-this-is-a-ci-gate) below.
+suite — the last section says why.
 
 ## What each row means
 
@@ -69,7 +69,7 @@ same, a full frame costs several times more, encode dominates diff on a full fra
 | encode 200x50, idle, truecolor | ~52 000 |
 | encode 200x50, full, truecolor | ~179 000 |
 
-## Why none of this is a CI gate {#why-none-of-this-is-a-ci-gate}
+## Why none of this is a CI gate
 
 A wall-clock threshold asserted in CI fails for reasons that have nothing to do with the
 commit under test: a noisy neighbour on a shared runner, a different machine class, a
