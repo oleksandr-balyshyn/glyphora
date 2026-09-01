@@ -22,6 +22,11 @@ private[terminal] object MouseReports:
   /** Bit 5 of a mouse report's button byte: set when the report describes motion rather than a press or a release. */
   private val MotionBit = 32
 
+  /** Bit 6 of a mouse report's button byte: set when the report is a wheel or trackpad scroll rather than a button. The
+    * low two bits then name the scroll direction instead of a button.
+    */
+  private val WheelBit = 64
+
   /** The low two bits of a mouse report's button byte, which name the button involved. */
   private val ButtonMask = 3
 
@@ -59,9 +64,8 @@ private[terminal] object MouseReports:
   def urxvt(params: Seq[Int]): Option[Event] =
     params match
       case Seq(button, column, row) if button >= X10Bias =>
-        val bits    = button - X10Bias
-        val isPress = (bits & ButtonMask) != NoButtonHeld
-        event(bits, column - 1, row - 1, isPress)
+        val bits = button - X10Bias
+        event(bits, column - 1, row - 1, isPressFromBits(bits))
       case _                                             => None
 
   /** Legacy X10 mouse report `CSI M b x y`: three raw bytes, each the value biased by 32.
@@ -82,28 +86,34 @@ private[terminal] object MouseReports:
   def x10(button: Int, column: Int, row: Int): Option[Event] =
     if button > 0xff || column > 0xff || row > 0xff then None // a replacement character, not a coordinate byte
     else
-      val bits    = button - X10Bias
-      // X10 has no separate release code: button 3 means "some button came up"
-      val isPress = (bits & ButtonMask) != NoButtonHeld
-      event(bits, column - X10Bias - 1, row - X10Bias - 1, isPress)
+      val bits = button - X10Bias
+      event(bits, column - X10Bias - 1, row - X10Bias - 1, isPressFromBits(bits))
+
+  /** Whether an X10-derived report is a press.
+    *
+    * X10 and urxvt have no per-button release code — button bits `3` mean "some button came up" — so a press is derived
+    * from the bits rather than from the final byte, which is always `M`. SGR, which does have one, passes the final
+    * byte instead.
+    */
+  private def isPressFromBits(bits: Int): Boolean = (bits & ButtonMask) != NoButtonHeld
 
   /** The [[Event.Mouse]] a button byte and a zero-based position describe, with the button byte carrying no format
     * bias: SGR's parameter has none to start with, and [[urxvt]] and [[x10]] subtract [[X10Bias]] before calling.
     */
-  def event(button: Int, x: Int, y: Int, isPress: Boolean): Option[Event] =
+  def event(buttonBits: Int, x: Int, y: Int, isPress: Boolean): Option[Event] =
     val kind      =
-      if (button & 64) != 0 then wheelKind(button)
-      else if (button & MotionBit) != 0 then
+      if (buttonBits & WheelBit) != 0 then wheelKind(buttonBits)
+      else if (buttonBits & MotionBit) != 0 then
         // bit 5 says "this report is motion". The low two bits then name the button that is held, and the value 3
         // means "none" — so 3 is the pointer moving over the window with nothing pressed, which is a hover, and
         // anything else is a drag. Only a terminal asked for `MouseCaptureMode.AllMotion` sends the hover form; under
         // buttons-only tracking this branch never sees a 3, which is why `Moved` used to be unreachable.
-        if (button & ButtonMask) == NoButtonHeld then MouseEventKind.Moved else MouseEventKind.Drag
+        if (buttonBits & ButtonMask) == NoButtonHeld then MouseEventKind.Moved else MouseEventKind.Drag
       else if isPress then MouseEventKind.Down
       else MouseEventKind.Up
     // a mouse report carries the same shift/alt/ctrl bitmask as a CSI modifier parameter, shifted up by two positions
-    val modifiers = InputDecoder.modifiersFromBits(button >> MouseModifierShift)
-    val pressed   = pressedButton(button)
+    val modifiers = InputDecoder.modifiersFromBits(buttonBits >> MouseModifierShift)
+    val pressed   = pressedButton(buttonBits)
     Some(Event.Mouse(MouseEvent(Position(math.max(0, x), math.max(0, y)), kind, modifiers, pressed)))
 
   /** Which button the report names.
@@ -116,9 +126,9 @@ private[terminal] object MouseReports:
     * right-button drag-and-release usable.
     */
   private def pressedButton(button: Int): MouseButton =
-    if (button & 64) != 0 then MouseButton.Unknown
+    if (button & WheelBit) != 0 then MouseButton.Unknown
     else
-      button & 3 match
+      button & ButtonMask match
         case 0 => MouseButton.Left
         case 1 => MouseButton.Middle
         case 2 => MouseButton.Right
@@ -132,7 +142,7 @@ private[terminal] object MouseReports:
     * honest answer only while [[MouseEventKind]] had no horizontal vocabulary — it has one now.
     */
   private def wheelKind(button: Int): MouseEventKind =
-    button & 3 match
+    button & ButtonMask match
       case 0 => MouseEventKind.ScrollUp
       case 1 => MouseEventKind.ScrollDown
       case 2 => MouseEventKind.ScrollLeft
