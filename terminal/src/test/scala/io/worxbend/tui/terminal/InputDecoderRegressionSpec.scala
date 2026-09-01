@@ -296,8 +296,8 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     dropped(csi("55357u")*) // kitty reporting a high surrogate as a code point
 
   test("a high surrogate not followed by a low one does not swallow the next key"):
-    val input = decoder(0xd83d, 'a'.toInt)
-    val events  = List(input.decode(10), input.decode(10)).flatten
+    val input  = decoder(0xd83d, 'a'.toInt)
+    val events = List(input.decode(10), input.decode(10)).flatten
     assert(events == List(Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.None))))
 
   test("kitty super/hyper/meta keys are dropped rather than delivered unmodified"):

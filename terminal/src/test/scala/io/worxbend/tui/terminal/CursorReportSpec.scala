@@ -105,8 +105,8 @@ final class CursorReportSpec extends AnyFunSuite:
     // nanos does not fit in a Long: it wrapped round to a small negative number, so the deadline was about a
     // millisecond in the *past*, the wait loop never ran once, and the query reported "this terminal cannot answer"
     // instantly.
-    val script  = Seq.fill(3)(NothingAvailable) ++ csi("5;9R") // three timed-out reads, then the report
-    val input = decoder(script*)
+    val script = Seq.fill(3)(NothingAvailable) ++ csi("5;9R") // three timed-out reads, then the report
+    val input  = decoder(script*)
     assert(input.readCursorReport(Duration.Inf) == Some(Position(8, 4)))
 
   test("Duration.Inf reaches the decoder as a wait that actually waits"):

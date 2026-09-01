@@ -32,7 +32,7 @@ final class InputFixtureSpec extends AnyFunSuite:
   /** Replays `bytes` through a single decoder until it stops producing events. */
   private def replay(bytes: Seq[Int]): List[Event] =
     var index    = 0
-    val input = InputDecoder(_ =>
+    val input    = InputDecoder(_ =>
       if index < bytes.length then { val c = bytes(index); index += 1; c }
       else NothingAvailable
     )
@@ -44,7 +44,7 @@ final class InputFixtureSpec extends AnyFunSuite:
         case None        => if index >= bytes.length then draining = false
     events.result()
 
-  private def text(s: String): Seq[Int]   = s.map(_.toInt)
+  private def text(s: String): Seq[Int] = s.map(_.toInt)
 
   private def key(code: KeyCode): Event                  = Event.Key(KeyEvent.of(code))
   private def key(code: KeyCode, m: KeyModifiers): Event = Event.Key(KeyEvent(code, m))
