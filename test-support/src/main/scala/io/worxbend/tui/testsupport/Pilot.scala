@@ -175,10 +175,19 @@ final class Pilot private (
     scroll(x, y, MouseEventKind.ScrollRight, times, modifiers)
 
   private def scroll(x: Int, y: Int, kind: MouseEventKind, times: Int, modifiers: KeyModifiers): Pilot =
+    // a wheel notch presses nothing, so it names no button — the same thing a real terminal reports
+    repeat(times)(postMouse(x, y, kind, modifiers, MouseButton.Unknown))
+
+  /** Runs `post` `times` over, then returns this pilot for chaining.
+    *
+    * A count of zero — or a negative one, which a caller can arrive at from arithmetic — posts nothing rather than
+    * failing: `tick(0)` is a legitimate no-op in a test parameterised over a count, and `PilotEventPostingSpec` asserts
+    * exactly that. This is the one place that decides it.
+    */
+  private def repeat(times: Int)(post: => Any): Pilot =
     var remaining = times
     while remaining > 0 do
-      // a wheel notch presses nothing, so it names no button — the same thing a real terminal reports
-      postMouse(x, y, kind, modifiers, MouseButton.Unknown)
+      val _ = post
       remaining -= 1
     this
 
@@ -232,12 +241,7 @@ final class Pilot private (
     * Posting them by hand is what makes an animation or timeout test exact: the app under test needs no tick rate at
     * all, so nothing depends on wall-clock timing, and a test that wants ten ticks gets exactly ten.
     */
-  def tick(times: Int = 1): Pilot =
-    var remaining = times
-    while remaining > 0 do
-      backend.postEvent(Event.Tick)
-      remaining -= 1
-    this
+  def tick(times: Int = 1): Pilot = repeat(times)(backend.postEvent(Event.Tick))
 
   /** Posts the report a terminal sends when its window regains focus (the "mode 1004" focus report). */
   def focusGained(): Pilot =
