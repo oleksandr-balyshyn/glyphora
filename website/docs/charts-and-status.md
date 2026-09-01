@@ -44,6 +44,25 @@ Pin `max` to the metric's own scale, not to the data's. The trap is that autosca
 looks fine while you are watching one series — it only misleads once the reader starts
 comparing two frames, or two rows.
 
+## Pin the newest sample to the right edge
+
+A sparkline draws one column per data point. When the series is longer than the pane
+is wide, the default keeps the *oldest* points and clips the newest off the right —
+which is the wrong end for a live metric: the reading you care about is the one that
+disappears. `.rightToLeft` anchors the series to the other edge, so the latest sample
+always sits in the last column and history scrolls off the left:
+
+```scala
+sparkline(window).rightToLeft.max(peak)
+```
+
+Before this existed, a live pane had to trim the window by hand on every frame to keep
+the newest readings visible. It no longer does — pass the whole history and let the
+widget choose the window. The ceiling is still taken from the whole series, not from
+the visible columns, so the trace does not rescale itself the moment a peak scrolls
+off the left. `dualSparkline(upper, lower, SparkDirection.RightToLeft)` anchors both
+halves the same way.
+
 ## Carry doubles into a Long series
 
 `Sparkline` takes `Seq[Long]`, so a metric with decimals loses them on the way in.

@@ -153,10 +153,11 @@ final case class BadgeElement(
 final case class SparklineElement(
     data: Seq[Long],
     max: Option[Long] = None,
+    direction: w.SparkDirection = w.SparkDirection.LeftToRight,
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = SparklineElement
-  def widget: Widget = w.Sparkline(data, max, props.style)
+  def widget: Widget = w.Sparkline(data, max, direction, props.style)
 
   /** Pins the top of the scale instead of letting it float to the largest value present.
     *
@@ -165,6 +166,17 @@ final case class SparklineElement(
     * the same thing.
     */
   def max(ceiling: Long): SparklineElement = copy(max = Some(ceiling))
+
+  /** Anchors the series to the right edge, so the newest reading is always in the last column.
+    *
+    * By default a sparkline keeps the oldest points and clips the newest off the right, which is the wrong end for a
+    * live metric: as readings arrive the one you care about is the one that disappears. With this the history scrolls
+    * off the left instead and the latest value stays put, so the caller no longer has to trim the window by hand.
+    */
+  def rightToLeft: SparklineElement = copy(direction = w.SparkDirection.RightToLeft)
+
+  /** Anchors the series to either edge — see [[rightToLeft]] for why that matters. */
+  def direction(anchor: w.SparkDirection): SparklineElement = copy(direction = anchor)
 
   private[dsl] def withProps(props: ElementProps): SparklineElement = copy(props = props)
   private[dsl] override def claim: SizeClaim                        = SizeClaim.OneRow

@@ -103,7 +103,8 @@ private[dsl] trait ElementFactories:
     *
     * The scale runs from zero to the largest value present, so a series is always drawn using the full row height and
     * two sparklines side by side are *not* comparable unless you pin the ceiling with `.max(n)`. Points that do not fit
-    * the width are clipped on the right. See [[w.Sparkline]].
+    * the width are clipped on the right — call `.rightToLeft` to anchor the series to the other edge instead, so the
+    * newest reading stays in the last column and the history scrolls off the left. See [[w.Sparkline]].
     */
   def sparkline(data: Seq[Long]): SparklineElement = SparklineElement(data)
 
@@ -293,10 +294,15 @@ private[dsl] trait ElementFactories:
 
   /** Two sparklines sharing one area — `upper` in the top half, `lower` in the bottom — for comparing a pair of series
     * such as ingress against egress. Each series is scaled independently, so the shapes are comparable but the heights
-    * are not. See [[w.DualSparkline]].
+    * are not. `direction` anchors both halves to the same edge — pass `SparkDirection.RightToLeft` for a live pair, so
+    * the newest reading of each series sits in the last column. See [[w.DualSparkline]].
     */
-  def dualSparkline(upper: Seq[Long], lower: Seq[Long]): WidgetElement =
-    WidgetElement(w.DualSparkline(upper, lower))
+  def dualSparkline(
+      upper: Seq[Long],
+      lower: Seq[Long],
+      direction: w.SparkDirection = w.SparkDirection.LeftToRight,
+  ): WidgetElement =
+    WidgetElement(w.DualSparkline(upper, lower, direction = direction))
 
   /** A pulsing placeholder for content that has not arrived yet, on the ambient [[AnimationClock]]. */
   def skeleton()(using theme: Theme, scope: ReactiveScope): SkeletonElement =

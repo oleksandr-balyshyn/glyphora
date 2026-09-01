@@ -746,6 +746,13 @@ row(
 )
 ```
 
+When the series is longer than the pane is wide the extra points have to go somewhere.
+By default the oldest points are kept and the newest are clipped off the right;
+`.rightToLeft` reverses that, pinning the latest reading to the last column so the
+history scrolls off the left — the behaviour a live metric wants, because the column the
+reader is watching never moves. `dualSparkline(upper, lower, SparkDirection.RightToLeft)`
+does the same for both halves at once.
+
 ### Bar glyphs
 
 A terminal has no pixels, so a bar two and a half cells tall is drawn as two full cells and

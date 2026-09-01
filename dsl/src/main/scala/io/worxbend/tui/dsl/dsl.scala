@@ -217,6 +217,7 @@ export io.worxbend.tui.widgets.{
   Shape,
   SliderRange,
   SortDirection,
+  SparkDirection,
   SpinnerPreset,
   SyntaxHighlighter,
   SyntaxTheme,
