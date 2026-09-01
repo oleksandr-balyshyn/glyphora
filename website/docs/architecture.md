@@ -126,6 +126,21 @@ The answer can be one less than the budget: a two-column grapheme that would onl
 fit is dropped whole rather than split, because a terminal handed half of one draws it
 across the column beyond the budget.
 
+Text that carries styling of its own is a `Line` — a sequence of `Span`s, each with its
+own `Style` — and `setLine(x, y, line, maxWidth, baseStyle)` writes one, sharing a single
+column budget across the spans and answering the columns written, exactly as `setString`
+does. Each span's style is layered over `baseStyle`, so the base supplies whatever a span
+says nothing about; `setSpan` is the same for one span alone.
+
+```scala
+val status = Line(Seq(Span("ready", Style.Default.withFg(Color.Green)), Span(" · 3 replicas", Style.Default)))
+val used   = buffer.setLine(row.x, row.y, status, row.width, Style.Default.withBg(Color.Black))
+```
+
+The line is written where it is told and nowhere else: centring or right-aligning it
+inside a wider area is a layout decision, made by the widget drawing it through
+`Alignment`, not by the buffer.
+
 ## tui-terminal
 
 The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks to

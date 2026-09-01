@@ -139,6 +139,40 @@ final class Buffer(val area: Rect):
   def setString(x: Int, y: Int, text: String, style: Style, maxWidth: Int): Int =
     writeString(x, y, text, style, math.min(area.right, x + math.max(0, maxWidth)))
 
+  /** Writes `span`'s content at `(x, y)` in at most `maxWidth` columns, and answers how many columns it wrote.
+    *
+    * The span's own [[Style]] is layered over `baseStyle` — the argument supplies whatever the span says nothing about,
+    * which is how a theme colour reaches text that already chose to be bold. Clipping is [[setString]]'s: the write
+    * stops at the area's right edge or at `x + maxWidth`, whichever comes first, and a two-column cluster that would
+    * only half-fit inside that bound is dropped whole rather than split, so the answer can be smaller than the budget
+    * with content left over.
+    *
+    * A [[Span]] is a `tui-core` value, and so is the buffer it is drawn into; before this existed the code that put one
+    * into the other lived inside `tui-widgets`, out of reach of every other module. Nothing about it needs a widget.
+    */
+  def setSpan(x: Int, y: Int, span: Span, maxWidth: Int, baseStyle: Style = Style.Default): Int =
+    setString(x, y, span.content, baseStyle.patch(span.style), maxWidth)
+
+  /** Writes `line`'s spans left to right from `(x, y)`, sharing one budget of `maxWidth` columns between them, and
+    * answers how many columns were written in total.
+    *
+    * Each span's style is layered over `baseStyle`, exactly as [[setSpan]] describes. The spans are written end to end
+    * with nothing inserted between them, and the budget is spent as it goes, so a line wider than its budget stops part
+    * way through whichever span reaches the edge instead of dropping that span and every one after it. Writing stops as
+    * soon as the budget is gone, so the tail of a very long line is never even measured.
+    *
+    * This places the line where it is told and nowhere else. Centring or right-aligning a row against a wider area is a
+    * decision about layout rather than about writing cells, and belongs to the widget making it — see
+    * `io.worxbend.tui.core.Alignment` for the arithmetic the widgets share.
+    */
+  def setLine(x: Int, y: Int, line: Line, maxWidth: Int, baseStyle: Style = Style.Default): Int =
+    val budget  = math.max(0, maxWidth)
+    var written = 0
+    val spans   = line.spans.iterator
+    while spans.hasNext && written < budget do
+      written += setSpan(x + written, y, spans.next(), budget - written, baseStyle)
+    written
+
   /** The shared body of both [[setString]] overloads: writes clusters left to right while the write head stays below
     * `limit` (an exclusive column bound already clipped to the area), and answers the columns written.
     */
