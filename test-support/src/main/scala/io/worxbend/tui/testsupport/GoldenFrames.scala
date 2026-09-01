@@ -45,8 +45,10 @@ object GoldenFrames:
       case None            =>
         val stream = getClass.getResourceAsStream(s"/golden/$name.txt")
         if stream == null then // scalafix:ok DisableSyntax; getResourceAsStream returns null when the fixture is absent
-          throw AssertionError(
-            s"missing golden fixture golden/$name.txt — run once with GLYPHORA_GOLDEN_UPDATE=<test-resources-dir>"
+          throw CallSite.attribute(
+            AssertionError(
+              s"missing golden fixture golden/$name.txt — run once with GLYPHORA_GOLDEN_UPDATE=<test-resources-dir>"
+            )
           )
         val expected = Using.resource(Source.fromInputStream(stream, "UTF-8"))(_.mkString)
         assertMatchesText(name, buffer, expected)
@@ -70,8 +72,8 @@ object GoldenFrames:
     val actual   = normalise(BufferAssertions.text(buffer))
     val recorded = normalise(expected)
     if actual != recorded then
-      throw AssertionError(
-        s"frame differs from golden/$name.txt\n--- expected ---\n$recorded\n--- actual ---\n$actual"
+      throw CallSite.attribute(
+        AssertionError(s"frame differs from golden/$name.txt\n--- expected ---\n$recorded\n--- actual ---\n$actual")
       )
 
   /** Drops trailing line terminators, which is what makes trailing blank rows insignificant while interior blank rows

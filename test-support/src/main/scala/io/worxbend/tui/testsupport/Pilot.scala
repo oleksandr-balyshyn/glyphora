@@ -277,7 +277,7 @@ final class Pilot private (
       !thread.isAlive || (backend.pendingEvents == 0 && backend.idleReads > idleReadsBefore)
     while !settled && deadline.hasTimeLeft() do Thread.sleep(Pilot.PollSleep.toMillis)
     rethrowAppFailure()
-    if !settled then throw AssertionError(s"app did not go idle within $timeout")
+    if !settled then throw CallSite.attribute(AssertionError(s"app did not go idle within $timeout"))
     this
 
   /** Waits until `condition` holds, and fails the test naming `description` if it never does.
@@ -302,7 +302,7 @@ final class Pilot private (
     while !condition && deadline.hasTimeLeft() do
       Thread.sleep(Pilot.PollSleep.toMillis)
       rethrowAppFailure()
-    if !condition then throw AssertionError(s"timed out after $timeout waiting for $description")
+    if !condition then throw CallSite.attribute(AssertionError(s"timed out after $timeout waiting for $description"))
     this
 
   /** Waits until the app has drawn at least `count` frames in total since it started.
@@ -329,7 +329,7 @@ final class Pilot private (
     */
   def lastFrame: Buffer =
     rethrowAppFailure()
-    backend.lastDrawn.getOrElse(throw AssertionError("nothing has been drawn yet"))
+    backend.lastDrawn.getOrElse(throw CallSite.attribute(AssertionError("nothing has been drawn yet")))
 
   /** The cell at `(x, y)` of the last rendered frame. */
   def cellAt(x: Int, y: Int): Cell = lastFrame.get(x, y)
@@ -360,10 +360,11 @@ final class Pilot private (
     */
   private def rethrowAppFailure(): Unit =
     appFailure.get() match
-      case Some(error) => throw AssertionError(s"the tui-pilot-app thread died with $error", error)
+      case Some(error) => throw CallSite.attribute(AssertionError(s"the tui-pilot-app thread died with $error", error))
       case None        =>
         runFailure.get() match
-          case Some(error) => throw AssertionError(s"the app's runner returned a failure: ${error.message}")
+          case Some(error) =>
+            throw CallSite.attribute(AssertionError(s"the app's runner returned a failure: ${error.message}"))
           case None        => ()
 
 object Pilot:
