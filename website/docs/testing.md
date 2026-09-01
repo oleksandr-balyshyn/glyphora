@@ -58,6 +58,39 @@ assert(cell.style.fg.contains(Color.Cyan))
 Keep style assertions focused on meaningful semantics; asserting every empty cell
 makes harmless renderer changes noisy.
 
+### Compare two whole frames
+
+Naming cells one at a time only catches the cells you thought to name. When the frame
+as a whole should be a known frame — style included — compare the two buffers:
+
+```scala
+val actual   = BufferAssertions.rendered(widget, width = 6, height = 1)
+val expected = BufferAssertions.buffered("ab    ")
+
+BufferAssertions.assertEquals(actual, expected)
+```
+
+`assertEquals` checks the area first, then every cell's symbol **and** `Style`. On a
+mismatch it fails with the differing positions and both cells, then prints both frames
+as text. `assertEquals(actual, expected, label)` writes `label` in front of the
+message, for a test that compares several frames in a row.
+
+`buffered("row", "row")` builds an expected frame from plain strings — as wide as the
+widest row's *display* width, so a row of ideographs sizes correctly — and
+`buffered(lines, base)` does the same from `core.Line`s, whose spans carry their own
+styles.
+
+`cellDifferences(actual, expected)` returns the differing positions with both cells, for
+a test that wants to assert on the *shape* of a difference ("only the selected row
+changed") rather than on a failure message.
+
+Which to reach for:
+
+| The test is about | Use |
+| --- | --- |
+| layout and content | `trimmedLines` / `text` |
+| styling too, on a frame small enough to write out | `assertEquals` + `buffered` |
+| a frame too large to write out by hand | `GoldenFrames` (glyphs only) |
 ### Compare a whole buffer, style included
 
 Two buffers are equal when they cover the same area and hold the same cell — symbol
@@ -189,6 +222,21 @@ pilot.press("q")
 assert(pilot.awaitTermination())
 ```
 
+A test with no other use for the backend can let the pilot own it. `Pilot.start(size)`
+builds the `HeadlessBackend`, hands it to the block, and leaves it reachable afterwards
+as `pilot.backend`:
+
+```scala
+val app = CounterApp()
+val pilot = Pilot.start(Size(44, 8))(app.runWith).waitForIdle()
+```
+
+The block takes the backend as its parameter rather than closing over a `val`, which is
+what collapses the three lines above into one. It takes a function of the backend and
+not the application itself because `tui-test` is built on `tui-core`, `tui-terminal`
+and `tui-runtime` and on nothing above them — a `TuiApp` overload would point the
+dependency edge upward at `tui-dsl`.
+
 `press` takes **the same key specs `binding` takes** — `"q"`, `"ctrl+s"`,
 `"shift+tab"` (or its alias `"backtab"`), `"esc"`, `"f2"`, `"up"`, `"+"`. Both go
 through the one parser in `tui-core`, so a test presses the string the application was written against instead
@@ -267,6 +315,34 @@ pilot.waitForDraws(3)   // the app repainted at least three times
 
 Keep coordinates tied to a deliberate test layout and size. A test that clicks a
 magic coordinate in a changing screen is hard to maintain.
+
+## Paste, ticks, focus and interrupt
+
+A terminal reports more than keys, mouse and resizes, and each of the remaining
+reports has its own posting method:
+
+```scala
+pilot.paste("hello\nworld").waitForIdle()   // one bracketed paste, not N key events
+pilot.tick(3).waitForIdle()                 // three synthetic ticks
+pilot.focusLost().focusGained().waitForIdle()
+pilot.interrupt()
+assert(pilot.awaitTermination())
+```
+
+Two things a reader cannot guess from the names:
+
+- `paste` is a **different code path** from `typeText`. A terminal in bracketed-paste
+  mode hands the application the whole pasted string as one event, so the DSL routes it
+  to an element's paste handler instead of to its key handler. Type text to test the
+  keyboard; paste text to test the clipboard.
+- `tick(n)` needs **no tick rate on the app under test**. The runner injects ticks on a
+  clock when it is configured with one; posting them by hand instead means a test that
+  asks for ten ticks gets exactly ten, with no wall-clock timing anywhere in it.
+
+`interrupt()` is what reaches the application when `Ctrl+C` raises SIGINT. An app that
+does not consume it quits through its normal teardown, so the natural follow-up is
+`awaitTermination()`; an app that consumes it stays up, and the follow-up is
+`waitForIdle()` and an `isRunning` assertion.
 
 ## Assert style, not just glyphs
 
