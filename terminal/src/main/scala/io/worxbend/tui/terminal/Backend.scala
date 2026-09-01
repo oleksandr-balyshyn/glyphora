@@ -312,12 +312,7 @@ trait Backend:
   def insertBefore(height: Int, widget: Widget): Either[BackendError, Unit] =
     if height <= 0 then Right(())
     else
-      size.flatMap { terminalSize =>
-        val area   = Rect(0, 0, terminalSize.width, height)
-        val buffer = Buffer(area)
-        widget.render(area, buffer)
-        printAbove(Backend.plainRows(buffer))
-      }
+      size.flatMap(sz => printAbove(Backend.plainRows(Backend.renderBlock(sz.width, height, widget))))
 
   /** Erases part of the screen, as `kind` describes.
     *
@@ -407,6 +402,17 @@ private[terminal] object Backend:
     */
   def requirePositiveTimeout(timeout: Duration): Unit =
     require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
+
+  /** The block [[Backend.insertBefore]] inserts: `widget` rendered into `Rect(0, 0, width, height)`.
+    *
+    * One owner for the geometry, because all three implementations of `insertBefore` differ only in what they do with
+    * the finished buffer — plain rows, encoded rows, or the buffer itself — not in how it is drawn.
+    */
+  private[terminal] def renderBlock(width: Int, height: Int, widget: Widget): Buffer =
+    val area   = Rect(0, 0, width, height)
+    val buffer = Buffer(area)
+    widget.render(area, buffer)
+    buffer
 
   /** The text of `buffer`, one string per row, with trailing blanks removed.
     *

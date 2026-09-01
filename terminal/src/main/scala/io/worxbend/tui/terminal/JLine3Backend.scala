@@ -546,12 +546,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   override def insertBefore(height: Int, widget: Widget): Either[BackendError, Unit] =
     if height <= 0 then Right(())
     else
-      attempt {
-        val area   = Rect(0, 0, currentSize.width, height)
-        val buffer = Buffer(area)
-        widget.render(area, buffer)
-        buffer
-      }.flatMap { buffer =>
+      attempt(Backend.renderBlock(currentSize.width, height, widget)).flatMap { buffer =>
         suspend {
           var y = 0
           while y < height do

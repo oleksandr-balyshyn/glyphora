@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Event, Position, Rect, Size, Widget}
+import io.worxbend.tui.core.{Buffer, Event, Position, Size, Widget}
 
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
@@ -225,9 +225,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   override def insertBefore(height: Int, widget: Widget): Either[BackendError, Unit] =
     if height <= 0 then Right(())
     else
-      val area   = Rect(0, 0, terminalSize.width, height)
-      val buffer = Buffer(area)
-      widget.render(area, buffer)
+      val buffer = Backend.renderBlock(terminalSize.width, height, widget)
       insertedBlocks.synchronized { val _ = insertedBlocks += buffer }
       printedLines.synchronized { printedLines ++= Backend.plainRows(buffer) }
       Right(())
