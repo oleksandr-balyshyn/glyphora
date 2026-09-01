@@ -24,6 +24,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   @volatile private var lastClipboard: Option[String]          = None
   @volatile private var lastTitle: Option[String]              = None
   @volatile private var caret: Option[Position]                = None
+  @volatile private var inlineRows                             = 0
   private val caretMoveCounter                                 = AtomicLong(0)
   private val appendedLineCounter                             = AtomicLong(0)
   private val drawCounter                                      = AtomicLong(0)
@@ -75,6 +76,10 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   def showCursor(): Either[BackendError, Unit] =
     cursorVisible = true
+    Right(())
+
+  override def reserveInlineRows(rows: Int): Either[BackendError, Unit] =
+    inlineRows = math.max(0, rows)
     Right(())
 
   /** Records where the hardware caret was asked to go, so a test can assert on it exactly as it asserts on a drawn
@@ -216,6 +221,9 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     */
   def mouseCaptureMode: Option[MouseCaptureMode] = mouseCapture
   def isCursorVisible: Boolean                   = cursorVisible
+
+  /** How many rows an inline run reserved on the primary screen; `0` for a full-screen run. */
+  def reservedInlineRows: Int = inlineRows
 
   /** The text most recently sent to the clipboard via [[copyToClipboard]], if any. */
   def clipboardContents: Option[String] = lastClipboard

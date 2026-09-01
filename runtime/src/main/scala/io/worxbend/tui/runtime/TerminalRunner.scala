@@ -1,6 +1,6 @@
 package io.worxbend.tui.runtime
 
-import io.worxbend.tui.core.{Buffer, Event, Position, Rect}
+import io.worxbend.tui.core.{Buffer, Event, Position}
 import io.worxbend.tui.terminal.{Backend, BackendError}
 
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
@@ -142,10 +142,18 @@ final class TerminalRunner(
       val _ = Runtime.getRuntime.removeShutdownHook(hook)
     catch case _: IllegalStateException => ()
 
+  /** Dresses the terminal for the configured viewport.
+    *
+    * A full-screen run switches to the alternate screen; an inline run stays on the primary screen and instead asks the
+    * backend to scroll its rows free, so the shell's output above the app survives the run and the app's last frame
+    * survives its exit.
+    */
   private def setup(): Either[BackendError, Unit] =
     for
       _ <- backend.enableRawMode()
-      _ <- backend.enterAlternateScreen()
+      _ <- config.viewport match
+        case Viewport.Fullscreen     => backend.enterAlternateScreen()
+        case inline: Viewport.Inline => backend.reserveInlineRows(inline.reservedRows)
       _ <- backend.hideCursor()
       _ <- if config.mouseCapture then backend.enableMouseCapture() else Right(())
     yield ()
@@ -160,7 +168,7 @@ final class TerminalRunner(
     var lastTick = nanoTime()
 
     val handle   = BackendHandle(backend, state)
-    val composer = FrameComposer(backend, render, config.onFrame)
+    val composer = FrameComposer(backend, render, config.onFrame, config.viewport)
 
     /** Composes and flushes one frame.
       *
@@ -269,6 +277,7 @@ private final class FrameComposer(
     backend: Backend,
     render: Frame => Unit,
     onFrame: Option[CompletedFrame => Unit],
+    viewport: Viewport,
 ):
 
   private var frameBuffer: Option[Buffer] = None
@@ -282,7 +291,7 @@ private final class FrameComposer(
     */
   def compose(): Either[BackendError, Unit] =
     backend.size.flatMap { size =>
-      val area   = Rect(size)
+      val area   = viewport.areaIn(size)
       val buffer = frameBuffer.filter(_.area == area).getOrElse(Buffer(area))
       buffer.reset()
       frameBuffer = Some(buffer)

@@ -62,6 +62,20 @@ trait Backend:
     val _ = position
     Right(())
 
+  /** Reserves `rows` lines at the bottom of the *primary* screen for an app that is not taking the alternate screen.
+    *
+    * The complement of [[enterAlternateScreen]]. Instead of switching to a blank second screen, this scrolls whatever
+    * the shell has already printed up by `rows` lines, so those lines are free for the app to draw into and everything
+    * above them stays visible. On exit the app's last frame is left where it is rather than being wiped, which is the
+    * point: an inline UI ends up in the user's scrollback like any other command's output.
+    *
+    * The default is a no-op, for a backend with no real screen to scroll — an inline run against it simply composes
+    * into the bottom rows of the size it reports.
+    */
+  def reserveInlineRows(rows: Int): Either[BackendError, Unit] =
+    val _ = rows
+    Right(())
+
   /** Blocks up to `timeout` for the next input event; `Right(None)` means nothing arrived.
     *
     * `timeout` must be **strictly positive**, or infinite to block until an event arrives. Zero is rejected rather than

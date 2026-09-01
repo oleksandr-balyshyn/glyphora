@@ -170,6 +170,7 @@ export io.worxbend.tui.runtime.{
   RunnerConfig,
   RunnerError,
   Signal,
+  Viewport,
 }
 // The terminal vocabulary [[TuiApp]]'s own lifecycle seams are typed in: `runWith` takes a `Backend`, `createBackend`
 // returns `Either[BackendError, Backend]`, and `colorDepth` returns a `ColorDepth`. Overriding either seam — the

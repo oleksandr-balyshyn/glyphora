@@ -28,12 +28,16 @@ import scala.concurrent.duration.FiniteDuration
   * report, a periodic sample. `None`, the default, costs nothing at all — no snapshot is taken. A body that throws is
   * not absorbed: like the render function it ends the loop as [[RunnerError.Handler]], because a second isolation
   * policy for frame observers would be one policy too many to reason about.
+  *
+  * `viewport` decides how much of the terminal the run owns — the whole alternate screen (the default), or a strip of
+  * rows at the bottom of the primary screen that leaves the shell's own output visible above it. See [[Viewport]].
   */
 final case class RunnerConfig(
     tickRate: Option[FiniteDuration] = None,
     mouseCapture: Boolean = false,
     onTaskError: Option[RenderTaskErrorHandler] = None,
     onFrame: Option[CompletedFrame => Unit] = None,
+    viewport: Viewport = Viewport.Fullscreen,
 )
 
 /** An event handler's answer to one question: does this event change what is on screen?

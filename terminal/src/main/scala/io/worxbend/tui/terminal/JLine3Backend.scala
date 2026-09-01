@@ -33,6 +33,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   @volatile private var mouseCaptureActive: Option[MouseCaptureMode] = None
   @volatile private var cursorHidden                                 = false
   @volatile private var suspendedState                               = TerminalState.Undressed
+  @volatile private var inlineRows                                   = 0
 
   // owned by the render thread alone — no other thread may read or write it. A thread that takes the screen away (the
   // SIGCONT handler re-entering the alternate screen) raises `fullRedrawRequested` instead: a reset written here from
@@ -160,6 +161,27 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
         write(AnsiSequences.clear(ClearType.All))
         alternateScreenActive = true
         requestFullRedraw() // the alternate screen starts blank; the next draw must repaint everything
+      }
+
+  /** Scrolls the primary screen up by `rows` lines so an inline app has room at the bottom.
+    *
+    * A newline written on the last row is what makes a terminal scroll — that is all this does, `rows` times, which is
+    * the same trick ratatui's inline viewport uses. Nothing is cleared: the shell's earlier output moves up and stays
+    * readable, and the freed rows are blank because they have never been written to.
+    *
+    * The frame diff is invalidated afterwards, because the rows the backend believed it had already painted have just
+    * moved somewhere else on screen.
+    */
+  override def reserveInlineRows(rows: Int): Either[BackendError, Unit] =
+    if rows <= 0 then Right(())
+    else
+      attempt {
+        screenOwnership.synchronized {
+          terminal.writer().write("\n".repeat(rows))
+          terminal.writer().flush()
+        }
+        inlineRows = rows
+        requestFullRedraw()
       }
 
   def leaveAlternateScreen(): Either[BackendError, Unit] =
@@ -373,6 +395,13 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
     undress(state.mouse.isDefined, disableMouseCapture())
     undress(state.cursorHidden, showCursor())
+    // An inline run leaves its last frame on the primary screen on purpose, so park the cursor on the line below the
+    // strip: without this the shell's next prompt would be drawn straight over the frame the app just left behind.
+    if inlineRows > 0 then
+      try
+        terminal.writer().write("\r\n")
+        terminal.writer().flush()
+      catch case NonFatal(_) => ()
     undress(state.alternateScreen, leaveAlternateScreen())
     undress(state.raw, disableRawMode())
     // each step above already flushed its own sequence; this is belt-and-braces and stays silent, so that closing an

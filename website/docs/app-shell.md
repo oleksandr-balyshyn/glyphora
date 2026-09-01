@@ -303,6 +303,36 @@ override def config = RunnerConfig(tickRate = Some(100.millis))
 Use toasts for confirmation and recoverable status. Keep required decisions in a
 screen or dialog where they cannot disappear.
 
+## Run inline instead of taking the screen
+
+By default an app takes the whole terminal. It does that by switching to the
+*alternate screen* — the terminal's second screen buffer, which has no scrollback:
+your shell's output disappears for the app's lifetime and is back, untouched, the
+moment it exits, and the app leaves no trace behind. That is right for a dashboard
+and wrong for a progress panel.
+
+The other shape is inline. The app stays on the *primary* screen and owns only the
+bottom few rows of it:
+
+```scala
+override def config: RunnerConfig = RunnerConfig(viewport = Viewport.Inline(3))
+```
+
+At startup the runner scrolls the screen up by three lines to make room, so
+everything the shell printed before stays visible above the app, and when the app
+exits its last frame stays on screen the way `git`'s output does — the shell's next
+prompt appears underneath it, not over it.
+
+Two things to know before choosing it. The frame is composed into those rows and
+nothing else, so a layout written for a full screen is clipped to the strip: design
+the view for the height you asked for. And a terminal shorter than the strip shrinks
+it rather than failing — resize a window down to two rows and a `Viewport.Inline(5)`
+app composes two rows, so the view still has to survive a small area.
+
+`printAbove` pairs naturally with an inline app: it writes durable lines into the
+scrollback above the strip, which is how an installer logs the steps it has finished
+while the strip keeps showing the current one.
+
 ## Theme semantically
 
 ```scala
