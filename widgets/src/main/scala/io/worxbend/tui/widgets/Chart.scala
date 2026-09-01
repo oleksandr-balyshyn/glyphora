@@ -2,20 +2,34 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Constraint, Rect, Style, Widget}
 
-/** How a [[Dataset]]'s points are drawn: `Line` joins consecutive points with segments, `Scatter` plots them alone.
+/** How a [[Dataset]]'s points are drawn.
   *
-  * `Line` follows the points in the order the dataset lists them — it does not sort by x, so an unsorted series draws
-  * as a zig-zag rather than a function plot.
+  *   - `Line` joins consecutive points with segments.
+  *   - `Scatter` plots each point on its own, with nothing between them.
+  *   - `Bar` drops an upright bar from each point to the dataset's `fillToY` baseline, which reads as a magnitude per
+  *     sample rather than as a trend.
+  *   - `Area` is `Line` with everything between the line and the baseline filled in, for a series whose *size* matters
+  *     as much as its shape — a stack of them shows one series swamping another at a glance.
+  *
+  * `Line` and `Area` follow the points in the order the dataset lists them — they do not sort by x, so an unsorted
+  * series draws as a zig-zag rather than a function plot.
   */
 enum GraphType:
-  case Line, Scatter
+  case Line, Scatter, Bar, Area
 
-/** One plotted series: points in world coordinates, drawn as a connected polyline or scattered markers. */
+/** One plotted series: points in world coordinates, drawn the way `graphType` says.
+  *
+  * `fillToY` is the baseline the `Bar` and `Area` graph types measure from, in the data's own units. It defaults to
+  * zero, which is what a count or a rate is measured against; set it when the meaningful floor is elsewhere — a
+  * temperature series against 20.0, say — so the filled region shows the departure from that level rather than from an
+  * origin the reader does not care about. The other graph types ignore it.
+  */
 final case class Dataset(
     name: String,
     points: Seq[(Double, Double)],
     style: Style = Style.Default,
     graphType: GraphType = GraphType.Line,
+    fillToY: Double = 0.0,
 )
 
 /** An x/y chart with drawn axes; the plot region is a [[Canvas]] over the datasets' shapes.
@@ -62,6 +76,8 @@ final case class Chart(
         dataset.graphType match
           case GraphType.Line    => Shape.Polyline(dataset.points, dataset.style)
           case GraphType.Scatter => Shape.Points(dataset.points, dataset.style)
+          case GraphType.Bar     => Shape.Bars(dataset.points, dataset.fillToY, dataset.style)
+          case GraphType.Area    => Shape.AreaShape(dataset.points, dataset.fillToY, dataset.style)
       }
       Canvas(xBounds, yBounds, shapes, marker, resolution).render(plotArea, buffer)
       if gutter > 0 then

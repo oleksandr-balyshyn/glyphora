@@ -753,6 +753,18 @@ history scrolls off the left — the behaviour a live metric wants, because the 
 reader is watching never moves. `dualSparkline(upper, lower, SparkDirection.RightToLeft)`
 does the same for both halves at once.
 
+Each `Dataset` picks how it is drawn with `graphType`. `GraphType.Line` joins the points,
+`GraphType.Scatter` leaves them separate, `GraphType.Bar` drops an upright bar from each
+point to a baseline, and `GraphType.Area` fills everything between the line and that
+baseline — reach for the last one when the *size* of a series matters as much as its
+shape. The baseline is the dataset's own `fillToY`, in the data's units; it defaults to
+zero, which is what a count or a rate is measured against, and you set it when the
+meaningful floor is somewhere else:
+
+```scala
+Dataset("above ambient", readings, graphType = GraphType.Area, fillToY = 20.0)
+```
+
 `chart(..., showLabels = true)` prints the two y bounds beside the vertical axis. The
 numbers get a *gutter* of their own — a strip of columns reserved to the left of the
 axis, as wide as the widest of the two labels — and the axis and the plot both move

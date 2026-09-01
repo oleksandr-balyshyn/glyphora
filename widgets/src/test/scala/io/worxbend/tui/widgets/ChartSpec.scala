@@ -128,3 +128,34 @@ final class ChartSpec extends AnyFunSuite:
     val buffer   = rendered(chart, 40, 12)
     assert(trimmedLines(buffer)(0).endsWith("\u25a0 series 1"))
     assert(trimmedLines(buffer)(4).endsWith("\u25a0 series 5"))
+
+  test("a bar dataset drops an upright bar from each point to the baseline"):
+    val dataset = Dataset("d", Seq((1.0, 3.0)), graphType = GraphType.Bar)
+    val buffer  = rendered(Chart(Seq(dataset), (0.0, 3.0), (0.0, 3.0)), 5, 5)
+    // the bar occupies one plot column, filled from the bottom row of the plot up to the point
+    assert((0 to 3).forall(row => buffer.get(2, row).symbol == "•"))
+    assert(buffer.get(1, 0).symbol == " ") // and nothing either side of it
+    assert(buffer.get(3, 0).symbol == " ")
+
+  test("a bar dataset measures from its own fillToY baseline"):
+    val dataset = Dataset("d", Seq((1.0, 3.0)), graphType = GraphType.Bar, fillToY = 2.0)
+    val buffer  = rendered(Chart(Seq(dataset), (0.0, 3.0), (0.0, 3.0)), 5, 5)
+    // the bar now starts at y = 2 rather than at the origin, so the rows below it stay empty
+    assert(buffer.get(2, 0).symbol == "•")
+    assert(buffer.get(2, 3).symbol == " ")
+
+  test("an area dataset fills between the line and the baseline"):
+    val dataset = Dataset("d", Seq((0.0, 3.0), (3.0, 3.0)), graphType = GraphType.Area)
+    val buffer  = rendered(Chart(Seq(dataset), (0.0, 3.0), (0.0, 3.0)), 5, 5)
+    // a flat series at the top fills every plot cell underneath it, not only the two named points
+    assert((1 to 4).forall(column => (0 to 3).forall(row => buffer.get(column, row).symbol == "•")))
+
+  test("an area dataset with a single point still draws that one bar"):
+    val dataset = Dataset("d", Seq((1.0, 3.0)), graphType = GraphType.Area)
+    val buffer  = rendered(Chart(Seq(dataset), (0.0, 3.0), (0.0, 3.0)), 5, 5)
+    assert((0 to 3).forall(row => buffer.get(2, row).symbol == "•"))
+
+  test("an empty area dataset draws nothing rather than failing"):
+    val dataset = Dataset("d", Seq.empty, graphType = GraphType.Area)
+    val buffer  = rendered(Chart(Seq(dataset), (0.0, 3.0), (0.0, 3.0)), 5, 5)
+    assert(trimmedLines(buffer) == Seq("│", "│", "│", "│", "└────"))
