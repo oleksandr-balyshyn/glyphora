@@ -38,8 +38,8 @@ private[widgets] object ClusterRow:
     * The single-cell counterpart of [[RowCursor.write]], and the one place the whole rule is stated: a cluster measures
     * [[renderedWidth]] (at least one column); it is refused outright — not clipped — when it would straddle `right`,
     * because half of a wide glyph is not a character; a zero-width cluster is substituted by [[drawnSymbol]] so the
-    * cell drawn is as wide as the cell measured; and the continuation cell of a two-column glyph is blanked so the
-    * diffing backend does not leave whatever was underneath showing through the middle of it.
+    * cell drawn is as wide as the cell measured; and the continuation cell of a two-column glyph is blanked by
+    * `Buffer.set`, which owns that bookkeeping.
     *
     * The head advances by the cluster's width whether or not it was drawn, so a caller looping to `right` always
     * terminates.
@@ -49,9 +49,7 @@ private[widgets] object ClusterRow:
     */
   def put(buffer: Buffer, x: Int, y: Int, cluster: String, style: Style, right: Int): Int =
     val width = renderedWidth(cluster)
-    if x + width <= right then
-      buffer.set(x, y, Cell(drawnSymbol(cluster), style))
-      if width == 2 then buffer.set(x + 1, y, Cell.Empty)
+    if x + width <= right then buffer.set(x, y, Cell(drawnSymbol(cluster), style))
     x + width
 
   /** The columns clusters `[from, until)` occupy together. */
@@ -88,8 +86,7 @@ private[widgets] object ClusterRow:
   /** Paints one row of clusters starting at `scroll`, left to right from `x` up to (but not including) `right`.
     *
     * A cluster that would straddle `right` is skipped rather than clipped, because half of a wide glyph is not a
-    * character. The continuation cell of a two-column glyph is blanked so the diffing backend does not leave whatever
-    * was underneath showing through.
+    * character. Wide glyphs reserve their continuation cell through `Buffer.set`; see [[put]].
     *
     * `cursorAt` is highlighted with `style` patched by `cursorStyle`, and only when `showCursor` is set — an unfocused
     * field passes `false` so exactly one field on screen shows a cursor.
