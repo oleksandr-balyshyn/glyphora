@@ -2,7 +2,8 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Direction, Rect, Style, Widget}
 
-/** A scrollbar strip: a vertical bar on the area's right edge or a horizontal bar on its bottom edge.
+/** A scrollbar strip: a vertical bar down one of the area's side edges, or a horizontal bar along its top or bottom
+  * edge. Which of the two `side` picks; by default it is the conventional right edge or bottom edge.
   *
   * The thumb's size is proportional to how much of the content the viewport covers; when the content fits entirely,
   * only the track is drawn.
@@ -23,6 +24,9 @@ import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Direction, Rect, Style, Wi
   *   describes. Pass a value when it does not: a bar drawn beside a bordered pane covers two rows more than the pane
   *   shows, and a bar sharing its column with a header covers one row more. Getting this wrong makes the thumb the
   *   wrong length and stops it reaching the end of the track.
+  * @param side
+  *   which edge of the area the strip lands on, read along its own axis: `Far` — the default — is the right edge of a
+  *   vertical bar and the bottom edge of a horizontal one, `Near` the left edge and the top edge
   * @param capStyle
   *   the style of the two arrow caps, when there are any
   * @param beginSymbol
@@ -42,6 +46,7 @@ final case class Scrollbar(
     trackSymbol: String = "│",
     thumbSymbol: String = "█",
     viewportLength: Option[Int] = None,
+    side: ScrollbarSide = ScrollbarSide.Far,
     capStyle: Style = Style.Default,
     beginSymbol: Option[String] = None,
     endSymbol: Option[String] = None,
@@ -59,12 +64,20 @@ final case class Scrollbar(
       val endCells                                             = endSymbol.fold(0)(capCells)
       val trackLength                                          = math.max(0, extent - trackStart - endCells)
       val thumb                                                = thumbRange(trackLength, visibleLength(trackLength))
+      // the lane the strip occupies: a column for a vertical bar, a row for a horizontal one. Both are computed
+      // because each orientation reads only its own, and an unused Int costs nothing.
+      val column                                               = side match
+        case ScrollbarSide.Near => area.x
+        case ScrollbarSide.Far  => area.right - 1
+      val row                                                  = side match
+        case ScrollbarSide.Near => area.y
+        case ScrollbarSide.Far  => area.bottom - 1
       // paint one cell `at` cells along the strip, ignoring anything that would fall outside it
       def put(at: Int, symbol: String, cellStyle: Style): Unit =
         if at >= 0 && at < extent then
           orientation match
-            case Direction.Vertical   => buffer.set(area.right - 1, area.y + at, Cell(symbol, cellStyle))
-            case Direction.Horizontal => buffer.set(area.x + at, area.bottom - 1, Cell(symbol, cellStyle))
+            case Direction.Vertical   => buffer.set(column, area.y + at, Cell(symbol, cellStyle))
+            case Direction.Horizontal => buffer.set(area.x + at, row, Cell(symbol, cellStyle))
       // the end cap goes down first so that on a one-cell strip, where both caps want the same cell, the begin cap
       // is the one left visible rather than whichever happened to be written last
       endSymbol.foreach(symbol => put(extent - capCells(symbol), symbol, capStyle))
@@ -119,6 +132,7 @@ object Scrollbar:
       symbols: ScrollbarSymbols,
       orientation: Direction = Direction.Vertical,
       viewportLength: Option[Int] = None,
+      side: ScrollbarSide = ScrollbarSide.Far,
       style: Style = Style.Default,
       thumbStyle: Style = Style.Default,
       capStyle: Style = Style.Default,
@@ -132,6 +146,7 @@ object Scrollbar:
       trackSymbol = symbols.track,
       thumbSymbol = symbols.thumb,
       viewportLength = viewportLength,
+      side = side,
       capStyle = capStyle,
       beginSymbol = symbols.begin,
       endSymbol = symbols.end,

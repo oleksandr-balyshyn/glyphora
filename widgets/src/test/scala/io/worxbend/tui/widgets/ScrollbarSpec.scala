@@ -104,3 +104,21 @@ final class ScrollbarSpec extends AnyFunSuite:
   test("a wide end cap is placed so that its right half is the last cell"):
     val buffer = rendered(Scrollbar(8, 0, Direction.Horizontal, endSymbol = Some("⏩")), 6, 1)
     assert(lines(buffer) == Seq("██││⏩"))
+
+  test("a near-side vertical scrollbar draws in the leftmost column"):
+    val buffer = rendered(Scrollbar(2, 0, side = ScrollbarSide.Near), 3, 2)
+    assert(lines(buffer) == Seq("│  ", "│  "))
+
+  test("a near-side horizontal scrollbar draws along the top row"):
+    val buffer = rendered(Scrollbar(8, 0, Direction.Horizontal, side = ScrollbarSide.Near), 4, 2)
+    assert(lines(buffer) == Seq("██││", "    "))
+
+  test("the side moves the strip without moving the thumb along it"):
+    val far  = rendered(Scrollbar(8, 4), 1, 4)
+    val near = rendered(Scrollbar(8, 4, side = ScrollbarSide.Near), 1, 4)
+    assert(lines(far) == lines(near))
+
+  test("a near-side bar keeps its caps at the two ends of the strip"):
+    val buffer =
+      rendered(Scrollbar(8, 0, side = ScrollbarSide.Near, beginSymbol = Some("↑"), endSymbol = Some("↓")), 2, 4)
+    assert(lines(buffer) == Seq("↑ ", "█ ", "│ ", "↓ "))

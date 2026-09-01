@@ -115,7 +115,15 @@ widget(Scrollbar(contentLength = 200, position = 40)).rows(1)
 
 // along the bottom edge instead
 Scrollbar(200, 40, orientation = Direction.Horizontal)
+
+// a left-hand gutter instead of the right edge
+Scrollbar(200, 40, side = ScrollbarSide.Near)
 ```
+
+`side` picks which of the axis's two edges the strip lands on. `Far`, the default, is the
+right edge for a vertical bar and the bottom edge for a horizontal one; `Near` is the left
+edge and the top edge. The thumb sits in the same place along the strip either way — only
+the lane it is drawn in moves.
 
 The thumb's length is proportional to how much of the content the viewport covers, and a
 `position` past the end pins it to the end rather than drawing it off the track. When the
