@@ -59,6 +59,17 @@ private[terminal] final class InputDecoder(
   /** Where the report that [[readCursorReport]] is waiting for said the cursor was, once one arrives. */
   private var reportedCursor: Option[Position] = None
 
+  /** What the terminal has said about itself so far, while [[readCapabilityReport]] is listening, and whether the DA1
+    * fence that ends the listening has arrived.
+    *
+    * Only meaningful during a probe. Outside one a private-parameter reply is still dropped, unread, exactly as it was
+    * before — a stray device-attributes answer that arrives mid-session must not rewrite what was established at
+    * start-up.
+    */
+  private var probing           = false
+  private var probed            = TerminalCapabilities.unknown
+  private var probeFenceReached = false
+
   /** How large the terminal said its text area was in pixels, once a `CSI 4 ; h ; w t` reply arrives.
     *
     * No companion flag, unlike [[awaitingCursorReport]]: a `t` final byte encodes no key, so this reply is unambiguous
@@ -112,6 +123,26 @@ private[terminal] final class InputDecoder(
   private[terminal] def readTextAreaSize(timeoutMillis: Long): Option[Size] =
     reportedTextArea = None
     awaitReply(timeoutMillis, () => reportedTextArea)
+
+  /** Reads the terminal's answers to the capability queries, giving up after `timeoutMillis`.
+    *
+    * Called only by [[JLine3Backend.enableRawMode]], immediately after it has written the queries — DA1 last, because
+    * DA1 is the fence: terminals answer in the order the queries arrived, so its reply means everything that was going
+    * to be answered has been.
+    *
+    * Subject to the same rules as the other two reply round trips: render thread only, and a key typed while the
+    * answers are in flight is queued rather than dropped. A terminal that answers nothing at all — including one that
+    * does not implement DA1 — costs the full timeout once, at start-up, and yields [[TerminalCapabilities.unknown]],
+    * which every caller reads as "use the features anyway".
+    */
+  private[terminal] def readCapabilityReport(timeoutMillis: Long): TerminalCapabilities =
+    probing = true
+    probed = TerminalCapabilities.unknown
+    probeFenceReached = false
+    try
+      val _ = awaitReply(timeoutMillis, () => Option.when(probeFenceReached)(()))
+      probed
+    finally probing = false
 
   /** Pumps the decoder until `arrived` answers or `timeoutMillis` runs out, queueing every real event it meets.
     *
@@ -297,7 +328,13 @@ private[terminal] final class InputDecoder(
     else if params.startsWith("<") && (finalByte == 'M' || finalByte == 'm') then
       decodeSgrMouse(params.drop(1), finalByte == 'M')
     else if finalByte == 'M' && params.nonEmpty && !params.startsWith("<") then decodeUrxvtMouse(params)
-    else if isPrivateReply(params) then None // DA/DECRPM/kitty-query replies: not input, must not surface as keys
+    else if isPrivateReply(params) then
+      // DA/DECRPM/kitty-query replies: never input, and never a key. During a capability probe they are also the
+      // answers being waited for, so they are read on the way past instead of only being dropped.
+      if probing then
+        probed = CapabilityReplies.fold(probed, params, finalByte)
+        if CapabilityReplies.endsProbe(finalByte) then probeFenceReached = true
+      None
     // A cursor-position report is caught here rather than down in `decodeCsiKey`, because its second parameter is a
     // *column*, and the modifier extraction below rejects any second parameter above 16 — so a report from anywhere
     // right of column 16 would never have reached a case at all.

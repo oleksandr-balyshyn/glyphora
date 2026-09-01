@@ -47,6 +47,11 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * Cached because the answer only changes when the window does, and because the query costs a round trip on the
     * stream the event loop reads from. `onResize` clears both, so the next `windowSize` asks again.
     */
+  /** What the terminal said about itself when raw mode was entered. Written once per raw-mode session, on the render
+    * thread, and read from `draw` — hence `@volatile`.
+    */
+  @volatile private var probed: TerminalCapabilities = TerminalCapabilities.unknown
+
   @volatile private var textAreaPixels: Option[Size] = None
   @volatile private var pixelsAsked                  = false
 
@@ -96,6 +101,8 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   terminal.handle(Terminal.Signal.QUIT, _ => onInterrupt())
   terminal.handle(Terminal.Signal.TSTP, _ => onStop())
   terminal.handle(Terminal.Signal.CONT, _ => onContinue())
+
+  override def capabilities: TerminalCapabilities = probed
 
   def size: Either[BackendError, Size] = attempt(currentSize)
 
@@ -148,9 +155,10 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       // the erase itself has to go out, which is the one case where "nothing changed" still needs a write
       if body.nonEmpty || erasing then
         // one atomic update: the terminal shows the previous frame until the whole batch has arrived
-        val frame =
-          AnsiSequences.BeginSynchronized + (if erasing then AnsiSequences.ClearScreen else "") +
-            body + AnsiSequences.ResetStyle + AnsiSequences.EndSynchronized
+        val frame = AnsiSequences.frame(
+          (if erasing then AnsiSequences.ClearScreen else "") + body,
+          probed.enabled(probed.synchronizedOutput),
+        )
         // under the monitor, so a Ctrl+Z landing mid-frame cannot leave the alternate screen between the two writes
         // and spill this frame's cursor moves and box-drawing over the user's shell
         screenOwnership.synchronized {
@@ -186,11 +194,38 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       // there is no screen switch to restore the prompt's position for it.
       write(AnsiSequences.SaveCursor)
       cookedAttributes = Some(terminal.enterRawMode())
-      // modern input modes; terminals without support ignore them and keep legacy behavior
-      write(AnsiSequences.EnableBracketedPaste)
-      write(AnsiSequences.EnableFocusReporting)
-      write(AnsiSequences.PushKittyKeyboard)
+      // Ask before telling. The probe has to come after raw mode — there is no reader for a reply before it — and
+      // before the modes below, so a terminal that denies one is never sent it at all.
+      probed = probeCapabilities()
+      // modern input modes; a terminal that answered nothing still gets them, because an unsupported private mode is
+      // ignored by an overwhelming majority of terminals and switching the feature off on silence would disable it
+      // almost everywhere. Only an explicit denial skips one.
+      if probed.enabled(probed.bracketedPaste) then write(AnsiSequences.EnableBracketedPaste)
+      if probed.enabled(probed.focusReporting) then write(AnsiSequences.EnableFocusReporting)
+      if probed.enabled(probed.kittyKeyboard) then write(AnsiSequences.PushKittyKeyboard)
     }
+
+  /** Writes the capability queries and reads what comes back, or skips the round trip entirely.
+    *
+    * DA1 goes last because it is the fence: terminals answer in the order the queries arrived, so its reply means
+    * everything that was going to be answered has been. A terminal that answers nothing at all costs the timeout once,
+    * at start-up, and leaves every field unknown — which is exactly today's behaviour, since unknown means "use it".
+    *
+    * `GLYPHORA_NO_CAPABILITY_PROBE` set to any non-empty value skips the round trip, for a CI harness or a terminal
+    * where even a short start-up read is unwanted. Skipping is safe by construction: it produces the same unknown value
+    * a silent terminal would.
+    */
+  private def probeCapabilities(): TerminalCapabilities =
+    if sys.env.get("GLYPHORA_NO_CAPABILITY_PROBE").exists(_.nonEmpty) then TerminalCapabilities.unknown
+    else
+      screenOwnership.synchronized {
+        write(AnsiSequences.queryPrivateMode(CapabilityReplies.SynchronizedOutputMode))
+        write(AnsiSequences.queryPrivateMode(CapabilityReplies.BracketedPasteMode))
+        write(AnsiSequences.queryPrivateMode(CapabilityReplies.FocusReportingMode))
+        write(AnsiSequences.QueryKittyKeyboard)
+        write(AnsiSequences.QueryPrimaryDeviceAttributes)
+      }
+      decoder.readCapabilityReport(JLine3Backend.CapabilityProbeTimeoutMillis)
 
   /** Re-pushes the kitty keyboard flags with "report event types" added.
     *
@@ -739,6 +774,14 @@ object JLine3Backend:
     * noticed.
     */
   private val PixelQueryTimeoutMillis = 100L
+
+  /** How long [[JLine3Backend.enableRawMode]] waits for the capability answers before starting the app anyway.
+    *
+    * Paid once, at start-up, and only by a terminal that answers nothing — every terminal that implements DA1, which is
+    * almost all of them, ends the wait as soon as its reply arrives. The budget is the same tenth of a second the pixel
+    * query uses, for the same reason: it is under the threshold at which a start-up stutter is noticed.
+    */
+  private val CapabilityProbeTimeoutMillis = 100L
 
   /** Wraps an already-built JLine terminal.
     *

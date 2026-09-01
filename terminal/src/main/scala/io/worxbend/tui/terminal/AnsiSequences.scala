@@ -52,6 +52,20 @@ private[terminal] object AnsiSequences:
   val BeginSynchronized: String     = s"$Esc[?2026h"
   val EndSynchronized: String       = s"$Esc[?2026l"
 
+  /** One frame's worth of output, wrapped so the terminal shows the previous frame until the whole batch arrives.
+    *
+    * `synchronizedOutput` is what a capability probe established: a terminal that reported mode 2026 as unrecognised
+    * gets the bare body, because sending it a `?2026h` it does not understand is at best noise and at worst two stray
+    * sequences printed into the frame. Everything else — including every terminal that answered nothing — gets the
+    * wrapper, since an unsupported private mode is ignored by an overwhelming majority of terminals and tearing is a
+    * visible defect where the wrapper is missing.
+    *
+    * Extracted from `JLine3Backend.draw` so this decision can be read, and tested, without a terminal.
+    */
+  def frame(body: String, synchronizedOutput: Boolean): String =
+    if synchronizedOutput then s"$BeginSynchronized$body$ResetStyle$EndSynchronized"
+    else s"$body$ResetStyle"
+
   /** DECSCUSR (`CSI n SP q`): selects the shape the terminal draws its hardware cursor in — see [[CursorShape]]. */
   def cursorShape(shape: CursorShape): String = s"$Esc[${CursorShape.parameter(shape)} q"
 
@@ -235,6 +249,28 @@ private[terminal] object AnsiSequences:
     * answers at all, which is the common case, so every caller needs a timeout.
     */
   val RequestTextAreaPixels: String = s"$Esc[14t"
+
+  /** DECRQM (`CSI ? mode $ p`) — asks whether a DEC private mode is recognised, and what state it is in.
+    *
+    * The answer is a DECRPM, `CSI ? mode ; state $ y`; `CapabilityReplies` reads it. A terminal that does not implement
+    * DECRQM answers nothing at all, which is why the probe needs a fence rather than a per-query timeout.
+    */
+  def queryPrivateMode(mode: Int): String = s"$Esc[?$mode$$p"
+
+  /** Asks the terminal for its current kitty keyboard flags (`CSI ? u`).
+    *
+    * Only a terminal implementing the protocol answers, so the arrival of a reply *is* the answer — which is why there
+    * is nothing to read out of it.
+    */
+  val QueryKittyKeyboard: String = s"$Esc[?u"
+
+  /** DA1 (`CSI c`), the primary device attributes query.
+    *
+    * Every terminal answers it, so it is the fence that ends a capability probe: terminals answer in the order the
+    * queries arrived, so once DA1's reply is back, anything still unanswered was never going to be answered. Sent last
+    * for exactly that reason.
+    */
+  val QueryPrimaryDeviceAttributes: String = s"$Esc[c"
 
   /** Moves the cursor to an absolute zero-based position (ANSI rows/columns are one-based). */
   def moveTo(x: Int, y: Int): String =

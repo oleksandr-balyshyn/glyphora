@@ -201,6 +201,40 @@ than being swallowed.
 When launching an external interactive program, use `TuiApp.suspend { ... }` so the
 terminal is deliberately handed over and restored.
 
+## What the terminal supports
+
+When glyphora enters raw mode it asks the terminal about itself once, and then acts on
+the answer. Three queries go out — a DECRQM (`CSI ? mode $ p`) for synchronised output,
+bracketed paste and focus reporting, a `CSI ? u` for the kitty keyboard protocol, and a
+primary device attributes request (`CSI c`) last. DA1 is the fence: terminals answer in
+the order the queries arrived, so once its reply is back, anything still unanswered was
+never going to be answered.
+
+Each feature ends up in one of three states, and the third is the interesting one:
+
+| State | What it means | What glyphora does |
+|---|---|---|
+| `Support.Yes` | the terminal said it has the mode | use it |
+| `Support.No` | the terminal said the mode is not recognised | do not send it at all |
+| `Support.Unknown` | the terminal said nothing | **use it anyway** |
+
+Silence has to mean "carry on". Almost every terminal ignores a query it does not
+implement rather than answering it, so treating silence as a denial would switch
+synchronised output and bracketed paste off on the majority of terminals that support
+them perfectly well. Only an explicit denial turns anything off, which is why adding
+the probe changed nothing for a terminal that answers nothing.
+
+The whole round trip is bounded at a tenth of a second, paid once at start-up and only
+by a terminal that answers nothing at all. If even that is unwanted — a CI harness, a
+terminal where a start-up read causes trouble — set `GLYPHORA_NO_CAPABILITY_PROBE` to
+any non-empty value and it is skipped entirely. Skipping is safe by construction: it
+produces exactly the "nothing established" answer a silent terminal would, so every
+feature stays on.
+
+`Backend.capabilities` reports what was established, for an application that wants to
+show it or log it. A backend with no device to ask — `HeadlessBackend` — always reports
+that nothing was established.
+
 ## Borders and spinners come out as boxes or question marks
 
 The terminal's font has no glyph for what was drawn. Set `GLYPHORA_ASCII=1` in the

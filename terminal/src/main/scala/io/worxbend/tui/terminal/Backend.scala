@@ -28,6 +28,16 @@ trait Backend:
   def hideCursor(): Either[BackendError, Unit]
   def showCursor(): Either[BackendError, Unit]
 
+  /** What this terminal is known to support, established once when raw mode was entered.
+    *
+    * The default answers [[TerminalCapabilities.unknown]] — nothing was established — which every caller must read as
+    * "use the feature anyway". See [[TerminalCapabilities]] for why silence is the optimistic answer and only an
+    * explicit denial turns anything off.
+    *
+    * Read-only, and stable for the life of a raw-mode session: a backend probes once and hands out the value it got.
+    */
+  def capabilities: TerminalCapabilities = TerminalCapabilities.unknown
+
   /** Asks the terminal to report key *releases* as well as presses (kitty keyboard protocol flag 2).
     *
     * Answering `Right(())` promises nothing about whether releases actually arrive: a backend with no such protocol
