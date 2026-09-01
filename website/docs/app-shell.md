@@ -367,6 +367,45 @@ far — a breadcrumb, a title bar — wants the names. That last binding is the 
 reason to want it: one `Esc` that means "go back a level" while anything is pushed and
 "quit" at the top, without the app keeping a parallel counter of its own.
 
+### Close a dialog with Esc or a click away from it
+
+By default only the application's own `popScreen()` closes a screen. A modal can ask to
+close itself instead:
+
+```scala
+pushScreen(Screen(confirmBody, dismissal = Dismissal.EscapeOrClickOutside))
+```
+
+`Dismissal` has four cases — `Never` (the default), `Escape`, `ClickOutside` and
+`EscapeOrClickOutside` — and all of them apply to a modal only. A full screen replaces
+what is beneath it, so it has no surrounding area that counts as "outside", and there is
+nothing to fall back to.
+
+`Esc` is handled at the very last stage of key routing, after the element tree and after
+the key bindings, so an element that wants `Esc` for itself still gets it and the dialog
+stays open.
+
+A click is resolved against the topmost thing under the pointer, so a press on any of the
+dialog's own controls goes to that control and the dialog stays open. "Outside" here means
+"on no control of the dialog", which is not quite the same as "outside its frame": a press
+on a plain border or on a caption lands on no control, so it counts as outside. A dialog
+that wants its whole frame to be inert says so in one line, by consuming presses at its
+root:
+
+```scala
+panel("Really?")(body).onMouseEvent(_ => true)
+```
+
+A geometric test is deliberately not attempted, because nothing in the tree records where
+a dialog was *placed* — placement is spacers around a sized node — so the rectangle would
+have to be guessed, and a wrong guess closes a dialog the user is still using.
+
+The layer underneath a modal stays inert throughout, as it always has: it receives no
+key and no mouse event, so nothing down there reacts to the click that dismissed the
+dialog on top of it. `dismissibleOverlay(content)(onOutsidePress)` is the same backdrop as
+a plain element builder, for a dialog an application layers itself rather than pushing as
+a screen.
+
 ### Keys that belong to one screen
 
 A shortcut often belongs to the screen showing it, not to the whole application. Before

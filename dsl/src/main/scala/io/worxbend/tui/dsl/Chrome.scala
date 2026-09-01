@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{CharWidth, Constraint, Text}
+import io.worxbend.tui.core.{CharWidth, Constraint, MouseEventKind, Text}
 import io.worxbend.tui.widgets as w
 
 /** The app-chrome presets: top bar, status bar, sidebar, scaffold, help overlay, and layout helpers. All of them are
@@ -108,6 +108,41 @@ def sidebarLayout(pane: Element, main: Element, paneWidth: Int = 24): Element =
 /** The classic list-left, detail-right split. */
 def masterDetail(master: Element, detail: Element, masterWidth: Int = 30): Element =
   sidebarLayout(master, detail, masterWidth)
+
+/** `content` laid over a backdrop that reports a mouse press no part of `content` took, so a dialog can be closed by
+  * clicking away from it.
+  *
+  * How it works, and what it therefore means. [[EventRouter]] resolves a press against the *topmost* sibling subtree
+  * that covers the pointer and never offers it to the ones underneath, and it only considers elements that recorded an
+  * area — that is, elements that are focusable or carry a mouse handler of their own. `content` is the later of the two
+  * layers here, so a press that lands on any of its controls is resolved there and the backdrop never hears about it. A
+  * press that lands where the dialog has no control resolves to nothing inside `content`, falls through to the
+  * backdrop, and calls `onOutsidePress`.
+  *
+  * The consequence worth knowing before using this: "outside" means "on no control of the dialog", which is not quite
+  * the same as "outside the dialog's frame". A press on a dialog's border or on a caption inside it lands on no control
+  * and so counts as outside. A dialog that wants its whole frame to be inert says so in one line, by consuming presses
+  * at its root:
+  *
+  * {{{
+  * panel("Really?")(body).onMouseEvent(_ => true)
+  * }}}
+  *
+  * A geometric test is deliberately not attempted. Nothing in the tree records where a dialog was *placed* — placement
+  * is spacers around a sized node, and the placed node has no area of its own unless it is a control — so a rectangle
+  * to compare against would have to be guessed, and a guess that is wrong closes a dialog the user was using.
+  *
+  * `TuiApp` wires this for any modal `Screen` whose [[Dismissal]] includes a click outside; call it directly only for a
+  * dialog an application layers itself.
+  */
+def dismissibleOverlay(content: Element)(onOutsidePress: () => Unit): Element =
+  val backdrop = Element.spacer.onMouseEvent { event =>
+    if event.kind == MouseEventKind.Down then
+      onOutsidePress()
+      true
+    else false
+  }
+  Element.layers(backdrop, content)
 
 /** `content` at a fixed size, centered both ways in whatever space is available. */
 def centered(width: Int, height: Int)(content: Element): Element =

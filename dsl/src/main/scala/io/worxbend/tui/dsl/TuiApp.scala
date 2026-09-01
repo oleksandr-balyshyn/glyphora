@@ -804,7 +804,11 @@ trait TuiApp:
     if consumed || bound then true else handleFrameworkKey(key, run.tracker, handle)
 
   /** The last stage: the keys the framework reserves for itself once nothing else claimed the event — `Tab` /
-    * `Shift+Tab` focus traversal, `Ctrl+P` for the command palette, `Ctrl+C` to quit.
+    * `Shift+Tab` focus traversal, `Ctrl+P` for the command palette, `Ctrl+C` to quit, and `Esc` when the modal on top
+    * of the stack asked to be closed by it (see `Screen.dismissal`).
+    *
+    * `Esc` is handled here, last, and not earlier, so that an element or a key binding that wants `Esc` for itself
+    * still gets it: a text field leaving its editing mode consumes the key long before the event reaches this method.
     *
     * Answers `true` only when focus actually moved, because that is the one outcome here that changes the next frame
     * without going through a signal; opening the palette and quitting each schedule their own redraw.
@@ -820,7 +824,19 @@ trait TuiApp:
       case KeyEvent(KeyCode.Char('c'), modifiers) if modifiers.hasAny(KeyModifiers.Ctrl) =>
         handle.quit()
         false
+      case KeyEvent(KeyCode.Escape, _) if topScreenClosesOnEscape                        =>
+        popScreen()
+        false
       case _                                                                             => false
+
+  /** Whether the screen on top of the stack is a modal that asked to be closed by `Esc`.
+    *
+    * Reads the stack with `peek` rather than `get`: this runs from the event loop, not from a view evaluation, so
+    * subscribing here would attach a dependency to whatever view happened to be recomputing.
+    */
+  private def topScreenClosesOnEscape: Boolean =
+    screenStack.peek.headOption
+      .exists(screen => screen.presentation == Presentation.Modal && screen.dismissal.byEscape)
 
   private def handleMouse(mouse: MouseEvent, run: RunState): Boolean =
     val hit        = run.tracker.hitTest(mouse.position)
@@ -846,7 +862,13 @@ trait TuiApp:
     given Theme     = theme
     val withScreens = screenStack.get.reverse.foldLeft(view) { (below, screen) =>
       screen.presentation match
-        case Presentation.Modal => Element.layers(FocusPass.suppressFocus(below), screen.view)
+        case Presentation.Modal =>
+          // a modal that closes on a click outside is wrapped in the backdrop that notices such a click; the layer
+          // underneath stays inert either way, so nothing down there sees the press
+          val top =
+            if screen.dismissal.byClickOutside then dismissibleOverlay(screen.view)(() => popScreen())
+            else screen.view
+          Element.layers(FocusPass.suppressFocus(below), top)
         case Presentation.Full  => screen.view
     }
     val withPalette =

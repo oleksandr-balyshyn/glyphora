@@ -14,6 +14,40 @@ enum Presentation:
   /** Replaces the view beneath it entirely — a page. */
   case Full
 
+/** How a modal [[Screen]] may close itself, without the application writing a handler for it.
+  *
+  * A sealed set of cases rather than two booleans, so a call site reads as one decision — `Dismissal.Escape` — instead
+  * of a pair of unlabelled `true`/`false` arguments whose order nobody remembers.
+  *
+  * Every case is honoured only for [[Presentation.Modal]]. A full screen replaces what is beneath it, so there is no
+  * whitespace around it that counts as "outside", and closing it on `Esc` would take the user somewhere the screen
+  * never said it was willing to go.
+  */
+enum Dismissal:
+
+  /** Only the application's own `popScreen()` closes this screen. The default, and what every screen did before this
+    * existed.
+    */
+  case Never
+
+  /** `Esc` closes it — but only once no element and no key binding claimed that key, so a text field that uses `Esc` to
+    * leave its editing mode still wins.
+    */
+  case Escape
+
+  /** A mouse press in the whitespace around the dialog closes it. A press anywhere on the dialog itself does not,
+    * including on its border.
+    */
+  case ClickOutside
+
+  /** Both [[Escape]] and [[ClickOutside]]. */
+  case EscapeOrClickOutside
+
+  private[dsl] def byEscape: Boolean = this == Dismissal.Escape || this == Dismissal.EscapeOrClickOutside
+
+  private[dsl] def byClickOutside: Boolean =
+    this == Dismissal.ClickOutside || this == Dismissal.EscapeOrClickOutside
+
 /** One entry of the app's screen stack. See [[Presentation]] for how it sits over the view beneath; push and pop via
   * `TuiApp.pushScreen`/`popScreen`.
   */
@@ -49,6 +83,16 @@ trait Screen:
     */
   def label: Option[String] = None
 
+  /** How this screen closes itself when the user tries to leave it — see [[Dismissal]]. `Never` by default, which is
+    * what every screen did before this existed: only the application's own `popScreen()` closes it.
+    *
+    * Honoured only for [[Presentation.Modal]]. It is wired once by `TuiApp` rather than per dialog, which is the point:
+    * before this, "clicking the darkened area around the dialog closes it" had to be written by hand for every dialog,
+    * and in fact could not be written at all, because the layer underneath a modal is deliberately inert and a press
+    * out there reached nothing.
+    */
+  def dismissal: Dismissal = Dismissal.Never
+
   /** Runs on the render thread the moment this screen goes on the stack, before the frame that first shows it.
     *
     * This is a screen's own "now I am running", the counterpart of `TuiApp.onStart` for a subtree that comes and goes.
@@ -82,6 +126,9 @@ object Screen:
     * `onEnter`/`onLeave` are the same hooks the trait declares, for a screen small enough not to want a class of its
     * own: `Screen(detailView, onEnter = () => startPolling(), onLeave = () => stopPolling())`.
     *
+    * `dismissal` says whether `Esc` or a click outside closes it — see [[Dismissal]]; it applies to a modal screen
+    * only, so `Screen.full` leaving it at `Never` is not an oversight.
+    *
     * `label` names the screen for the application's own breadcrumbs and title bars — see [[Screen.label]]; leaving it
     * empty means the screen is unnamed.
     *
@@ -95,8 +142,9 @@ object Screen:
       onLeave: () => Unit = () => (),
       keys: KeyBindings = KeyBindings.empty,
       label: String = "",
+      dismissal: Dismissal = Dismissal.Never,
   ): Screen =
-    build(element, Presentation.Modal, onEnter, onLeave, keys, label)
+    build(element, Presentation.Modal, onEnter, onLeave, keys, label, dismissal)
 
   /** A ready-made modal "are you sure?": Left/Right (and Tab) move between the two buttons, Space or Enter presses the
     * selected one, Esc cancels.
@@ -138,8 +186,9 @@ object Screen:
       onLeave: () => Unit = () => (),
       keys: KeyBindings = KeyBindings.empty,
       label: String = "",
+      dismissal: Dismissal = Dismissal.Never,
   ): Screen =
-    build(element, Presentation.Full, onEnter, onLeave, keys, label)
+    build(element, Presentation.Full, onEnter, onLeave, keys, label, dismissal)
 
   private def build(
       element: View,
@@ -148,6 +197,7 @@ object Screen:
       leaving: () => Unit,
       keys: KeyBindings,
       name: String,
+      closes: Dismissal,
   ): Screen =
     new Screen:
       def view(using ReactiveScope, Theme): Element = element
@@ -158,6 +208,7 @@ object Screen:
       // an empty string is the "no name given" spelling: the parameter has to have a default, and `Option[String]` as
       // a parameter type would make every labelled call site write `Some(...)` for nothing
       override def label: Option[String]            = Option(name).filter(_.nonEmpty)
+      override def dismissal: Dismissal             = closes
 
 /** An intro shown before the first view render: `content` (typically a `bigText` logo composition) plays `effect` and
   * holds for at least `minimumDuration`; any key skips it. Wire via `TuiApp.splash`.
