@@ -7,8 +7,17 @@ import scala.concurrent.duration.FiniteDuration
   *
   * The buffer itself stays module-private — application render code goes through the widget contract, which keeps every
   * write attributable to a widget and an area.
+  *
+  * `count` is how many frames this runner composed before this one: the first frame of a run is `0` and the number goes
+  * up by one per composed frame, wrapping back to `0` after `Long.MaxValue` (about 300 million years at a thousand
+  * frames a second — the wrap is stated so the type is total, not because anyone will see it). It counts *composed*
+  * frames, not cells that reached the terminal: a frame the backend's diff turned into no output at all still consumed
+  * its number. Use it to do expensive work only every Nth frame, or to label a frame in a debug overlay. Do **not**
+  * drive animation from it — a frame rate is not a clock, and the same animation would then run at a different speed on
+  * a fast terminal than on a slow one. `core.Progress` with a real elapsed duration is the one owner of
+  * time-to-position arithmetic.
   */
-final class Frame(val area: Rect, private[runtime] val buffer: Buffer):
+final class Frame(val area: Rect, private[runtime] val buffer: Buffer, val count: Long = 0L):
 
   def renderWidget(widget: Widget, area: Rect): Unit =
     widget.render(area, buffer)

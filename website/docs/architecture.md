@@ -208,6 +208,28 @@ The mid-level framework tier:
 - **`Stopwatch` / `Timer` / `TickDriven`** — caller-owned tick clocks, the thing
   that supplies the `elapsed` `tui-core`'s motion values are pure functions of.
 
+### Frame numbers
+
+Every `Frame` carries a `count`: how many frames this runner composed before it. The
+first frame of a run is `0` and the number goes up by one per composed frame — a frame
+whose contents the backend's diff turned into no output at all still used its number.
+There are two sanctioned uses. Doing expensive work only occasionally:
+
+```scala
+if frame.count % 30 == 0 then refreshExpensivePanel()
+```
+
+and labelling a frame in a debug overlay:
+
+```scala
+frame.renderWidget(Paragraph(s"frame ${frame.count}"), debugArea)
+```
+
+It is deliberately *not* a clock. A frame rate depends on the terminal, so an animation
+driven off `count` runs at one speed over SSH and another locally. Time-to-position
+arithmetic has one owner, `core.Progress` (and the `Tween`/`Spring` values built on it),
+which take a real elapsed duration — see [Motion](./motion).
+
 `tui-dsl` adds `AnimationClock` on top of these: a signal of elapsed time republished
 each tick, which the animated elements read. Because that read is tracked, a view
 subscribes to the clock only while it actually renders an animation. The elapsed

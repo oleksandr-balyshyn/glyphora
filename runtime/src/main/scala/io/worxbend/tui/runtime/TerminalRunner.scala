@@ -268,6 +268,7 @@ final class TerminalRunner(
 private final class FrameComposer(backend: Backend, render: Frame => Unit):
 
   private var frameBuffer: Option[Buffer] = None
+  private var composed: Long              = 0L
 
   /** Asks the backend for the current size, composes the frame into the (reused or freshly sized) buffer and flushes
     * it. A failure at either backend call is returned rather than thrown, for the loop to record.
@@ -278,7 +279,11 @@ private final class FrameComposer(backend: Backend, render: Frame => Unit):
       val buffer = frameBuffer.filter(_.area == area).getOrElse(Buffer(area))
       buffer.reset()
       frameBuffer = Some(buffer)
-      render(Frame(area, buffer))
+      render(Frame(area, buffer, composed))
+      // The number is spent here, before the flush: the first frame an app sees is 0, and a frame whose `draw` fails
+      // still used its number. Rolling it back on a failed draw would hand two different frames the same number, which
+      // is worse for a debug label than a gap in the sequence.
+      composed = if composed == Long.MaxValue then 0L else composed + 1L
       backend.draw(buffer)
     }
 
