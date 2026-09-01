@@ -6,13 +6,7 @@ import scala.concurrent.duration.{Duration, DurationInt}
 
 import org.scalatest.funsuite.AnyFunSuite
 
-final class WindowSizeSpec extends AnyFunSuite:
-
-  private def decoderFor(chars: Int*): InputDecoder =
-    val iterator = chars.iterator
-    InputDecoder(_ => if iterator.hasNext then iterator.next() else -2)
-
-  private def csi(body: String): Seq[Int] = 0x1b +: '['.toInt +: body.map(_.toInt)
+final class WindowSizeSpec extends AnyFunSuite with DecoderFixtures:
 
   // ------------------------------------------------------------------ the value
 

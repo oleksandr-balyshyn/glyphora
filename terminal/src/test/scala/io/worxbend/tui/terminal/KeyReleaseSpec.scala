@@ -5,13 +5,7 @@ import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers}
 import org.scalatest.funsuite.AnyFunSuite
 
 /** The kitty keyboard protocol's event-type sub-parameter: what glyphora asks for, and what it makes of the answer. */
-final class KeyReleaseSpec extends AnyFunSuite:
-
-  private def decoderFor(chars: Int*): InputDecoder =
-    val iterator = chars.iterator
-    InputDecoder(_ => if iterator.hasNext then iterator.next() else -2)
-
-  private def csi(body: String): Seq[Int] = 0x1b +: '['.toInt +: body.map(_.toInt)
+final class KeyReleaseSpec extends AnyFunSuite with DecoderFixtures:
 
   private def decoded(body: String): Option[Event] = decoderFor(csi(body)*).decode(10)
 

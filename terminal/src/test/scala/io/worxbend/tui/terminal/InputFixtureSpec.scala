@@ -25,7 +25,7 @@ import org.scalatest.funsuite.AnyFunSuite
   * add a real capture: run `script -f trace.raw`, press the keys, then paste the bytes here with the terminal and key
   * names recorded alongside, so a future reader can tell a captured fixture from a derived one.
   */
-final class InputFixtureSpec extends AnyFunSuite:
+final class InputFixtureSpec extends AnyFunSuite with DecoderFixtures:
 
   private val Esc = 0x1b
 
@@ -44,7 +44,6 @@ final class InputFixtureSpec extends AnyFunSuite:
         case None        => if index >= bytes.length then draining = false
     events.result()
 
-  private def csi(body: String): Seq[Int] = Esc +: '['.toInt +: body.map(_.toInt)
   private def ss3(body: String): Seq[Int] = Esc +: 'O'.toInt +: body.map(_.toInt)
   private def text(s: String): Seq[Int]   = s.map(_.toInt)
 

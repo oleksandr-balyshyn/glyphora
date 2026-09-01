@@ -21,21 +21,15 @@ import org.scalatest.funsuite.AnyFunSuite
   * Synthesizing an `Escape` from unparsed bytes means a capability probe or a mouse click silently closes whatever
   * dialog the user had open.
   */
-final class InputDecoderRegressionSpec extends AnyFunSuite:
+final class InputDecoderRegressionSpec extends AnyFunSuite with DecoderFixtures:
 
   private val Esc = 0x1b
-
-  private def decoderFor(chars: Int*): InputDecoder =
-    val iterator = chars.iterator
-    InputDecoder(_ => if iterator.hasNext then iterator.next() else -2)
 
   private def decoded(chars: Int*): Event =
     decoderFor(chars*).decode(10).getOrElse(fail("expected an event"))
 
   private def dropped(chars: Int*): Unit =
     assert(decoderFor(chars*).decode(10).isEmpty)
-
-  private def csi(body: String): Seq[Int] = Esc +: '['.toInt +: body.map(_.toInt)
 
   /** What a scripted stream produces over `calls` successive `decode` calls, `None` entries included.
     *

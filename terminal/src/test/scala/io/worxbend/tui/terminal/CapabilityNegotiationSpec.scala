@@ -7,13 +7,7 @@ import scala.concurrent.duration.DurationInt
 import org.scalatest.funsuite.AnyFunSuite
 
 /** Asking the terminal what it supports, and — the part that matters — what is done with silence. */
-final class CapabilityNegotiationSpec extends AnyFunSuite:
-
-  private def decoderFor(chars: Int*): InputDecoder =
-    val iterator = chars.iterator
-    InputDecoder(_ => if iterator.hasNext then iterator.next() else -2)
-
-  private def csi(body: String): Seq[Int] = 0x1b +: '['.toInt +: body.map(_.toInt)
+final class CapabilityNegotiationSpec extends AnyFunSuite with DecoderFixtures:
 
   private val Da1 = csi("?62;1;4c")
 

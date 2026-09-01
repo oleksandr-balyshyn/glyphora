@@ -22,18 +22,12 @@ import org.scalatest.funsuite.AnyFunSuite
   * down. Both halves of that are covered here: that `MouseCaptureMode.AllMotion` really does add mode 1003, and that a
   * motion report naming no button really does decode to `Moved` rather than to a phantom `Drag`.
   */
-final class MouseCaptureModeSpec extends AnyFunSuite:
+final class MouseCaptureModeSpec extends AnyFunSuite with DecoderFixtures:
 
   private val Esc = ''
 
-  /** Decodes one event from a fixed script of character codes; reads past the end report a timeout. */
   private def decoded(chars: Int*): Event =
-    val iterator = chars.iterator
-    InputDecoder(_ => if iterator.hasNext then iterator.next() else -2)
-      .decode(10)
-      .getOrElse(fail("expected an event"))
-
-  private def csi(body: String): Seq[Int] = 0x1b +: '['.toInt +: body.map(_.toInt)
+    decoderFor(chars*).decode(10).getOrElse(fail("expected an event"))
 
   test("only all-motion capture asks the terminal for mode 1003"):
     assert(!AnsiSequences.enableMouseCapture(MouseCaptureMode.Buttons).contains(s"$Esc[?1003h"))

@@ -13,14 +13,7 @@ import org.scalatest.funsuite.AnyFunSuite
   * the resolution has to become conditional — a report only while a query is outstanding — and these tests pin both
   * sides of that, plus the keys a user types during the round trip, which must not be lost.
   */
-final class CursorReportSpec extends AnyFunSuite:
-
-  /** A decoder fed from a fixed script of character codes; reads past the end report a timeout. */
-  private def decoderFor(chars: Int*): InputDecoder =
-    val iterator = chars.iterator
-    InputDecoder(_ => if iterator.hasNext then iterator.next() else -2)
-
-  private def csi(body: String): Seq[Int] = 0x1b +: '['.toInt +: body.map(_.toInt)
+final class CursorReportSpec extends AnyFunSuite with DecoderFixtures:
 
   private final class BareBackend extends Backend:
     def size: Either[BackendError, Size]                                  = Right(Size(10, 3))
@@ -110,9 +103,8 @@ final class CursorReportSpec extends AnyFunSuite:
     // nanos does not fit in a Long: it wrapped round to a small negative number, so the deadline was about a
     // millisecond in the *past*, the wait loop never ran once, and the query reported "this terminal cannot answer"
     // instantly.
-    val script  = Seq.fill(3)(-2) ++ csi("5;9R") // three timed-out reads, then the report
-    val chars   = script.iterator
-    val decoder = InputDecoder(_ => if chars.hasNext then chars.next() else -2)
+    val script  = Seq.fill(3)(NothingAvailable) ++ csi("5;9R") // three timed-out reads, then the report
+    val decoder = decoderFor(script*)
     assert(decoder.readCursorReport(Duration.Inf) == Some(Position(8, 4)))
 
   test("Duration.Inf reaches the decoder as a wait that actually waits"):

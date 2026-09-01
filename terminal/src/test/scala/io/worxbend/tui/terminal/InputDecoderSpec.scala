@@ -15,17 +15,10 @@ import io.worxbend.tui.core.{
 
 import org.scalatest.funsuite.AnyFunSuite
 
-final class InputDecoderSpec extends AnyFunSuite:
-
-  /** A decoder fed from a fixed script of character codes; reads past the end report a timeout. */
-  private def decoderFor(chars: Int*): InputDecoder =
-    val iterator = chars.iterator
-    InputDecoder(_ => if iterator.hasNext then iterator.next() else -2)
+final class InputDecoderSpec extends AnyFunSuite with DecoderFixtures:
 
   private def decoded(chars: Int*): Event =
     decoderFor(chars*).decode(10).getOrElse(fail("expected an event"))
-
-  private def csi(body: String): Seq[Int] = 0x1b +: '['.toInt +: body.map(_.toInt)
 
   test("a timeout with no input decodes to no event"):
     assert(decoderFor().decode(10).isEmpty)
