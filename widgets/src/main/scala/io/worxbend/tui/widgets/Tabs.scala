@@ -10,6 +10,11 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, Measured, Rect, Style, Wid
   * also why padding cannot be expressed by widening the divider — a divider is drawn between tabs, so the first and the
   * last tab would get none of it, and no part of it would ever be highlighted.
   *
+  * `selected` is an index into `titles`. Any value outside that range — [[Tabs.NoSelection]] is the name for one —
+  * highlights no tab at all, which is what a tab bar should look like before anything has been opened or while the
+  * focus is somewhere else entirely. That is part of this widget's contract and is covered by its tests, rather than
+  * an out-of-range index happening to match nothing.
+  *
   * Both paddings are empty by default, which draws exactly what this widget drew before they existed: the default
   * `divider` carries its own blanks. For the padded look, set the divider to a bare `"│"` and both paddings to `" "` —
   * or call [[Tabs.padded]], which does that for you.
@@ -50,6 +55,14 @@ final case class Tabs(
     Some(titles.map(title => title.width + padding).sum + dividers)
 
 object Tabs:
+
+  /** The `selected` value that highlights no tab.
+    *
+    * Any out-of-range index does the same thing; this one exists so a call site can say what it means. Writing
+    * `Tabs(titles, Tabs.NoSelection)` states the intent, where `Tabs(titles, -1)` leaves the next reader working out
+    * whether the `-1` is deliberate or a bug in whatever computed it.
+    */
+  val NoSelection: Int = -1
 
   /** The padded look: a bare `│` between tabs and one blank column inside each tab, so the highlight of the selected
     * tab covers a column either side of its title rather than stopping at the glyphs.

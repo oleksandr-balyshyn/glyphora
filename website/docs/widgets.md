@@ -497,6 +497,15 @@ import io.worxbend.tui.widgets.Tabs
 widget(Tabs.padded(Seq("Overview", "Detail").map(Line.raw), selected = 1))
 ```
 
+A tab bar can also show nothing as chosen. `selected` is an index into the titles,
+and any index outside their range highlights no tab — `Tabs.NoSelection` is the name
+for one, so a call site can say that it means it rather than leaving the next reader
+to work out whether a `-1` was deliberate:
+
+```scala
+widget(Tabs(titles, Tabs.NoSelection))  // nothing opened yet
+```
+
 `Tabs` also answers `widthAt(height)` from `core.Measured`, reporting the exact
 columns it needs — every title, its padding, and one divider per gap. A `row` can
 therefore size a tab bar from its own content instead of you maintaining a

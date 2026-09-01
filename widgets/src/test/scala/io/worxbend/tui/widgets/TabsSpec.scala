@@ -52,3 +52,12 @@ final class TabsSpec extends AnyFunSuite:
   test("a single tab is measured with no divider, and no tabs at all measure as nothing"):
     assert(Tabs(Seq(Line.raw("solo"))).widthAt(1) == Some(4))
     assert(Tabs(Seq.empty).widthAt(1) == Some(0))
+
+  test("Tabs.NoSelection highlights nothing"):
+    val buffer = rendered(tabs.copy(selected = Tabs.NoSelection), 20, 1)
+    assert(trimmedLines(buffer) == Seq("one │ two │ three"))
+    assert((0 until 17).forall(x => !buffer.get(x, 0).style.modifiers.hasAny(Modifiers.Reverse)))
+
+  test("an index past the last tab highlights nothing either"):
+    val buffer = rendered(tabs.copy(selected = 99), 20, 1)
+    assert((0 until 17).forall(x => !buffer.get(x, 0).style.modifiers.hasAny(Modifiers.Reverse)))
