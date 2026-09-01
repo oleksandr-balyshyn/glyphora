@@ -126,3 +126,25 @@ final class ViewStateSpec extends AnyFunSuite:
     assert(store.slotCount == 2)
     assert(values.head.peek == 1)
     assert(values(1).peek == 2)
+
+  test("an empty key is still a scope of its own, not the root"):
+    val store  = ViewState()
+    store.beginGeneration()
+    // both hooks are the first call in their own scope, so both used to be numbered "#0": the root path is the empty
+    // string and so is a path of one empty key. The second call then read back the first call's Signal[String].
+    val values = ViewState.during(store)(Seq(useSignal("a"), keyed("")(useSignal(0))))
+    store.sweep()
+    assert(store.slotCount == 2)
+    assert(values.head.peek == "a")
+    assert(values(1).peek == 0)
+
+  test("a key containing the path separator is not the two keys it looks like"):
+    val store  = ViewState()
+    store.beginGeneration()
+    // "a/b" as one key and "a" containing "b" both used to spell the path "a/b", so the second call read back the
+    // first one's slot
+    val values = ViewState.during(store)(Seq(keyed("a/b")(useSignal("one")), keyed("a")(keyed("b")(useSignal(2)))))
+    store.sweep()
+    assert(store.slotCount == 2)
+    assert(values.head.peek == "one")
+    assert(values(1).peek == 2)

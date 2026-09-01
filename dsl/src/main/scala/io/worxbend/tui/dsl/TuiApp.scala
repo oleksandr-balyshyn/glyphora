@@ -242,7 +242,12 @@ trait TuiApp:
   private def merged(top: Option[Screen]): KeyBindings =
     top.fold(bindings) { screen =>
       val claimed = screen.bindings.bindings.flatMap(_.triggers).toSet
-      screen.bindings ++ KeyBindings(bindings.bindings.filterNot(_.triggers.forall(claimed.contains))*)
+      // `triggers.nonEmpty &&` matters: `forall` on an empty sequence answers true, so a command with no keys at all
+      // — a palette-only entry, reached by name through Ctrl+P and by nothing else — read as "the screen claimed
+      // every one of its keys" and was dropped for as long as any screen was on the stack. A binding with no trigger
+      // cannot be shadowed by anything, because there is nothing to shadow.
+      val shadowed = (app: KeyBinding) => app.triggers.nonEmpty && app.triggers.forall(claimed.contains)
+      screen.bindings ++ KeyBindings(bindings.bindings.filterNot(shadowed)*)
     }
 
   /** An intro screen shown before the first `view` render — see [[SplashScreen]]. Any key skips it. */
@@ -654,8 +659,13 @@ trait TuiApp:
     var queued = PortalQueue.drain()
     while queued.nonEmpty && round < MaxPortalRounds do
       queued.foreach { (target, content) =>
-        val clipped = target.intersection(frame.area)
-        if !clipped.isEmpty then frame.renderWidget(content.widget, clipped)
+        // Rendered at its own rectangle, not at the intersection with the screen. `Buffer.set` already drops a cell
+        // outside the frame, so handing the content its full rectangle clips it and nothing more. Handing it the
+        // intersection instead *moved* it: a portal starting five columns left of the screen has an intersection whose
+        // origin is column 0, so its content was laid out from there and the user saw the portal's first five columns
+        // where its sixth through tenth belonged. Off the right or the bottom the two agree, which is why only the
+        // left and top edges ever showed it.
+        if !target.intersection(frame.area).isEmpty then frame.renderWidget(content.widget, target)
       }
       queued = PortalQueue.drain()
       round += 1

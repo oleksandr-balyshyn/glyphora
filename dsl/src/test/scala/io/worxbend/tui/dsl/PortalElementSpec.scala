@@ -165,3 +165,45 @@ final class PortalElementSpec extends AnyFunSuite:
     val _       = pilot.awaitTermination()
     assert(outside.value == "a")
     assert(inside.value == "b")
+
+  test("a portal captures the pointer over a sibling focusable it was painted on top of"):
+    val backend = HeadlessBackend(Size(24, 6))
+    val state   = MenuState()
+    var picked  = -1
+    var pressed = false
+    val app     = new TuiApp:
+      def view(using ReactiveScope, Theme): Element =
+        row(
+          layers(
+            text("left"),
+            portal(dx = 0, dy = 0, width = 22, height = 4)(
+              menu(Seq(MenuEntry.Item("first"), MenuEntry.Item("second")), state)(index => picked = index)
+            ),
+          ),
+          column(button("B") { pressed = true }, text("x")),
+        )
+    val pilot   = Pilot.start(backend)(app.runWith(backend))
+    pilot.waitForIdle()
+    // the portal is 22 columns wide, so its menu covers the right pane's button; column 14 is inside both, and
+    // row 2 is the menu's second entry
+    val secondY = pilot.screenLines.indexWhere(_.contains("second"))
+    pilot.click(14, secondY).waitForIdle()
+    pilot.interrupt()
+    val _       = pilot.awaitTermination()
+    // the click belongs to what the user can see, which is the portal — not to the button hidden underneath it
+    assert(!pressed, "the button under the portal must not receive a click the portal covers")
+    assert(picked == 1, "the portal's own menu entry is what was clicked")
+
+  test("a portal running off the left of the terminal is clipped rather than shifted"):
+    val backend = HeadlessBackend(Size(20, 3))
+    val app     = new TuiApp:
+      def view(using ReactiveScope, Theme): Element =
+        layers(text("base"), portal(dx = -5, dy = 0, width = 10, height = 1)(text("ABCDEFGHIJ")))
+    val pilot   = Pilot.start(backend)(app.runWith(backend))
+    pilot.waitForIdle()
+    val top     = pilot.screenLines.head
+    pilot.interrupt()
+    val _       = pilot.awaitTermination()
+    // five columns ran off the left edge, so the five characters that were drawn there are gone and what
+    // survives is the tail of the content, still in the columns it was laid out in
+    assert(top.startsWith("FGHIJ"), s"expected the clipped tail, got '$top'")

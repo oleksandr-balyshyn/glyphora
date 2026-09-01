@@ -79,7 +79,7 @@ final class ViewState private[dsl] ():
     * documentation states, which changes the shape of the view rather than only its types.
     */
   private[dsl] def slot[A](create: () => A): A =
-    val id = s"${path.reverse.mkString("/")}#$ordinal"
+    val id = ViewState.identify(path, ordinal)
     ordinal += 1
     slots.get(id) match
       case Some(existing) =>
@@ -91,6 +91,32 @@ final class ViewState private[dsl] ():
         created
 
 object ViewState:
+
+  /** The identifier of one call site: its chain of enclosing keys, outermost first, plus its position in its scope.
+    *
+    * Each key is written as its own length, a colon, and then the key itself — `"3:a/b"` — rather than being joined
+    * with a plain separator. That is what makes two different paths impossible to spell the same way, and both ways of
+    * spelling one used to be reachable:
+    *
+    *   - the root scope has no keys at all, and so did a path made of one empty key, so `useSignal("a")` at the root
+    *     and `keyed("")(useSignal(0))` were both `"#0"`;
+    *   - `keyed("a/b")` and `keyed("a")(keyed("b"))` both spelled `"a/b"`.
+    *
+    * In each case the second call found the first one's slot and got its value back through the unchecked cast in
+    * [[slot]], which then failed as a `ClassCastException` wherever the value was actually used. Prefixing the length
+    * removes the ambiguity: a reader of the identifier always knows where one key ends, whatever characters it holds.
+    */
+  private def identify(path: List[String], ordinal: Int): String =
+    val id = StringBuilder()
+    path.reverse.foreach { key =>
+      id ++= key.length.toString
+      id += ':'
+      id ++= key
+      id += '/'
+    }
+    id += '#'
+    id ++= ordinal.toString
+    id.result()
 
   /** One call site's value, plus the last frame that reached it. */
   private final class Slot(val value: Any, var generation: Long)

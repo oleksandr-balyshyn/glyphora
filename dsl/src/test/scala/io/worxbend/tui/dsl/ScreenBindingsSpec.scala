@@ -193,3 +193,35 @@ final class ScreenBindingsSpec extends AnyFunSuite:
     press(pilot, 'h') // the screen took this one key, so the app's help does not run again
     assert(app.helps == 1)
     quitApp(pilot)
+
+  /** An app whose command list holds a palette-only entry: a command with no key at all, which the user reaches by
+    * name through `Ctrl+P` rather than by pressing something.
+    */
+  private final class KeylessApp extends TuiApp:
+    var exported: Int = 0
+
+    private val plain: Screen = Screen(text("screen"))
+
+    override def bindings: KeyBindings = KeyBindings(
+      binding("e", "open a screen")(pushScreen(plain)),
+      // built through the case class rather than through `binding`, which requires at least one key spec: this is a
+      // command the user reaches by name in the Ctrl+P palette and by nothing else
+      KeyBinding(Seq.empty, "Export CSV", "write the table to a file", () => exported += 1),
+      binding("ctrl+q", "quit")(quit()),
+    )
+
+    def view(using ReactiveScope, Theme): Element = column(text("base"), statusBar(activeBindings))
+
+  test("a command with no key at all survives a screen being pushed"):
+    val backend = HeadlessBackend(Size(110, 4))
+    val app     = KeylessApp()
+    val pilot   = Pilot.start(backend)(app.runWith(backend))
+    pilot.waitForIdle()
+    assert(pilot.screenText.contains("Export CSV"))
+    val _       = pilot.pressKey(KeyCode.Char('e')).waitForIdle()
+    // "every trigger of this binding is one the screen claimed" is vacuously true of a binding with no triggers, so
+    // the keyless command used to be dropped from the merged list for as long as any screen was on the stack —
+    // vanishing from the status bar and from the Ctrl+P palette, and coming back on pop
+    assert(pilot.screenText.contains("Export CSV"), "a keyless command must not be shadowed by a screen")
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
