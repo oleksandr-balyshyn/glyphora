@@ -46,6 +46,20 @@ object CharWidth:
       while clusters.hasNext do total += clusterWidth(clusters.next(), mode)
       total
 
+  /** How many grapheme clusters `text` contains — the number of characters a reader would say it has, which is not
+    * `text.length` (UTF-16 code units) and not [[of]] (terminal columns): an emoji is one cluster, two code units and
+    * two columns.
+    */
+  def clusterCount(text: String): Int =
+    if isPrintableAscii(text) then text.length
+    else
+      var total    = 0
+      val clusters = graphemeClusters(text)
+      while clusters.hasNext do
+        val _ = clusters.next()
+        total += 1
+      total
+
   /** Whether every char of `text` is printable US-ASCII (`0x20`–`0x7E`), i.e. exactly one column each.
     *
     * The fast path that keeps the overwhelmingly common case allocation-free: no iterator, no per-cluster `String`.

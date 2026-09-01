@@ -184,7 +184,7 @@ final case class MaskedInputElement(
     while currentLength > 0 && currentLength <= maskSlots.size && !isSlot(maskSlots(currentLength - 1)) do
       state.backspace()
 
-  private def currentLength: Int = CharWidth.graphemeClusters(state.value).size
+  private def currentLength: Int = CharWidth.clusterCount(state.value)
 
   private def isSlot(slot: String): Boolean = slot == "#" || slot == "A"
 

@@ -175,7 +175,7 @@ final case class MarqueeElement(
     * leaves the rate alone rather than dividing by zero.
     */
   def period(duration: FiniteDuration): MarqueeElement =
-    val lap     = CharWidth.graphemeClusters(content).size + gap
+    val lap     = CharWidth.clusterCount(content) + gap
     val seconds = duration.toNanos / 1e9
     if lap <= 0 || seconds <= 0.0 then this else copy(cellsPerSecond = lap / seconds)
 

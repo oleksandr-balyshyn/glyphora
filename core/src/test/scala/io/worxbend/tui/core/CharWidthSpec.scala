@@ -188,6 +188,18 @@ final class CharWidthSpec extends AnyFunSuite:
     assert(CharWidth.graphemeClusters(heartOnFire).size == 1)
     assert(CharWidth.of(heartOnFire) == 2)
 
+  test("clusterCount agrees with the general path on its ASCII fast path"):
+    // clusterCount carries its own copy of the printable-ASCII shortcut, so it needs the same guard `of` has
+    assert(CharWidth.clusterCount("abc") == 3)
+    assert(CharWidth.clusterCount("abc") == CharWidth.graphemeClusters("abc").size)
+
+  test("clusterCount counts drawn characters, not code units or columns"):
+    val heartOnFire = "❤" + EmojiPresentationSelector + ZeroWidthJoiner + "🔥"
+    assert(CharWidth.clusterCount(heartOnFire) == 1)
+    assert(heartOnFire.length > 1)
+    val accented    = "e" + "\u0301"
+    assert(CharWidth.clusterCount(accented) == 1 && accented.length == 2)
+
   test("withoutControls drops C0, DEL and C1 but keeps everything else"):
     assert(CharWidth.withoutControls("a\tb") == "ab")
     assert(CharWidth.withoutControls("a" + Escape + "[31mb") == "a[31mb")

@@ -27,13 +27,8 @@ final case class Masked(content: String, maskChar: String):
     * multi-code-point emoji is hidden by exactly one mask glyph rather than by two or four.
     */
   def value: String =
-    val glyph    = CharWidth.graphemeClusters(maskChar).nextOption().getOrElse(Masked.DefaultMaskChar)
-    val masked   = StringBuilder()
-    val clusters = CharWidth.graphemeClusters(content)
-    while clusters.hasNext do
-      val _ = clusters.next()
-      masked ++= glyph
-    masked.result()
+    val glyph = CharWidth.graphemeClusters(maskChar).nextOption().getOrElse(Masked.DefaultMaskChar)
+    glyph * CharWidth.clusterCount(content)
 
   /** Terminal columns the masked form occupies — which is the mask's width, not the secret's. */
   def width: Int = CharWidth.of(value)
