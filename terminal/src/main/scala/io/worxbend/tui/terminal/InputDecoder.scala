@@ -12,6 +12,8 @@ import io.worxbend.tui.core.{
   Size,
 }
 
+import scala.concurrent.duration.Duration
+
 /** Decodes terminal input bytes into [[Event]]s: printable keys, control keys, ANSI CSI/SS3 escape sequences for
   * navigation and function keys, kitty-protocol keys, bracketed paste, and both SGR and legacy X10 mouse reports.
   *
@@ -94,7 +96,7 @@ private[terminal] final class InputDecoder(
     if first < 0 then None
     else decodeFirst(first)
 
-  /** Reads the terminal's reply to a Device Status Report, giving up after `timeoutMillis`.
+  /** Reads the terminal's reply to a Device Status Report, giving up after `timeout`.
     *
     * Called only by [[JLine3Backend.queryCursorPosition]], immediately after it has written `ESC[6n`. While this is
     * running, a `CSI row ; column R` is read as that report; at every other moment the same bytes stay the F3 key, and
@@ -107,24 +109,24 @@ private[terminal] final class InputDecoder(
     * Subject to the same one-reader rule as [[decode]], and for a sharper reason: a second thread decoding concurrently
     * would take the reply out of this one's hands and drop it as an unrecognised sequence.
     */
-  private[terminal] def readCursorReport(timeoutMillis: Long): Option[Position] =
+  private[terminal] def readCursorReport(timeout: Duration): Option[Position] =
     awaitingCursorReport = true
     reportedCursor = None
-    try awaitReply(timeoutMillis, () => reportedCursor)
+    try awaitReply(timeout, () => reportedCursor)
     finally awaitingCursorReport = false
 
-  /** Reads the terminal's reply to [[AnsiSequences.RequestTextAreaPixels]], giving up after `timeoutMillis`.
+  /** Reads the terminal's reply to [[AnsiSequences.RequestTextAreaPixels]], giving up after `timeout`.
     *
     * Called only by [[JLine3Backend.windowSize]], immediately after it has written `ESC[14t`. Everything
     * [[readCursorReport]] says about ordering applies unchanged: it must run on the render thread, a key typed while
     * the reply is in flight is queued rather than dropped, and `None` means the terminal did not answer — which is the
     * ordinary outcome on the many terminals that do not implement the report.
     */
-  private[terminal] def readTextAreaSize(timeoutMillis: Long): Option[Size] =
+  private[terminal] def readTextAreaSize(timeout: Duration): Option[Size] =
     reportedTextArea = None
-    awaitReply(timeoutMillis, () => reportedTextArea)
+    awaitReply(timeout, () => reportedTextArea)
 
-  /** Reads the terminal's answers to the capability queries, giving up after `timeoutMillis`.
+  /** Reads the terminal's answers to the capability queries, giving up after `timeout`.
     *
     * Called only by [[JLine3Backend.enableRawMode]], immediately after it has written the queries — DA1 last, because
     * DA1 is the fence: terminals answer in the order the queries arrived, so its reply means everything that was going
@@ -135,29 +137,29 @@ private[terminal] final class InputDecoder(
     * does not implement DA1 — costs the full timeout once, at start-up, and yields [[TerminalCapabilities.unknown]],
     * which every caller reads as "use the features anyway".
     */
-  private[terminal] def readCapabilityReport(timeoutMillis: Long): TerminalCapabilities =
+  private[terminal] def readCapabilityReport(timeout: Duration): TerminalCapabilities =
     probing = true
     probed = TerminalCapabilities.unknown
     probeFenceReached = false
     try
-      val _ = awaitReply(timeoutMillis, () => Option.when(probeFenceReached)(()))
+      val _ = awaitReply(timeout, () => Option.when(probeFenceReached)(()))
       probed
     finally probing = false
 
-  /** Pumps the decoder until `arrived` answers or `timeoutMillis` runs out, queueing every real event it meets.
+  /** Pumps the decoder until `arrived` answers or `timeout` runs out, queueing every real event it meets.
     *
     * Shared by the two reply round trips so there is one loop, and therefore one place where the ordering guarantee
     * they both make — nothing the user typed is lost, it is only deferred — is actually implemented.
     *
-    * An infinite timeout arrives here as `Long.MaxValue` milliseconds, and `Long.MaxValue * 1_000_000` does not fit in
-    * a `Long`: it wraps round to a small negative number. The deadline was then a moment about a millisecond in the
-    * *past*, the loop below never ran a single time, and the query answered "the terminal cannot say" without ever
-    * having waited for the answer. So a wait too large to express in nanoseconds is treated as what it means — wait
-    * until the reply arrives — rather than converted into a negative one.
+    * `Duration.Inf` means "wait until the reply arrives", and so does any finite wait too large to express in
+    * nanoseconds. That second case is not pedantry: `Long.MaxValue * 1_000_000` does not fit in a `Long`, it wraps
+    * round to a small negative number, and the deadline computed from it is a moment about a millisecond in the *past*
+    * — the loop below would never run once, and the query would answer "the terminal cannot say" without having waited
+    * at all. `MaxWaitMillis` is where that clamp sits.
     */
-  private def awaitReply[A](timeoutMillis: Long, arrived: () => Option[A]): Option[A] =
-    val unbounded = timeoutMillis >= InputDecoder.MaxWaitMillis
-    val deadline  = if unbounded then Long.MaxValue else System.nanoTime() + timeoutMillis * NanosPerMilli
+  private def awaitReply[A](timeout: Duration, arrived: () => Option[A]): Option[A] =
+    val unbounded = !timeout.isFinite || timeout.toMillis >= InputDecoder.MaxWaitMillis
+    val deadline  = if unbounded then Long.MaxValue else System.nanoTime() + timeout.toMillis * NanosPerMilli
     while arrived().isEmpty && (unbounded || System.nanoTime() < deadline) do
       // an unbounded wait still reads in bounded steps, so the loop keeps its shape and each read has a sane timeout
       // to hand the terminal
@@ -823,9 +825,9 @@ private[terminal] object InputDecoder:
     */
   private val NanosPerMilli = 1000000L
 
-  /** The largest millisecond wait that still converts to nanoseconds inside a `Long`. Anything at or above it — an
-    * infinite timeout above all, which reaches [[readCursorReport]] as `Long.MaxValue` — is treated as "wait until the
-    * reply arrives" rather than multiplied into a negative deadline.
+  /** The largest millisecond wait that still converts to nanoseconds inside a `Long`. A finite timeout at or above it
+    * is treated as "wait until the reply arrives" — the same as `Duration.Inf` — rather than multiplied into a negative
+    * deadline.
     */
   private val MaxWaitMillis = Long.MaxValue / NanosPerMilli
 

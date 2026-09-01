@@ -8,7 +8,8 @@ import org.jline.utils.InfoCmp
 import java.io.{FileDescriptor, FileOutputStream, InterruptedIOException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration.DurationInt
 import scala.util.control.NonFatal
 
 /** [[Backend]] implementation over JLine 3's system terminal.
@@ -129,7 +130,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
             screenOwnership.synchronized {
               write(AnsiSequences.RequestTextAreaPixels)
             }
-            decoder.readTextAreaSize(JLine3Backend.PixelQueryTimeoutMillis)
+            decoder.readTextAreaSize(JLine3Backend.PixelQueryTimeout)
         WindowSize(currentSize, textAreaPixels)
     }
 
@@ -225,7 +226,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
         write(AnsiSequences.QueryKittyKeyboard)
         write(AnsiSequences.QueryPrimaryDeviceAttributes)
       }
-      decoder.readCapabilityReport(JLine3Backend.CapabilityProbeTimeoutMillis)
+      decoder.readCapabilityReport(JLine3Backend.CapabilityProbeTimeout)
 
   /** Re-pushes the kitty keyboard flags with "report event types" added.
     *
@@ -442,12 +443,11 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     */
   override def queryCursorPosition(timeout: Duration): Either[BackendError, Position] =
     Backend.requirePositiveTimeout(timeout)
-    val waitMillis = if timeout.isFinite then timeout.toMillis else Long.MaxValue
     attempt {
       screenOwnership.synchronized {
         write(AnsiSequences.RequestCursorPosition)
       }
-      decoder.readCursorReport(waitMillis)
+      decoder.readCursorReport(timeout)
     }.flatMap {
       case Some(position) => Right(position)
       case None           => Left(BackendError.UnsupportedTerminal("the terminal did not report its cursor position"))
@@ -768,7 +768,7 @@ object JLine3Backend:
     * user. A tenth of a second, paid once per window size, is under the threshold at which a start-up stutter is
     * noticed.
     */
-  private val PixelQueryTimeoutMillis = 100L
+  private val PixelQueryTimeout: FiniteDuration = 100.millis
 
   /** How long [[JLine3Backend.enableRawMode]] waits for the capability answers before starting the app anyway.
     *
@@ -776,7 +776,7 @@ object JLine3Backend:
     * almost all of them, ends the wait as soon as its reply arrives. The budget is the same tenth of a second the pixel
     * query uses, for the same reason: it is under the threshold at which a start-up stutter is noticed.
     */
-  private val CapabilityProbeTimeoutMillis = 100L
+  private val CapabilityProbeTimeout: FiniteDuration = 100.millis
 
   /** Wraps an already-built JLine terminal.
     *
@@ -840,6 +840,9 @@ object JLine3Backend:
     * `HeadlessBackend` implements as "block until an event arrives" — used to be caught as an I/O failure and reported
     * as `BackendError.Io`, which the runner treats as fatal. JLine reads a non-positive timeout as an unbounded
     * blocking read, which is exactly what was asked for.
+    *
+    * That encoding is JLine's, not `InputDecoder.awaitReply`'s, which reads `Duration.Inf` as unbounded and a
+    * non-positive wait as "already expired". Do not feed this result to the reply round trips.
     */
   private[terminal] def readTimeoutMillis(timeout: Duration): Long =
     if timeout.isFinite then timeout.toMillis else 0L
