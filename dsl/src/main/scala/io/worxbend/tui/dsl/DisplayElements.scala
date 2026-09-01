@@ -274,7 +274,17 @@ final case class TableElement(
 ) extends FlexContainer:
   type Self = TableElement
   def widget: Widget =
-    w.Table.ofStrings(rows, widths, header, footer, columnSpacing, flex, props.style)
+    // every argument by name, so that this call deliberately stopping at `style` — leaving `headerStyle` and
+    // `footerStyle` at their defaults — is visible, and a new `ofStrings` parameter cannot slide into the wrong slot
+    w.Table.ofStrings(
+      rows = rows,
+      widths = widths,
+      header = header,
+      footer = footer,
+      columnSpacing = columnSpacing,
+      flex = flex,
+      style = props.style,
+    )
 
   /** This table rebuilt with the leftover width placed differently.
     *

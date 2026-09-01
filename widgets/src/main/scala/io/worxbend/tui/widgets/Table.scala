@@ -112,6 +112,11 @@ object Table:
     * of `String`s and every such caller was writing the same `rows.map(_.map(Line.raw))` incantation. This does that
     * once. A `Seq[Seq[String | Line]]` union would have removed the need for a second factory altogether, but a union
     * two collections deep is unpleasant to read and to infer, so the two shapes get two names instead.
+    *
+    * The parameter list mirrors [[Table]]'s, and that mirror is a maintenance contract: a new [[Table]] parameter
+    * belongs here too. The forwarding call below passes every argument by name, so a parameter added to one and not the
+    * other, or two neighbouring parameters of the same type swapped, is a compile error rather than a table that
+    * quietly renders wrong.
     */
   def ofStrings(
       rows: Seq[Seq[String]],
@@ -125,13 +130,13 @@ object Table:
       footerStyle: Style = Style.Default.bold,
   ): Table =
     Table(
-      rows.map(_.map(Line.raw)),
-      widths,
-      header.map(_.map(Line.raw)),
-      footer.map(_.map(Line.raw)),
-      columnSpacing,
-      flex,
-      style,
-      headerStyle,
-      footerStyle,
+      rows = rows.map(_.map(Line.raw)),
+      widths = widths,
+      header = header.map(_.map(Line.raw)),
+      footer = footer.map(_.map(Line.raw)),
+      columnSpacing = columnSpacing,
+      flex = flex,
+      style = style,
+      headerStyle = headerStyle,
+      footerStyle = footerStyle,
     )
