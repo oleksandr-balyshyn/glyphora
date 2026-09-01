@@ -42,6 +42,24 @@ final class Painter private[widgets] (
     */
   def dotSize: (Int, Int) = (surface.dotWidth, surface.dotHeight)
 
+  /** How many dots one world unit is worth on each axis, as `(acrossX, downY)`.
+    *
+    * This is what a shape needs when it has to choose a *sample count* — how many points to evaluate along a curve it
+    * cannot rasterize exactly, such as a circle. Choosing that number from the world extent instead produces one sample
+    * per world unit, which is meaningless: a circle of radius `0.4` on a normalized canvas is not smaller than one of
+    * radius `400` on a canvas scaled a thousand times wider, it is exactly the same circle.
+    *
+    * `0.0` on an axis that has no room or no extent, which callers should read as "sample as coarsely as you like,
+    * nothing will be drawn anyway".
+    */
+  def dotsPerWorldUnit: (Double, Double) =
+    val (xMin, xMax)    = xBounds
+    val (yMin, yMax)    = yBounds
+    val (columns, rows) = dotSize
+    val across          = if xMax > xMin && columns > 1 then (columns - 1) / (xMax - xMin) else 0.0
+    val down            = if yMax > yMin && rows > 1 then (rows - 1) / (yMax - yMin) else 0.0
+    (across, down)
+
   /** The dot `(column, row)` a world point falls in, or `None` when there is no such dot.
     *
     * `None` is returned when the point lies outside [[bounds]], when either coordinate is non-finite, when the bounds

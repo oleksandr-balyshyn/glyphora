@@ -81,6 +81,17 @@ object Shape:
         SegmentShape(x + width, y, x + width, y + height, style),
       ).foreach(_.draw(painter))
 
+  /** A circle outline, sampled at even angles around its circumference.
+    *
+    * Unlike a segment, a circle cannot be walked dot by dot with integer arithmetic here, so it is sampled — but how
+    * *many* samples it needs is a question about the surface, not about the data. The count is taken from the
+    * circumference measured in dots ([[Painter.dotsPerWorldUnit]]), so a circle of radius `0.4` on a canvas with bounds
+    * of `0.0` to `1.0` and a circle of radius `400` on a canvas scaled a thousand times wider — the same circle, drawn
+    * onto the same grid — get the same number of samples. Sizing the count off the world radius, as it used to be, drew
+    * the first as an octagon and asked for tens of thousands of samples for the second.
+    *
+    * A circle whose centre or radius is not a finite number is not drawn at all.
+    */
   final case class CircleShape(
       centerX: Double,
       centerY: Double,
@@ -88,8 +99,33 @@ object Shape:
       style: Style = Style.Default,
   ) extends Shape:
     def draw(painter: Painter): Unit =
-      val steps = math.max(8, (radius * 32).toInt)
-      (0 until steps).foreach { i =>
-        val angle = 2 * math.Pi * i / steps
-        painter.paint(centerX + radius * math.cos(angle), centerY + radius * math.sin(angle), style)
-      }
+      if centerX.isFinite && centerY.isFinite && radius.isFinite then
+        val (dotsAcross, dotsDown) = painter.dotsPerWorldUnit
+        val dotRadius              = math.abs(radius) * math.max(dotsAcross, dotsDown)
+        val steps                  = sampleCount(2 * math.Pi * dotRadius * Oversample)
+        (0 until steps).foreach { i =>
+          val angle = 2 * math.Pi * i / steps
+          painter.paint(centerX + radius * math.cos(angle), centerY + radius * math.sin(angle), style)
+        }
+
+  /** Two samples per dot of arc, so that neighbouring samples land on neighbouring dots rather than skipping one.
+    *
+    * Sampling a curve at exactly one point per dot of its length only works if the points space themselves perfectly
+    * evenly over the dots, and around a circle they do not — near the top and bottom the x step is large and the y step
+    * near zero. Doubling closes the gaps that rounding would otherwise leave.
+    */
+  private val Oversample = 2
+
+  /** The smallest sample count worth drawing: below this a "circle" reads as a polygon whatever the surface. */
+  private val MinimumSamples = 8
+
+  /** Sample counts are capped as well as floored.
+    *
+    * A canvas is a few hundred dots across at most, so no honest curve needs more than this; the ceiling is there so
+    * that a wildly scaled input asks for a bounded amount of work on the render thread instead of stalling it.
+    */
+  private val MaximumSamples = 1 << 14
+
+  private def sampleCount(wanted: Double): Int =
+    if !wanted.isFinite then MinimumSamples
+    else math.max(MinimumSamples, math.min(MaximumSamples.toDouble, wanted.ceil)).toInt
