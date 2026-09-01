@@ -100,6 +100,37 @@ final class CharWidthSpec extends AnyFunSuite:
 
   test("dropByWidth of the empty string is the empty string"):
     assert(CharWidth.dropByWidth("", 4) == "")
+  test("dropByWidth discards ASCII up to the exact column"):
+    assert(CharWidth.dropByWidth("hello", 3) == "lo")
+    assert(CharWidth.dropByWidth("hello", 0) == "hello")
+    assert(CharWidth.dropByWidth("hello", -1) == "hello")
+    assert(CharWidth.dropByWidth("hello", 5) == "")
+    assert(CharWidth.dropByWidth("hello", 99) == "")
+
+  test("dropByWidth drops a straddling wide cluster whole rather than half of it"):
+    // One column into "你好" lands in the middle of the first character; half a character is not a character, so the
+    // whole of it goes and the result is one column narrower than the arithmetic alone would suggest.
+    assert(CharWidth.dropByWidth("你好", 1) == "好")
+    assert(CharWidth.of(CharWidth.dropByWidth("你好", 1)) == 2)
+    assert(CharWidth.dropByWidth("你好", 2) == "好")
+    assert(CharWidth.dropByWidth("a你好", 1) == "你好")
+
+  test("dropByWidth keeps combining marks and emoji sequences with their base"):
+    assert(CharWidth.dropByWidth("xé", 1) == "é")
+    assert(CharWidth.dropByWidth("ab👨‍👩‍👧‍👦", 2) == "👨‍👩‍👧‍👦")
+
+  test("dropByWidth and substringByWidth cut the same string in two"):
+    Seq("hello world", "你好 world", "ab👍🏽cd", "éxé").foreach { text =>
+      (0 to CharWidth.of(text)).foreach { at =>
+        val head = CharWidth.substringByWidth(text, at)
+        val tail = CharWidth.dropByWidth(text, at)
+        // At a cut inside a wide cluster neither side keeps it, so the halves can be shorter than the whole; neither
+        // may ever invent text, and together they must stay in order.
+        assert(text.startsWith(head), s"'$head' is not a prefix of '$text'")
+        assert(text.endsWith(tail), s"'$tail' is not a suffix of '$text'")
+        assert(head.length + tail.length <= text.length, s"'$head' + '$tail' overlap in '$text' at $at")
+      }
+    }
 
   test("isWideCodePoint recognizes CJK, emoji, and hangul jamo starts"):
     assert(CharWidth.isWideCodePoint(0x4e00))
