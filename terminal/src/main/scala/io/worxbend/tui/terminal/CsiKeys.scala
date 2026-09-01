@@ -24,4 +24,5 @@ private[terminal] object CsiKeys:
       case n if n >= 17 && n <= 21 => Some(KeyCode.F(n - 11)) // F6-F10, the block skipping 16
       case 23                      => Some(KeyCode.F(11))
       case 24                      => Some(KeyCode.F(12))
+      case 29                      => Some(KeyCode.Menu)      // xterm/rxvt's context-menu key
       case _                       => None

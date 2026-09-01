@@ -171,6 +171,24 @@ final class InputDecoderSpec extends AnyFunSuite:
         )
     )
 
+  test("the kitty lock and system key block decodes to named keys"):
+    assert(decoded(csi("57358u")*) == Event.Key(KeyEvent.of(KeyCode.CapsLock)))
+    assert(decoded(csi("57359u")*) == Event.Key(KeyEvent.of(KeyCode.ScrollLock)))
+    assert(decoded(csi("57360u")*) == Event.Key(KeyEvent.of(KeyCode.NumLock)))
+    assert(decoded(csi("57361u")*) == Event.Key(KeyEvent.of(KeyCode.PrintScreen)))
+    assert(decoded(csi("57362u")*) == Event.Key(KeyEvent.of(KeyCode.Pause)))
+    assert(decoded(csi("57363u")*) == Event.Key(KeyEvent.of(KeyCode.Menu)))
+
+  test("a modifier still rides along with a system key"):
+    assert(decoded(csi("57363;5u")*) == Event.Key(KeyEvent(KeyCode.Menu, KeyModifiers.Ctrl)))
+
+  test("xterm's CSI 29~ is the menu key, so it works without the kitty protocol"):
+    assert(decoded(csi("29~")*) == Event.Key(KeyEvent.of(KeyCode.Menu)))
+
+  test("the functional-key block is still deliberately partial"):
+    // a media key: glyphora has no name for it, so no event is reported rather than a garbage character
+    assert(decoderFor(csi("57428u")*).decode(10).isEmpty)
+
   test("kitty keypad keys decode to their non-keypad equivalents"):
     assert(decoded(csi("57399u")*) == Event.Key(KeyEvent.of(KeyCode.Char('0')))) // KP_0
     assert(decoded(csi("57408u")*) == Event.Key(KeyEvent.of(KeyCode.Char('9')))) // KP_9
@@ -178,7 +196,6 @@ final class InputDecoderSpec extends AnyFunSuite:
     assert(decoded(csi("57423u")*) == Event.Key(KeyEvent.of(KeyCode.Home)))      // KP_HOME
     assert(decoded(csi("57376u")*) == Event.Key(KeyEvent.of(KeyCode.F(13))))
     assert(decoded(csi("57398u")*) == Event.Key(KeyEvent.of(KeyCode.F(35))))
-    assert(decoderFor(csi("57358u")*).decode(10).isEmpty) // CAPS_LOCK is a lock state, not a key event
 
   test("a torn escape sequence is dropped rather than reported as a key"):
     // reporting Escape here would mean a half-arrived arrow key silently closes the user's dialog

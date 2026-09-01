@@ -30,11 +30,19 @@ private[terminal] object KittyKeys:
     * Keypad keys report as their non-keypad equivalents (`KP_7` is `Home`, `KP_ENTER` is `Enter`, `KP_3` is `3`) —
     * glyphora has no separate keypad concept and an application almost never wants one. Media keys and the
     * modifier-only keys (a bare Shift press) are dropped: they are not key events in this model.
+    *
+    * The lock and system keys (`CAPS_LOCK` through `MENU`) *are* reported, as the [[KeyCode]] cases of the same names.
+    * A lock key reports the press itself, not the state it leaves behind — glyphora never claims to know whether Caps
+    * Lock is currently on.
     */
   private def functionalKey(codePoint: Int): Option[KeyCode] =
     codePoint match
-      case cp if cp >= LockKeysLow && cp <= LockKeysHigh =>
-        None // caps/scroll/num lock, print screen, pause, menu
+      case CapsLock                                                   => Some(KeyCode.CapsLock)
+      case ScrollLock                                                 => Some(KeyCode.ScrollLock)
+      case NumLock                                                    => Some(KeyCode.NumLock)
+      case PrintScreen                                                => Some(KeyCode.PrintScreen)
+      case PauseKey                                                   => Some(KeyCode.Pause)
+      case MenuKey                                                    => Some(KeyCode.Menu)
       case cp if cp >= F13 && cp <= F13 + (LastNamedFunctionKey - 13) =>
         Some(KeyCode.F(cp - F13 + 13))
       case cp if cp >= Keypad0 && cp <= Keypad0 + 9                   =>
@@ -71,8 +79,13 @@ private[terminal] object KittyKeys:
   // the functional-key block, by the names the kitty keyboard-protocol spec gives these code points
   private val FunctionalKeyLow     = 57344
   private val FunctionalKeyHigh    = 63743
-  private val LockKeysLow          = 57358 // CAPS_LOCK; through MENU, none of which glyphora reports
-  private val LockKeysHigh         = 57363
+  private val CapsLock             = 57358
+  private val ScrollLock           = 57359
+  private val NumLock              = 57360
+  private val PrintScreen          = 57361
+  // `PauseKey`/`MenuKey` rather than `Pause`/`Menu`: the bare names would read as the KeyCode cases beside them
+  private val PauseKey             = 57362
+  private val MenuKey              = 57363
   private val F13                  = 57376 // F13; the block runs to F35 at 57398
   private val LastNamedFunctionKey = 35
   private val Keypad0              = 57399 // KP_0; the block runs to KP_9 at 57408

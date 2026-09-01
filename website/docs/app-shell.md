@@ -128,6 +128,28 @@ replacement.
 
 Function keys run `"f1"` through `"f35"`, matching the range the input decoder emits.
 
+Six more keys have spec names, and they come with a caveat worth reading before you use
+one:
+
+| Spec | Key |
+|---|---|
+| `"capslock"` | Caps Lock |
+| `"scrolllock"` | Scroll Lock |
+| `"numlock"` | Num Lock |
+| `"printscreen"`, `"prtsc"` | Print Screen |
+| `"pause"` | Pause / Break |
+| `"menu"` | the context-menu key beside the right-hand Ctrl |
+
+An ordinary terminal never sends any of these. They arrive only from a terminal speaking
+the kitty keyboard protocol (`"menu"` also arrives from xterm, which has sent it as
+`CSI 29~` for decades). So treat a binding on one as a bonus shortcut for the people
+whose terminal supports it, and always give the same command an ordinary key as well —
+the `binding(Seq(…), …)` form below is exactly for that.
+
+The three lock keys report the key *being pressed*, not the state it leaves behind.
+glyphora has no notion of whether Caps Lock is currently on, and nothing is delivered
+when the light changes for any other reason.
+
 A spec that names no key (`"ctrl+"`) or no known key (`"banana"`) is a programmer error
 and throws from `binding` at declaration time.
 

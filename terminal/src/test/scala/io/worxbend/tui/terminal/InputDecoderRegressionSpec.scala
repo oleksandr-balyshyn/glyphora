@@ -159,10 +159,16 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     assert(decoded(csi("57376u")*) == Event.Key(KeyEvent.of(KeyCode.F(13))))     // F13
     assert(decoded(csi("57398u")*) == Event.Key(KeyEvent.of(KeyCode.F(35)))) // F35
 
-  test("kitty modifier-only and lock keys are not reported as keys"):
-    dropped(csi("57441u")*) // LEFT_SHIFT
-    dropped(csi("57358u")*) // CAPS_LOCK
-    dropped(csi("57428u")*) // MEDIA_PLAY
+  test("kitty modifier-only and media keys are not reported as keys"):
+    dropped(csi("57441u")*) // LEFT_SHIFT: holding a modifier is not a key event in this model
+    dropped(csi("57428u")*) // MEDIA_PLAY: glyphora has no name for the transport keys
+
+  test("a kitty lock or system key is reported, and reports the press rather than the resulting state"):
+    // these used to be dropped along with the modifier-only keys. Menu and Pause in particular are keys applications
+    // genuinely bind, and a lock key press is an ordinary key event — what glyphora still does not claim to know is
+    // whether the lock is now on.
+    assert(decoded(csi("57358u")*) == Event.Key(KeyEvent.of(KeyCode.CapsLock)))
+    assert(decoded(csi("57363u")*) == Event.Key(KeyEvent.of(KeyCode.Menu)))
 
   test("kitty modifier parameters follow the 1 + bitmask encoding"):
     assert(decoded(csi("97;5u")*) == Event.Key(KeyEvent(KeyCode.Char('a'), KeyModifiers.Ctrl)))

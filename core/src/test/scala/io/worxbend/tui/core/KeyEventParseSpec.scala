@@ -141,3 +141,25 @@ final class KeyEventParseSpec extends AnyFunSuite:
 
   private val parseCtrlShiftTab  = Right(KeyEvent(KeyCode.Tab, KeyModifiers.Ctrl | KeyModifiers.Shift))
   private val parseCtrlAltDelete = Right(KeyEvent(KeyCode.Delete, KeyModifiers.Ctrl | KeyModifiers.Alt))
+
+  test("the lock and system keys have spec names"):
+    val expected = Seq(
+      "capslock"    -> KeyCode.CapsLock,
+      "scrolllock"  -> KeyCode.ScrollLock,
+      "numlock"     -> KeyCode.NumLock,
+      "printscreen" -> KeyCode.PrintScreen,
+      "prtsc"       -> KeyCode.PrintScreen,
+      "pause"       -> KeyCode.Pause,
+      "menu"        -> KeyCode.Menu,
+    )
+    for (spec, code) <- expected do assert(KeyEvent.parse(spec) == Right(KeyEvent(code, KeyModifiers.None)))
+
+  test("the lock and system key names are case-insensitive like every other named key"):
+    assert(KeyEvent.parse("Menu") == KeyEvent.parse("menu"))
+    assert(KeyEvent.parse("PrtSc") == KeyEvent.parse("printscreen"))
+    assert(KeyEvent.parse("CapsLock") == KeyEvent.parse("capslock"))
+
+  test("the lock and system keys take modifiers and produce no text"):
+    assert(KeyEvent.parse("ctrl+menu") == Right(KeyEvent(KeyCode.Menu, KeyModifiers.Ctrl)))
+    assert(KeyCode.Menu.text.isEmpty)
+    assert(KeyCode.CapsLock.text.isEmpty)

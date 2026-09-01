@@ -107,22 +107,29 @@ final class KeySpecRoundTripSpec extends AnyFunSuite:
     * until that case is given a spec name (or explicitly declared self-naming).
     */
   private def specNameFor(code: KeyCode): Option[String] = code match
-    case KeyCode.Enter     => Some("enter")
-    case KeyCode.Escape    => Some("esc")
-    case KeyCode.Backspace => Some("backspace")
-    case KeyCode.Tab       => Some("tab")
-    case KeyCode.Delete    => Some("delete")
-    case KeyCode.Insert    => Some("insert")
-    case KeyCode.Home      => Some("home")
-    case KeyCode.End       => Some("end")
-    case KeyCode.PageUp    => Some("pageup")
-    case KeyCode.PageDown  => Some("pagedown")
-    case KeyCode.Up        => Some("up")
-    case KeyCode.Down      => Some("down")
-    case KeyCode.Left      => Some("left")
-    case KeyCode.Right     => Some("right")
-    case KeyCode.Char(cp)  => Some(Character.toString(cp)) // a printable key names itself
-    case KeyCode.F(n)      => Some(s"f$n")
+    case KeyCode.Enter       => Some("enter")
+    case KeyCode.Escape      => Some("esc")
+    case KeyCode.Backspace   => Some("backspace")
+    case KeyCode.Tab         => Some("tab")
+    case KeyCode.Delete      => Some("delete")
+    case KeyCode.Insert      => Some("insert")
+    case KeyCode.Home        => Some("home")
+    case KeyCode.End         => Some("end")
+    case KeyCode.PageUp      => Some("pageup")
+    case KeyCode.PageDown    => Some("pagedown")
+    case KeyCode.Up          => Some("up")
+    case KeyCode.Down        => Some("down")
+    case KeyCode.Left        => Some("left")
+    case KeyCode.Right       => Some("right")
+    case KeyCode.Char(cp)    => Some(Character.toString(cp)) // a printable key names itself
+    case KeyCode.F(n)        => Some(s"f$n")
+    // the kitty lock and system block; `printscreen` also answers to the shorter `prtsc`
+    case KeyCode.CapsLock    => Some("capslock")
+    case KeyCode.ScrollLock  => Some("scrolllock")
+    case KeyCode.NumLock     => Some("numlock")
+    case KeyCode.PrintScreen => Some("printscreen")
+    case KeyCode.Pause       => Some("pause")
+    case KeyCode.Menu        => Some("menu")
 
   test("every named KeyCode the decoder can emit is nameable in a spec"):
     val named = Seq(
@@ -140,6 +147,12 @@ final class KeySpecRoundTripSpec extends AnyFunSuite:
       KeyCode.Down,
       KeyCode.Left,
       KeyCode.Right,
+      KeyCode.CapsLock,
+      KeyCode.ScrollLock,
+      KeyCode.NumLock,
+      KeyCode.PrintScreen,
+      KeyCode.Pause,
+      KeyCode.Menu,
     )
     named.foreach: code =>
       val spec = specNameFor(code).getOrElse(fail(s"no spec name for $code"))
