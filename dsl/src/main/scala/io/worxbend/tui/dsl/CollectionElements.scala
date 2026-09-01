@@ -247,6 +247,11 @@ final case class DataTableElement(
   def widget: Widget                                                     =
     (area, buffer) => table.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): DataTableElement      = copy(props = props)
+
+  // the visible page is filtered and paginated on each call; name it once so a key press computes it once.
+  // it stays a `def`: the thunks below run after `state` may already have moved, so the count is read at call time
+  private def rowCount: Int = table.visibleRows(state).size
+
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
     Some(
       keys {
@@ -254,16 +259,16 @@ final case class DataTableElement(
         case KeyEvent(KeyCode.PageUp, _) if state.paging.nonEmpty   => state.previousPage()
       }.orElse(
         selectionKeys(
-          () => state.selectNext(table.visibleRows(state).size),
-          () => state.selectPrevious(table.visibleRows(state).size),
+          () => state.selectNext(rowCount),
+          () => state.selectPrevious(rowCount),
         )
       ).orElse(
         // the paging branch above is guarded on `state.paging.nonEmpty` and runs first, so a paged table keeps
         // PageUp/PageDown turning pages; only an unpaged one falls through to jumping the selection by a screenful
         selectionJumpKeys(
-          () => state.selectFirst(table.visibleRows(state).size),
-          () => state.selectLast(table.visibleRows(state).size),
-          delta => state.selectBy(table.visibleRows(state).size, delta),
+          () => state.selectFirst(rowCount),
+          () => state.selectLast(rowCount),
+          delta => state.selectBy(rowCount, delta),
         )
       )
     )
