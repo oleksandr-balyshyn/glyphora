@@ -51,6 +51,37 @@ private[widgets] object SubCell:
       case CanvasResolution.Braille   => (BrailleBase + mask).toChar.toString
       case CanvasResolution.Octant    => Octants(mask)
 
+  /** How many independently *coloured* sub-pixels one cell holds: 2 at half-block resolution, 1 everywhere else.
+    *
+    * This is the whole reason to pick half blocks over a finer resolution. A terminal cell carries one foreground and
+    * one background colour, and `▀` paints its top half in the foreground and its bottom half in the background — so a
+    * half-block cell is genuinely two coloured pixels, where a braille cell with eight dots still has only one colour
+    * for all eight of them. Two points stacked in one cell used to collapse to whichever was drawn second.
+    */
+  def slotsPerCell(resolution: CanvasResolution): Int =
+    resolution match
+      case CanvasResolution.HalfBlock => 2
+      case _                          => 1
+
+  /** The cell a lit half-block pair renders as, given the style each half was drawn in.
+    *
+    * Three shapes come out of it. One half lit is that half's own block (`▀` or `▄`) in that half's style, leaving the
+    * background alone so whatever is beneath still shows through. Both lit in the same colour is a solid `█`. Both lit
+    * in *different* colours is `▀` with the lower half's foreground moved into the background, which is the trick that
+    * fits two colours into one cell.
+    *
+    * A lower half with no foreground colour of its own has nothing to move into the background, so it falls back to the
+    * solid block rather than inventing a colour for it.
+    */
+  def halfBlockCell(mask: Int, upper: Style, lower: Style): Cell =
+    mask match
+      case 1 => Cell(UpperHalfBlock, upper)
+      case 2 => Cell(LowerHalfBlock, lower)
+      case _ =>
+        lower.fg match
+          case Some(colour) if !upper.fg.contains(colour) => Cell(UpperHalfBlock, upper.withBg(colour))
+          case _                                          => Cell(FullBlock, upper)
+
   /** Stands in for a marker that is not exactly one column wide. */
   val FallbackMarker: String = "•"
 
@@ -142,8 +173,9 @@ private[widgets] object SubCell:
   * [[DotGrid]] the brightest dot's — and one differing decision is a parameter, not a second copy of the surface.
   *
   * That decision arrives as the `styleAt` function [[flush]] takes, so the accumulator here never needs to know what
-  * "brightest" means. Callers keep their own per-cell array, sized [[cellCount]] and indexed by the value [[light]]
-  * hands back.
+  * "brightest" means. Callers keep their own array, sized [[slotCount]] and indexed by the value [[light]] hands back —
+  * one slot per cell at every resolution but half-block, where the upper and lower halves are coloured separately and
+  * get a slot each.
   *
   * `marker` is passed through [[SubCell.safeMarker]] on the way in, so a two-column marker cannot smear into the
   * neighbouring cell on *any* surface.
@@ -161,23 +193,34 @@ private[widgets] final class SubCellSurface(area: Rect, resolution: CanvasResolu
   /** How many cells the surface covers — the size a caller's per-cell array needs to be. */
   val cellCount: Int = area.area
 
+  private val slotsPerCell = SubCell.slotsPerCell(resolution)
+
+  /** How many colour slots a caller's per-slot array needs.
+    *
+    * The same as [[cellCount]] at every resolution but half-block, where it is twice that: a `▀` cell colours its top
+    * half with the foreground and its bottom half with the background, so the two halves are coloured separately and
+    * each needs a slot of its own.
+    */
+  val slotCount: Int = cellCount * slotsPerCell
+
   private val masks      = new Array[Int](cellCount)
   private val safeMarker = SubCell.safeMarker(marker)
 
-  /** Lights dot `(col, row)` and returns the index of the cell it landed in, or `-1` when it is off the grid.
+  /** Lights dot `(col, row)` and returns the index of the *colour slot* it landed in, or `-1` when it is off the grid.
     *
     * Off-grid dots are dropped rather than wrapped or clamped, so a caller doing its own centring arithmetic cannot
-    * smear the edge. The returned index is what the caller stores its per-cell style or intensity under; `-1` means
-    * "nothing was lit", so the caller records nothing.
+    * smear the edge. The returned index is what the caller stores its style or intensity under; `-1` means "nothing was
+    * lit", so the caller records nothing. At every resolution but half-block a cell has exactly one slot and the index
+    * is the cell's own; at half-block the upper and lower halves get one slot each.
     */
   def light(col: Int, row: Int): Int =
     if col >= 0 && col < dotWidth && row >= 0 && row < dotHeight then
-      val index = (row / dotsDown) * area.width + (col / dotsAcross)
-      masks(index) |= SubCell.bitFor(resolution, col % dotsAcross, row % dotsDown)
-      index
+      val cell = (row / dotsDown) * area.width + (col / dotsAcross)
+      masks(cell) |= SubCell.bitFor(resolution, col % dotsAcross, row % dotsDown)
+      if slotsPerCell == 1 then cell else cell * slotsPerCell + row % dotsDown
     else -1
 
-  /** Writes every cell holding at least one dot, styled `styleAt(cellIndex)`.
+  /** Writes every cell holding at least one dot, styled `styleAt(slotIndex)` for the slots [[light]] handed back.
     *
     * Cells with no dots are left untouched, so the figure composes over whatever is beneath it under `layers` — the
     * rule [[Canvas]], [[DotGrid]] and [[LinearDots]] all follow.
@@ -187,7 +230,10 @@ private[widgets] final class SubCellSurface(area: Rect, resolution: CanvasResolu
     while index < masks.length do
       val mask = masks(index)
       if mask != 0 then
-        val x = area.x + index % area.width
-        val y = area.y + index / area.width
-        buffer.set(x, y, Cell(SubCell.glyphFor(resolution, mask, safeMarker), styleAt(index)))
+        val x    = area.x + index % area.width
+        val y    = area.y + index / area.width
+        val cell =
+          if slotsPerCell == 2 then SubCell.halfBlockCell(mask, styleAt(index * 2), styleAt(index * 2 + 1))
+          else Cell(SubCell.glyphFor(resolution, mask, safeMarker), styleAt(index))
+        buffer.set(x, y, cell)
       index += 1

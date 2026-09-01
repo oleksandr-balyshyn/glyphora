@@ -31,7 +31,10 @@ private[widgets] final class DotGrid(area: Rect, resolution: CanvasResolution, m
   val centreColumn: Int = (dotWidth - 1) / 2
   val centreRow: Int    = (dotHeight - 1) / 2
 
-  private val intensities = new Array[Double](surface.cellCount)
+  /** One entry per colour *slot*, not per cell: at half-block resolution the upper and lower halves of a cell are
+    * coloured independently, so a graded tail can now be brighter in one half than in the other.
+    */
+  private val intensities = new Array[Double](surface.slotCount)
 
   /** Lights dot `(col, row)` at `intensity` in `[0, 1]`. Coordinates off the grid are dropped rather than wrapped or
     * clamped, so a caller doing its own centring arithmetic cannot smear the edge. Masks accumulate; the cell keeps the

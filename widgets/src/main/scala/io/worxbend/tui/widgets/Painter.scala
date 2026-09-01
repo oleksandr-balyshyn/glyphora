@@ -8,6 +8,9 @@ import io.worxbend.tui.core.{Buffer, Rect, Style}
   * The dot accumulation and the flush are [[SubCellSurface]]'s; what is this widget's own is the world-to-dot mapping
   * and the last-writer-wins style per cell. Last-writer-wins is right here and wrong for [[DotGrid]] for the reason
   * spelled out there: a canvas plots independent points, so which of two points sharing a cell wins carries no meaning.
+  * At [[CanvasResolution.HalfBlock]] "sharing a cell" is narrower than it sounds — the upper and lower halves are
+  * coloured separately, so two points stacked in one cell keep both of their colours and only two points in the *same*
+  * half compete.
   *
   * Two coordinate systems meet here, and it is worth naming both. *World* coordinates are the numbers a [[Shape]]
   * speaks in — whatever `xBounds`/`yBounds` the canvas was given, with y pointing up the way a graph's y axis does.
@@ -27,7 +30,7 @@ final class Painter private[widgets] (
 ):
 
   private val surface = SubCellSurface(area, resolution, marker)
-  private val styles  = Array.fill(surface.cellCount)(Style.Default)
+  private val styles  = Array.fill(surface.slotCount)(Style.Default)
 
   /** The world rectangle this painter maps, as `((xMin, xMax), (yMin, yMax))`.
     *

@@ -911,6 +911,14 @@ than under `Braille` even though the two pack the identical 2 × 4 grid.
 `Quadrant` is the useful middle: four times the area of a single cell, solid rather than
 dotted, and in every font that already has the half blocks.
 
+`HalfBlock` has one property none of the finer resolutions has: it carries **two colours
+per cell**. A terminal cell has one foreground and one background colour, and `▀` fills
+its top half with the foreground while its bottom half shows the background — so the two
+halves of a half-block cell can be coloured independently. A braille cell packs eight
+dots, but all eight must share a single colour. If your points carry colour and two of
+them can land in the same cell, `HalfBlock` keeps both where `Braille` keeps only the
+last one drawn.
+
 Segments — and therefore polylines and rectangle outlines — are clipped to the canvas
 bounds and then drawn one dot at a time on the sub-cell grid. Two consequences worth
 knowing. A line that starts far outside the visible world range still draws a solid run
