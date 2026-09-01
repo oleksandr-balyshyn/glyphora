@@ -85,3 +85,19 @@ final class FrameEncoderSpec extends AnyFunSuite:
       encoder.encode(previous, next) ==
         AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + "漢" + AnsiSequences.moveTo(3, 0) + "b"
     )
+
+  test("a frame of a different shape repaints in full instead of diffing"):
+    // what a resize looks like from here: the previous frame describes a grid the terminal no longer has, so there is
+    // nothing to compare against. `Buffer.diff` refuses such a pair outright, and the encoder is the caller that has to
+    // know the difference between "no usable predecessor" and "somebody passed the wrong buffer".
+    val previous = Buffer(Rect(0, 0, 2, 1))
+    val next     = Buffer(Rect(0, 0, 4, 1))
+    next.setString(0, 0, "grew", Style.Default)
+    assert(encoder.encode(previous, next) == AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + "grew")
+
+  test("a repaint after a resize writes the blank cells too, so nothing of the old frame survives"):
+    val previous = Buffer(Rect(0, 0, 6, 1))
+    val next     = Buffer(Rect(0, 0, 3, 1))
+    next.setString(0, 0, "a", Style.Default)
+    // three cells written, not one: the two blanks are what clears whatever the old, wider frame had drawn there
+    assert(encoder.encode(previous, next) == AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + "a  ")

@@ -57,10 +57,13 @@ final class BufferDiffSpec extends AnyFunSuite:
     assert(collected(bold, reversed).map(_._1.x) == Seq(0, 1, 2))
     assert(collected(reversed, reversed.snapshot).isEmpty)
 
-  test("a differing area repaints every cell"):
+  test("a differing width is refused rather than repainted"):
+    // this pair used to fall back to emitting all six cells. That silently turned a caller's mistake into a full
+    // repaint every frame, so the resize case moved to `emitAll` and the mismatch became the error it always was.
     val small = Buffer(Rect(0, 0, 4, 1))
     val large = Buffer(Rect(0, 0, 6, 1))
-    assert(collected(small, large).size == 6)
+    intercept[IllegalArgumentException](collected(small, large))
+    assert(collected(large, large.snapshot).isEmpty)
 
   test("the continuation cell of a wide grapheme is never emitted on its own"):
     val previous = styled("ab")

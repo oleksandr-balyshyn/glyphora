@@ -176,6 +176,13 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
 - **`FrameEncoder`** — the pure buffer-diff-to-ANSI step `JLine3Backend.draw` uses.
   It takes the previous and the next frame and returns one string, so the
   cursor/style/hyperlink carry-over rules are unit-tested without a terminal.
+  It is also the one place that decides when a frame cannot be described as a
+  difference at all: `Buffer.diff` requires both frames to share an origin and a
+  width, and after a resize — where the grid the old frame described no longer
+  exists — the encoder calls `Buffer.emitAll` on the new frame to repaint every
+  cell instead. Splitting the two apart matters because `diff` used to answer a
+  shape mismatch by quietly repainting, which meant a caller who really had passed
+  the wrong buffer got a full repaint on every frame rather than an error.
 - **`HeadlessBackend`** — in-memory backend for the `Pilot` end-to-end test harness.
 
 The trait is deliberately JLine-free: a fake backend can implement it without

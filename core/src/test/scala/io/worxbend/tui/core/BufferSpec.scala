@@ -149,11 +149,16 @@ final class BufferSpec extends AnyFunSuite:
     val changedPositions = previous.diff(next).map(_._1).toSeq
     assert(changedPositions == Seq(Position(0, 0)))
 
-  test("diff emits every cell when the areas differ"):
+  test("emitAll paints every cell of a frame that has no usable predecessor"):
+    // what a resize needs. `diff` used to do this itself whenever the two areas disagreed; it now says so instead, and
+    // the repaint has its own name — see BufferEmitAllSpec for the contract in full.
     val previous = buffer(2, 1)
     val next     = buffer(3, 1)
     next.setString(0, 0, "abc", Style.Default)
-    assert(previous.diff(next).size == 3)
+    intercept[IllegalArgumentException](previous.diff(next).size)
+    val painted  = Seq.newBuilder[String]
+    next.emitAll((_, _, cell) => painted += cell.symbol)
+    assert(painted.result() == Seq("a", "b", "c"))
 
   test("blit blanks wide graphemes cut in half at the window edges"):
     val source = buffer(6, 1)

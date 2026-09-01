@@ -382,7 +382,8 @@ final class Buffer(val area: Rect):
     *
     * This is what a terminal backend flushes each frame instead of redrawing everything. Positions covered by the
     * continuation cell of a wide grapheme in `next` are never emitted — flushing the wide cell itself repaints both
-    * columns. If the two buffers cover different areas (e.g. after a resize), every cell of `next` is emitted.
+    * columns. The two buffers must start at the same origin and be the same width; see [[emitAll]] for the frame after
+    * a resize, where the previous frame is unusable and there is nothing to compare against.
     *
     * One column is emitted even when its content did not change: a column that was the right half of a wide grapheme in
     * this (previous) frame, is not one in `next`, and whose grapheme painted a style that shows through a blank — see
@@ -400,15 +401,44 @@ final class Buffer(val area: Rect):
     * state), which matters because a 200x50 frame is 10 000 cells and runs at the tick rate.
     */
   def diff(next: Buffer, emit: (Int, Int, Cell) => Unit): Unit =
-    val emitAll = area != next.area
-    var y       = next.area.y
-    while y < next.area.bottom do
+    require(
+      area.x == next.area.x && area.y == next.area.y && area.width == next.area.width,
+      s"diff expects two buffers with the same origin and width, got $area and ${next.area}; " +
+        "call emitAll on the new frame when the previous one is unusable (a resize, a resume from suspend)",
+    )
+    // a next frame one row shorter is diffed over the rows the two share, the way ratatui does; the rows only `next`
+    // has are the caller's to paint, because this buffer has nothing to compare them against
+    val bottom = math.min(area.bottom, next.area.bottom)
+    var y      = next.area.y
+    while y < bottom do
       var x = next.area.x
       while x < next.area.right do
         val candidate = next.cellAt(x, y)
         // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
-        val changed   = emitAll || !sameCell(cellAt(x, y), candidate) || vacatedTrailing(next, x, y)
+        val changed   = !sameCell(cellAt(x, y), candidate) || vacatedTrailing(next, x, y)
         if changed && !next.isContinuation(x, y) then emit(x, y, candidate)
+        x += 1
+      y += 1
+
+  /** Emits every cell of this buffer, in the same row-major order and with the same continuation rule as [[diff]] — the
+    * full repaint the first frame after a resize or a resume from suspend needs.
+    *
+    * This is the honest way to spell "there is no usable previous frame". [[diff]] used to answer that case itself, by
+    * quietly emitting everything whenever the two areas disagreed, which meant a caller who really had made a mistake —
+    * diffing an off-screen staging buffer against the frame, say — got a silent full repaint every frame instead of an
+    * error. Splitting the two makes the resize path something a test can name, and turns the mistake back into one.
+    *
+    * The columns holding the right half of a two-column grapheme are skipped here as well: emitting the grapheme itself
+    * repaints both of its columns, and a terminal handed the filler would draw a stray blank over the half already
+    * painted.
+    */
+  def emitAll(emit: (Int, Int, Cell) => Unit): Unit =
+    var y = area.y
+    while y < area.bottom do
+      var x = area.x
+      while x < area.right do
+        val index = indexOf(x, y)
+        if !continuations(index) then emit(x, y, cells(index))
         x += 1
       y += 1
 

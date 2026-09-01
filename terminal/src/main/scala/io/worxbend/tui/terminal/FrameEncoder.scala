@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Style}
+import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Style}
 
 /** Turns the difference between two frames into the ANSI text that moves the terminal from one to the other.
   *
@@ -21,13 +21,17 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     * Cursor position, SGR state and the open hyperlink carry across cells, so each is re-emitted only where it actually
     * changes — that suppression is most of the reason a diffed frame is small enough to write in one go. Returns the
     * empty string when the frame is unchanged.
+    *
+    * `previous` and `next` covering different rectangles is not a difference that can be encoded — that happens when
+    * the terminal was resized, and the grid the old frame described no longer exists — so every cell of `next` is
+    * written instead. Anything narrower would leave the parts of the new grid the old one never covered unpainted.
     */
   def encode(previous: Buffer, next: Buffer): String =
-    val body                        = StringBuilder()
-    var expectedX                   = -1
-    var currentY                    = -1
-    var currentStyle                = ""
-    var currentLink: Option[String] = None
+    val body                            = StringBuilder()
+    var expectedX                       = -1
+    var currentY                        = -1
+    var currentStyle                    = ""
+    var currentLink: Option[String]     = None
     // The last style [[AnsiSequences.sgr]] was asked about, and what it answered. Neighbouring cells overwhelmingly
     // share a style, and on a full-change frame — the first one, every resize, every SIGCONT, every tick of a
     // whole-frame effect — rebuilding that sequence per cell and throwing it away was most of the encoding cost.
@@ -36,10 +40,11 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     // every cell a freshly allocated but usually equal `Style`.
     // Seeded with `Style.Default` so there is no "nothing cached yet" case, and local to the call so that `encode`
     // stays pure and callable from any thread, as the class doc promises.
-    var memoStyle: Style            = Style.Default
-    var memoSgr: String             = AnsiSequences.sgr(Style.Default, colorDepth)
-    previous.diff(
-      next,
+    var memoStyle: Style                = Style.Default
+    var memoSgr: String                 = AnsiSequences.sgr(Style.Default, colorDepth)
+    // one frame cannot be described as a difference from a frame of another shape — after a resize the terminal has
+    // thrown the old grid away — so that case repaints every cell instead of diffing
+    val paint: (Int, Int, Cell) => Unit =
       (x, y, cell) => {
         if y != currentY || x != expectedX then body ++= AnsiSequences.moveTo(x, y)
         if !((cell.style eq memoStyle) || cell.style == memoStyle) then
@@ -56,8 +61,8 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
         body ++= cell.symbol
         currentY = y
         expectedX = x + math.max(1, CharWidth.of(cell.symbol))
-      },
-    )
+      }
+    if previous.area == next.area then previous.diff(next, paint) else next.emitAll(paint)
     // a link left open would swallow everything drawn after this frame
     if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
     body.result()
