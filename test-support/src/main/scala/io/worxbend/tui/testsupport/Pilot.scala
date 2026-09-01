@@ -220,6 +220,26 @@ final class Pilot private (
     backend.postEvent(Event.Interrupt)
     this
 
+  /** Moves a [[ManualClock]] the app under test was started with forward by `delta`, then waits for the frames the
+    * ticks it is now owed will paint.
+    *
+    * This is the exact alternative to sleeping. One advance of at least the runner's tick rate owes the app exactly
+    * **one** tick, however far past the rate it goes: when the runner fires a tick it records the reading it fired at,
+    * rather than adding one rate to the previous deadline, so the next tick is due one whole rate after the advance and
+    * not partway through it. Three ticks are therefore three advances, which is also how a test says "three separate
+    * moments" rather than "one long jump".
+    *
+    * `draws` is how many frames those ticks are expected to paint — one, for a tick handler that answers `Redraw`. Pass
+    * `draws = 0` for an app whose ticks paint nothing: the advance still happens and nothing is waited for.
+    *
+    * Frames are counted from before the advance, so a frame the app happened to paint for its own reasons a moment
+    * earlier cannot be miscounted as one of these.
+    */
+  def advanceClock(clock: ManualClock, delta: FiniteDuration, draws: Long = 1L): Pilot =
+    val before = backend.drawCount
+    val _      = clock.advance(delta)
+    waitForDraws(before + draws)
+
   /** Waits until the app has consumed every posted event and gone idle (an empty-queue read timeout), or the app thread
     * has exited. Throws on deadline overrun — an assertion failure, not a modeled error. An app thread that died from a
     * throwable is not an exit: this fails with that throwable as the cause.

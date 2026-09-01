@@ -378,6 +378,35 @@ dot masks so the ring never erodes, which means its **glyphs are identical at ev
 moment** and the entire animation lives in the per-cell style — a glyph-only assertion
 would call it static.
 
+## Drive ticks from a clock you control
+
+An app with a tick rate ticks on wall-clock time, so a test about ticks either sleeps
+and hopes or polls and settles for "at least". `TerminalRunner` takes its clock as a
+parameter for exactly this reason, and `ManualClock` is that parameter:
+
+```scala
+val clock = ManualClock()
+val pilot = Pilot.start(Size(20, 3)) { backend =>
+  TerminalRunner(backend, RunnerConfig(tickRate = Some(50.millis)), clock.reading)
+    .run(onStart, handleEvent, render)
+}
+
+pilot.waitForIdle()
+pilot.advanceClock(clock, 50.millis)   // exactly one tick, and the frame it painted
+```
+
+`advanceClock` moves the clock and then waits for the frames the tick is expected to
+paint (`draws`, one by default; pass `0` for an app whose ticks paint nothing). Nothing
+in the test waits on real time, so a slow machine cannot turn one tick into two.
+
+One advance is **one tick at most**, however far it jumps. When the runner fires a tick
+it records the reading it fired at rather than adding a rate to the previous deadline,
+so a jump of three tick rates fires once and puts the next tick a whole rate later.
+Three ticks are three advances.
+
+This is a different clock from the animation one below. `ManualClock` decides when the
+runner believes a tick is due; `AnimationClock.freezeAt` decides where an animation has
+got to. A test about both pins both.
 ## Render a view without a terminal
 
 Everything above runs an app. Sometimes there is nothing to run: you want the pixels a
