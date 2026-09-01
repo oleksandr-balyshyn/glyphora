@@ -30,3 +30,30 @@ final class ScrollbarSpec extends AnyFunSuite:
   test("the vertical scrollbar draws on the rightmost column of a wider area"):
     val buffer = rendered(Scrollbar(2, 0), 3, 2)
     assert(lines(buffer) == Seq("  │", "  │"))
+
+  test("a declared viewport shorter than the track shortens the thumb"):
+    // the bar is 8 rows tall but the pane it describes only shows 4 of the 16 content rows, so the thumb covers a
+    // quarter of the track (2 of 8 cells) rather than the half it would if the track spoke for the viewport
+    val buffer = rendered(Scrollbar(contentLength = 16, viewportLength = Some(4)), 1, 8)
+    assert(lines(buffer) == Seq("█", "█", "│", "│", "│", "│", "│", "│"))
+
+  test("a declared viewport makes the thumb reach the end at the real last offset"):
+    // 16 rows of content seen 4 at a time scrolls to offset 12, not to 16 - 8
+    val buffer = rendered(Scrollbar(contentLength = 16, position = 12, viewportLength = Some(4)), 1, 8)
+    assert(lines(buffer) == Seq("│", "│", "│", "│", "│", "│", "█", "█"))
+
+  test("a declared viewport at least as large as the content draws only the track"):
+    val buffer = rendered(Scrollbar(contentLength = 6, viewportLength = Some(6)), 1, 3)
+    assert(lines(buffer) == Seq("│", "│", "│"))
+
+  test("a viewport larger than the track never asks for a thumb longer than the bar"):
+    val buffer = rendered(Scrollbar(contentLength = 12, position = 0, viewportLength = Some(11)), 1, 3)
+    assert(lines(buffer) == Seq("█", "█", "│"))
+
+  test("a nonsensical viewport of zero is treated as one visible row"):
+    val buffer = rendered(Scrollbar(contentLength = 4, position = 0, viewportLength = Some(0)), 1, 4)
+    assert(lines(buffer) == Seq("█", "│", "│", "│"))
+
+  test("a horizontal scrollbar honours its declared viewport width"):
+    val buffer = rendered(Scrollbar(16, 0, Direction.Horizontal, viewportLength = Some(4)), 8, 1)
+    assert(lines(buffer) == Seq("██││││││"))

@@ -117,9 +117,20 @@ widget(Scrollbar(contentLength = 200, position = 40)).rows(1)
 Scrollbar(200, 40, orientation = Direction.Horizontal)
 ```
 
-The thumb's length is proportional to how much of the content the track covers, and a
+The thumb's length is proportional to how much of the content the viewport covers, and a
 `position` past the end pins it to the end rather than drawing it off the track. When the
 content fits, only the track is drawn.
+
+By default the bar assumes the viewport is exactly as long as the bar itself, which is
+right whenever the strip runs the full height of the thing it describes. When it does not
+— a bar beside a bordered pane sits next to two rows of border, so it is two cells longer
+than the rows the reader can see — say so with `viewportLength`, otherwise the thumb comes
+out the wrong length and stops short of the end of the track:
+
+```scala
+// the strip is 10 cells tall, but the pane behind it shows only 8 of the 200 rows
+Scrollbar(contentLength = 200, position = 40, viewportLength = Some(8))
+```
 
 ### Panel padding and captions
 
