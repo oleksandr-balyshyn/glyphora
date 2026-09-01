@@ -151,6 +151,25 @@ the left. Neither costs a content row: they overwrite border cells that were bei
 anyway. Below the DSL, `Block` takes a `Seq[BlockTitle]` and any number of them can share
 a border — `BlockTitle.top(line, Alignment.Center)`, `BlockTitle.bottom(line)`, and so on.
 
+`Block` has two styles and they do different jobs. `borderStyle` colours the frame glyphs
+and the titles. `style` paints the *whole* area — frame and interior together — before
+anything is drawn, which is how a panel gets a background colour distinct from the screen
+behind it:
+
+```scala
+Block(
+  Seq(BlockTitle.top(Line.raw("Errors"))),
+  style = Style.Default.withBg(Color.Blue),        // the panel's own background
+  borderStyle = Style.Default.withFg(Color.Red),   // layered on top, so the frame keeps that background
+)
+```
+
+The fill changes the style of each cell and never its glyph, so content already drawn in
+that area keeps its text and its foreground colour — you can render the block before or
+after the content and get the same frame. `borderStyle` is layered on `style` rather than
+replacing it, so it only has to say what is *different* about the frame; a block left at
+the default `style` paints no fill at all.
+
 See [Layout & style](./layout-and-style) for constraints and [The app shell](./app-shell)
 for application-level composition.
 
