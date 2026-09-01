@@ -37,7 +37,7 @@ final class ListNavigationSpec extends AnyFunSuite:
     assert(state.selected.contains(49))
     assert(pilot.screenLines.exists(_.contains("> item-49")))
     pilot.pressKey(KeyCode.Home)
-    val _ = pilot.waitForIdle()
+    val _     = pilot.waitForIdle()
     assert(state.selected.contains(0))
     assert(pilot.screenLines.exists(_.contains("> item-0")))
     quitApp(pilot)
@@ -62,7 +62,7 @@ final class ListNavigationSpec extends AnyFunSuite:
     pilot.pressKey(KeyCode.Down)
     val _     = pilot.waitForIdle()
     pilot.pressKey(KeyCode.Down)
-    val _ = pilot.waitForIdle()
+    val _     = pilot.waitForIdle()
     assert(state.selected.contains(1))
     quitApp(pilot)
 
@@ -73,7 +73,7 @@ final class ListNavigationSpec extends AnyFunSuite:
     assert(pilot.screenLines.last.contains("first"))
     assert(pilot.screenLines.head.trim.isEmpty)
     pilot.pressKey(KeyCode.End)
-    val _ = pilot.waitForIdle()
+    val _     = pilot.waitForIdle()
     assert(state.selected.contains(1))
     quitApp(pilot)
 

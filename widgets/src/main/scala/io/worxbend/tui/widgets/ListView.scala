@@ -2,15 +2,15 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, CharWidth, Line, Rect, StatefulWidget, Style}
 
-/** Caller-owned list state: the selection, the scroll offset and how close to the edge the selection is allowed to
-  * get. Mutable on purpose — the widget adjusts the offset during render to keep the selection visible, and the app
-  * mutates the selection from key handlers (the `StatefulWidget` contract).
+/** Caller-owned list state: the selection, the scroll offset and how close to the edge the selection is allowed to get.
+  * Mutable on purpose — the widget adjusts the offset during render to keep the selection visible, and the app mutates
+  * the selection from key handlers (the `StatefulWidget` contract).
   *
   * `scrollPadding` is the number of further items kept visible on each side of the selection whenever the list is long
   * enough to show them. It defaults to `0`, which is the behaviour every 0.12.0 list already had: the highlight can
   * come to rest on the top or bottom visible row, with more items just out of sight. Set it to `2` and the list starts
-  * scrolling under the highlight two rows before the highlight would reach the edge. See
-  * [[ScrollWindow.offsetFor]] for the exact rule, including how it degrades at the two ends of the list.
+  * scrolling under the highlight two rows before the highlight would reach the edge. See [[ScrollWindow.offsetFor]] for
+  * the exact rule, including how it degrades at the two ends of the list.
   *
   * Render-thread-only, and mutating it does not by itself schedule a frame. This is a plain mutable object, invisible
   * to the reactive layer: a background result written straight into it stays off screen until something unrelated
@@ -30,8 +30,8 @@ final class ListState(var selected: Option[Int] = None, var offset: Int = 0, var
     * Setting `selected = None` on its own leaves `offset` wherever the last selection had scrolled it, so a list the
     * app has just deselected — after deleting the highlighted row, or clearing a search — keeps showing whatever page
     * it happened to be on with nothing highlighted on it. "No selection" and "back to the top" are the same intent in
-    * every case this library has seen, so this method does both; an app that genuinely wants one without the other
-    * can still write the two fields directly.
+    * every case this library has seen, so this method does both; an app that genuinely wants one without the other can
+    * still write the two fields directly.
     */
   def clearSelection(): Unit =
     selected = None

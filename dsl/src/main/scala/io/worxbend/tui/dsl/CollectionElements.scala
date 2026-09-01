@@ -29,8 +29,8 @@ final case class ListElement(
   /** Chooses when the columns holding the `> ` selection marker are reserved; see [[w.HighlightSpacing]]. The default
     * reserves them always, so the text never shifts sideways.
     */
-  def highlightGutter(spacing: w.HighlightSpacing): ListElement = copy(highlightSpacing = spacing)
-  def widget: Widget                                            =
+  def highlightGutter(spacing: w.HighlightSpacing): ListElement          = copy(highlightSpacing = spacing)
+  def widget: Widget =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
     val view = w.ListView(
       items,
@@ -40,8 +40,8 @@ final case class ListElement(
       highlightStyle = props.focusStyle,
     )
     (area, buffer) => view.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): ListElement               = copy(props = props)
-  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =
+  private[dsl] def withProps(props: ElementProps): ListElement           = copy(props = props)
+  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler] =
     Some(
       selectionKeys(() => state.selectNext(items.size), () => state.selectPrevious(items.size))
         .orElse(

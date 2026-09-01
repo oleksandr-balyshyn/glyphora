@@ -52,11 +52,10 @@ private[widgets] object Selection:
     *
     * Clamping rather than wrapping, for the reason [[next]] gives: a page jump that ran off the end and reappeared at
     * the top would move the highlight somewhere the reader is not looking. With nothing selected yet the move starts
-    * With nothing selected yet the move starts from a sentinel just outside the list — the same trick [[moveWithin]]
-    * uses — so that the very first downward move of one place lands on index 0 rather than skipping it, and any
-    * upward move stays on index 0. That is what lets [[next]] and [[previous]] be defined as the `delta` of `+1` and
-    * `-1` without changing what either of them did. `None` when the list is empty, because there is nothing to point
-    * at.
+    * from a sentinel just outside the list — the same trick [[moveWithin]] uses — so that the very first downward move
+    * of one place lands on index 0 rather than skipping it, and any upward move stays on index 0. That is what lets
+    * [[next]] and [[previous]] be defined as the `delta` of `+1` and `-1` without changing what either of them did.
+    * `None` when the list is empty, because there is nothing to point at.
     */
   def by(current: Option[Int], count: Int, delta: Int): Option[Int] =
     if count <= 0 then None

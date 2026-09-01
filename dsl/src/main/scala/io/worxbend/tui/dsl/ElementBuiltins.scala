@@ -97,9 +97,9 @@ private def selectionKeys(next: () => Unit, previous: () => Unit): BuiltinKeyHan
   * highlight [[PageStep]] entries at a time.
   *
   * It is a second combinator layered over [[selectionKeys]] with `.orElse` rather than four more thunks on that one,
-  * because only the elements whose state addresses a row *by index* can answer these. The tree and menu nodes address
-  * a row by the value it shows — a node path, a file path — and have no index to jump to, so they keep the Up/Down
-  * pair on its own. Reusing [[PageStep]] keeps a list page and a scroll-viewport page the same size.
+  * because only the elements whose state addresses a row *by index* can answer these. The tree and menu nodes address a
+  * row by the value it shows — a node path, a file path — and have no index to jump to, so they keep the Up/Down pair
+  * on its own. Reusing [[PageStep]] keeps a list page and a scroll-viewport page the same size.
   */
 private def selectionJumpKeys(first: () => Unit, last: () => Unit, by: Int => Unit): BuiltinKeyHandler =
   keys {
@@ -132,8 +132,8 @@ private def scrollKeys(up: Int => Unit, down: Int => Unit): BuiltinKeyHandler =
 
 /** The jump half of the scrolling vocabulary: Home and End go to the top and bottom of the content.
   *
-  * Layered over [[scrollKeys]] with `.orElse`, the same way [[selectionJumpKeys]] layers over [[selectionKeys]], so
-  * a viewport that has no notion of its own bottom can keep the Up/Down/Page pair alone.
+  * Layered over [[scrollKeys]] with `.orElse`, the same way [[selectionJumpKeys]] layers over [[selectionKeys]], so a
+  * viewport that has no notion of its own bottom can keep the Up/Down/Page pair alone.
   */
 private def scrollJumpKeys(first: () => Unit, last: () => Unit): BuiltinKeyHandler =
   keys {

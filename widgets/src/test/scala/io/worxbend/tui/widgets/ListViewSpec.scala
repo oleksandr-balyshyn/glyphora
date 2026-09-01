@@ -65,7 +65,7 @@ final class ListViewSpec extends AnyFunSuite:
 
   test("the reclaimed gutter columns go to the text, measured by display width"):
     // "日本語" is six columns; a six-wide area fits all three only once the two-column gutter is gone
-    val wide = ListView(Seq("日本語"), highlightSpacing = HighlightSpacing.Never)
+    val wide   = ListView(Seq("日本語"), highlightSpacing = HighlightSpacing.Never)
     assert(trimmedLines(rendered(wide, ListState(), 6, 1)) == Seq("日本語"))
     val narrow = ListView(Seq("日本語"))
     assert(trimmedLines(rendered(narrow, ListState(), 6, 1)) == Seq("  日本"))
@@ -77,8 +77,8 @@ final class ListViewSpec extends AnyFunSuite:
     assert(state.offset == 0)
 
   test("rendering an emptied list clears the stale selection instead of keeping it for later"):
-    val state = ListState(selected = Some(2), offset = 1)
-    val _     = rendered(ListView(Seq.empty), state, 10, 3)
+    val state  = ListState(selected = Some(2), offset = 1)
+    val _      = rendered(ListView(Seq.empty), state, 10, 3)
     assert(state.selected.isEmpty)
     assert(state.offset == 0)
     // and when items come back the highlight starts from nothing rather than reappearing on an unrelated row

@@ -17,8 +17,8 @@ final class ScrollViewState:
   /** The furthest down the content can be scrolled: the last row of content, less a viewport's worth.
     *
     * Both figures are recorded by the most recent render, because the state has no way of knowing the size of an area
-    * it has never been drawn into. On a state that has never rendered this is `0`, so every move below is a no-op
-    * until the first frame — which is the right answer, since there is no content to move over yet.
+    * it has never been drawn into. On a state that has never rendered this is `0`, so every move below is a no-op until
+    * the first frame — which is the right answer, since there is no content to move over yet.
     */
   private[widgets] def maxOffset: Int = math.max(0, lastContentHeight - lastViewportHeight)
 
