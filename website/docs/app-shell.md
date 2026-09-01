@@ -435,6 +435,36 @@ override def config = RunnerConfig(tickRate = Some(100.millis))
 Use toasts for confirmation and recoverable status. Keep required decisions in a
 screen or dialog where they cannot disappear.
 
+### Notifying from outside the app class
+
+`notify` is a method on the app, so only code written inside the app's own body can
+call it. As soon as a view is split across files — a helper that saves a row, an
+element factory in a module of its own — that helper has no way to say anything to the
+user unless the app threads a callback down to it.
+
+`Notifications` is the same capability as a value. Take it as a `using` parameter:
+
+```scala
+// in any other file
+def saveRow(row: Row)(using notifications: Notifications): Unit =
+  repository.save(row)
+  notifications.success(s"saved ${row.name}")
+```
+
+and call it from the app with nothing extra written at the call site, because the app
+publishes its own `notifications` as a `given`:
+
+```scala
+override def bindings = KeyBindings(
+  binding("ctrl+s", "save")(saveRow(selected.peek)),  // resolves `notifications` on its own
+)
+```
+
+`info`, `success`, `warn` and `error` are shorthands for `notify` at that severity and
+the default duration; `notify(message, level, duration)` and `dismissToasts()` are
+there for anything else. Everything on it runs on the render thread, exactly like the
+app methods it delegates to.
+
 ## Run inline instead of taking the screen
 
 By default an app takes the whole terminal. It does that by switching to the

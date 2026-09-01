@@ -293,6 +293,28 @@ trait TuiApp:
 
   protected final def dismissToasts(): Unit = toasts.dismissAll()
 
+  /** This app's toast stack as a value, so a helper written outside the app's own body can raise a toast.
+    *
+    * [[notify]] is a method on the app, which means only code inside the app can call it. Handing this out instead lets
+    * a helper anywhere take `(using Notifications)` and say something to the user, with no callback threaded down from
+    * the app. It is a `given`, so a call made from any method of this app resolves it with nothing to write; pass it
+    * explicitly when the call site is not lexically inside the app.
+    *
+    * {{{
+    * // in some other file
+    * def saveRow(row: Row)(using n: Notifications): Unit = { repository.save(row); n.success("saved") }
+    *
+    * // in the app
+    * binding("ctrl+s", "save")(saveRow(selected))   // resolves `notifications` on its own
+    * }}}
+    */
+  protected final def notifications: Notifications = new Notifications:
+    def notify(message: String, level: NoticeLevel, duration: FiniteDuration): Unit =
+      TuiApp.this.notify(message, level, duration)
+    def dismissToasts(): Unit                                                       = TuiApp.this.dismissToasts()
+
+  protected final given Notifications = notifications
+
   /** Opens the fuzzy command palette over the declared [[bindings]]. */
   protected final def openPalette(): Unit = palette.open()
 
