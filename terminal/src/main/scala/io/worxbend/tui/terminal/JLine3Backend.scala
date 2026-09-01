@@ -76,15 +76,22 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   def draw(buffer: Buffer): Either[BackendError, Unit] =
     // claimed before the frame is composed, so a request raised while this frame is in flight survives for the next one
-    val forced = fullRedrawRequested.claim()
-    val result = attempt {
-      val previous = if forced then None else lastFlushed
+    val forced  = fullRedrawRequested.claim()
+    // a terminal that narrowed has already reflowed what was on screen, and the wrapped remnants sit outside the new,
+    // smaller area where no amount of repainting reaches them — see ScreenReset for why only a shrink pays for this
+    val erasing = ScreenReset.clearsOnShrink(lastFlushed.map(_.area), buffer.area)
+    val result  = attempt {
+      // after an erase the display is blank, so the frame is diffed against blankness rather than against a picture
+      // the terminal no longer shows
+      val previous = if forced || erasing then None else lastFlushed
       val body     = frameEncoder.encode(previous.getOrElse(Buffer(buffer.area)), buffer)
-      // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent
-      if body.nonEmpty then
+      // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent — unless
+      // the erase itself has to go out, which is the one case where "nothing changed" still needs a write
+      if body.nonEmpty || erasing then
         // one atomic update: the terminal shows the previous frame until the whole batch has arrived
         val frame =
-          AnsiSequences.BeginSynchronized + body + AnsiSequences.ResetStyle + AnsiSequences.EndSynchronized
+          AnsiSequences.BeginSynchronized + (if erasing then AnsiSequences.ClearScreen else "") +
+            body + AnsiSequences.ResetStyle + AnsiSequences.EndSynchronized
         // under the monitor, so a Ctrl+Z landing mid-frame cannot leave the alternate screen between the two writes
         // and spill this frame's cursor moves and box-drawing over the user's shell
         screenOwnership.synchronized {
