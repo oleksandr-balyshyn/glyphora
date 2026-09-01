@@ -305,7 +305,16 @@ text("production")
 
 panel("Audit log")(logView).rounded
 panel("Danger zone")(dangerView).doubleBorder.fg(Color.Red)
+panel("Now playing")(nowPlaying).thick
+panel("Preference")(body).borderType(userChoice)
 ```
+
+Four border glyph sets exist: the square default, `.rounded` (`╭─╮`), `.doubleBorder`
+(`╔═╗`), and `.thick` (`┏━┓`), which gives the same emphasis as a double border in one
+heavy stroke rather than two thin ones. `.borderType(glyphs)` takes a `BorderType`
+value, for code that picks one from a theme setting or a `match` rather than writing it
+out. All four sets are one column wide, so the choice never changes how much room is
+left inside the box.
 
 The built-in modifiers are `.bold`, `.dim`, `.italic`, `.underline`, `.reverse`,
 `.fg(...)`, and `.bg(...)`. Use `.styled` when you need a complete

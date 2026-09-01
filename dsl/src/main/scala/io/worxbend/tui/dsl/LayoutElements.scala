@@ -93,7 +93,11 @@ final case class PanelElement(
     if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + gaps + PanelBorderCells + padding.verticalCells)
     else None
 
-/** Rounded and double-line borders, on the one node type where a border exists at all. */
+/** Border glyph sets, on the one node type where a border exists at all.
+  *
+  * `w.BorderType` has four members — the square `┌─┐`, the rounded `╭─╮`, the double `╔═╗` and the heavy `┏━┓` — and
+  * all four are single-column glyphs, so choosing one changes only the look and never the space left for content.
+  */
 extension (panel: PanelElement)
 
   /** Rounded corners instead of square ones. */
@@ -102,6 +106,15 @@ extension (panel: PanelElement)
   /** A double-line border — the conventional "this box is important" cue. */
   def doubleBorder: PanelElement = panel.copy(borderType = w.BorderType.Double)
 
+  /** A heavy single-line border (`┏━┓`): the same emphasis a double border gives, in one stroke rather than two, which
+    * reads better next to plain-bordered neighbours.
+    */
+  def thick: PanelElement = panel.copy(borderType = w.BorderType.Thick)
+
+  /** Any border glyph set by name, for code that picks one from a value rather than writing it out — a theme setting,
+    * a user preference, a `match` on some state. The three named builders above are shorthands for this.
+    */
+  def borderType(glyphs: w.BorderType): PanelElement = panel.copy(borderType = glyphs)
   /** Joins this panel's border to any border already drawn where it lands, instead of overwriting it.
     *
     * Two panels laid side by side share a column. By default the second one drawn simply wins there, which gives one
