@@ -286,6 +286,14 @@ pushScreen(Screen.full(settingsPage))
 Call `popScreen()` from the active screen to return. Focus stays inside a modal by
 construction, so you do not need a separate focus trap.
 
+Focus also moves *with* the layer. Pushing a screen starts the incoming screen on its
+own first control — whatever was focused underneath, and however deep in the tab order
+it was — and popping puts focus back on the element the screen covered, exactly where
+the user left it. Nested layers unwind one level at a time, so closing a palette opened
+over a dialog returns to the dialog rather than to the page beneath it. `replaceScreen`
+counts as a new layer for this purpose, so the incoming screen starts at its first
+control too.
+
 ### Swap, unwind, and read where you are
 
 `pushScreen`/`popScreen` move one level at a time. Three more calls cover the rest of a

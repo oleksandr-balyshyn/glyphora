@@ -126,6 +126,40 @@ private[dsl] final class FocusTracker:
     focusedIndex = -1
     focusedKey = None
 
+  /** Focus as it stood before a layer covered it: where to put the cursor back when that layer goes away. */
+  private final case class CoveredFocus(index: Int, key: Option[String])
+
+  private var covered = List.empty[CoveredFocus]
+
+  /** Called when a layer goes over the current tree — a modal or full screen is pushed, the command palette opens.
+    *
+    * Remembers where focus was and anchors it at the top of the tab order, so the incoming layer starts on its *first*
+    * control. Without this the old index is merely clamped into the new layer's range, which is why opening a
+    * three-field dialog while the app's fifth control was focused used to land the cursor on the dialog's last field.
+    */
+  def pushLayer(): Unit =
+    covered = CoveredFocus(focusedIndex, focusedKey) :: covered
+    focusedIndex = 0
+    focusedKey = None
+
+  /** Called when that layer goes away. Puts focus back where the layer found it.
+    *
+    * `reconcile` still runs afterwards, so a tree that changed shape underneath the layer cannot restore an index that
+    * is now out of range: the restored key re-anchors when it is still there, and the index is clamped when it is not.
+    * Popping more layers than were pushed anchors at the top rather than failing — the two calls are driven by a depth
+    * comparison and are balanced by construction, and guessing at the tab order is a better failure than an exception
+    * in the render pass.
+    */
+  def popLayer(): Unit =
+    covered match
+      case frame :: rest =>
+        focusedIndex = frame.index
+        focusedKey = frame.key
+        covered = rest
+      case Nil           =>
+        focusedIndex = 0
+        focusedKey = None
+
   /** `Tab`. From the no-focus state this lands on the *first* focusable rather than the second one. */
   def focusNext(): Boolean =
     if focusableCount == 0 then false

@@ -40,6 +40,13 @@ private final class RunState(val splash: SplashPlayer):
     */
   var renderLoop: Option[RenderThread.RenderLoop] = None
 
+  /** How many layers covered the app's own view when the last frame was composed — pushed screens plus the command
+    * palette — and which screen was on top. Compared against the current state on every frame to decide whether focus
+    * should move into an incoming layer or back out of one that has gone; see `TuiApp.syncFocusLayers`.
+    */
+  var layerCount: Int              = 0
+  var topScreen: Option[Screen]    = None
+
 /** The application entry point for the declarative DSL.
   *
   * `view` is re-evaluated under a tracking [[ReactiveScope]]: any `Signal` read during the last evaluation schedules a
@@ -435,11 +442,54 @@ trait TuiApp:
     else
       scope.beginGeneration()
       val rawTree = ResponsivePass.resolve(effectiveView(using scope), frameSize)
+      syncFocusLayers(run)
       run.tracker.reconcile(FocusPass.focusKeys(rawTree))
       val tree    = FocusPass.decorate(rawTree, run.tracker, theme.focus)
       run.lastTree = Some(tree)
       frame.renderWidget(tree.widget, frame.area)
       effects.applyTo(frame)
+
+  /** Moves focus into a layer that has just appeared, or back out of one that has gone, before the frame is
+    * reconciled.
+    *
+    * A layer is a pushed [[Screen]] or the open command palette. Both remove everything beneath them from the tab
+    * order, so the set of focusables changes completely — and `reconcile` on its own would merely clamp the old index
+    * into the new, much shorter range. Opening a three-field dialog while the app's fifth control was focused would
+    * land the cursor on the dialog's *last* field rather than its first, and closing it again would leave focus
+    * wherever the clamp had dropped it rather than where the user left it.
+    *
+    * The count is compared rather than each navigation call announcing itself, because the layers do not all go
+    * through this trait: the command palette closes itself from inside its own key handler. A comparison cannot get
+    * out of step with the truth the way a queue of announcements can. The screen on top is compared as well, so
+    * [[replaceScreen]] — which swaps a layer without changing the count — also starts the incoming screen at its first
+    * control.
+    *
+    * Reads through `peek` rather than `get`: this is bookkeeping about the frame, and subscribing it would make every
+    * frame depend on the navigation signal whether or not the view looked at it.
+    */
+  private def syncFocusLayers(run: RunState): Unit =
+    val screens = screenStack.peek
+    val layers  = screens.size + (if palette.isOpenNow then 1 else 0)
+    val top     = screens.headOption
+    // reference identity, not `==`: two screens can be equal values and still be different pushes
+    val sameTop = (top, run.topScreen) match
+      case (Some(now), Some(before)) => now eq before
+      case (None, None)              => true
+      case _                         => false
+    // a swap at the same depth: the layer that was covering the view has gone and a different one has taken over
+    if layers == run.layerCount && layers > 0 && !sameTop then
+      run.tracker.popLayer()
+      run.tracker.pushLayer()
+    else
+      var count = run.layerCount
+      while count < layers do
+        run.tracker.pushLayer()
+        count += 1
+      while count > layers do
+        run.tracker.popLayer()
+        count -= 1
+    run.layerCount = layers
+    run.topScreen = top
 
   /** The runner's single event entry point: dispatches one event and answers whether the frame must be redrawn.
     *
