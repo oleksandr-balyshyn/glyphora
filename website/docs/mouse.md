@@ -31,6 +31,32 @@ panel("Custom control")(text("press Enter"))
   .onKey(Key.Enter) { activate() }
 ```
 
+## Choose where focus starts
+
+Focus starts on the first focusable in the tab order. `.autofocus` moves it to the
+element that asks:
+
+```scala
+column(
+  input(search, placeholder = "search").autofocus.key("search"),
+  list(results, resultState),
+)
+```
+
+It fires **once**, on the frame the element first appears in, and never again while the
+element stays in the tree. That is deliberate: an element that re-claimed focus every
+render would make `Tab` useless, because the next frame would take the keyboard straight
+back. The same rule makes it work for content that appears later — open a dialog whose
+default button carries `.autofocus` and the keyboard goes there as the dialog appears,
+then stays wherever the user puts it.
+
+`.autofocus` also opts the element into the tab order, the way `.focusable` does, so it
+works on a non-interactive element too. Pair it with `.key(...)`: "has this element
+appeared?" is answered by the focus key when there is one and by the element's position
+in the tab order otherwise, so an unkeyed autofocusing element that *moves* — because
+something above it appeared — reads as a new element and claims focus a second time. If
+two elements ask at once, the first in the tab order wins.
+
 ## Keep focus stable across changing trees
 
 Without an explicit key, focus is positional. Conditional content inserted before a

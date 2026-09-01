@@ -22,6 +22,17 @@ private[dsl] final case class ViewportTransform(dx: Int, dy: Int, viewport: Rect
   */
 private[dsl] final case class MouseHit(focusIndex: Int, area: Rect)
 
+/** An element in the tree about to render asking to be given focus: where it sits in the tab order, and what identifies
+  * it across renders.
+  *
+  * The identity is the element's focus key when it has one and its position in the tab order otherwise, which is why
+  * both fields are here and why the whole value is compared. [[FocusTracker.reconcile]] acts on a request only when it
+  * differs from the one the previous frame carried, so an autofocusing element grabs focus once — when it appears — and
+  * then leaves the keyboard wherever the user takes it. Without a key an element that *moves* in the tab order looks
+  * like a different request and grabs focus again, which is why `.autofocus` reads better with a `.key(...)` beside it.
+  */
+private[dsl] final case class AutofocusRequest(index: Int, key: Option[String])
+
 /** Per-app focus bookkeeping, owned by a single `TuiApp.runWith` invocation and touched only on the render thread:
   * which focusable (by depth-first order index) has focus, how many exist, and where each rendered last frame (for
   * click-to-focus hit-testing).
@@ -45,7 +56,8 @@ private[dsl] final class FocusTracker:
   /** The focus keys of the tree the last [[reconcile]] saw, in tab order (`None` for an unkeyed focusable). Kept so
     * [[focusToKey]] can answer "which index is the element named `email`?" without walking the tree again.
     */
-  private var focusKeysSeen = Vector.empty[Option[String]]
+  private var focusKeysSeen              = Vector.empty[Option[String]]
+  private var lastAutofocus              = Option.empty[AutofocusRequest]
   private val areas         = mutable.Map[Int, Rect]()
   private val pointerAreas  = mutable.Map[Int, Rect]()
   private var viewports     = List.empty[ViewportTransform]
@@ -93,16 +105,32 @@ private[dsl] final class FocusTracker:
     * The "nothing is focused" state survives this. A tracker at `-1` — which is where [[clearFocus]] leaves it — stays
     * at `-1` however the tree changed shape, because the clamp is what an *existing* focus needs and re-anchoring a
     * deliberately dropped one would put the cursor back where the app asked it not to be.
+    *
+    * `autofocus` is the element asking to be focused, if the tree contains one. It is honoured only when it differs
+    * from the request the previous frame carried — that is, when the asking element has just appeared. Honouring it on
+    * every frame instead would pin the keyboard to that one element forever: Tab would move focus and the next render
+    * would take it straight back.
     */
-  def reconcile(keys: Seq[Option[String]]): Unit =
+  def reconcile(keys: Seq[Option[String]], autofocus: Option[AutofocusRequest]): Unit =
     focusKeysSeen = keys.toVector
     focusableCount = keys.size
     if focusedIndex < 0 then focusedKey = None
     else
       focusedKey.map(key => keys.indexOf(Some(key))).filter(_ >= 0).foreach(focusedIndex = _)
-      focusedIndex = if focusableCount > 0 then math.max(0, math.min(focusedIndex, focusableCount - 1)) else 0
+      focusedIndex = clampedIndex(focusedIndex)
       focusedKey = keys.lift(focusedIndex).flatten
+    val appeared = autofocus.filterNot(request => lastAutofocus.contains(request))
+    lastAutofocus = autofocus
+    // an element that has just appeared takes focus even from the cleared state: asking for it is the whole point
+    appeared.foreach { request =>
+      focusedIndex = clampedIndex(request.index)
+      focusedKey = keys.lift(focusedIndex).flatten
+    }
     clearAreas()
+
+  /** An index pulled back inside the tab order, or zero when there is nothing focusable to point at. */
+  private def clampedIndex(index: Int): Int =
+    if focusableCount > 0 then math.max(0, math.min(index, focusableCount - 1)) else 0
 
   /** Moves focus to the focusable declared with `.key(name)` in the last reconciled tree; `false` — and nothing changed
     * — when no focusable carries that key, which is what happens when the element sits in a branch the view did not
@@ -226,6 +254,26 @@ private[dsl] object FocusPass:
   def focusKeys(element: Element): Vector[Option[String]] =
     val own = if element.props.focusable then Vector(element.props.focusKey) else Vector.empty
     own ++ element.children.flatMap(focusKeys)
+
+  /** The first focusable in the tab order that asked for focus with `.autofocus`, if any.
+    *
+    * "First" rather than "the one", because nothing stops a tree from carrying two — a screen with an autofocusing
+    * search box pushed over a form with an autofocusing first field, say. Taking the first in depth-first order makes
+    * that case decided rather than arbitrary. (A modal covers the layer below it through
+    * [[FocusPass.suppressFocus]], which clears `focusable` on every node underneath, so a covered element's request is
+    * not in the tab order at all and cannot win.)
+    */
+  def autofocusRequest(root: Element): Option[AutofocusRequest] =
+    def search(element: Element, index: Int): (Option[AutofocusRequest], Int) =
+      val own   = if element.props.focusable && element.props.autofocus then
+        Some(AutofocusRequest(index, element.props.focusKey))
+      else None
+      val next  = if element.props.focusable then index + 1 else index
+      element.children.foldLeft((own, next)) { case ((found, position), child) =>
+        val (childFound, after) = search(child, position)
+        (found.orElse(childFound), after)
+      }
+    search(root, 0)._1
 
   /** Rebuilds the tree with the theme's focus cue stamped on every node, the focused element marked (`props.focused =
     * true`), and every focusable wrapped in a [[TrackedElement]] that records its rendered area; a non-focusable

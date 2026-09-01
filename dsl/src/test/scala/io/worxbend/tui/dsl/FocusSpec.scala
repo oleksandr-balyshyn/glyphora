@@ -383,7 +383,7 @@ final class FocusSpec extends AnyFunSuite:
     val tracker = FocusTracker()
     // content twice the viewport height, so there is somewhere to scroll to
     val root    = scrollView(column(input(TextInputState())), contentHeight = 8, scroll)
-    tracker.reconcile(FocusPass.focusKeys(root))
+    tracker.reconcile(FocusPass.focusKeys(root), FocusPass.autofocusRequest(root))
     tracker.focusTo(focusedIndex)
     val tree    = FocusPass.decorate(root, tracker, Style.Default)
     val area    = Rect(0, 0, 20, 4)
@@ -408,7 +408,7 @@ final class FocusSpec extends AnyFunSuite:
     val tracker = FocusTracker()
     val root    = FilledElement(button("press me")(()), Style.Default)
     assert(FocusPass.focusKeys(root).size == 1)
-    tracker.reconcile(FocusPass.focusKeys(root))
+    tracker.reconcile(FocusPass.focusKeys(root), FocusPass.autofocusRequest(root))
     val tree    = FocusPass.decorate(root, tracker, Style.Default)
     val area    = Rect(0, 0, 20, 1)
     tree.widget.render(area, Buffer(area))

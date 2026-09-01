@@ -24,8 +24,9 @@ final case class FocusState private[dsl] (
   * claims inside a `row`/`column`/`panel`), its event handlers, and focus participation. Styling and layout extension
   * methods produce a new element with updated props — elements stay immutable values.
   *
-  * `focusable` opts the element into tab-order traversal. Everything the framework itself sets each render lives in
-  * [[focusState]], which user code can read but not build.
+  * `focusable` opts the element into tab-order traversal, and `autofocus` asks for the keyboard the frame the element
+  * first appears in — see [[AutofocusRequest]] for why "first appears" and not "every frame". Everything the framework
+  * itself sets each render lives in [[focusState]], which user code can read but not build.
   */
 final case class ElementProps(
     style: Style = Style.Default,
@@ -33,6 +34,7 @@ final case class ElementProps(
     onKey: Option[KeyEvent => Boolean] = None,
     onMouse: Option[MouseEvent => Boolean] = None,
     focusable: Boolean = false,
+    autofocus: Boolean = false,
     focusKey: Option[String] = None,
     focusState: FocusState = FocusState(),
 ):

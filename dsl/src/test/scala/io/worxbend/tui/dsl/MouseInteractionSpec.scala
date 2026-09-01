@@ -174,7 +174,7 @@ final class MouseInteractionSpec extends AnyFunSuite:
     val fixture = ScrollFixture()
     fixture.state.offset = 5
     val tracker = FocusTracker()
-    tracker.reconcile(FocusPass.focusKeys(fixture.root))
+    tracker.reconcile(FocusPass.focusKeys(fixture.root), FocusPass.autofocusRequest(fixture.root))
     val tree    = FocusPass.decorate(fixture.root, tracker, Style.Default)
     val buffer  = Buffer(Rect(0, 0, 40, 12))
     tree.widget.render(buffer.area, buffer)

@@ -497,7 +497,7 @@ trait TuiApp:
       AnimationClock.beginFrame()
       val rawTree = ResponsivePass.resolve(effectiveView(using scope), frameSize)
       syncFocusLayers(run)
-      run.tracker.reconcile(FocusPass.focusKeys(rawTree))
+      run.tracker.reconcile(FocusPass.focusKeys(rawTree), FocusPass.autofocusRequest(rawTree))
       val tree    = FocusPass.decorate(rawTree, run.tracker, theme.focus)
       run.lastTree = Some(tree)
       frame.renderWidget(tree.widget, frame.area)

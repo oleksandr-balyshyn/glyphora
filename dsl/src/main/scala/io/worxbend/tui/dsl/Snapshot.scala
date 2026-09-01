@@ -45,5 +45,5 @@ object Snapshot:
     val resolved               = ResponsivePass.resolve(view(using scope, theme), Size(area.width, area.height))
     val tracker                = FocusTracker()
     tracker.focusedKey = focusedKey
-    tracker.reconcile(FocusPass.focusKeys(resolved))
+    tracker.reconcile(FocusPass.focusKeys(resolved), FocusPass.autofocusRequest(resolved))
     FocusPass.decorate(resolved, tracker, theme.focus).widget.render(area, buffer)

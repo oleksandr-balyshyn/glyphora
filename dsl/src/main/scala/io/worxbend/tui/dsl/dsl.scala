@@ -325,6 +325,25 @@ extension [E <: Element](element: E)
   def focusable: element.Self =
     element.withProps(element.props.copy(focusable = true))
 
+  /** Asks for the keyboard when this element first appears — a search box on a screen that opens, the first field of a
+    * form, the default button of a dialog. Without it, focus starts on whichever focusable happens to come first in the
+    * tab order, and an app that wanted otherwise had to reach into the framework's own focus bookkeeping, which is not
+    * public.
+    *
+    * It fires *once*, on the frame the element appears in, and never again while it stays in the tree: an element that
+    * re-claimed focus every frame would make Tab useless, because the next render would take the keyboard straight
+    * back. It also opts the element into the tab order, the way `.focusable` does, so it works on a non-interactive
+    * element too.
+    *
+    * Pair it with [[key]]. "Has this element appeared?" is answered by the focus key when there is one and by the
+    * element's position in the tab order otherwise, so an unkeyed autofocusing element that *moves* — because something
+    * above it appeared — reads as a new element and claims focus a second time.
+    *
+    * If two elements ask at once, the first in the tab order wins.
+    */
+  def autofocus: element.Self =
+    element.withProps(element.props.copy(focusable = true, autofocus = true))
+
   /** A stable focus identity: focus follows this key across renders even when the tree changes shape (without a key,
     * focus is positional and can jump when elements appear or disappear).
     */
