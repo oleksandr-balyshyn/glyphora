@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Constraint, Modifiers}
+import io.worxbend.tui.core.{Constraint, Flex, Modifiers}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -142,3 +142,14 @@ final class DataTableSpec extends AnyFunSuite:
     assert(buffer.get(0, 0).symbol == "a")
     assert(buffer.get(4, 0).symbol == "b") // two four-column halves of an eight-column area
     assert(buffer.get(4, 1).symbol == "2")
+
+  test("flex places the leftover width when the columns are all fixed"):
+    val centred = table.copy(flex = Flex.Center)
+    // eight plus six plus one cell of spacing is fifteen columns of content in a twenty-one column area
+    assert(rendered(centred, DataTableState(), 21, 2).get(3, 0).symbol == "n")
+    assert(rendered(table, DataTableState(), 21, 2).get(0, 0).symbol == "n")
+
+  test("the highlight gutter is taken off before the flex distributes what is left"):
+    val centred = table.copy(flex = Flex.Center, highlightSymbol = "> ")
+    // the gutter takes two columns, so the fifteen columns of content centre in the remaining nineteen
+    assert(rendered(centred, DataTableState(), 21, 2).get(4, 0).symbol == "n")

@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Alignment, Color, Constraint, KeyCode, KeyEvent, KeyModifiers, Modifiers, Span}
+import io.worxbend.tui.core.{Alignment, Color, Constraint, Flex, KeyCode, KeyEvent, KeyModifiers, Modifiers, Span}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 import io.worxbend.tui.widgets.{BigText, BorderType}
 
@@ -182,3 +182,23 @@ final class DslConstructionSpec extends AnyFunSuite:
   test("a right-aligned line pushes its spans to the right edge when rendered"):
     val element = line(Span.raw("Total")).rightAligned
     assert(trimmedLines(rendered(element.widget, 8, 1)) == Seq("   Total"))
+
+  /** `table` is a `FlexContainer`, so the alignment and gap builders every `row` and `column` has apply to its columns
+    * too. Before that, fixed-width columns could only ever pack at the left of the area they were given.
+    */
+  test("a table's columns can be centred and its column gap set through the container builders"):
+    val fixed   = table(Seq(Seq("ab", "cd")), Constraint.Length(2), Constraint.Length(2)).gap(0)
+    val centred = fixed.center
+    assert(centred.flex == Flex.Center)
+    assert(fixed.columnSpacing == 0)
+    // four columns of content in an eight-column area: packed left it starts at 0, centred it starts at 2
+    assert(rendered(fixed.widget, 8, 1).get(0, 0).symbol == "a")
+    assert(rendered(centred.widget, 8, 1).get(2, 0).symbol == "a")
+
+  /** `table`'s widths are varargs, so writing none of them compiles. It used to draw a blank rectangle. */
+  test("a table with no widths divides its area equally"):
+    val bare   = table(Seq(Seq("a", "b")))
+    assert(bare.widths.isEmpty)
+    val buffer = rendered(bare.gap(0).widget, 8, 1)
+    assert(buffer.get(0, 0).symbol == "a")
+    assert(buffer.get(4, 0).symbol == "b")

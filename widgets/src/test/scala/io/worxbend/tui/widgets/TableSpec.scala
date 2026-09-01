@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Constraint, Line, Modifiers}
+import io.worxbend.tui.core.{Constraint, Flex, Line, Modifiers}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -75,3 +75,33 @@ final class TableSpec extends AnyFunSuite:
   test("no widths and no cells renders nothing rather than failing"):
     val buffer = rendered(Table(rows = Seq(Seq.empty), widths = Seq.empty), 6, 2)
     assert(trimmedLines(buffer) == Seq("", ""))
+
+  test("fixed-width columns pack at the left by default and the leftover trails"):
+    val table = Table(
+      rows = Seq(row("ab", "cd")),
+      widths = Seq(Constraint.Length(2), Constraint.Length(2)),
+      columnSpacing = 0,
+    )
+    assert(rendered(table, 8, 1).get(0, 0).symbol == "a")
+
+  test("flex centres and right-aligns the block of fixed-width columns"):
+    def cells(mode: Flex): Table =
+      Table(
+        rows = Seq(row("ab", "cd")),
+        widths = Seq(Constraint.Length(2), Constraint.Length(2)),
+        columnSpacing = 0,
+        flex = mode,
+      )
+    // four columns of content in an eight-column area leaves four cells over
+    assert(rendered(cells(Flex.Center), 8, 1).get(2, 0).symbol == "a")
+    assert(rendered(cells(Flex.End), 8, 1).get(4, 0).symbol == "a")
+
+  test("flex has nothing to place once a Fill column absorbs the leftover"):
+    def cells(mode: Flex): Table =
+      Table(
+        rows = Seq(row("ab", "cd")),
+        widths = Seq(Constraint.Length(2), Constraint.Fill(1)),
+        columnSpacing = 0,
+        flex = mode,
+      )
+    assert(trimmedLines(rendered(cells(Flex.Center), 8, 1)) == trimmedLines(rendered(cells(Flex.Start), 8, 1)))

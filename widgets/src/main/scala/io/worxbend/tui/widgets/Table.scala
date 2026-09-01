@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Constraint, Direction, Layout, Line, Rect, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Constraint, Direction, Flex, Layout, Line, Rect, Style, Widget}
 
 /** Rows of cells laid out in columns sized by the core constraint solver.
   *
@@ -12,12 +12,19 @@ import io.worxbend.tui.core.{Buffer, Constraint, Direction, Layout, Line, Rect, 
   *   and in the rows it is about to draw, and gives each column an equal share of the area. That fallback exists
   *   because an empty sequence used to render a blank rectangle, and the DSL's `table(rows)` — whose widths are
   *   varargs, so writing none of them is a legal call — landed straight in it.
+  * @param flex
+  *   where the columns sit when they do not fill the area. Constraints like `Length(8)` can leave the table narrower
+  *   than the space it was given; before this parameter the leftover always trailed off the right-hand side, because
+  *   the widget passed no flex to the layout and took the [[Flex.Start]] default. Now a table of fixed-width columns
+  *   can be centred or right-aligned in its area, the same way a `row` can. Has no effect when a `Fill` or `Min` column
+  *   is already absorbing the leftover, because then there is none.
   */
 final case class Table(
     rows: Seq[Seq[Line]],
     widths: Seq[Constraint],
     header: Option[Seq[Line]] = None,
     columnSpacing: Int = 1,
+    flex: Flex = Flex.Start,
     style: Style = Style.Default,
     headerStyle: Style = Style.Default.bold,
 ) extends Widget:
@@ -29,7 +36,7 @@ final case class Table(
       val body        = rows.iterator.take(math.max(0, area.height - headerRows)).toSeq
       // the fallback only walks the rows that are about to be drawn, which is why `body` is taken first
       val constraints = TableColumns.resolve(widths, (header.iterator ++ body.iterator).map(_.size))
-      val columns     = Layout(Direction.Horizontal, constraints, columnSpacing).split(area)
+      val columns     = Layout(Direction.Horizontal, constraints, columnSpacing, flex).split(area)
       var y           = area.y
       header.foreach { cells =>
         if y < area.bottom then
@@ -61,6 +68,7 @@ object Table:
       widths: Seq[Constraint],
       header: Option[Seq[String]] = None,
       columnSpacing: Int = 1,
+      flex: Flex = Flex.Start,
       style: Style = Style.Default,
       headerStyle: Style = Style.Default.bold,
   ): Table =
@@ -69,6 +77,7 @@ object Table:
       widths,
       header.map(_.map(Line.raw)),
       columnSpacing,
+      flex,
       style,
       headerStyle,
     )

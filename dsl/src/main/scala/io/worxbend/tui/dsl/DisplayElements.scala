@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Alignment, CharWidth, Color, Constraint, Line, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{Alignment, CharWidth, Color, Constraint, Flex, Line, Span, Style, Text, Widget}
 import io.worxbend.tui.widgets as w
 
 import java.time.LocalTime
@@ -180,16 +180,36 @@ final case class TabsElement(
   private[dsl] def withProps(props: ElementProps): TabsElement = copy(props = props)
   private[dsl] override def claim: SizeClaim                   = SizeClaim.OneRow
 
-/** A static table of rows under fixed column widths. */
+/** A static table of rows under fixed column widths.
+  *
+  * A [[FlexContainer]], so the alignment builders every `row` and `column` has work here too — `.center` and `.flexEnd`
+  * place the block of columns inside the area when fixed-width columns leave space over, and `.gap(n)` sets the blank
+  * cells between neighbouring columns. Its "children" are its columns rather than nested elements, which is why it
+  * carries the trait without carrying a `children` list.
+  */
 final case class TableElement(
     rows: Seq[Seq[String]],
     widths: Seq[Constraint],
     header: Option[Seq[String]] = None,
+    columnSpacing: Int = 1,
+    flex: Flex = Flex.Start,
     props: ElementProps = ElementProps(),
-) extends Element:
+) extends FlexContainer:
   type Self = TableElement
   def widget: Widget =
-    w.Table.ofStrings(rows, widths, header, style = props.style)
+    w.Table.ofStrings(rows, widths, header, columnSpacing, flex, props.style)
+
+  /** This table rebuilt with the leftover width placed differently.
+    *
+    * Fixed-width columns — `Constraint.Length(8)` and friends — can add up to less than the space the table was given.
+    * That leftover always used to trail off the right-hand side, because the widget passed no flex to the layout at
+    * all. `Flex.Center` centres the block of columns instead and `Flex.End` pushes it right. It changes nothing when a
+    * `Fill` or `Min` column is already soaking up the slack, because then there is no leftover to place.
+    */
+  def withFlex(mode: Flex): TableElement = copy(flex = mode)
+
+  /** This table rebuilt with `cells` blank columns between neighbouring columns (negative counts clamp to zero). */
+  def withSpacing(cells: Int): TableElement = copy(columnSpacing = math.max(0, cells))
 
   /** Adds a bold caption row above the data — one label per column, in the same order as `widths`.
     *

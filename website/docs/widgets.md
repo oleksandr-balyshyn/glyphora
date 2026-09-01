@@ -360,6 +360,19 @@ table(rows, Constraint.Length(18), Constraint.Fill(1), Constraint.Length(6))
   .header("Service", "Status", "Replicas")
 ```
 
+A `table` is a flex container, like `row` and `column`: `.gap(n)` sets the blank
+columns between neighbouring cells, and `.center` / `.flexEnd` / `.spaceBetween` place
+the block of columns inside the area when fixed widths leave space over. Without one of
+those the leftover always trails off the right-hand side.
+
+```scala
+table(rows, Constraint.Length(18), Constraint.Length(9)).center.gap(2)
+```
+
+The same knob exists one level down on the widgets, as `Table(…, flex = Flex.Center)`
+and `DataTable(…, flex = Flex.Center)`. It changes nothing when a `Fill` or `Min` column
+is already absorbing the slack, because then there is no leftover to place.
+
 Use `DataTable` when users need sorting, filtering, selection, scrolling, or paging:
 
 ```scala

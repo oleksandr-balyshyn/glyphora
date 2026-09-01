@@ -1,6 +1,18 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Constraint, Direction, Layout, Line, Rect, Span, StatefulWidget, Style}
+import io.worxbend.tui.core.{
+  Buffer,
+  CharWidth,
+  Constraint,
+  Direction,
+  Flex,
+  Layout,
+  Line,
+  Rect,
+  Span,
+  StatefulWidget,
+  Style,
+}
 
 /** Which way a [[DataTable]] column is sorted. */
 enum SortDirection:
@@ -132,12 +144,16 @@ object DataTableState:
   * @param widths
   *   one [[Constraint]] per column. An empty sequence means "equal columns": each of the `columns` titles gets an equal
   *   share of the area. Before that fallback existed an empty sequence drew a blank rectangle instead.
+  * @param flex
+  *   where the columns sit when they do not fill the area — see [[Table]] for the full explanation. The reserved
+  *   `highlightSymbol` gutter is taken off the left first, so the flex distributes only what is left over after it.
   */
 final case class DataTable(
     columns: Seq[String],
     rows: Seq[Seq[String]],
     widths: Seq[Constraint],
     columnSpacing: Int = 1,
+    flex: Flex = Flex.Start,
     style: Style = Style.Default,
     headerStyle: Style = Style.Default.bold,
     highlightStyle: Style = Style.Default.reverse,
@@ -211,7 +227,7 @@ final case class DataTable(
       val grid        = area.copy(x = area.x + symbolWidth, width = area.width - symbolWidth)
       // an empty `widths` means equal columns; a DataTable always names its columns, so the header settles the count
       val constraints = TableColumns.resolve(widths, Iterator(columns.size))
-      val segments    = Layout(Direction.Horizontal, constraints, columnSpacing).split(grid)
+      val segments    = Layout(Direction.Horizontal, constraints, columnSpacing, flex).split(grid)
       renderHeader(buffer, segments, state)
       val bodyHeight  = area.height - 1
       if bodyHeight > 0 && view.nonEmpty then
