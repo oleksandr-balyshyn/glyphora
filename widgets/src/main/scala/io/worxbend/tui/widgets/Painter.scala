@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Line, Rect, Style}
+import io.worxbend.tui.core.{Buffer, Line, Rect, Style}
 
 /** Paints world-coordinate points into terminal cells for one [[Canvas]] render, accumulating sub-pixel hits and
   * flushing them as glyphs.
@@ -277,21 +277,8 @@ final class Painter private[widgets] (
 
   private[widgets] def flush(buffer: Buffer): Unit =
     surface.flush(buffer, styles.apply)
-    labels.foreach((x, y, line) => writeLine(buffer, x, y, line))
-
-  /** Writes one line span by span, clipped at the canvas area's right edge.
-    *
-    * The clipping is this widget's own, and it has to be: [[Buffer.setString]] clips at the *buffer's* edge, which is
-    * usually further right than the canvas, and a label running past the plot into whatever is drawn beside it is the
-    * bug that would leave. Trimming goes through [[CharWidth.substringByWidth]] so a label ending in a wide character —
-    * a CJK name, an emoji — is cut between grapheme clusters rather than through one.
-    */
-  private def writeLine(buffer: Buffer, x: Int, y: Int, line: Line): Unit =
-    var column = x
-    line.spans.foreach { span =>
-      val room = area.right - column
-      if room > 0 then
-        val text = CharWidth.substringByWidth(span.content, room)
-        buffer.setString(column, y, text, line.style.patch(span.style))
-        column += CharWidth.of(text)
+    // the budget is the canvas area's right edge, not the buffer's: Buffer.setString would happily let a label
+    // run past the plot into whatever is drawn beside it. LineRenderer/RowCursor own the wide-cluster clipping.
+    labels.foreach { (x, y, line) =>
+      val _ = LineRenderer.render(buffer, x, y, line, area.right - x)
     }
