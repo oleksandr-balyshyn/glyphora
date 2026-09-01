@@ -859,8 +859,32 @@ own style. Every glyph in a set must be a single terminal column wide, because a
 measured in whole columns and a two-column glyph would spill into the bar next door.
 
 For custom plots, `canvas(xBounds, yBounds)(shapes*)` provides points, segments,
-polylines, rectangles, and circles. Charts can use braille or half-block resolution
-depending on density.
+polylines, rectangles, and circles.
+
+### Canvas resolution
+
+A canvas draws sub-pixels — several drawable dots inside one terminal cell — by picking a
+glyph that has the right dots filled in. `CanvasResolution` chooses how finely it does
+that, and the choice is a trade between resolution and how likely the terminal's font is
+to have the glyphs at all. A missing glyph draws as a replacement box, so pick the finest
+one you are willing to see fail.
+
+| Resolution | Dots per cell | Looks like | Font needed |
+| --- | --- | --- | --- |
+| `Cell` | 1 × 1 | your `marker` glyph | anything |
+| `HalfBlock` | 1 × 2 | `▀ ▄ █` | anything |
+| `Quadrant` | 2 × 2 | `▘ ▚ ▟ █` | anything |
+| `Sextant` | 2 × 3 | `🬀 🬞 🬺` | Unicode 13 (2020) |
+| `Braille` | 2 × 4 | `⠁ ⡇ ⣿` | anything |
+| `Octant` | 2 × 4 | `𜺨 𜵱 █` | Unicode 16 (2024) |
+
+Resolution is not the only difference. Braille draws *sparse dots* with visible gaps
+between them, which reads well as a line. The block-drawing resolutions fill their whole
+sub-pixel, which reads as a solid area — so a filled chart looks better under `Octant`
+than under `Braille` even though the two pack the identical 2 × 4 grid.
+
+`Quadrant` is the useful middle: four times the area of a single cell, solid rather than
+dotted, and in every font that already has the half blocks.
 
 Segments — and therefore polylines and rectangle outlines — are clipped to the canvas
 bounds and then drawn one dot at a time on the sub-cell grid. Two consequences worth
