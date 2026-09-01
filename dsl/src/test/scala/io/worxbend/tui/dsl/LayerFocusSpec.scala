@@ -64,12 +64,12 @@ final class LayerFocusSpec extends AnyFunSuite:
     assert(app.dialogSecond.value == "second")
     pilot.pressKey(KeyCode.Char('z'), KeyModifiers.Ctrl).waitForIdle()
     pilot.typeText("!").waitForIdle()
-    assert(app.three.value == "!") // back on the base field, not on the base's first one
+    assert(app.three.value == "!")                               // back on the base field, not on the base's first one
     assert(app.one.value == "")
     quitApp(pilot)
 
-  /** `replaceScreen` swaps a layer without changing how many there are, so the count comparison alone would not
-    * notice. The screen on top is compared as well, which is what this pins.
+  /** `replaceScreen` swaps a layer without changing how many there are, so the count comparison alone would not notice.
+    * The screen on top is compared as well, which is what this pins.
     */
   test("replacing the top screen starts the incoming one on its first control"):
     val app   = DialogApp()
@@ -107,11 +107,11 @@ final class LayerFocusSpec extends AnyFunSuite:
     val pilot = start(app)
     pilot.pressKey(KeyCode.Tab).pressKey(KeyCode.Tab).waitForIdle() // base: third field
     pilot.pressKey(KeyCode.Char('o'), KeyModifiers.Ctrl).waitForIdle()
-    pilot.pressKey(KeyCode.Tab).waitForIdle()                      // dialog: second field
+    pilot.pressKey(KeyCode.Tab).waitForIdle()                       // dialog: second field
     pilot.pressKey(KeyCode.Char('p'), KeyModifiers.Ctrl).waitForIdle()
-    pilot.pressKey(KeyCode.Escape).waitForIdle()                   // palette closes
+    pilot.pressKey(KeyCode.Escape).waitForIdle()                    // palette closes
     pilot.typeText("still").waitForIdle()
-    assert(app.dialogSecond.value == "still")                      // back inside the dialog, where the palette found it
+    assert(app.dialogSecond.value == "still") // back inside the dialog, where the palette found it
     pilot.pressKey(KeyCode.Char('z'), KeyModifiers.Ctrl).waitForIdle()
     pilot.typeText("home").waitForIdle()
     assert(app.three.value == "home")

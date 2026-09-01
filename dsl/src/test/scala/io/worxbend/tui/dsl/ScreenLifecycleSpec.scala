@@ -16,7 +16,7 @@ import scala.collection.mutable
 final class ScreenLifecycleSpec extends AnyFunSuite:
 
   private final class TracedApp extends TuiApp:
-    val trace: mutable.Buffer[String]             = mutable.Buffer.empty
+    val trace: mutable.Buffer[String] = mutable.Buffer.empty
 
     /** A screen that records its own hooks under `name`. A fresh one per push, so a screen pushed twice is genuinely
       * two screens and the pairing of the hooks is visible.
@@ -29,7 +29,7 @@ final class ScreenLifecycleSpec extends AnyFunSuite:
       )
 
     /** One value, pushed twice by the `s` binding below. */
-    private val shared: Screen                    = traced("shared")
+    private val shared: Screen = traced("shared")
 
     override def onStop(): Unit                   = trace += "app stop"
     override def bindings: KeyBindings            = KeyBindings(

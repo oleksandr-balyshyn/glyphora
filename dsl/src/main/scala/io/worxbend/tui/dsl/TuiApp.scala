@@ -44,8 +44,8 @@ private final class RunState(val splash: SplashPlayer):
     * palette — and which screen was on top. Compared against the current state on every frame to decide whether focus
     * should move into an incoming layer or back out of one that has gone; see `TuiApp.syncFocusLayers`.
     */
-  var layerCount: Int              = 0
-  var topScreen: Option[Screen]    = None
+  var layerCount: Int           = 0
+  var topScreen: Option[Screen] = None
 
 /** The application entry point for the declarative DSL.
   *
@@ -54,9 +54,8 @@ private final class RunState(val splash: SplashPlayer):
   *
   * Focus and events: focusable elements form a tab order in depth-first view order; `Tab` / `Shift+Tab` cycle focus and
   * a mouse press focuses the innermost focusable under the pointer; [[focusTo]] and [[clearFocus]] move it from code.
-  * Key events start at the focused element and bubble
-  * to its ancestors (`true` consumes), then the app's [[bindings]] run; an unconsumed `Ctrl+P` opens the command
-  * palette (when bindings exist) and `Ctrl+C` quits.
+  * Key events start at the focused element and bubble to its ancestors (`true` consumes), then the app's [[bindings]]
+  * run; an unconsumed `Ctrl+P` opens the command palette (when bindings exist) and `Ctrl+C` quits.
   *
   * App services: [[pushScreen]]/[[popScreen]]/[[replaceScreen]]/[[resetScreens]] for modal or full-screen navigation
   * (layers below a modal leave the tab order), with [[currentScreen]]/[[screenDepth]] as reactive reads of where
@@ -65,8 +64,9 @@ private final class RunState(val splash: SplashPlayer):
   *
   * Lifecycle: [[onStart]] runs on the render thread before the first frame — start pollers and timers there — and
   * [[onStop]] runs on every exit path, which is where they are cancelled. A screen has the same pair of its own,
-  * `Screen.onEnter`/`Screen.onLeave`, for work that belongs to a subtree rather than to the whole app. Between the two, [[requestRedraw]] schedules
-  * a frame for state the reactive layer cannot see, such as a mutable widget state filled in by a background result.
+  * `Screen.onEnter`/`Screen.onLeave`, for work that belongs to a subtree rather than to the whole app. Between the two,
+  * [[requestRedraw]] schedules a frame for state the reactive layer cannot see, such as a mutable widget state filled
+  * in by a background result.
   *
   * Running it: the trait supplies `main`, so `object MyApp extends TuiApp` is already a runnable program. Reach for
   * [[run]] directly only when the app is started from code that owns the process (an existing `main`, a launcher), and
@@ -190,8 +190,8 @@ trait TuiApp:
 
   /** Pushes a screen; modal screens layer over the current view, full screens replace it.
     *
-    * The screen's `Screen.onEnter` runs immediately afterwards, on the render thread, before the frame that first
-    * shows it — after the stack has been written, so a callback that reads [[screenDepthNow]] sees itself on it.
+    * The screen's `Screen.onEnter` runs immediately afterwards, on the render thread, before the frame that first shows
+    * it — after the stack has been written, so a callback that reads [[screenDepthNow]] sees itself on it.
     */
   protected final def pushScreen(screen: Screen): Unit =
     screenStack.update(screen :: _)
@@ -316,9 +316,9 @@ trait TuiApp:
     * if !emailIsValid then focusTo("email")        // in a handler
     * }}}
     *
-    * Answers `false`, and changes nothing, when no focusable with that key was in the frame the app last rendered —
-    * the element lives in a branch the view did not render, the key is misspelt, or the app is not running. The key is
-    * then *remembered*, so focus follows that element across later renders even when the tree changes shape.
+    * Answers `false`, and changes nothing, when no focusable with that key was in the frame the app last rendered — the
+    * element lives in a branch the view did not render, the key is misspelt, or the app is not running. The key is then
+    * *remembered*, so focus follows that element across later renders even when the tree changes shape.
     *
     * Call it on the render thread, which every event handler, timer body and `Async` continuation already is.
     */
@@ -469,8 +469,7 @@ trait TuiApp:
       frame.renderWidget(tree.widget, frame.area)
       effects.applyTo(frame)
 
-  /** Moves focus into a layer that has just appeared, or back out of one that has gone, before the frame is
-    * reconciled.
+  /** Moves focus into a layer that has just appeared, or back out of one that has gone, before the frame is reconciled.
     *
     * A layer is a pushed [[Screen]] or the open command palette. Both remove everything beneath them from the tab
     * order, so the set of focusables changes completely — and `reconcile` on its own would merely clamp the old index
@@ -478,11 +477,10 @@ trait TuiApp:
     * land the cursor on the dialog's *last* field rather than its first, and closing it again would leave focus
     * wherever the clamp had dropped it rather than where the user left it.
     *
-    * The count is compared rather than each navigation call announcing itself, because the layers do not all go
-    * through this trait: the command palette closes itself from inside its own key handler. A comparison cannot get
-    * out of step with the truth the way a queue of announcements can. The screen on top is compared as well, so
-    * [[replaceScreen]] — which swaps a layer without changing the count — also starts the incoming screen at its first
-    * control.
+    * The count is compared rather than each navigation call announcing itself, because the layers do not all go through
+    * this trait: the command palette closes itself from inside its own key handler. A comparison cannot get out of step
+    * with the truth the way a queue of announcements can. The screen on top is compared as well, so [[replaceScreen]] —
+    * which swaps a layer without changing the count — also starts the incoming screen at its first control.
     *
     * Reads through `peek` rather than `get`: this is bookkeeping about the frame, and subscribing it would make every
     * frame depend on the navigation signal whether or not the view looked at it.

@@ -133,7 +133,7 @@ final class AppServicesSpec extends AnyFunSuite:
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope, Theme): Element = text(s"base depth=$screenDepth")
-    val pilot   = Pilot.start(backend) { app.runWith(backend) }
+    val pilot              = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("base depth=0"))
     pilot.pressKey(KeyCode.Char('p')).waitForIdle()

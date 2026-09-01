@@ -17,13 +17,13 @@ final class ImperativeFocusSpec extends AnyFunSuite:
 
   /** Three keyed inputs and bindings that move focus between them from application code. */
   private final class FormApp extends TuiApp:
-    val name                                      = TextInputState()
-    val email                                     = TextInputState()
-    val notes                                     = TextInputState()
-    var lastMoveAccepted: Boolean                 = false
-    var keyUnderFocus: Option[String]             = None
-    val showEmail                                 = Signal(true)
-    override def bindings: KeyBindings            = KeyBindings(
+    val name                                       = TextInputState()
+    val email                                      = TextInputState()
+    val notes                                      = TextInputState()
+    var lastMoveAccepted: Boolean                  = false
+    var keyUnderFocus: Option[String]              = None
+    val showEmail                                  = Signal(true)
+    override def bindings: KeyBindings             = KeyBindings(
       binding("ctrl+e", "focus email") { lastMoveAccepted = focusTo("email") },
       binding("ctrl+n", "focus notes") { lastMoveAccepted = focusTo("notes") },
       binding("ctrl+x", "focus a key that is not there") { lastMoveAccepted = focusTo("nonexistent") },
@@ -119,8 +119,8 @@ final class ImperativeFocusSpec extends AnyFunSuite:
     assert(forward.name.value == "first")
     quitApp(pilot)
 
-    val backward     = FormApp()
-    val pilotBack    = start(backward)
+    val backward  = FormApp()
+    val pilotBack = start(backward)
     pilotBack.pressKey(KeyCode.Char('b'), KeyModifiers.Ctrl).waitForIdle()
     pilotBack.pressKey(KeyCode.Tab, KeyModifiers.Shift).typeText("last").waitForIdle()
     assert(backward.notes.value == "last")

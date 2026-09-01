@@ -40,8 +40,8 @@ def binding(keys: Seq[String], description: String)(action: => Unit): KeyBinding
 /** Parses one spec or throws — bindings are static declarations, so a bad spec is a programmer error that should fail
   * at startup rather than turn into a key that never fires.
   *
-  * One owner for that rule: it backs both `binding("ctrl+s", …)` here and the element-level `.onKey("ctrl+s") { … }`
-  * in [[Grammar]], so a typo fails the same way wherever a key is named as a string.
+  * One owner for that rule: it backs both `binding("ctrl+s", …)` here and the element-level `.onKey("ctrl+s") { … }` in
+  * [[Grammar]], so a typo fails the same way wherever a key is named as a string.
   */
 private[dsl] def parseSpec(key: String): KeyEvent =
   KeyEvent.parse(key) match

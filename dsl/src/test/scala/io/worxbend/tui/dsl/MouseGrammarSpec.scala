@@ -31,8 +31,8 @@ final class MouseGrammarSpec extends AnyFunSuite:
     }
     assert(clicks == 1)
 
-  /** The positions a handler is told are the absolute terminal cells the `MouseEvent` carried, not coordinates
-    * relative to the element — an element that wants its own coordinate space subtracts its area's origin itself.
+  /** The positions a handler is told are the absolute terminal cells the `MouseEvent` carried, not coordinates relative
+    * to the element — an element that wants its own coordinate space subtracts its area's origin itself.
     */
   test("onClickAt, onHover, onDrag and onDragEnd each claim exactly their own kind and report the cell"):
     var seen = List.empty[(String, Position)]
@@ -69,10 +69,10 @@ final class MouseGrammarSpec extends AnyFunSuite:
     * one silently replacing the ones before it. A hand-written `onMouseEvent` underneath keeps working the same way.
     */
   test("mouse handlers compose with each other and with a raw onMouseEvent underneath"):
-    var raw     = 0
-    var clicks  = 0
-    var wheels  = 0
-    val el      = text("x")
+    var raw    = 0
+    var clicks = 0
+    var wheels = 0
+    val el     = text("x")
       .onMouseEvent { _ =>
         raw += 1
         true
@@ -86,8 +86,8 @@ final class MouseGrammarSpec extends AnyFunSuite:
     assert(wheels == 1)
     assert(raw == 1) // only the kind neither combinator claimed reached the raw handler
 
-  /** The annotation is half the assertion: like the key handlers, each mouse handler hands back the element's own
-    * type, so the node-specific builders stay reachable after the binding.
+  /** The annotation is half the assertion: like the key handlers, each mouse handler hands back the element's own type,
+    * so the node-specific builders stay reachable after the binding.
     */
   test("mouse handlers keep the element's own type"):
     val bound: PanelElement = panel(text("x")).onClick(()).onScroll((), ()).rounded
@@ -97,13 +97,13 @@ final class MouseGrammarSpec extends AnyFunSuite:
     * event router, into an `.onClick` on a plain (non-focusable) element.
     */
   test("onClick receives a real press routed through a running app, and only inside the element"):
-    var clicks   = 0
-    val backend  = HeadlessBackend(Size(20, 4))
-    val testApp  = new TuiApp:
+    var clicks                      = 0
+    val backend                     = HeadlessBackend(Size(20, 4))
+    val testApp                     = new TuiApp:
       override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
       def view(using ReactiveScope, Theme): Element =
         column(text("target").length(1).onClick { clicks += 1 }, text("elsewhere").length(1))
-    val pilot    = Pilot.start(backend) { testApp.runWith(backend) }
+    val pilot                       = Pilot.start(backend) { testApp.runWith(backend) }
     pilot.waitForIdle()
     def press(x: Int, y: Int): Unit =
       backend.postEvent(Event.Mouse(MouseEvent(Position(x, y), MouseEventKind.Down, KeyModifiers.None)))
