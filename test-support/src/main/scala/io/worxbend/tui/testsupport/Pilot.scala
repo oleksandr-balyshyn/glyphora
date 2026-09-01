@@ -175,6 +175,32 @@ final class Pilot private (
     backend.resizeTo(Size(width, height))
     this
 
+  /** Posts raw terminal input: the code units go through the *production* input decoder, and whatever events it
+    * produces are queued for the app.
+    *
+    * [[press]] builds a [[KeyEvent]] from a key spec and queues it directly, which never involves the decoder. That
+    * leaves one thing untested that this toolkit has already been bitten by: an application binding spelled `ctrl+s`
+    * and a decoder that turns the bytes a terminal sends for Ctrl+S into some *other* key both look correct on their
+    * own, while the app is dead in a real terminal. Sending the bytes exercises both vocabularies at once.
+    *
+    * The values are UTF-16 code units as a terminal reader hands them back, not UTF-8 bytes. Use this for what a key
+    * spec cannot say — a bracketed paste, an SGR mouse report, a kitty-protocol key — and for the sequences that must
+    * decode to *nothing*, such as a device-attributes reply, where the assertion is that the app saw no event at all.
+    *
+    * One call is one decoder, so a sequence has to be sent whole. Splitting a bracketed paste across two calls does not
+    * simulate a paste arriving in two reads: the first call's decoder reaches the end of its input in the middle of the
+    * paste and reports the empty paste it had read up to that point.
+    */
+  def sendBytes(codeUnits: Int*): Pilot =
+    backend.postInput(codeUnits)
+    this
+
+  /** [[sendBytes]] spelled the way an escape sequence is written down: `sendEscape("[A")` sends `ESC [ A`, the up
+    * arrow. Only the `ESC` is supplied; every character of `body` is sent as its own code unit.
+    */
+  def sendEscape(body: String): Pilot =
+    sendBytes(0x1b +: body.map(_.toInt)*)
+
   /** Posts one bracketed paste carrying `text` as a single event.
     *
     * A terminal in bracketed-paste mode hands an application the whole pasted string at once instead of a storm of key

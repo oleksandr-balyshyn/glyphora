@@ -316,6 +316,30 @@ pilot.waitForDraws(3)   // the app repainted at least three times
 Keep coordinates tied to a deliberate test layout and size. A test that clicks a
 magic coordinate in a changing screen is hard to maintain.
 
+## Send the bytes a terminal sends
+
+`press` builds a `KeyEvent` from a key spec and queues it, which never involves the
+input decoder. That leaves one thing untested: an application binding spelled
+`ctrl+s` and a decoder that turns the byte a terminal sends for Ctrl+S into some other
+key would both look correct on their own, and the app would still be dead in a real
+terminal. `sendBytes` closes that loop by running the code units through the
+production decoder:
+
+```scala
+pilot.sendBytes(0x13).waitForIdle()        // Ctrl+S, as a terminal sends it
+pilot.sendEscape("[A").waitForIdle()       // ESC [ A — the up arrow
+pilot.sendEscape("[?62;1;4c").waitForIdle() // a capability reply: decodes to no event at all
+```
+
+`sendEscape(body)` is `sendBytes` with the leading `ESC` supplied for you. The values
+are UTF-16 code units as a terminal reader hands them back, not UTF-8 bytes.
+
+One call is one decoder, so a sequence has to be sent whole: splitting a bracketed
+paste across two calls does not simulate a paste arriving in two reads, it makes the
+first call's decoder run out of input mid-paste. Use this for what a key spec cannot
+say — bracketed paste, SGR mouse reports, kitty-protocol keys — and for sequences whose
+correct handling is to produce nothing.
+
 ## Paste, ticks, focus and interrupt
 
 A terminal reports more than keys, mouse and resizes, and each of the remaining

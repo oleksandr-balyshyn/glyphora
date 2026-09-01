@@ -168,6 +168,35 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   /** Queues a synthetic event for the runner to read. Safe from any thread. */
   def postEvent(event: Event): Unit = events.put(event)
 
+  /** Feeds raw terminal input through the *production* [[InputDecoder]] and queues whatever it decodes.
+    *
+    * [[postEvent]] hands the runner an [[Event]] a test built by hand, which skips the decoder entirely. That is the
+    * right thing for most tests and the wrong thing for one: an application binding spelled `ctrl+s` and a decoder that
+    * turns byte `0x13` into some other key would both look correct on their own, and the app would still be dead in a
+    * real terminal. Posting the bytes joins the two halves — the key spec the app is written with, and the sequence a
+    * terminal actually sends.
+    *
+    * `codeUnits` are UTF-16 code units as a terminal reader hands them back (that is what `JLine3Backend` reads), not
+    * UTF-8 bytes. A sequence the decoder deliberately drops — a device-attributes reply, say — queues nothing at all,
+    * which is exactly what a test about such a reply wants to assert.
+    *
+    * Decoding happens on the calling thread and is finished before this returns, so the decoder's one-reader rule
+    * holds: the app thread only ever takes completed events off the queue. A trailing lone `ESC` costs the decoder's
+    * escape timeout (50 ms) before it reports, the same as it would at a real terminal.
+    */
+  def postInput(codeUnits: Seq[Int]): Unit =
+    val remaining = codeUnits.iterator
+    // the decoder's read function: hand over the next code unit, or the "nothing available" sentinel once they run out
+    val decoder   = InputDecoder(_ => if remaining.hasNext then remaining.next() else -1)
+    var draining  = codeUnits.nonEmpty
+    while draining do
+      decoder.decode(0L) match
+        case Some(event) => postEvent(event)
+        // an undecodable sequence yields no event but may have consumed only part of the input, so keep going while
+        // there is any left; the decoder may also be holding a pushed-back character, which is why a decoded event
+        // does not end the loop either
+        case None        => draining = remaining.hasNext
+
   /** Changes the reported terminal size and posts the matching resize event. */
   def resizeTo(size: Size): Unit =
     terminalSize = size
