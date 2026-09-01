@@ -16,7 +16,7 @@ package io.worxbend.tui.core
 final case class Text(lines: Seq[Line], alignment: Option[Alignment] = None, style: Style = Style.Default):
   def height: Int = lines.size
 
-  def width: Int = if lines.isEmpty then 0 else lines.map(_.width).max
+  def width: Int = widthIn(WidthMode.Narrow)
 
   /** This block's width under a given East Asian Ambiguous policy — the widest of its lines' [[Line.widthIn]], and zero
     * when there are no lines. See [[WidthMode]]; `widthIn(WidthMode.Narrow)` is exactly [[width]].

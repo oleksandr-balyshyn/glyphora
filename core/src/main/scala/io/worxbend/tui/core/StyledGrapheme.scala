@@ -11,5 +11,9 @@ package io.worxbend.tui.core
   */
 final case class StyledGrapheme(cluster: String, style: Style):
 
-  /** Terminal columns this cluster occupies: none for a combining mark, two for a wide character or emoji, else one. */
+  /** Terminal columns this cluster occupies: none for a combining mark, two for a wide character or emoji, else one.
+    *
+    * Measured through [[CharWidth.of]], the arbitrary-text entry point, rather than the single-cluster one, so a value
+    * built by hand out of more than one cluster still measures correctly instead of counting only its first.
+    */
   def width: Int = CharWidth.of(cluster)

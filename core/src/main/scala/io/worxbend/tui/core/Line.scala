@@ -15,7 +15,7 @@ package io.worxbend.tui.core
   * span. The default, [[Style.Default]], sets nothing, so a line that does not use it renders exactly as it did.
   */
 final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None, style: Style = Style.Default):
-  def width: Int = spans.map(_.width).sum
+  def width: Int = widthIn(WidthMode.Narrow)
 
   /** This row's width under a given East Asian Ambiguous policy — the sum of its spans' [[Span.widthIn]]. See
     * [[WidthMode]]; `widthIn(WidthMode.Narrow)` is exactly [[width]].
