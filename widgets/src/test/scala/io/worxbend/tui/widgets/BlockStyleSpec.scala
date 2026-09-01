@@ -51,8 +51,10 @@ final class BlockStyleSpec extends AnyFunSuite:
     // The continuation cell is deliberately left as a continuation rather than restyled: the terminal paints both
     // columns of a wide grapheme from the *left* cell's style, so the background is unbroken on screen, and the
     // diff still refuses to emit column 2 on its own.
+    // the diff is taken *towards* this frame — an empty previous frame against this one as the next — because that is
+    // the direction a backend flushes in, and it is the next frame's continuation flags that decide what it may paint
     assert(
-      !buffer.diff(Buffer(Rect(0, 0, 6, 3))).toSeq.exists { case (position, _) => position.x == 2 && position.y == 1 }
+      !Buffer(Rect(0, 0, 6, 3)).diff(buffer).toSeq.exists { case (position, _) => position.x == 2 && position.y == 1 }
     )
 
   test("a one-cell area is filled and not an error"):
