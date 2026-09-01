@@ -24,7 +24,7 @@ object HelloWorld extends TuiApp:
 - **Factories** — `text`, `line`, `panel`, `row`, `column`, `spacer`, `gauge`,
   `sparkline`, `tabs`, `table`, `widget` (escape hatch), re-exported so one
   `import ...dsl.*` suffices. `text` paints one style over a whole block; `line` takes
-  `Span`s, so `line("Status: ".styled(identity), "OK".styled(_.withFg(Color.Green)))`
+  plain `String`s and `Span`s in any mix, so `line("Status: ", "OK".styled(_.withFg(Color.Green)))`
   puts two styles on one row without any hand-counted column widths.
 - **Extensions** — styling (`.bold`, `.fg(...)`, `.bg(...)`, `.rounded`), layout
   (`.length(n)`, `.percent(n)`, `.fill`), panel chrome (`.padding(cells)`,

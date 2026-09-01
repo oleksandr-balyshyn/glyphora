@@ -29,14 +29,23 @@ private[dsl] trait ElementFactories:
   /** One terminal row assembled from differently-styled runs:
     *
     * {{{
-    * line("Status: ".styled(identity), "OK".styled(_.withFg(Color.Green)))
+    * line("Status: ", "OK".styled(_.withFg(Color.Green)))
     * }}}
     *
-    * `"...".styled(...)` is the [[Span]] builder this package adds to `String`. Use this instead of a `row` of `text`
-    * elements with hand-counted `.length(n)` widths: the row is measured in display columns, so it stays correct when
-    * the text is translated or contains CJK or emoji characters that occupy two columns each.
+    * A part is either a plain `String`, drawn in the element's own style, or a [[Span]] built with the
+    * `"...".styled(...)` extension this package adds to `String`; the two mix freely in one call, the same shape
+    * `listView` takes for its items. Before the `String` case existed an unstyled run had to be spelled
+    * `"Status: ".styled(identity)`, which is ceremony on the commonest part of any row.
+    *
+    * Use this instead of a `row` of `text` elements with hand-counted `.length(n)` widths: the row is measured in
+    * display columns, so it stays correct when the text is translated or contains CJK or emoji characters that occupy
+    * two columns each.
     */
-  def line(parts: Span*): LineElement = LineElement(parts)
+  def line(parts: (String | Span)*): LineElement =
+    LineElement(parts.map {
+      case content: String => Span.raw(content)
+      case span: Span      => span
+    })
 
   /** A bordered box around `children`, captioned `title`.
     *

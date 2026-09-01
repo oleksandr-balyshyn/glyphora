@@ -50,6 +50,25 @@ final class ExpressivenessSpec extends AnyFunSuite:
     assert(buffer.get(0, 0).style.fg.isEmpty)
     assert(buffer.get(8, 0).style.fg.contains(Color.Green))
 
+  test("a plain String part is drawn unstyled beside a styled span"):
+    val element = line("Status: ", "OK".styled(_.withFg(Color.Green)))
+    val buffer  = rendered(element.widget, 20, 1)
+    assert(trimmedLines(buffer) == Seq("Status: OK"))
+    assert(buffer.get(0, 0).style.fg.isEmpty)
+    assert(buffer.get(8, 0).style.fg.contains(Color.Green))
+
+  test("a plain String part is measured in display columns, not characters"):
+    // "日本" is four columns, so the "ok" that follows it starts at column 4, not column 2
+    val element = line("日本", "ok".styled(identity))
+    val buffer  = rendered(element.widget, 20, 1)
+    assert(element.claim.horizontal == Constraint.Length(6))
+    assert(buffer.get(4, 0).symbol == "o")
+
+  test("plain String parts inherit the element's own style"):
+    val buffer = rendered(line("a", "b").dim.widget, 4, 1)
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Dim))
+    assert(buffer.get(1, 0).style.modifiers.hasAny(Modifiers.Dim))
+
   test("a line claims exactly one row and its measured display width"):
     // two columns per character, so a declared `.length(4)` would have been half the truth
     val element = line("日本".styled(identity), "ok".styled(identity))

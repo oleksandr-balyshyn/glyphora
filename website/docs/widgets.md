@@ -179,12 +179,15 @@ column(
 default colour and `OK` in green. `line(...)` can:
 
 ```scala
-line("Status: ".styled(identity), "OK".styled(_.withFg(Color.Green)))
+line("Status: ", "OK".styled(_.withFg(Color.Green)))
 ```
 
-`"...".styled(transform)` builds a `Span` — a run of text with its own style — and
-`identity` leaves that run alone. The element's own style is the base each span layers
-onto, so `line(...).dim` dims the whole row and a span that set its own colour keeps it.
+Each part is either a plain `String` or a `Span`, and the two mix freely in one call.
+`"...".styled(transform)` builds a `Span` — a run of text with its own style. A part
+written as a bare `String` carries no style of its own, so it is drawn in the element's
+style; that is why the label above needs no `.styled(identity)` to sit beside a coloured
+span. The element's own style is the base each span layers onto, so `line(...).dim` dims
+the whole row and a span that set its own colour keeps it.
 
 A `line` can also place itself: `line(...).rightAligned` (and `leftAligned`, `centered`,
 `aligned(Alignment.Center)`) sets the alignment on the underlying `Line`, which wins over
