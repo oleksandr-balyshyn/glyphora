@@ -1025,6 +1025,32 @@ final case class FilledBox(x1: Double, y1: Double, x2: Double, y2: Double, style
     }
 ```
 
+### Marking days on a calendar
+
+`calendar(year, month, selected)` draws a month grid. The widget behind it,
+`Calendar`, takes a `dayStyles: Map[LocalDate, Style]` so that any number of
+individual dates can be drawn differently — appointments, public holidays, today,
+the days of a streak — instead of only the one day the cursor is on:
+
+```scala
+import io.worxbend.tui.core.Style
+import io.worxbend.tui.widgets.Calendar
+import java.time.LocalDate
+
+private val busy = Map(
+  LocalDate.of(2026, 7, 2)  -> Style.Default.bold,
+  LocalDate.of(2026, 7, 14) -> Style.Default.underline,
+)
+
+widget(Calendar(2026, 7, selected = Some(14), dayStyles = busy))
+```
+
+The map is keyed by `LocalDate`, not by day-of-month, so one map can be handed to
+several months' grids and each takes only the dates that belong to it. Styles layer
+outermost-last: the calendar's own `style`, then the date's entry, then
+`highlightStyle` for the selected day — so the cursor is still visible when it lands
+on a marked date.
+
 ## Feedback and motion
 
 Animations need one thing from you — a tick rate — and nothing else:

@@ -8,6 +8,12 @@ import java.util.Locale
 
 /** A month grid: title row, weekday header (weeks start Monday), and day numbers with an optional highlighted day.
   *
+  * `dayStyles` gives individual dates their own appearance — a date with an appointment, a public holiday, today,
+  * every day of a streak. It is keyed by `java.time.LocalDate` rather than by day-of-month so a caller can hold one map
+  * across several months and hand the same value to each grid. A date's style is layered over the calendar's `style`,
+  * and `highlightStyle` is layered over that in turn, so the cursor stays visible wherever it lands: a marked day that
+  * is also the selected day reads as selected first.
+  *
   * Needs 20 columns (seven three-column day slots, the last one two wide) and `2 + weeks` rows — the title, the weekday
   * header, then one row per week the month touches, so up to 8. Overflow clips like everything else.
   */
@@ -18,6 +24,7 @@ final case class Calendar(
     style: Style = Style.Default,
     headerStyle: Style = Style.Default.bold,
     highlightStyle: Style = Style.Default.reverse,
+    dayStyles: Map[LocalDate, Style] = Map.empty,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -48,7 +55,10 @@ final case class Calendar(
       val slot     = firstColumn + day - 1
       val x        = area.x + (slot % 7) * 3
       val y        = area.y + 2 + slot / 7
-      val dayStyle = if selected.contains(day) then style.patch(highlightStyle) else style
+      val date     = yearMonth.atDay(day)
+      // three layers, outermost last: the calendar's own style, then whatever this date was given, then the cursor
+      val marked   = dayStyles.get(date).fold(style)(style.patch)
+      val dayStyle = if selected.contains(day) then marked.patch(highlightStyle) else marked
       // a grid cell is two columns wide: drop the ones the area cannot hold rather than write past its edges
       if x + 2 <= area.right && y < area.bottom then buffer.setString(x, y, f"$day%2d", dayStyle)
     }

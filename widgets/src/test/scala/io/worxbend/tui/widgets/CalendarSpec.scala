@@ -1,6 +1,8 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Modifiers, Rect}
+import io.worxbend.tui.core.{Buffer, Modifiers, Rect, Style}
+
+import java.time.LocalDate
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -33,3 +35,23 @@ final class CalendarSpec extends AnyFunSuite:
     // day 1 sits in the We column (x = 6..7) on the first grid row (y = 2)
     assert(buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Reverse))
     assert(!buffer.get(10, 2).style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("a date named in dayStyles is drawn with that style layered over the calendar's"):
+    val marked = Map(LocalDate.of(2026, 7, 2) -> Style.Default.bold)
+    val buffer = rendered(Calendar(2026, 7, dayStyles = marked), 20, 8)
+    // 2026-07-01 is a Wednesday, so the 2nd sits in the Th column (x = 9..10) on the first grid row
+    assert(buffer.get(10, 2).symbol == "2")
+    assert(buffer.get(10, 2).style.modifiers.hasAny(Modifiers.Bold))
+    assert(!buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("dates in other months are ignored, so one map can be shared across grids"):
+    val marked = Map(LocalDate.of(2026, 8, 2) -> Style.Default.bold)
+    val buffer = rendered(Calendar(2026, 7, dayStyles = marked), 20, 8)
+    assert(buffer.get(10, 2).symbol == "2")
+    assert(!buffer.get(10, 2).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("the selection is layered over a marked day, so the cursor stays visible"):
+    val marked = Map(LocalDate.of(2026, 7, 1) -> Style.Default.bold)
+    val buffer = rendered(Calendar(2026, 7, selected = Some(1), dayStyles = marked), 20, 8)
+    assert(buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Reverse))
+    assert(buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Bold))
