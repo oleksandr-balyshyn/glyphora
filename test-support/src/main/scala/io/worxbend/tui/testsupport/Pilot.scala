@@ -331,6 +331,20 @@ final class Pilot private (
     rethrowAppFailure()
     backend.lastDrawn.getOrElse(throw CallSite.attribute(AssertionError("nothing has been drawn yet")))
 
+  /** Compares the last rendered frame against the `golden/<name>.txt` fixture, and returns `this` so a snapshot sits in
+    * a chain of interactions:
+    *
+    * {{{
+    * pilot.press("tab").waitForIdle().assertGolden("form-focused")
+    * }}}
+    *
+    * The fluent spelling of `GoldenFrames.assertMatches(name, pilot)`. See [[GoldenFrames]] for the recording workflow
+    * and for what a fixture does and does not record — it is glyphs and layout, never styling.
+    */
+  def assertGolden(name: String): Pilot =
+    GoldenFrames.assertMatches(name, lastFrame)
+    this
+
   /** The cell at `(x, y)` of the last rendered frame. */
   def cellAt(x: Int, y: Int): Cell = lastFrame.get(x, y)
 

@@ -58,6 +58,10 @@ assert(cell.style.fg.contains(Color.Cyan))
 Keep style assertions focused on meaningful semantics; asserting every empty cell
 makes harmless renderer changes noisy.
 
+Every assertion this library throws is attributed to the line that called it, not to
+the helper that threw it — so a test comparing three frames reports which of the three
+failed, and jumping to the failure lands in the test rather than in `tui-test`.
+
 ### Compare two whole frames
 
 Naming cells one at a time only catches the cells you thought to name. When the frame
@@ -159,6 +163,18 @@ The name identifies a fixture on the test classpath at
 module being tested. On a mismatch the failure prints the expected and the actual
 frame in full, one after the other. A fixture that does not exist yet fails with an
 assertion telling you to record it.
+
+A whole running app is snapshotted the same way, without reaching for its last frame
+by hand:
+
+```scala
+pilot.press("tab").waitForIdle().assertGolden("form-focused")
+```
+
+`assertGolden` returns the pilot, so a snapshot sits in the middle of a chain of
+interactions. It fails, rather than matching an empty fixture, when the app has drawn
+nothing yet. `GoldenFrames.assertMatches(name, pilot)` is the same comparison written
+the other way round.
 
 ### A golden frame records glyphs, not styling
 
