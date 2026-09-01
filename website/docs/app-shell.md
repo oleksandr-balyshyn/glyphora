@@ -286,6 +286,42 @@ pushScreen(Screen.full(settingsPage))
 Call `popScreen()` from the active screen to return. Focus stays inside a modal by
 construction, so you do not need a separate focus trap.
 
+### Swap, unwind, and read where you are
+
+`pushScreen`/`popScreen` move one level at a time. Three more calls cover the rest of a
+navigation stack:
+
+```scala
+replaceScreen(Screen.full(detailPage))   // swap the top screen, staying at the same depth
+resetScreens()                           // unwind everything, back to the app's own view
+```
+
+`replaceScreen` matters because the alternative — `popScreen()` then `pushScreen(…)` —
+writes the stack twice, and whatever renders in between briefly shows the layer
+underneath. `replaceScreen` writes once, so the swap is a single frame. On an empty
+stack it does the same thing as a push. `resetScreens()` is the one-call "home" from a
+deep drill-down; on an already-empty stack it schedules no frame at all, because a
+`Signal` set to the value it already holds notifies nobody.
+
+Reading where navigation stands comes in two spellings, because a `view` and an event
+handler are in different positions:
+
+```scala
+def view(using ReactiveScope, Theme): Element =
+  // reactive: this view repaints when a screen is pushed or popped
+  column(breadcrumb(screenDepth), currentScreen.map(_ => text("(in a screen)")).getOrElse(text("home")))
+
+override def bindings: KeyBindings = KeyBindings(
+  // a handler has no ReactiveScope and must not subscribe anything, so it reads the non-tracking form
+  binding("esc", "back")(if screenDepthNow > 0 then popScreen() else quit()),
+)
+```
+
+`currentScreen` and `screenDepth` are reactive reads for `view`; `screenDepthNow` is the
+same depth read without subscribing, for a handler. That last binding is the usual
+reason to want it: one `Esc` that means "go back a level" while anything is pushed and
+"quit" at the top, without the app keeping a parallel counter of its own.
+
 Which of the two a screen is, is its `presentation`: `Presentation.Modal` (the default)
 or `Presentation.Full`. A hand-written `Screen` overrides it directly:
 

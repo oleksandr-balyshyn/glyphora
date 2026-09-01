@@ -50,8 +50,9 @@ private final class RunState(val splash: SplashPlayer):
   * to its ancestors (`true` consumes), then the app's [[bindings]] run; an unconsumed `Ctrl+P` opens the command
   * palette (when bindings exist) and `Ctrl+C` quits.
   *
-  * App services: [[pushScreen]]/[[popScreen]] for modal or full-screen navigation (layers below a modal leave the tab
-  * order), [[notify]] for timed toasts, [[openPalette]] for the fuzzy command palette over the declared bindings. Call
+  * App services: [[pushScreen]]/[[popScreen]]/[[replaceScreen]]/[[resetScreens]] for modal or full-screen navigation
+  * (layers below a modal leave the tab order), with [[currentScreen]]/[[screenDepth]] as reactive reads of where
+  * navigation stands, [[notify]] for timed toasts, [[openPalette]] for the fuzzy command palette over the declared bindings. Call
   * [[quit]] from any handler to exit cleanly.
   *
   * Lifecycle: [[onStart]] runs on the render thread before the first frame — start pollers and timers there — and
@@ -187,6 +188,53 @@ trait TuiApp:
       case _ :: tail => tail
       case Nil       => Nil
     }
+
+  /** Swaps the screen on top for `screen` in a single update.
+    *
+    * A `popScreen()` followed by a `pushScreen(...)` writes the stack twice, and anything that renders in between — a
+    * redraw the pop itself asked for — briefly shows the layer underneath. This writes once, so the swap is one frame.
+    * On an empty stack it does the same thing as [[pushScreen]].
+    */
+  protected final def replaceScreen(screen: Screen): Unit =
+    screenStack.update {
+      case _ :: tail => screen :: tail
+      case Nil       => screen :: Nil
+    }
+
+  /** Unwinds every pushed screen at once, so the app's own [[view]] is what shows again.
+    *
+    * The one-call way out of a deep drill-down ("home" from four levels in). Already-empty is a silent no-op: a
+    * `Signal` set to a value equal to the one it holds notifies nobody, so no redundant frame is scheduled.
+    */
+  protected final def resetScreens(): Unit =
+    screenStack.set(Nil)
+
+  /** The screen on top, as a reactive read — `None` means the app's own [[view]] is showing.
+    *
+    * Reading it from `view` subscribes that view to navigation, so a breadcrumb or a title bar recomputes when a screen
+    * is pushed or popped.
+    */
+  protected final def currentScreen(using scope: ReactiveScope): Option[Screen] =
+    screenStack.get(using scope).headOption
+
+  /** How many screens are stacked over the app's own [[view]] — `0` when none are — as a reactive read.
+    *
+    * Use this from `view` (a breadcrumb that shows the depth). An event handler has no [[ReactiveScope]] and must not
+    * subscribe anything anyway, so it reads [[screenDepthNow]] instead.
+    */
+  protected final def screenDepth(using scope: ReactiveScope): Int =
+    screenStack.get(using scope).size
+
+  /** [[screenDepth]] read without subscribing — the spelling for an event handler, which has no [[ReactiveScope]].
+    *
+    * What it is for: one global `Esc` binding that means "go back a level" while anything is pushed and "quit" at the
+    * top, without the app keeping a parallel counter of its own.
+    *
+    * {{{
+    * binding("esc", "back")(if screenDepthNow > 0 then popScreen() else quit())
+    * }}}
+    */
+  protected final def screenDepthNow: Int = screenStack.peek.size
 
   /** Shows a toast in the top-right corner for `duration` (needs a `config.tickRate` for it to age out again). */
   protected final def notify(

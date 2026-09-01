@@ -74,6 +74,81 @@ final class AppServicesSpec extends AnyFunSuite:
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
 
+  /** `replaceScreen` has to be distinguishable from a pop-then-push, which is why the test pops afterwards: if the
+    * replace had really been a push, the stack would be two deep and the pop would land on "one" instead of the base.
+    */
+  test("replaceScreen swaps the top screen in place, leaving the depth alone"):
+    val backend = HeadlessBackend(Size(30, 5))
+    val app     = new TuiApp:
+      override def bindings: KeyBindings            = KeyBindings(
+        binding("1", "push one")(pushScreen(Screen.full(text("screen one")))),
+        binding("2", "replace with two")(replaceScreen(Screen.full(text("screen two")))),
+        binding("b", "back")(popScreen()),
+        binding("ctrl+q", "quit")(quit()),
+      )
+      def view(using ReactiveScope, Theme): Element = text("base screen")
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.pressKey(KeyCode.Char('1')).waitForIdle()
+    assert(pilot.screenText.contains("screen one"))
+    pilot.pressKey(KeyCode.Char('2')).waitForIdle()
+    assert(pilot.screenText.contains("screen two"))
+    assert(!pilot.screenText.contains("screen one"))
+    pilot.pressKey(KeyCode.Char('b')).waitForIdle()
+    assert(pilot.screenText.contains("base screen"))
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
+  test("replaceScreen on an empty stack behaves as a push"):
+    val backend = HeadlessBackend(Size(30, 5))
+    val app     = new TuiApp:
+      override def bindings: KeyBindings            = KeyBindings(
+        binding("r", "replace")(replaceScreen(Screen.full(text("only screen")))),
+        binding("ctrl+q", "quit")(quit()),
+      )
+      def view(using ReactiveScope, Theme): Element = text("base screen")
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.pressKey(KeyCode.Char('r')).waitForIdle()
+    assert(pilot.screenText.contains("only screen"))
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
+  /** Three pushes, one reset. The depth readings are the other half of the assertion: `screenDepth` is a reactive read
+    * taken inside `view`, so it also proves that a push repaints anything that consulted it.
+    */
+  test("resetScreens unwinds the whole stack, and the depth reads report where navigation stands"):
+    val backend            = HeadlessBackend(Size(40, 5))
+    var depthSeenByHandler = -1
+    val app                = new TuiApp:
+      override def bindings: KeyBindings            = KeyBindings(
+        binding("p", "push") {
+          val level = screenDepthNow + 1
+          // `currentScreen` is read inside the screen's own view, where a ReactiveScope exists; from here, in a
+          // handler, there is none — which is exactly the split the two spellings are for
+          pushScreen(Screen.full(text(s"level $level top=${if currentScreen.isDefined then "yes" else "no"}")))
+        },
+        binding("h", "home")(resetScreens()),
+        binding("d", "read depth") { depthSeenByHandler = screenDepthNow },
+        binding("ctrl+q", "quit")(quit()),
+      )
+      def view(using ReactiveScope, Theme): Element = text(s"base depth=$screenDepth")
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
+    pilot.waitForIdle()
+    assert(pilot.screenText.contains("base depth=0"))
+    pilot.pressKey(KeyCode.Char('p')).waitForIdle()
+    pilot.pressKey(KeyCode.Char('p')).waitForIdle()
+    pilot.pressKey(KeyCode.Char('p')).waitForIdle()
+    assert(pilot.screenText.contains("level 3 top=yes"))
+    pilot.pressKey(KeyCode.Char('d')).waitForIdle()
+    assert(depthSeenByHandler == 3)
+    pilot.pressKey(KeyCode.Char('h')).waitForIdle()
+    assert(pilot.screenText.contains("base depth=0"))
+    pilot.pressKey(KeyCode.Char('d')).waitForIdle()
+    assert(depthSeenByHandler == 0)
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
   /** The lifetime is wall-clock time; ticks are only what notices it has passed. A 400ms toast is a 400ms toast whether
     * the app ticks every 10ms or every 200ms, which is the whole point of spelling it as a duration.
     */
