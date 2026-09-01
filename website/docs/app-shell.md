@@ -911,3 +911,55 @@ Async.run(fetchRows()) { rows =>
 
 The full shell in action is
 [`examples/showcase`](https://github.com/oleksandr-balyshyn/glyphora/tree/main/examples/showcase).
+
+## Embed the engine without TuiApp
+
+`TuiApp` is two things stacked: an engine that turns a `view` into a painted frame and
+routes events back into it, and a set of opinions about what keys mean — Tab and
+Shift+Tab move focus, Ctrl+P opens the command palette, Ctrl+C quits, screens stack,
+toasts expire, a splash plays first.
+
+Those opinions are right for an application whose whole window is glyphora. They are
+wrong for a program that already owns its loop, or that draws a glyphora panel inside a
+loop somebody else wrote — Tab may already mean something there, and quitting is not a
+key's decision to make. `ElementHost` is the engine on its own:
+
+```scala
+val host = ElementHost()
+
+runner.run { frame ?=>
+  host.render(frame, Theme.Dark, myView)
+}
+
+// per event, on the same thread the frames are painted on
+def onEvent(event: Event): Unit = event match
+  case Event.Key(key) if !host.dispatchKey(key) =>
+    key match                                  // your policy, not the framework's
+      case KeyEvent(KeyCode.Tab, mods) if mods.hasAny(KeyModifiers.Shift) => host.focusPrevious()
+      case KeyEvent(KeyCode.Tab, _)                                      => host.focusNext()
+      case _                                                             => ()
+  case Event.Mouse(mouse) => host.dispatchMouse(mouse)
+  case Event.Paste(text)  => host.dispatchPaste(text)
+  case _                  => ()
+```
+
+What the host does for you is the part that is genuinely hard to rewrite: resolving a
+`responsive` view against the size actually being painted, reconciling focus between
+frames so the highlight follows the *element* rather than the screen position, decorating
+the tree with the theme's focus cue, and routing every event to the tree that is on
+screen rather than to a freshly evaluated one.
+
+What it deliberately does not do is decide anything. `dispatchKey` returning `false`
+means nothing on screen wanted the key and the choice is yours; the host never traverses
+focus and never quits. `focusNext`, `focusPrevious`, `focusToKey` and `clearFocus` are
+there when you want the usual meanings — call them from your own key handling.
+
+Two rules come with it. One instance belongs to one loop, and every method is called on
+that loop's render thread: the focus bookkeeping and the last painted tree live in the
+instance and are not synchronised. And a focus change takes effect on the *next* frame,
+because events are routed against the tree the last `render` painted — which is the tree
+the person at the terminal is looking at. Any loop that redraws after handling an event
+never notices.
+
+`TuiApp` itself is built on this class, so an app and an embedded panel can never disagree
+about where focus is.

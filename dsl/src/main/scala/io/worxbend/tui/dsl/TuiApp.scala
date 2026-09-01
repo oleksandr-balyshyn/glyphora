@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Effect, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Size, Widget}
+import io.worxbend.tui.core.{Effect, Event, KeyCode, KeyEvent, KeyModifiers, Size, Widget}
 import io.worxbend.tui.runtime.{
   Async,
   Cancelable,
@@ -36,9 +36,18 @@ private val MaxPortalRounds: Int = 8
   * the app because an intro belongs to a run: running the same app twice plays it twice.
   */
 private final class RunState(val splash: SplashPlayer):
-  var invalidated: Boolean      = false
-  var lastTree: Option[Element] = None
-  val tracker: FocusTracker     = FocusTracker()
+  var invalidated: Boolean = false
+
+  /** The render-and-dispatch engine this run drives. `TuiApp` is that engine plus this file's policy — Tab traversal,
+    * Ctrl+P, Ctrl+C, screens, toasts, the splash — so the focus bookkeeping and the tree events are routed against live
+    * in [[ElementHost]] and are reached through here.
+    */
+  val host: ElementHost = ElementHost()
+
+  /** This run's focus tracker, which is the host's. Named here because the layer bookkeeping below and the imperative
+    * `focusTo`/`clearFocus` helpers both work directly against it.
+    */
+  def tracker: FocusTracker = host.tracker
 
   /** The state `useSignal`/`useState` hand out, keyed by where in the view the call was made. Owned by this run and
     * touched only while its render thread is evaluating the view, like everything else here — running the same app a
@@ -620,15 +629,12 @@ trait TuiApp:
         ViewState.during(run.viewState)(ResponsivePass.resolve(effectiveView(using scope), frameSize))
       run.viewState.sweep()
       syncFocusLayers(run)
-      run.tracker.reconcile(FocusPass.focusKeys(rawTree), FocusPass.autofocusRequest(rawTree))
-      val tree    = FocusPass.decorate(rawTree, run.tracker, theme.focus)
-      run.lastTree = Some(tree)
       // portals are collected while the tree paints and drawn afterwards, so a popup anchored deep inside a bordered
       // pane escapes it. Post-render effects still come last: they process the finished frame, and a portal is frame
       // content like anything else.
       PortalQueue.begin()
       try
-        frame.renderWidget(tree.widget, frame.area)
+        run.host.renderTree(rawTree, theme.focus, tree => frame.renderWidget(tree.widget, frame.area))
         drainPortals(frame)
       finally PortalQueue.end()
       effects.applyTo(frame)
@@ -760,9 +766,9 @@ trait TuiApp:
     activeHandle.set(Some(handle))
     val redraw = event match
       case Event.Key(key)     => handleKey(key, run, handle) || run.invalidated
-      case Event.Mouse(mouse) => handleMouse(mouse, run) || run.invalidated
+      case Event.Mouse(mouse) => run.host.dispatchMouse(mouse) || run.invalidated
       case Event.Paste(text)  =>
-        val consumed = run.lastTree.exists(EventRouter.dispatchPaste(_, text))
+        val consumed = run.host.dispatchPaste(text)
         consumed || run.invalidated
       case Event.FocusGained  =>
         onTerminalFocus(true)
@@ -799,7 +805,7 @@ trait TuiApp:
     * framework's own keys.
     */
   private def routeKey(key: KeyEvent, run: RunState, handle: RunnerHandle): Boolean =
-    val consumed = run.lastTree.exists(EventRouter.dispatchKey(_, key))
+    val consumed = run.host.dispatchKey(key)
     val bound    = !consumed && !palette.isOpenNow && activeBindingsNow.handle(key)
     if consumed || bound then true else handleFrameworkKey(key, run.tracker, handle)
 
@@ -837,20 +843,6 @@ trait TuiApp:
   private def topScreenClosesOnEscape: Boolean =
     screenStack.peek.headOption
       .exists(screen => screen.presentation == Presentation.Modal && screen.dismissal.byEscape)
-
-  private def handleMouse(mouse: MouseEvent, run: RunState): Boolean =
-    val hit        = run.tracker.hitTest(mouse.position)
-    val focusMoved =
-      if mouse.kind == MouseEventKind.Down then
-        hit match
-          case Some(index) if index != run.tracker.focusedIndex =>
-            run.tracker.focusTo(index)
-            true
-          case _                                                => false
-      else false
-    val target     = hit.flatMap(index => run.tracker.areaOf(index).map(MouseHit(index, _)))
-    val consumed   = run.lastTree.exists(EventRouter.dispatchMouse(_, mouse, target))
-    consumed || focusMoved
 
   /** The composed view: base -> screens -> palette -> toasts.
     *
