@@ -154,6 +154,51 @@ This is the mechanism the toolkit's own overlays are built from — a toast is a
 inside a `positioned` box, which is how the stack can sit against the right edge with
 every row a different width.
 
+## Escaping a pane: `portal(…)`
+
+Clipping is the right behaviour for an overlay that belongs to its pane, and the wrong
+behaviour for a dropdown. A context menu opened from a table row inside a bordered
+`panel` is taller than the space left below that row, so a `positioned` menu is cut off
+at the panel's border and the user sees half a menu.
+
+`portal(…)` takes the same four numbers as `positioned` and the same offset origin, but
+instead of painting inside the pane it hands the box to the frame root, which draws it
+after the entire tree. The result is clipped only by the terminal, so it paints over the
+border, over a neighbouring pane, and over anything else the frame already drew:
+
+```scala
+val menuState = MenuState()
+val menuOpen  = Signal(false)
+
+def view(using ReactiveScope, Theme): Element =
+  panel("Deployments")(
+    column(
+      deploymentTable,
+      if menuOpen.get then
+        portal(dx = 12, dy = 4, width = 22, height = 6)(
+          layers(clear(), menu(menuEntries, menuState)(runAction)),
+        )
+      else spacer().length(0),
+    ),
+  )
+```
+
+Which of the three overlay primitives to reach for:
+
+- `positioned` — the overlay belongs to its pane and should be trimmed at its edge.
+- `portal` — the overlay is anchored *inside* a pane but must spill past it.
+- `layers` — the overlay covers the whole screen anyway (a modal dialog, a splash).
+
+Two details are worth knowing. Portals paint in the order they were rendered, all of them
+above the tree, and a portal inside portal content is drawn above the portal containing
+it — so a submenu lands over its menu. And the content is still an ordinary child for
+event routing, focus order and measurement: a `menu` inside a portal is clicked and
+tabbed to exactly where it is drawn, with no extra wiring.
+
+`portal` only escapes its pane inside a running `TuiApp`, because the frame root is what
+draws the queued content. Rendering the element by hand in a construction test falls back
+to `positioned`'s clipped behaviour rather than drawing nothing.
+
 ## Pad inside a border
 
 A `panel` reserves blank cells between its border and its children:

@@ -24,6 +24,9 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
 /** How long a toast lives when the caller does not say. */
 private val DefaultToastDuration: FiniteDuration = 3.seconds
 
+/** How many rounds of portal draining one frame allows — see `TuiApp.drainPortals`. */
+private val MaxPortalRounds: Int = 8
+
 /** The mutable state of a single [[TuiApp.runWith]] invocation: whether a redraw is pending, the focus-decorated tree
   * the last frame produced (events are routed against that tree, not against a freshly evaluated one), the focus
   * tracker, and the intro player.
@@ -520,9 +523,36 @@ trait TuiApp:
       run.tracker.reconcile(FocusPass.focusKeys(rawTree), FocusPass.autofocusRequest(rawTree))
       val tree    = FocusPass.decorate(rawTree, run.tracker, theme.focus)
       run.lastTree = Some(tree)
-      frame.renderWidget(tree.widget, frame.area)
+      // portals are collected while the tree paints and drawn afterwards, so a popup anchored deep inside a bordered
+      // pane escapes it. Post-render effects still come last: they process the finished frame, and a portal is frame
+      // content like anything else.
+      PortalQueue.begin()
+      try
+        frame.renderWidget(tree.widget, frame.area)
+        drainPortals(frame)
+      finally PortalQueue.end()
       effects.applyTo(frame)
       retargetAmbientTicker(run)
+
+  /** Draws the portals the tree queued, then the portals *those* queued, and so on until nothing new arrives.
+    *
+    * Each portal is drawn at its own absolute rectangle, intersected with the frame — the terminal is the only thing
+    * that clips a portal. Rendering portal content can queue further portals (a submenu opened from a menu that is
+    * itself in a portal), which is why this loops instead of draining once.
+    *
+    * The round cap stops content that re-queues a portal on every pass from spinning the render thread forever. It is
+    * deliberately generous: real nesting is a menu inside a dialog inside a screen, never eight deep.
+    */
+  private def drainPortals(frame: Frame): Unit =
+    var round  = 0
+    var queued = PortalQueue.drain()
+    while queued.nonEmpty && round < MaxPortalRounds do
+      queued.foreach { (target, content) =>
+        val clipped = target.intersection(frame.area)
+        if !clipped.isEmpty then frame.renderWidget(content.widget, clipped)
+      }
+      queued = PortalQueue.drain()
+      round += 1
 
   /** Turns this run's own repeating tick on, off, or onto a different interval, according to what the frame just
     * composed actually needs.

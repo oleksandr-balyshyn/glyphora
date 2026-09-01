@@ -781,3 +781,16 @@ private[dsl] trait ElementFactories:
   /** Places `content` at an absolute `(dx, dy)` offset inside its area, sized `width` x `height`. */
   def positioned(dx: Int, dy: Int, width: Int, height: Int)(content: Element): PositionedElement =
     PositionedElement(dx, dy, width, height, content)
+
+  /** An overlay anchored `dx`/`dy` from this point in the tree that is **not** clipped by its container: the frame root
+    * draws it last, over everything else, clipped only by the terminal.
+    *
+    * Reach for it when the overlay is opened from inside a bordered [[panel]] or a [[scrollView]] and has to spill past
+    * that pane — a dropdown, a context menu, a tooltip on a table row. Reach for [[positioned]] instead when the
+    * overlay belongs to its pane and should be trimmed at its edge, and for [[layers]] when the overlay covers the
+    * whole screen anyway.
+    *
+    * Only takes effect inside a running [[TuiApp]]; rendering the element by hand falls back to [[positioned]].
+    */
+  def portal(dx: Int, dy: Int, width: Int, height: Int)(content: Element): PortalElement =
+    PortalElement(dx, dy, width, height, content)

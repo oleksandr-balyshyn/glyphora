@@ -57,6 +57,7 @@ export Element.{
   panel,
   pieChart,
   progressBar,
+  portal,
   positioned,
   radioGroup,
   responsive,

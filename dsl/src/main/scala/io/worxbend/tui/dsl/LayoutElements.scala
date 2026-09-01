@@ -245,6 +245,45 @@ final case class PositionedElement(
   private[dsl] override def withChildren(children: Seq[Element]): PositionedElement =
     copy(content = children.headOption.getOrElse(content))
 
+/** Like [[PositionedElement]], but the content escapes its container.
+  *
+  * Both nodes measure `dx`/`dy` from the top-left of the area the node itself occupies. The difference is what happens
+  * when the resulting rectangle runs past that area. A [[PositionedElement]] intersects with it, so a dropdown opened
+  * from a row inside a bordered `panel` loses everything past the border. This node instead hands the rectangle and the
+  * content to the frame root, which draws it *after* the whole tree — over the border, over any sibling pane, clipped
+  * only by the terminal.
+  *
+  * Portals paint in the order they were rendered, all of them above the tree, and a portal inside portal content is
+  * drawn above the portal that contains it.
+  *
+  * The content is still a child for event routing, focus order and measurement, so a menu inside a portal is clicked
+  * and tabbed to exactly where it is drawn.
+  *
+  * There is one case with no frame root to hand the content to: rendering a bare `Element` outside a [[TuiApp]], as a
+  * construction test that calls `widget.render` directly does. Rather than vanish, the content then falls back to
+  * [[PositionedElement]]'s clipped in-place behaviour.
+  */
+final case class PortalElement(
+    dx: Int,
+    dy: Int,
+    width: Int,
+    height: Int,
+    content: Element,
+    props: ElementProps = ElementProps(),
+) extends Element:
+  type Self = PortalElement
+  override def children: Seq[Element]                                           = Seq(content)
+  def widget: Widget                                                            =
+    (area, buffer) =>
+      val target = Rect(area.x + dx, area.y + dy, width, height)
+      if PortalQueue.isCollecting then PortalQueue.offer(target, content)
+      else
+        val clipped = target.intersection(area)
+        if !clipped.isEmpty then content.widget.render(clipped, buffer)
+  private[dsl] def withProps(props: ElementProps): PortalElement                = copy(props = props)
+  private[dsl] override def withChildren(children: Seq[Element]): PortalElement =
+    copy(content = children.headOption.getOrElse(content))
+
 /** Fills its whole area with `fill` (a solid background) before rendering `inner` — what the chrome bars use to read as
   * continuous surfaces. Transparent to focus, measurement and event routing.
   */
