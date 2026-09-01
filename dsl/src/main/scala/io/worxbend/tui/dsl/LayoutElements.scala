@@ -277,9 +277,8 @@ final case class PortalElement(
     (area, buffer) =>
       val target = Rect(area.x + dx, area.y + dy, width, height)
       if PortalQueue.isCollecting then PortalQueue.offer(target, content)
-      else
-        val clipped = target.intersection(area)
-        if !clipped.isEmpty then content.widget.render(clipped, buffer)
+      // no frame root to hand the content to: render it exactly as `positioned` would
+      else PositionedElement(dx, dy, width, height, content).widget.render(area, buffer)
   private[dsl] def withProps(props: ElementProps): PortalElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PortalElement =
     copy(content = children.headOption.getOrElse(content))
