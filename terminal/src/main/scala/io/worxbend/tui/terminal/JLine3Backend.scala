@@ -192,6 +192,21 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       write(AnsiSequences.PushKittyKeyboard)
     }
 
+  /** Re-pushes the kitty keyboard flags with "report event types" added.
+    *
+    * Pop-then-push rather than a second push: the flags live on a stack inside the terminal, and pushing twice would
+    * leave a second entry that `disableRawMode`'s single pop does not remove — the user's shell would keep receiving
+    * key releases after the app exited.
+    *
+    * A terminal that does not implement the protocol ignores both sequences, which is why this reports success either
+    * way: there is nothing to fail, and nothing to promise.
+    */
+  override def enableKeyEventTypes(): Either[BackendError, Unit] =
+    attempt {
+      write(AnsiSequences.PopKittyKeyboard)
+      write(AnsiSequences.PushKittyKeyboardEvents)
+    }
+
   def disableRawMode(): Either[BackendError, Unit] =
     cookedAttributes match
       case None             => Left(BackendError.NotInRawMode)

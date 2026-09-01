@@ -134,6 +134,22 @@ private[dsl] object EventRouter:
             .map(pathToTracked(_, index))
             .collectFirst { case Some(path) => path :+ element }
 
+  /** Routes a key *release* to the focused element and its ancestors, innermost first.
+    *
+    * Three deliberate differences from [[dispatchKey]], all of them the same decision: a release is not a press.
+    *   - Only the user's own `.onKeyRelease` handler is offered. No built-in behaviour fires, because every built-in in
+    *     the library is written against a press and would run twice for one keystroke.
+    *   - There is no depth-first fallback for a tree with nothing focusable. A release with no focused element has
+    *     nowhere sensible to go, and offering it to every node would fire a handler for a key the user pressed while
+    *     something else entirely had the keyboard.
+    *   - The caller does not fall back to the application's bindings — see `TuiApp`. A binding is a press vocabulary,
+    *     and firing it on the way up would run every chord twice.
+    */
+  def dispatchKeyRelease(root: Element, event: KeyEvent): Boolean =
+    pathToFocused(root) match
+      case Some(leafToRoot) => leafToRoot.exists(_.props.onKeyUp.exists(_(event)))
+      case None             => false
+
   /** Delivers a bracketed paste to the focused element's paste behavior. */
   def dispatchPaste(root: Element, text: String): Boolean =
     pathToFocused(root) match

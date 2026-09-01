@@ -775,25 +775,28 @@ trait TuiApp:
   private def handleEvent(event: Event, run: RunState, handle: RunnerHandle): EventOutcome =
     activeHandle.set(Some(handle))
     val redraw = event match
-      case Event.Key(key)     => handleKey(key, run, handle) || run.invalidated
-      case Event.Mouse(mouse) => run.host.dispatchMouse(mouse) || run.invalidated
-      case Event.Paste(text)  =>
+      case Event.Key(key)        => handleKey(key, run, handle) || run.invalidated
+      case Event.Mouse(mouse)    => run.host.dispatchMouse(mouse) || run.invalidated
+      // Releases reach the focused element's own `.onKeyRelease` and stop there. They deliberately do not bubble on
+      // to `bindings`: a binding names a press, so firing it again on the way up would run every chord twice.
+      case Event.KeyRelease(key) => run.host.dispatchKeyRelease(key) || run.invalidated
+      case Event.Paste(text)     =>
         val consumed = run.host.dispatchPaste(text)
         consumed || run.invalidated
-      case Event.FocusGained  =>
+      case Event.FocusGained     =>
         onTerminalFocus(true)
         run.invalidated
-      case Event.FocusLost    =>
+      case Event.FocusLost       =>
         onTerminalFocus(false)
         run.invalidated
-      case Event.Interrupt    => onInterrupt()
-      case Event.Resize(size) =>
+      case Event.Interrupt       => onInterrupt()
+      case Event.Resize(size)    =>
         // the render pass sets this too, from the frame it is about to draw; doing it here as well means an
         // `onResize` override — and anything it calls — already peeks the new size rather than the previous frame's
         terminalSizeSignal.set(size)
         onResize(size)
         true
-      case Event.Tick         => handleTick(run)
+      case Event.Tick            => handleTick(run)
     if redraw then EventOutcome.Redraw else EventOutcome.Ignored
 
   private def handleTick(run: RunState): Boolean =

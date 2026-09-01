@@ -228,6 +228,44 @@ events do not arrive today; a terminal already put into report-all-keys mode by
 something else will deliver them, and the decoder now names them correctly instead of
 dropping them on the floor.
 
+## Keys coming back up
+
+By default a terminal reports only that a key went *down*. A terminal speaking the
+kitty keyboard protocol can also report that it came back up, and glyphora will ask it
+to when the application says so:
+
+```scala
+override def config: RunnerConfig = RunnerConfig(keyEventTypes = true)
+```
+
+That adds the protocol's "report event types" flag to what glyphora pushes. Releases
+then reach the element that has focus, and its ancestors, through `.onKeyRelease`:
+
+```scala
+panel(content)
+  .onKeyEvent   { key => startAiming(key); true }
+  .onKeyRelease { key => stopAiming(key); true }
+```
+
+Four things are worth knowing before reaching for it.
+
+- **It is best-effort.** A terminal without the protocol reports presses only, so the
+  handler is simply never called there. Use it to enrich an interaction — releasing a
+  held key to stop something — and never as the only path to an action.
+- **Auto-repeat is a press.** Holding a key on a terminal without the protocol already
+  produces a stream of ordinary presses, so glyphora reports the protocol's own repeat
+  the same way. Held-arrow scrolling then behaves identically wherever the app runs.
+  There is no separate repeat event.
+- **A release fires no binding and no built-in.** A binding names a press, and every
+  built-in behaviour in the library is written against one; running either on the way
+  up would do each action twice per keystroke. Only your own `.onKeyRelease` sees a
+  release.
+- **It costs traffic.** Every keystroke becomes two events, which is why the flag is
+  off unless asked for.
+
+In a test, `Pilot.release("a")` posts a release the same way `press("a")` posts a
+press, so a release path can be driven without a terminal that supports the protocol.
+
 ## One command, several keys
 
 When a command answers to more than one key — a vim-flavoured app where `j` and the

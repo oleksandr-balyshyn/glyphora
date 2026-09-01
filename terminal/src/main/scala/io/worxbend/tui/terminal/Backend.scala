@@ -28,6 +28,18 @@ trait Backend:
   def hideCursor(): Either[BackendError, Unit]
   def showCursor(): Either[BackendError, Unit]
 
+  /** Asks the terminal to report key *releases* as well as presses (kitty keyboard protocol flag 2).
+    *
+    * Answering `Right(())` promises nothing about whether releases actually arrive: a backend with no such protocol
+    * takes the default, does nothing, and simply never emits [[io.worxbend.tui.core.Event.KeyRelease]]. Callers must
+    * treat releases as an enrichment the terminal may or may not provide, never as an event a feature depends on.
+    *
+    * There is no matching "disable". The flag is pushed onto the terminal's own keyboard-mode stack and
+    * [[disableRawMode]] pops it with everything else, so a run cannot leave a terminal reporting releases into the
+    * user's shell.
+    */
+  def enableKeyEventTypes(): Either[BackendError, Unit] = Right(())
+
   /** The window in character cells *and*, when the terminal will say, in device pixels.
     *
     * What it is for: anything that has to know the *shape* of a cell rather than how many there are. A picture drawn

@@ -423,6 +423,20 @@ extension [E <: Element](element: E)
     val previous = element.props.onKey
     element.withProps(element.props.copy(onKey = Some(event => handler(event) || previous.exists(_(event)))))
 
+  /** A handler for a key coming back *up*, composing with any already on the element exactly as [[onKeyEvent]] does.
+    *
+    * Best-effort by nature. A release only exists when the application set `RunnerConfig.keyEventTypes` and the
+    * terminal speaks the kitty keyboard protocol; everywhere else this handler is simply never called, so it belongs on
+    * features that enrich an interaction (releasing a held key to stop a repeat, say) and never on the only path to an
+    * action.
+    *
+    * A release is offered to the focused element and its ancestors and nowhere else: no built-in behaviour runs for it,
+    * and it does not reach `TuiApp.bindings`.
+    */
+  def onKeyRelease(handler: KeyEvent => Boolean): element.Self =
+    val previous = element.props.onKeyUp
+    element.withProps(element.props.copy(onKeyUp = Some(event => handler(event) || previous.exists(_(event)))))
+
   /** A mouse handler, composing with any already on the element exactly as [[onKeyEvent]] does. */
   def onMouseEvent(handler: MouseEvent => Boolean): element.Self =
     val previous = element.props.onMouse

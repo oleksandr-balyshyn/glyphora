@@ -29,6 +29,12 @@ import scala.concurrent.duration.FiniteDuration
   * not absorbed: like the render function it ends the loop as [[RunnerError.Handler]], because a second isolation
   * policy for frame observers would be one policy too many to reason about.
   *
+  * `keyEventTypes` asks the terminal to report key *releases* as well as presses, which reaches the app as
+  * [[Event.KeyRelease]]. It is off by default because it doubles the input volume for every keystroke and an app that
+  * ignores releases gains nothing for the traffic, and it is best-effort even when on: only a terminal speaking the
+  * kitty keyboard protocol can report a release at all, so an app must treat releases as an enrichment rather than as
+  * the event a feature depends on.
+  *
   * `viewport` decides how much of the terminal the run owns — the whole alternate screen (the default), or a strip of
   * rows at the bottom of the primary screen that leaves the shell's own output visible above it. See [[Viewport]].
   */
@@ -38,6 +44,7 @@ final case class RunnerConfig(
     onTaskError: Option[RenderTaskErrorHandler] = None,
     onFrame: Option[CompletedFrame => Unit] = None,
     viewport: Viewport = Viewport.Fullscreen,
+    keyEventTypes: Boolean = false,
 )
 
 /** An event handler's answer to one question: does this event change what is on screen?

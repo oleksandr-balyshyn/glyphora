@@ -85,6 +85,9 @@ final class ElementHost:
     consumed || focusMoved
 
   /** Delivers a bracketed-paste payload to the focused element. `false` when nothing took it. */
+  /** Offers a key release to the focused element and its ancestors — see [[EventRouter.dispatchKeyRelease]]. */
+  def dispatchKeyRelease(key: KeyEvent): Boolean = lastTree.exists(EventRouter.dispatchKeyRelease(_, key))
+
   def dispatchPaste(text: String): Boolean = lastTree.exists(EventRouter.dispatchPaste(_, text))
 
   /** Moves focus to the next focusable in tab order, wrapping at the end. `true` when it moved. */

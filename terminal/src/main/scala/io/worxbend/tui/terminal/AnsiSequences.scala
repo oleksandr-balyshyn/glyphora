@@ -77,13 +77,36 @@ private[terminal] object AnsiSequences:
       case ClearType.CurrentLine  => s"$Esc[2K"
       case ClearType.UntilNewLine => s"$Esc[0K"
 
-  /** Kitty keyboard protocol, progressive enhancement flag 1 (disambiguate escape codes): a lone Esc arrives as
-    * `CSI 27 u` instead of a bare ESC byte, removing the read-timeout heuristic on terminals that support it.
-    * Unsupported terminals ignore the sequence and keep sending legacy encoding.
+  /** Kitty keyboard progressive-enhancement flag 1, "disambiguate escape codes": a lone Esc arrives as `CSI 27 u`
+    * instead of a bare ESC byte, removing the read-timeout heuristic on terminals that support it.
     */
-  val PushKittyKeyboard: String = s"$Esc[>1u"
-  val PopKittyKeyboard: String  = s"$Esc[<u"
-  val LinkClose: String         = s"$Esc]8;;$Esc\\"
+  val KittyDisambiguate: Int = 1
+
+  /** Kitty keyboard progressive-enhancement flag 2, "report event types": every key report gains a `:press/repeat/
+    * release` sub-parameter, which is the only way a terminal can say a key came back *up*.
+    *
+    * Requested only when an application asks for it, through `RunnerConfig.keyEventTypes`. It is not in the default set
+    * because a release doubles the input volume for every keystroke, and an application that ignores releases gains
+    * nothing for the extra traffic.
+    */
+  val KittyReportEventTypes: Int = 2
+
+  /** The kitty progressive-enhancement push for `flags` (`CSI > flags u`).
+    *
+    * Flags 4 (report alternate keys), 8 (report all keys as escape codes) and 16 (report associated text) are
+    * deliberately never requested. 8 without 16 stops ordinary text arriving at all, and 8 with 16 needs an
+    * associated-text vocabulary that no `KeyEvent` in this library carries.
+    */
+  def pushKittyKeyboard(flags: Int): String = s"$Esc[>${flags}u"
+
+  /** The default push: disambiguation only. An unsupported terminal ignores it and keeps sending legacy encoding. */
+  val PushKittyKeyboard: String = pushKittyKeyboard(KittyDisambiguate)
+
+  /** The push an application that asked for key releases gets: disambiguation *and* event types. */
+  val PushKittyKeyboardEvents: String = pushKittyKeyboard(KittyDisambiguate | KittyReportEventTypes)
+
+  val PopKittyKeyboard: String = s"$Esc[<u"
+  val LinkClose: String        = s"$Esc]8;;$Esc\\"
 
   /** DECSC (`ESC 7`), "save cursor": stores the cursor position, and the terminal's own graphic-rendition and
     * character-set state, in a one-slot register.

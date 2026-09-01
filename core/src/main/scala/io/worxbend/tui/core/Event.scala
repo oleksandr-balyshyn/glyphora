@@ -14,6 +14,19 @@ enum Event:
   /** A bracketed paste: the whole pasted text arrives as one event instead of a storm of key events. */
   case Paste(text: String)
 
+  /** A key came back *up*.
+    *
+    * Only ever delivered when the application asked for it (`RunnerConfig.keyEventTypes`) *and* the terminal speaks the
+    * kitty keyboard protocol's "report event types" flag. Every other terminal reports presses only, so an application
+    * that acts solely on releases does nothing at all there — treat a release as an enrichment, never as the event a
+    * feature depends on.
+    *
+    * There is deliberately no `KeyRepeat`. A held key on a legacy terminal already arrives as a stream of ordinary
+    * presses, so reporting kitty's auto-repeat as anything else would make held-arrow scrolling behave differently
+    * depending on which terminal the app happened to start in. A repeat is a press.
+    */
+  case KeyRelease(event: KeyEvent)
+
   /** The terminal window gained or lost focus (mode 1004 reporting). */
   case FocusGained, FocusLost
 

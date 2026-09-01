@@ -313,8 +313,12 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     dropped(csi("97;33u")*) // meta
     dropped(csi("1;9C")*) // and on the xterm parameter path too
 
-  test("kitty event types are currently indistinguishable from a press"):
-    // LATENT: `AnsiSequences.PushKittyKeyboard` requests flag 1 only, so no release/repeat events are ever sent. The
-    // moment flag 2 is added, this equality means every binding fires twice per keypress.
-    assert(decoded(csi("97;5:3u")*) == decoded(csi("97;5u")*)) // :3 is a key release
-    assert(decoded(csi("97;5:2u")*) == decoded(csi("97;5u")*)) // :2 is auto-repeat
+  test("a kitty key release is told apart from the press, so no binding fires twice"):
+    // This assertion used to be its own inverse, guarding a latent defect: while the decoder ignored the event-type
+    // sub-parameter, `:3` — a key *release* — decoded to the same press as the key going down, so the moment flag 2
+    // was requested every binding would have fired twice per keystroke. The decoder now reads the sub-parameter, and
+    // the two must differ. See KeyReleaseSpec for the rest of the vocabulary.
+    assert(decoded(csi("97;5:3u")*) != decoded(csi("97;5u")*)) // :3 is a key release
+    assert(decoded(csi("97;5:3u")*) == Event.KeyRelease(KeyEvent(KeyCode.Char('a'), KeyModifiers.Ctrl)))
+    // :2 is auto-repeat and stays a press on purpose — a held key on a legacy terminal produces exactly that
+    assert(decoded(csi("97;5:2u")*) == decoded(csi("97;5u")*))

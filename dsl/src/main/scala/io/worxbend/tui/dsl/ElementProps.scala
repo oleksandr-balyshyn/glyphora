@@ -28,6 +28,10 @@ final case class FocusState private[dsl] (
   * first appears in — see [[AutofocusRequest]] for why "first appears" and not "every frame". Everything the framework
   * itself sets each render lives in [[focusState]], which user code can read but not build.
   *
+  * `onKeyUp` is the handler `.onKeyRelease(...)` installs. It is separate from `onKey` rather than a flag on it,
+  * because a release is a different event and an element that wants both wants two bodies: firing the press handler
+  * again on the way up would double every action the element takes.
+  *
   * `glyphs` is the glyph ceiling the themed factory that built this element read off the [[Theme]] — see
   * [[io.worxbend.tui.core.GlyphSupport]]. It rides on the props rather than on each node so that a fluent builder such
   * as `panel(...).borderType(BorderType.Thick)` keeps it: the ceiling belongs to the terminal the app is running on,
@@ -39,6 +43,7 @@ final case class ElementProps(
     constraint: Option[Constraint] = None,
     onKey: Option[KeyEvent => Boolean] = None,
     onMouse: Option[MouseEvent => Boolean] = None,
+    onKeyUp: Option[KeyEvent => Boolean] = None,
     focusable: Boolean = false,
     autofocus: Boolean = false,
     focusKey: Option[String] = None,

@@ -308,8 +308,8 @@ private[terminal] final class InputDecoder(
     else
       val numbers = parameterNumbers(params)
       numbers.drop(1).headOption match
-        case Some(code) => modifiersFromCode(code).flatMap(decodeCsiKey(numbers, finalByte, _))
-        case None       => decodeCsiKey(numbers, finalByte, KeyModifiers.None)
+        case Some(code) => modifiersFromCode(code).flatMap(decodeCsiKey(numbers, params, finalByte, _))
+        case None       => decodeCsiKey(numbers, params, finalByte, KeyModifiers.None)
 
   /** The numeric parameters of a CSI sequence, in order.
     *
@@ -324,7 +324,12 @@ private[terminal] final class InputDecoder(
   private def parameterNumbers(params: String): Seq[Int] =
     params.split(';').toSeq.filter(_.nonEmpty).flatMap(_.takeWhile(_ != ':').toIntOption)
 
-  private def decodeCsiKey(numbers: Seq[Int], finalByte: Int, modifiers: KeyModifiers): Option[Event] =
+  private def decodeCsiKey(
+      numbers: Seq[Int],
+      params: String,
+      finalByte: Int,
+      modifiers: KeyModifiers,
+  ): Option[Event] =
     finalByte match
       case 'A'                                            => key(KeyCode.Up, modifiers)
       case 'B'                                            => key(KeyCode.Down, modifiers)
@@ -337,7 +342,7 @@ private[terminal] final class InputDecoder(
       case 'Z'                                            => key(KeyCode.Tab, modifiers | KeyModifiers.Shift)
       case 'I'                                            => Some(Event.FocusGained)
       case 'O'                                            => Some(Event.FocusLost)
-      case 'u'                                            => decodeKittyKey(numbers, modifiers)
+      case 'u'                                            => decodeKittyKey(numbers, modifiers, kittyEventType(params))
       case '~' if numbers.headOption.contains(PasteStart) => Some(decodePaste())
       case '~'                                            => decodeTilde(numbers, modifiers)
       case _                                              => None
@@ -410,8 +415,32 @@ private[terminal] final class InputDecoder(
     * The code point vocabulary itself lives in [[KittyKeys]]; [[foldShiftedChar]] rewrites the one shape kitty reports
     * differently from every legacy terminal.
     */
-  private def decodeKittyKey(numbers: Seq[Int], modifiers: KeyModifiers): Option[Event] =
-    numbers.headOption.flatMap(KittyKeys.keyCode).map(c => Event.Key(foldShiftedChar(c, modifiers)))
+  private def decodeKittyKey(numbers: Seq[Int], modifiers: KeyModifiers, eventType: Int): Option[Event] =
+    numbers.headOption.flatMap(KittyKeys.keyCode).map { code =>
+      val key = foldShiftedChar(code, modifiers)
+      if eventType == KittyRelease then Event.KeyRelease(key) else Event.Key(key)
+    }
+
+  /** The event-type sub-parameter of a kitty key report — the `3` in `CSI 97;5:3u`.
+    *
+    * Kitty writes `modifiers:eventType` in the *second* CSI parameter. [[parameterNumbers]] deliberately drops
+    * everything after a `:`, because a sub-parameter it cannot read must not shift the positional parameters after it;
+    * this reads that one field back without disturbing that reading, which is why it takes the raw parameter text
+    * rather than the numbers.
+    *
+    * Missing, unparseable, or any value other than [[KittyRelease]] reads as a press. That is the safe default twice
+    * over: it is what a terminal without the flag would have sent, and kitty's auto-repeat (`:2`) is deliberately a
+    * press here — see [[Event.KeyRelease]] for why a repeat is not an event of its own.
+    */
+  private def kittyEventType(params: String): Int =
+    params
+      .split(';')
+      .toSeq
+      .filter(_.nonEmpty)
+      .lift(1)
+      .flatMap(_.split(':').toSeq.lift(1))
+      .flatMap(_.toIntOption)
+      .getOrElse(KittyPress)
 
   /** Rewrites a kitty "base key plus a Shift bit" report into the single legacy encoding, so a key spec has one
     * spelling that works on every terminal.
@@ -709,6 +738,12 @@ private[terminal] object InputDecoder:
     * dropped rather than misread as pixels.
     */
   private val TextAreaReport = 4
+
+  /** The kitty keyboard protocol's event-type sub-parameter values. Only the release is acted on: a repeat is reported
+    * as an ordinary press, which is what every legacy terminal already produces for a held key.
+    */
+  private val KittyPress   = 1
+  private val KittyRelease = 3
 
   /** How far a mouse report's shift/alt/ctrl bits sit above the CSI modifier parameter's: mouse uses 4/8/16 where a CSI
     * modifier bitmask uses 1/2/4.

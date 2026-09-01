@@ -62,6 +62,22 @@ final class Pilot private (
     }
     this
 
+  /** Posts one key *release* per key spec, in order — the mirror of [[press]] for an app that reads releases.
+    *
+    * The specs are read by the same [[io.worxbend.tui.core.KeyEvent.parse]], so `press("a")` and `release("a")` name
+    * the same key. A release only exists on a terminal speaking the kitty keyboard protocol with the app having asked
+    * for it, so this is how a test drives a code path that no ordinary terminal can produce on demand.
+    *
+    * A malformed spec throws [[IllegalArgumentException]], exactly as [[press]] does and for the same reason.
+    */
+  def release(specs: String*): Pilot =
+    specs.foreach { spec =>
+      KeyEvent.parse(spec) match
+        case Right(event)  => backend.postEvent(Event.KeyRelease(event))
+        case Left(problem) => throw IllegalArgumentException(s"bad key spec '$spec': $problem")
+    }
+    this
+
   /** Posts one key event built straight from the [[KeyCode]]/[[KeyModifiers]] ADT. [[press]] says the same thing in the
     * application's own vocabulary and is what most tests want.
     */
