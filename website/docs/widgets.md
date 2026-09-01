@@ -377,6 +377,21 @@ def tableView: Element = dataTable(deployments, tableState)
 `tableState.selected` indexes `deployments.visibleRows(tableState)`, not the original
 unsorted data. Use that method when opening the selected record.
 
+By default the selected row is marked only by `highlightStyle`, which reverses its
+foreground and background. Two kinds of terminal do not show that: one that ignores
+reverse video, and one where the row already carries a background colour the reversal
+blends into. `highlightSymbol` adds a text marker instead, the same way `ListView` does:
+
+```scala
+DataTable(columns, rows, widths, highlightSymbol = "> ")
+```
+
+The symbol's display width is reserved as a gutter on *every* row, header included, so
+the columns do not shift sideways as the selection moves. The default is `""`, which
+reserves nothing and draws exactly the grid a table written before this option existed
+drew. The width is measured in terminal columns, not characters, so a two-column CJK
+glyph reserves two.
+
 ## Text editing
 
 | Widget | State | Notes |

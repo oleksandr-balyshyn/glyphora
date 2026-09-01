@@ -101,3 +101,37 @@ final class DataTableSpec extends AnyFunSuite:
     assert(state.paging.map(_.page).contains(4)) // a read is only a read
     val _ = rendered(table, state, 15, 4)
     assert(state.paging.map(_.page).contains(1)) // three rows over two-row pages: page 1 is the last
+
+  test("no highlight symbol reserves no gutter, so the columns start at the area's left edge"):
+    val state = DataTableState()
+    state.selected = Some(1)
+    val lines = trimmedLines(rendered(table, state, 15, 4))
+    assert(lines == Seq("name     size", "beta     20", "alpha    100", "gamma    3"))
+
+  test("a highlight symbol marks the selected row and pads every other one"):
+    val state    = DataTableState()
+    state.selected = Some(1)
+    val withMark = table.copy(highlightSymbol = "> ")
+    val buffer   = rendered(withMark, state, 17, 4)
+    // the gutter is two columns wide on every row, so the header and the body stay in one grid
+    assert(trimmedLines(buffer) == Seq("  name     size", "  beta     20", "> alpha    100", "  gamma    3"))
+
+  test("a wide highlight symbol reserves its display width, not its character count"):
+    // "選" is a single character but occupies two terminal columns, which is what a naive `length` gets wrong
+    val narrow = table.copy(highlightSymbol = "→")
+    val wide   = table.copy(highlightSymbol = "選")
+    assert(trimmedLines(rendered(narrow, DataTableState(), 17, 2)).head == " name     size")
+    assert(trimmedLines(rendered(wide, DataTableState(), 17, 2)).head == "  name     size")
+
+  test("the highlight symbol is styled with the selected row's style"):
+    val state = DataTableState()
+    state.selected = Some(0)
+    val buffer = rendered(table.copy(highlightSymbol = "> "), state, 17, 4)
+    assert(buffer.get(0, 1).style.modifiers.hasAny(Modifiers.Reverse))
+    assert(!buffer.get(0, 2).style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("a highlight symbol wider than the whole area leaves no room for cells and draws no garbage"):
+    val state = DataTableState()
+    state.selected = Some(0)
+    val buffer = rendered(table.copy(highlightSymbol = ">>>>>>"), state, 3, 2)
+    assert(trimmedLines(buffer) == Seq("", ">>>"))

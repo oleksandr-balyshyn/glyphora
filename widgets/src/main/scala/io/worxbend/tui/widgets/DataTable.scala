@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Constraint, Direction, Layout, Line, Rect, Span, StatefulWidget, Style}
+import io.worxbend.tui.core.{Buffer, CharWidth, Constraint, Direction, Layout, Line, Rect, Span, StatefulWidget, Style}
 
 /** Which way a [[DataTable]] column is sorted. */
 enum SortDirection:
@@ -121,6 +121,15 @@ object DataTableState:
   *
   * The header shows a `▲`/`▼` indicator on the sorted column; the filter keeps rows where *any* cell contains the text
   * (case-insensitive); sorting compares numerically when both cells parse as numbers, else as text.
+  *
+  * @param highlightSymbol
+  *   text drawn to the left of the selected row, in a gutter reserved for it on *every* row so the columns do not jump
+  *   as the selection moves. `highlightStyle` alone marks the selection by reversing the row's colours, which two
+  *   kinds of terminal do not show: one that ignores reverse video, and one where the row already carries a background
+  *   colour of its own that the reversal blends into. A symbol survives both. The default is `""` — an empty symbol
+  *   reserves a zero-width gutter, so a table written before this parameter existed draws exactly the same cells in
+  *   exactly the same columns as before. [[ListView]] defaults to `"> "` instead, because a list has no column grid to
+  *   keep still.
   */
 final case class DataTable(
     columns: Seq[String],
@@ -130,6 +139,7 @@ final case class DataTable(
     style: Style = Style.Default,
     headerStyle: Style = Style.Default.bold,
     highlightStyle: Style = Style.Default.reverse,
+    highlightSymbol: String = "",
 ) extends StatefulWidget[DataTableState]:
 
   /** Every row surviving the filter, in sort order — the domain paging windows over.
@@ -193,18 +203,27 @@ final case class DataTable(
   def render(area: Rect, buffer: Buffer, state: DataTableState): Unit =
     if !area.isEmpty then
       clampPage(state)
-      val view       = visibleRows(state)
-      val segments   = Layout(Direction.Horizontal, widths, columnSpacing).split(area)
+      val view        = visibleRows(state)
+      // the gutter is carved off the left of the whole table, header included, so every column keeps one x position
+      val symbolWidth = math.min(CharWidth.of(highlightSymbol), area.width)
+      val grid        = area.copy(x = area.x + symbolWidth, width = area.width - symbolWidth)
+      val segments    = Layout(Direction.Horizontal, widths, columnSpacing).split(grid)
       renderHeader(buffer, segments, state)
-      val bodyHeight = area.height - 1
+      val bodyHeight  = area.height - 1
       if bodyHeight > 0 && view.nonEmpty then
         val selected = state.selected.map(index => math.max(0, math.min(index, view.size - 1)))
         state.selected = selected
         state.offset = ScrollWindow.offsetFor(state.offset, selected, view.size, bodyHeight)
+        val padding  = " ".repeat(symbolWidth)
         view.slice(state.offset, state.offset + bodyHeight).zipWithIndex.foreach { (cells, row) =>
-          val index    = state.offset + row
-          val rowStyle = if selected.contains(index) then style.patch(highlightStyle) else style
-          renderRow(buffer, segments, cells, area.y + 1 + row, rowStyle)
+          val index      = state.offset + row
+          val isSelected = selected.contains(index)
+          val rowStyle   = if isSelected then style.patch(highlightStyle) else style
+          val y          = area.y + 1 + row
+          if symbolWidth > 0 then
+            val prefix = if isSelected then highlightSymbol else padding
+            buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, symbolWidth), rowStyle)
+          renderRow(buffer, segments, cells, y, rowStyle)
         }
 
   private def renderHeader(buffer: Buffer, segments: Seq[Rect], state: DataTableState): Unit =
