@@ -13,6 +13,10 @@ import java.util.Locale
   * header starts its first week on the very first row of the area and needs two rows fewer. That is what makes a bare
   * month grid usable in a narrow sidebar.
   *
+  * `showSurroundingDays` fills the leading and trailing cells of the grid with the days of the months either side,
+  * drawn in `surroundingStyle` (dimmed by default) so they read as context rather than as part of this month. They
+  * are never selectable: `selected` names a day of the month being shown.
+  *
   * `firstDayOfWeek` decides which weekday the leftmost column is, so a US-facing application asks for
   * `DayOfWeek.SUNDAY` and gets a Sunday-first grid with the day numbers moved to match. `locale` decides the language
   * of the month name and the weekday abbreviations. It defaults to `Locale.ENGLISH` rather than to
@@ -37,9 +41,11 @@ final case class Calendar(
     showWeekdays: Boolean = true,
     firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     locale: Locale = Locale.ENGLISH,
+    showSurroundingDays: Boolean = false,
     style: Style = Style.Default,
     headerStyle: Style = Style.Default.bold,
     highlightStyle: Style = Style.Default.reverse,
+    surroundingStyle: Style = Style.Default.dim,
     dayStyles: Map[LocalDate, Style] = Map.empty,
 ) extends Widget:
 
@@ -77,18 +83,47 @@ final case class Calendar(
     cut + " " * math.max(0, DayColumnWidth - CharWidth.of(cut))
 
   private def drawDays(area: Rect, buffer: Buffer, yearMonth: YearMonth): Unit =
-    val firstColumn = columnOf(yearMonth.atDay(1))
-    (1 to yearMonth.lengthOfMonth).foreach { day =>
-      val slot     = firstColumn + day - 1
-      val x        = area.x + (slot % 7) * 3
-      val y        = gridTop(area) + slot / 7
-      val date     = yearMonth.atDay(day)
-      // three layers, outermost last: the calendar's own style, then whatever this date was given, then the cursor
-      val marked   = dayStyles.get(date).fold(style)(style.patch)
-      val dayStyle = if selected.contains(day) then marked.patch(highlightStyle) else marked
-      // a grid cell is two columns wide: drop the ones the area cannot hold rather than write past its edges
-      if x + 2 <= area.right && y < area.bottom then buffer.setString(x, y, f"$day%2d", dayStyle)
+    val first       = yearMonth.atDay(1)
+    val firstColumn = columnOf(first)
+    val monthSlots  = firstColumn + yearMonth.lengthOfMonth
+    // with surrounding days the grid is filled out to the end of the last week the month touches, so no week row is
+    // left half-drawn; without them it stops at the last day of the month, as it always has
+    val slots       = if showSurroundingDays then math.ceil(monthSlots / 7.0).toInt * 7 else monthSlots
+    (0 until slots).foreach { slot =>
+      val inMonth = slot >= firstColumn && slot < monthSlots
+      if inMonth || showSurroundingDays then
+        dateAt(first, slot - firstColumn).foreach { date =>
+          val x = area.x + (slot % 7) * 3
+          val y = gridTop(area) + slot / 7
+          // a grid cell is two columns wide: drop the ones the area cannot hold rather than write past its edges
+          if x + 2 <= area.right && y < area.bottom then
+            buffer.setString(x, y, f"${date.getDayOfMonth}%2d", styleFor(date, inMonth))
+        }
     }
+
+  /** The style one day cell is drawn with: the calendar's `style` for a day of this month and `surroundingStyle` for a
+    * day borrowed from the month either side, then whatever `dayStyles` says about that date, then `highlightStyle`
+    * for the selected day.
+    *
+    * `selected` names a day of *this* month, so a surrounding day that happens to carry the same number is never
+    * mistaken for the cursor.
+    */
+  private def styleFor(date: LocalDate, inMonth: Boolean): Style =
+    val base   = if inMonth then style else surroundingStyle
+    val marked = dayStyles.get(date).fold(base)(base.patch)
+    if inMonth && selected.contains(date.getDayOfMonth) then marked.patch(highlightStyle) else marked
+
+  /** `offset` days after the first of the month, or `None` when that date falls outside the range `LocalDate` can
+    * represent.
+    *
+    * `LocalDate.plusDays` throws there, and this widget clamps rather than throws out of `render` — a calendar sitting
+    * on the very first month `LocalDate` knows about has no previous month to borrow days from, so it draws none.
+    */
+  private def dateAt(first: LocalDate, offset: Int): Option[LocalDate] =
+    val epochDay = first.toEpochDay + offset
+    if epochDay >= LocalDate.MIN.toEpochDay && epochDay <= LocalDate.MAX.toEpochDay then
+      Some(LocalDate.ofEpochDay(epochDay))
+    else None
 
   /** The first row the day grid may use: whichever headers are shown come first, and a header that is switched off
     * gives its row back to the grid rather than leaving it blank.

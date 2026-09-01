@@ -1059,6 +1059,14 @@ on a marked date.
 | `showWeekdays` | `true` | the `Mo Tu We ...` row, likewise |
 | `firstDayOfWeek` | `DayOfWeek.MONDAY` | which weekday the leftmost column is |
 | `locale` | `Locale.ENGLISH` | language of the month name and weekday abbreviations |
+| `showSurroundingDays` | `false` | fill the empty leading/trailing cells with the neighbouring months' days |
+
+With `showSurroundingDays = true` the grid has no blank corners: the cells before
+the 1st and after the last day of the month are filled with the days of the months
+either side, drawn in `surroundingStyle` (dimmed by default) so they read as context.
+They are never selectable — `selected` names a day of the month being shown — but
+`dayStyles` does reach them, so a marked date keeps its appearance in whichever
+month's grid it appears.
 
 Turning a header off does not blank its row, it removes it: a grid with neither
 header starts its first week on the very first row of the area and needs two rows

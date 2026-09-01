@@ -2,7 +2,7 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, CharWidth, Modifiers, Rect, Style}
 
-import java.time.{DayOfWeek, LocalDate}
+import java.time.{DayOfWeek, LocalDate, Year}
 import java.util.Locale
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
@@ -95,3 +95,39 @@ final class CalendarSpec extends AnyFunSuite:
     // the 1st is a Wednesday, the fourth Sunday-first column, so its two cells are x = 9..10
     assert(buffer.get(10, 2).style.modifiers.hasAny(Modifiers.Reverse))
     assert(!buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("surrounding days fill the leading and trailing cells of the grid"):
+    val lines = trimmedLines(rendered(Calendar(2026, 7, showSurroundingDays = true), 20, 8))
+    // June 2026 ends on Tuesday the 30th, so the two cells before Wednesday the 1st are the 29th and the 30th
+    assert(lines(2) == "29 30  1  2  3  4  5")
+    // July ends on a Friday; the last row is completed with the 1st and 2nd of August
+    assert(lines(6) == "27 28 29 30 31  1  2")
+
+  test("surrounding days are dimmed and days of the month are not"):
+    val buffer = rendered(Calendar(2026, 7, showSurroundingDays = true), 20, 8)
+    assert(buffer.get(0, 2).style.modifiers.hasAny(Modifiers.Dim))
+    assert(!buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Dim))
+
+  test("a surrounding day sharing a number with the selected day is not highlighted"):
+    // 2026-08-01 trails July's grid, and the 1st of July is selected
+    val buffer = rendered(Calendar(2026, 7, selected = Some(1), showSurroundingDays = true), 20, 8)
+    assert(buffer.get(16, 6).symbol == "1")
+    assert(!buffer.get(16, 6).style.modifiers.hasAny(Modifiers.Reverse))
+    assert(buffer.get(7, 2).style.modifiers.hasAny(Modifiers.Reverse))
+
+  test("dayStyles reach surrounding days too, so a marked date shows in either month"):
+    val marked = Map(LocalDate.of(2026, 8, 1) -> Style.Default.bold)
+    val buffer = rendered(Calendar(2026, 7, showSurroundingDays = true, dayStyles = marked), 20, 8)
+    assert(buffer.get(16, 6).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("no surrounding days are drawn when the switch is off"):
+    val lines = trimmedLines(rendered(Calendar(2026, 7), 20, 8))
+    assert(lines(2) == "       1  2  3  4  5")
+    assert(lines(6) == "27 28 29 30 31")
+
+  test("a month with no room before it draws no leading days rather than failing"):
+    // the very first month LocalDate can represent has no previous month to borrow days from; starting the week on a
+    // Tuesday puts that month's 1st in the last column, so all six leading cells would have to come from before it
+    val calendar = Calendar(Year.MIN_VALUE, 1, firstDayOfWeek = DayOfWeek.TUESDAY, showSurroundingDays = true)
+    val lines    = trimmedLines(rendered(calendar, 20, 8))
+    assert(lines(2) == "                   1")
