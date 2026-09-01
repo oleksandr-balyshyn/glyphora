@@ -24,6 +24,14 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, LineBreaks, Measured, Rect
   * left-aligned one keeps its beginning. Keeping the beginning of a right-aligned line would hide exactly the part the
   * alignment was chosen to show, which for a path or a timestamp is the part that identifies it.
   *
+  * `scrollY` and `scrollX` make the area a window into a larger document rather than the whole of it. `scrollY` skips
+  * that many *composed* rows before drawing: with [[Overflow.Wrap]] those are wrapped rows, not source lines, so
+  * scrolling a reflowed document by one moves the view by exactly one screen row whatever the width — which is the case
+  * [[ScrollView]] cannot express, because it scrolls a rendered widget and has to be told its content height. `scrollX`
+  * skips that many columns from the start of every row it draws, which only has anything to skip under
+  * [[Overflow.Clip]]: wrapped rows are never wider than the area. Both are clamped at zero, and scrolling past the end
+  * of the text leaves the area blank rather than failing.
+  *
   * [[heightAt]] reports the rows the paragraph needs from the same `overflow` field `render` draws with, so the two
   * cannot disagree about whether the text wraps.
   */
@@ -32,6 +40,10 @@ final case class Paragraph(
     alignment: Alignment = Alignment.Left,
     overflow: Overflow = Overflow.Clip,
     style: Style = Style.Default,
+    // Appended rather than placed in the layout-and-behaviour slot the widget conventions ask for: inserting a
+    // parameter mid-list would silently change what every positional caller written against 0.12.0 means.
+    scrollY: Int = 0,
+    scrollX: Int = 0,
 ) extends Widget
     with Measured:
 
@@ -44,22 +56,30 @@ final case class Paragraph(
       // resolved once for the whole paragraph rather than per row: the widget's style is the floor, the text's own
       // style is laid over it, and each line then lays its own over that inside `LineRenderer`
       val baseStyle = style.patch(text.style)
-      lines.take(area.height).zipWithIndex.foreach { (line, row) =>
-        val lineWidth = math.min(line.width, area.width)
+      // Skipping happens on the lazy iterator, so scrolling past a long document costs the rows skipped rather than a
+      // full layout of the text. A negative offset is clamped to zero: `drop(-n)` drops nothing, but reading that as
+      // "scrolled to the top" is a decision worth making here rather than inheriting from the collections library.
+      lines.drop(math.max(0, scrollY)).take(area.height).zipWithIndex.foreach { (line, row) =>
         // the line's own alignment wins over the text's, which wins over the paragraph's argument; `None` at both
         // inner levels means "use the paragraph's", which is what every line said before either could carry one
-        val placement = line.alignment.orElse(text.alignment).getOrElse(alignment)
-        val startX    = placement.originAt(area.x, area.width, lineWidth)
+        val placement  = line.alignment.orElse(text.alignment).getOrElse(alignment)
         // A line wider than the area loses the side *away* from the alignment: a right-aligned line keeps its end, a
         // centred one loses as much from each side. Left-aligned text keeps its beginning, as before.
-        val tooWideBy = math.max(0, line.width - area.width)
-        val skipWidth = placement match
+        val tooWideBy  = math.max(0, line.width - area.width)
+        val alignSkip  = placement match
           case Alignment.Left   => 0
           case Alignment.Center => tooWideBy / 2
           case Alignment.Right  => tooWideBy
+        // The horizontal offset is thrown away on top of whatever the alignment already threw away, so a right-aligned
+        // line scrolled by two columns shows two columns further left than the end it would otherwise keep.
+        val skipWidth  = alignSkip + math.max(0, scrollX)
+        // What is left of the line once those columns are gone, capped at the area: the number the alignment places.
+        // With no scroll offset and no over-wide line this is the plain `min(line.width, area.width)` it always was.
+        val drawnWidth = math.max(0, math.min(line.width - skipWidth, area.width))
+        val startX     = placement.originAt(area.x, area.width, drawnWidth)
         // the paragraph has already placed the line itself, by choosing `startX`, so the renderer is told to draw from
         // there and not to align a second time
-        val _ =
+        val _          =
           LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, baseStyle, skipWidth = skipWidth)
       }
 
@@ -73,6 +93,11 @@ final case class Paragraph(
     * could disagree. Zero is an answer, not a refusal — [[io.worxbend.tui.core.Measured]] reserves `None` for "cannot
     * say", and a paragraph with no columns can say. A clipping paragraph is still one row per line at any width,
     * because clipping never consults the width to decide how many rows there are.
+    *
+    * The scroll offsets are deliberately not subtracted. This is the height of the whole text, which is what a caller
+    * sizing a viewport or driving a [[Scrollbar]] beside it needs: the scrollbar's `contentLength` is the document, and
+    * its `position` is the same `scrollY` the paragraph was given. A scrolled paragraph still occupies whatever rows
+    * its area gives it.
     */
   override def heightAt(width: Int): Option[Int] =
     val rows = overflow match

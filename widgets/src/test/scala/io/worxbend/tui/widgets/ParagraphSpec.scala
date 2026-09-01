@@ -200,3 +200,49 @@ final class ParagraphSpec extends AnyFunSuite:
     val literal = Text(Seq(Line(Seq(Span.raw("ab"))), Line(Seq(Span.raw("cd")))))
     assert(trimmedLines(rendered(Paragraph(built), 4, 2)) == trimmedLines(rendered(Paragraph(literal), 4, 2)))
     assert(trimmedLines(rendered(Paragraph(built), 4, 2)) == Seq("ab", "cd"))
+
+  test("scrollY skips whole source lines under Overflow.Clip"):
+    val text   = Text.raw("one\ntwo\nthree\nfour")
+    val buffer = rendered(Paragraph(text, scrollY = 2), 6, 2)
+    assert(trimmedLines(buffer) == Seq("three", "four"))
+
+  test("scrollY counts wrapped rows, not source lines"):
+    // One source line wrapping into three rows: an offset of one shows the *second* wrapped row at the top of the
+    // area, which is the case a widget-level scroller cannot express.
+    val text   = Text.raw("aa bb cc")
+    val buffer = rendered(Paragraph(text, overflow = Overflow.Wrap, scrollY = 1), 3, 2)
+    assert(trimmedLines(buffer) == Seq("bb", "cc"))
+
+  test("scrolling past the end of the text leaves the area blank"):
+    val buffer = rendered(Paragraph(Text.raw("one\ntwo"), scrollY = 9), 5, 2)
+    assert(trimmedLines(buffer) == Seq("", ""))
+
+  test("a negative scroll offset is clamped to the top-left corner"):
+    val text = Text.raw("one\ntwo")
+    assert(trimmedLines(rendered(Paragraph(text, scrollY = -3, scrollX = -3), 5, 2)) == Seq("one", "two"))
+
+  test("scrollY does not change the height the paragraph reports"):
+    val text     = Text.raw("aa bb cc dd")
+    val scrolled = Paragraph(text, overflow = Overflow.Wrap, scrollY = 2)
+    assert(scrolled.heightAt(3) == Paragraph(text, overflow = Overflow.Wrap).heightAt(3))
+
+  test("scrollX skips columns from the start of every clipped row"):
+    val buffer = rendered(Paragraph(Text.raw("abcdefgh\n12345678"), scrollX = 3), 4, 2)
+    assert(trimmedLines(buffer) == Seq("defg", "4567"))
+
+  test("scrollX never cuts a wide grapheme in half"):
+    // Skipping one column would land inside "你", so the drawing starts one column later instead and the first cell
+    // written is the whole character, not half of it.
+    val buffer = rendered(Paragraph(Text.raw("你好"), scrollX = 1), 4, 1)
+    assert(buffer.get(0, 0).symbol == "好")
+
+  test("scrollX moves a right-aligned line further towards its beginning"):
+    // Without an offset a right-aligned over-wide line keeps its end, "cdef". Two columns of scroll throw two more
+    // columns away from the left, leaving "ef" — and what is left is still right-aligned in the four-column area, so
+    // it is placed at the right edge rather than at column zero.
+    val line = Text(Seq(Line.raw("abcdef").rightAligned))
+    assert(trimmedLines(rendered(Paragraph(line, scrollX = 2), 4, 1)) == Seq("  ef"))
+
+  test("a short line scrolled past its own end draws nothing and does not misplace the rest"):
+    val buffer = rendered(Paragraph(Text.raw("ab\nlonger"), scrollX = 4), 6, 2)
+    assert(trimmedLines(buffer) == Seq("", "er"))

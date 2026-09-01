@@ -1530,6 +1530,21 @@ val raw = Paragraph(Text.raw("Rendered directly"), overflow = Overflow.Wrap)
 val element = widget(raw).fill
 ```
 
+`Paragraph` can show a window into a longer document rather than the whole of it:
+
+```scala
+val page = Paragraph(Text.raw(longDocument), overflow = Overflow.Wrap, scrollY = offset)
+```
+
+`scrollY` skips that many rows *after* wrapping, so scrolling a reflowed document by one
+moves the view by exactly one screen row whatever the width — something `scrollView`
+cannot express, because it scrolls a rendered widget and has to be told its content
+height. `scrollX` does the same for columns and only has anything to skip under
+`Overflow.Clip`, since a wrapped row is never wider than the area. Both are clamped at
+zero, and scrolling past the end leaves the area blank instead of failing. The number to
+hand a `scrollbar` beside it is `heightAt(width)`: the height of the whole text, which
+the scroll offset deliberately does not reduce.
+
 A widget that knows how much room its content needs says so by implementing
 `io.worxbend.tui.core.Measured` — `heightAt(width)` for content whose height depends on
 the width it wraps at, `widthAt(height)` for content sized the other way. Returning
