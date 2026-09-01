@@ -23,12 +23,16 @@ package io.worxbend.tui.core
   */
 final case class Masked(content: String, maskChar: String):
 
+  /** The one glyph every masked position is drawn with: the first grapheme cluster of [[maskChar]], so a
+    * multi-character argument cannot silently widen every position, and [[Masked.DefaultMaskChar]] when the argument
+    * holds no cluster at all — an empty mask would otherwise draw a zero-width secret.
+    */
+  private lazy val glyph: String = CharWidth.graphemeClusters(maskChar).nextOption().getOrElse(Masked.DefaultMaskChar)
+
   /** The display form: one [[maskChar]] per grapheme cluster of [[content]], so an accented letter or a
     * multi-code-point emoji is hidden by exactly one mask glyph rather than by two or four.
     */
-  def value: String =
-    val glyph = CharWidth.graphemeClusters(maskChar).nextOption().getOrElse(Masked.DefaultMaskChar)
-    glyph * CharWidth.clusterCount(content)
+  lazy val value: String = glyph * CharWidth.clusterCount(content)
 
   /** Terminal columns the masked form occupies — which is the mask's width, not the secret's. */
   def width: Int = CharWidth.of(value)
