@@ -39,7 +39,6 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val printedLines                            = scala.collection.mutable.ArrayBuffer.empty[String]
   private val clears                                  = scala.collection.mutable.ArrayBuffer.empty[ClearType]
   private val insertedBlocks                          = scala.collection.mutable.ArrayBuffer.empty[Buffer]
-  private val scrolledRegions                         = scala.collection.mutable.ArrayBuffer.empty[ScrolledRegion]
   private val sizeRequests                            = scala.collection.mutable.ArrayBuffer.empty[Size]
   private val scrolls                                 =
     scala.collection.mutable.ArrayBuffer.empty[(RowRange, Int, ScrollDirection)]
@@ -221,27 +220,6 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
       printedLines.synchronized { printedLines ++= Backend.plainRows(buffer) }
       Right(())
 
-  /** Records the band and the distance, having validated them exactly as a real terminal backend does.
-    *
-    * There is no simulated screen for rows to move on, so the request itself is the whole observable effect — which is
-    * the question a test asks anyway: which rows did the app confine the scroll to, and by how much? The validation is
-    * shared with the real backend on purpose: a band that a headless test accepted and a terminal rejected would be a
-    * defect that only ever reproduces in front of a user.
-    */
-  override def scrollRegionUp(top: Int, bottom: Int, lines: Int): Either[BackendError, Unit] =
-    recordScroll(top, bottom, lines, direction = 1)
-
-  /** [[scrollRegionUp]] in the other direction; recorded with a negative distance so one log shows both. */
-  override def scrollRegionDown(top: Int, bottom: Int, lines: Int): Either[BackendError, Unit] =
-    recordScroll(top, bottom, lines, direction = -1)
-
-  private def recordScroll(top: Int, bottom: Int, lines: Int, direction: Int): Either[BackendError, Unit] =
-    Backend.checkScrollRegion(top, bottom, terminalSize.height)
-    if lines <= 0 then Right(())
-    else
-      scrolledRegions.synchronized { val _ = scrolledRegions += ScrolledRegion(top, bottom, lines * direction) }
-      Right(())
-
   /** Adds `n` to the running total a test asserts on. There is no simulated scrollback to move rows into, so the count
     * is the whole observable effect — which is exactly the question an inline-viewport test asks: how much room did the
     * app ask the shell for?
@@ -339,9 +317,6 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   /** The erases requested via [[clearRegion]], in order. */
   def clearedRegions: Seq[ClearType] = clears.synchronized(clears.toSeq)
 
-  /** Every band scrolled via [[scrollRegionUp]] or [[scrollRegionDown]], in order. */
-  def scrolledBands: Seq[ScrolledRegion] = scrolledRegions.synchronized(scrolledRegions.toSeq)
-
   /** The styled blocks emitted above the app via [[insertBefore]], in order, each as the [[Buffer]] the widget was
     * rendered into. Their text also appears in [[printedAbove]]; this is the view that still carries the styling.
     */
@@ -391,10 +366,3 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** The window title most recently requested via [[setTitle]], if any. */
   def titleContents: Option[String] = lastTitle
-
-/** One request recorded by [[HeadlessBackend.scrollRegionUp]] or [[HeadlessBackend.scrollRegionDown]].
-  *
-  * `top` and `bottom` are the inclusive, zero-based rows the scroll was confined to. `lines` is how far the band moved
-  * and which way: positive for up (the direction that reaches the terminal's scrollback), negative for down.
-  */
-final case class ScrolledRegion(top: Int, bottom: Int, lines: Int)

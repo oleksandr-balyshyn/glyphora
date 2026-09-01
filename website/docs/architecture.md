@@ -174,17 +174,6 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   an *inline* viewport is built from — a UI that lives below the shell prompt on the
   primary screen instead of taking over the terminal — and it is meaningless on the
   alternate screen, which has no scrollback.
-  `scrollRegionUp(top, bottom, lines)` and `scrollRegionDown(...)` do the same thing
-  to a *band* of rows: a scrolling region (DECSTBM) tells the terminal that only rows
-  `top`..`bottom` may move, so lines can be pushed off the top of part of the screen
-  while a live interface below stays exactly where it is and is never repainted. The
-  band is set, scrolled and released inside the one call — a region left set makes the
-  user's own shell scroll inside a sub-rectangle of their terminal after the app exits
-  — and setting one homes the cursor on most terminals, so the implementation leaves
-  the cursor at a position it names rather than wherever the region change left it. A
-  band that is not on the screen is a programmer error and throws; a scroll distance of
-  zero or less is a no-op. Terminals that do not honour DECSTBM ignore the sequence, so
-  this is best-effort.
   `setCursorBlink(blinking)` says whether that caret blinks (the DECSET 12 terminal
   mode) — a form can blink it in the field being typed into and hold it steady while
   the app is idle. It is cosmetic and best-effort in the strongest sense: terminals
