@@ -51,6 +51,13 @@ final case class Dataset(
   * the row below the axis, right-aligned at the axis's far end. The rows are *taken from* the plot rather than written
   * over it, so a title can never cover a point.
   *
+  * `xLabels` names positions along the horizontal axis — timestamps, dates, category names — on a row taken from the
+  * plot just under the axis, above the x title if there is one. They are spread across the plot's columns rather than
+  * placed at data coordinates: the first sits at the left end of the axis, the last at the right end, and any in
+  * between are centred on their own even share of the width. Three labels therefore read as start, middle and end of
+  * the range, which is what the two y bounds already do for the vertical axis. A label that does not fit, or that would
+  * touch the label before it, is left out rather than truncated into a different-looking number.
+  *
   * @param labelAlignment
   *   by the widget parameter-order convention this is placement and would belong before `axisStyle`; it sits last
   *   because `Chart` is a published 0.12.0 signature and inserting a parameter in the middle would silently repoint
@@ -70,17 +77,22 @@ final case class Chart(
     legendMarker: String = "■",
     xTitle: Option[String] = None,
     yTitle: Option[String] = None,
+    // Appended for the same reason `xTitle` and `yTitle` are: inserting a parameter mid-list would silently change
+    // what every positional caller written against 0.12.0 means.
+    xLabels: Seq[String] = Seq.empty,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    // one row for the axis, plus one for each title present: below that there is no plot left to draw
-    val titleRows = xTitle.size + yTitle.size
+    // one row for the axis, plus one for each title present and one more for the x labels when there are any: below
+    // that there is no plot left to draw
+    val labelRows = if xLabels.isEmpty then 0 else 1
+    val titleRows = xTitle.size + yTitle.size + labelRows
     if area.width >= 3 && area.height >= 3 + titleRows then
       val labels   = if showLabels then Seq(formatBound(yBounds._2), formatBound(yBounds._1)) else Seq.empty
       val gutter   = labelGutter(area, labels)
       val axisX    = area.x + gutter
       val plotTop  = area.y + yTitle.size
-      val axisRow  = area.bottom - 1 - xTitle.size
+      val axisRow  = area.bottom - 1 - xTitle.size - labelRows
       drawAxes(axisX, plotTop, axisRow, area.right, buffer)
       val plotArea = Rect(axisX + 1, plotTop, area.width - gutter - 1, axisRow - plotTop)
       val shapes   = datasets.map { dataset =>
@@ -99,7 +111,41 @@ final case class Chart(
         drawLabel(buffer, area.x, gutter, plotTop, labels.head)
         drawLabel(buffer, area.x, gutter, axisRow - 1, labels.last)
       if showLegend then drawLegend(plotArea, buffer)
+      if labelRows > 0 then drawXLabels(buffer, axisX + 1, area.right, axisRow + 1)
       drawTitles(buffer, area, axisX)
+
+  /** Writes the x labels along the row under the horizontal axis, spread across the plot's columns.
+    *
+    * The first label is pressed against the left end of the axis and the last against the right end, because those are
+    * the two positions a reader takes as "where the data starts" and "where it ends"; anything between them is centred
+    * on its own even share of the columns. A lone label is treated as the first one and sits at the left end.
+    *
+    * A label is left out when it does not fit in the columns available, or when it would land on a label already
+    * written — half a number reads as a different number, and two numbers running into each other read as neither.
+    * Dropping the ones that do not fit rather than the whole row keeps the ends, which are the labels that carry the
+    * most meaning.
+    */
+  private def drawXLabels(buffer: Buffer, plotLeft: Int, plotRight: Int, row: Int): Unit =
+    val width = plotRight - plotLeft
+    if width > 0 then
+      // the first column no label has claimed yet, so a label starting before it would overlap its neighbour
+      var takenTo = plotLeft
+      xLabels.zipWithIndex.foreach { (label, index) =>
+        val fitted = CharWidth.substringByWidth(label, width)
+        val span   = CharWidth.of(fitted)
+        if span > 0 then
+          val start =
+            if index == 0 then plotLeft
+            else if index == xLabels.size - 1 then plotRight - span
+            else
+              // this label's own share of the columns, with the label centred inside that share
+              val share = width.toDouble / xLabels.size
+              plotLeft + math.round(share * index + (share - span) / 2).toInt
+          if start >= takenTo && start + span <= plotRight then
+            buffer.setString(start, row, fitted, axisStyle)
+            // plus one, so two labels always have a blank column between them
+            takenTo = start + span + 1
+      }
 
   /** Writes the axis titles on the rows reserved for them: the y title above the plot at the axis column, the x title
     * below the axis at its far end. Both are truncated to the columns available rather than running off the area.

@@ -1069,6 +1069,30 @@ measured in whole columns and a two-column glyph would spill into the bar next d
 For custom plots, `canvas(xBounds, yBounds)(shapes*)` provides points, segments,
 polylines, rectangles, and circles.
 
+### Naming positions along a chart's x axis
+
+`Chart` prints its two y bounds in a gutter left of the vertical axis. The horizontal axis
+has no such pair of numbers, because the interesting labels there are usually not numbers
+at all — timestamps, dates, weekdays. `xLabels` supplies them:
+
+```scala
+Chart(
+  datasets,
+  xBounds = (0.0, 24.0),
+  yBounds = (0.0, 100.0),
+  showLabels = true,
+  xLabels = Seq("00:00", "12:00", "24:00"),
+)
+```
+
+The labels are spread across the plot's columns rather than placed at data coordinates:
+the first at the left end of the axis, the last at the right end, any in between centred
+on their own even share of the width. Three of them therefore read as the start, middle and
+end of the range. They take a row from the plot, just under the axis and above the x title
+if there is one, so a label can never be drawn over a point. A label that does not fit, or
+that would touch the label before it, is left out — half a timestamp reads as a different
+time, and two labels running together read as neither.
+
 ### Labelling a plot
 
 `CanvasLabel(x, y, line)` pins text to a **world** coordinate — the same coordinate

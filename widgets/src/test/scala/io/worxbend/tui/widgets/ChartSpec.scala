@@ -190,3 +190,45 @@ final class ChartSpec extends AnyFunSuite:
     val buffer = rendered(chart, 5, 5)
     // five columns hold two of the three ideographs; the third is dropped whole, never half-drawn
     assert(trimmedLines(buffer)(0) == "負荷")
+
+  test("x labels take a row under the axis and sit at the ends of the plot"):
+    val chart  = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xLabels = Seq("0", "9"))
+    val buffer = rendered(chart, 6, 5)
+    assert(trimmedLines(buffer) == Seq("│", "│", "│", "└─────", " 0   9"))
+
+  test("a middle x label is centred on its own share of the columns"):
+    val chart  = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xLabels = Seq("a", "b", "c"))
+    val buffer = rendered(chart, 10, 4)
+    assert(trimmedLines(buffer)(3) == " a   b   c")
+
+  test("x labels are taken from the plot, never drawn over the data"):
+    val chart  = Chart(
+      Seq(Dataset("d", Seq((0.0, 0.0), (3.0, 3.0)))),
+      (0.0, 3.0),
+      (0.0, 3.0),
+      xLabels = Seq("0", "3"),
+    )
+    val buffer = rendered(chart, 5, 6)
+    assert(trimmedLines(buffer)(4) == "└────")
+    assert(trimmedLines(buffer)(5) == " 0  3")
+    // the lowest plotted point is above the axis, so nothing of the series lands on the label row
+    assert(buffer.get(1, 3).symbol == "•")
+
+  test("a label that would touch its neighbour is dropped rather than run into it"):
+    val chart  = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xLabels = Seq("start", "middle", "end"))
+    val buffer = rendered(chart, 12, 4)
+    // "start" and "end" claim the two ends, leaving no room between them for "middle"
+    assert(trimmedLines(buffer)(3) == " start   end")
+
+  test("an x label wider than the plot is left out entirely"):
+    val chart = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xLabels = Seq("0"))
+    assert(trimmedLines(rendered(chart, 3, 4))(3) == " 0")
+
+  test("x labels are measured in columns, so a wide label keeps its distance"):
+    val chart  = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xLabels = Seq("月", "火"))
+    val buffer = rendered(chart, 8, 4)
+    assert(trimmedLines(buffer)(3) == " 月   火")
+
+  test("an area too short to give the labels a row draws nothing"):
+    val chart = Chart(Seq.empty, (0.0, 1.0), (0.0, 1.0), xLabels = Seq("0", "1"))
+    assert(trimmedLines(rendered(chart, 6, 3)).forall(_.isEmpty))
