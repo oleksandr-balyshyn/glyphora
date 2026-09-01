@@ -45,6 +45,41 @@ final class ListViewSpec extends AnyFunSuite:
     state.selectPrevious(4)
     assert(state.selected.contains(0))
 
+  test("a bottom-to-top list sits against the floor of a taller area"):
+    val threeItems = ListView(Seq("alpha", "beta", "gamma"), direction = ListDirection.BottomToTop)
+    val buffer     = rendered(threeItems, ListState(), 10, 5)
+    // the first item is drawn on the *last* row and later items climb, so the empty rows end up above the list
+    assert(trimmedLines(buffer) == Seq("", "", "  gamma", "  beta", "  alpha"))
+
+  test("a top-to-bottom list of the same items leaves the empty rows underneath"):
+    val threeItems = ListView(Seq("alpha", "beta", "gamma"))
+    val buffer     = rendered(threeItems, ListState(), 10, 5)
+    assert(trimmedLines(buffer) == Seq("  alpha", "  beta", "  gamma", "", ""))
+
+  test("the direction does not change which items are visible or where the offset lands"):
+    val downwards = ListView(Seq("a", "b", "c", "d", "e", "f", "g"))
+    val upwards   = downwards.copy(direction = ListDirection.BottomToTop)
+    val downState = ListState(selected = Some(6))
+    val upState   = ListState(selected = Some(6))
+    val down      = rendered(downwards, downState, 10, 3)
+    val up        = rendered(upwards, upState, 10, 3)
+    assert(downState.offset == upState.offset)
+    // the same three rows, mirrored: the selected item is on the bottom row one way and the top row the other
+    assert(trimmedLines(down) == Seq("  e", "  f", "> g"))
+    assert(trimmedLines(up) == Seq("> g", "  f", "  e"))
+
+  test("a bottom-to-top list in a one-row area shows only the first visible item"):
+    val widget = ListView(Seq("alpha", "beta"), direction = ListDirection.BottomToTop)
+    val buffer = rendered(widget, ListState(), 10, 1)
+    assert(trimmedLines(buffer) == Seq("  alpha"))
+
+  test("a bottom-to-top list truncates wide characters by display width, not by character count"):
+    // each CJK ideograph is two columns wide, so four of them need eight columns; a six-column area fits two of them
+    // after the two-column unselected indent
+    val widget = ListView(Seq("日本語版"), direction = ListDirection.BottomToTop)
+    val buffer = rendered(widget, ListState(), 6, 3)
+    assert(trimmedLines(buffer) == Seq("", "", "  日本"))
+
   test("plain strings and styled lines can be mixed in one list"):
     val mixed  = ListView(Seq("alpha", Line.styled("beta", Style.Default.bold)))
     val buffer = rendered(mixed, ListState(), 10, 2)

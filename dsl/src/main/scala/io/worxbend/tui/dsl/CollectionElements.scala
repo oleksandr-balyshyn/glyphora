@@ -7,18 +7,26 @@ import java.nio.file.Path
 
 /** A scrollable single-selection list. Up/Down move the selection while focused, the wheel does the same on hover; the
   * widget scrolls to keep the selection visible. `state` is caller-owned, so the app can read or set the selection.
+  *
+  * `direction` says which edge the rows are anchored to — call [[bottomToTop]] for the chat-transcript shape.
   */
 final case class ListElement(
     items: Seq[String],
     state: w.ListState,
+    direction: w.ListDirection = w.ListDirection.TopToBottom,
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   type Self = ListElement
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(wheelScrolls(() => state.selectPrevious(items.size), () => state.selectNext(items.size)))
-  def widget: Widget =
+
+  /** Anchors the list to the bottom of its area and grows it upward — the chat-transcript or log-tail shape, where the
+    * first item of the sequence is drawn on the bottom row. Feed the items newest-first.
+    */
+  def bottomToTop: ListElement = copy(direction = w.ListDirection.BottomToTop)
+  def widget: Widget           =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
-    val view = w.ListView(items, style = props.style, highlightStyle = props.focusStyle)
+    val view = w.ListView(items, direction = direction, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => view.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): ListElement               = copy(props = props)
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =

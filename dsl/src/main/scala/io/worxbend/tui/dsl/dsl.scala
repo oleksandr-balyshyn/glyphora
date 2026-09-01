@@ -198,6 +198,7 @@ export io.worxbend.tui.widgets.{
   LinearPath,
   LinearTrail,
   Language,
+  ListDirection,
   ListState,
   LogState,
   MarkdownTheme,

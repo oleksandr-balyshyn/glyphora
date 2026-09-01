@@ -30,9 +30,14 @@ final class ListState(var selected: Option[Int] = None, var offset: Int = 0):
   * `String` into a [[Line]] happens per drawn row, in [[lineOf]], and only for the rows the viewport actually shows:
   * the DSL builds a fresh `ListView` value every frame, so converting the whole `items` sequence up front would put the
   * cost of the entire list — 50 000 items is 3 MiB of `Line`s — on every repaint to draw at most a screenful.
+  *
+  * `direction` picks which edge of the area the rows are anchored to; see [[ListDirection]]. It changes only where the
+  * visible rows are painted — the selection clamping and the scroll offset are index arithmetic and are identical in
+  * both directions.
   */
 final case class ListView(
     items: Seq[String | Line],
+    direction: ListDirection = ListDirection.TopToBottom,
     style: Style = Style.Default,
     highlightStyle: Style = Style.Default.reverse,
     highlightSymbol: String = "> ",
@@ -55,7 +60,12 @@ final case class ListView(
         val isSelected = selected.contains(index)
         val rowStyle   = if isSelected then style.patch(highlightStyle) else style
         val prefix     = if isSelected then highlightSymbol else padding
-        val y          = area.y + row
+        // `row` counts visible rows away from the anchored edge, so only the edge changes between the two directions
+        // and the scroll arithmetic above cannot drift apart from what is drawn. `area.bottom - 1 - row` never falls
+        // above the area because the slice is capped at `area.height` rows.
+        val y          = direction match
+          case ListDirection.TopToBottom => area.y + row
+          case ListDirection.BottomToTop => area.bottom - 1 - row
         // clip to the area, not just to the buffer: a highlight symbol wider than a narrow list would otherwise be
         // written straight over whatever owns the columns to the right
         buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, area.width), rowStyle)

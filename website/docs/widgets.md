@@ -359,6 +359,22 @@ def serviceList(using ReactiveScope, Theme): Element =
   }
 ```
 
+A list normally starts at the top row of its area and grows downward, so a list with
+three entries in a ten-row pane leaves seven blank rows underneath it. A chat transcript
+or a log tail wants the opposite: the newest entry welded to the bottom edge, with the
+blank rows above it. Call `bottomToTop` for that. It anchors the first item of the
+sequence to the *last* row of the area and grows upward, so feed the items newest-first.
+The underlying `ListView` takes the same choice as a `ListDirection` value
+(`TopToBottom`, the default, or `BottomToTop`); nothing else changes — the selection
+still clamps and scrolls exactly as it does the other way up.
+
+```scala
+private val transcript = ListState()
+
+def chatPane(using ReactiveScope, Theme): Element =
+  list(messages.get.reverse, transcript).bottomToTop
+```
+
 Use `tree(nodes, TreeState)` for in-memory hierarchy and
 `directoryTree(DirectoryTreeState(root))` for the filesystem. The directory tree
 loads branches lazily, caches listings, and exposes `invalidate()` when outside code
