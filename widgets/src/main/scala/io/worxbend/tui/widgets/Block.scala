@@ -78,6 +78,12 @@ object BlockTitle:
   * [[BorderGlyphs]] of your own and it wins over `borderType`, which is how a frame nothing in the enum describes gets
   * drawn without waiting for the enum to grow a case.
   *
+  * [[shadow]] casts an offset drop shadow, which is what makes a dialog or a popup read as floating rather than cut
+  * into the screen. Unlike a CSS box shadow it is paid for *inside* the block's own area — a widget never draws outside
+  * the rectangle it is handed — so a block with the default one-cell shadow frames itself one column narrower and one
+  * row shorter, and the strip that frees up is the shadow. On an area too small to leave a usable frame the shadow is
+  * dropped and the block renders as it would without one.
+  *
   * Titles sharing a border *and* an alignment are drawn as one run separated by a single space, in the order given.
   * Titles that share a border with different alignments can still collide on a narrow block; the block clips rather
   * than reflows, matching the library-wide silent-clipping philosophy.
@@ -90,10 +96,36 @@ final case class Block(
     borderStyle: Style = Style.Default,
     borderType: BorderType = BorderType.Plain,
     borderSet: Option[BorderGlyphs] = None,
+    shadow: Option[Shadow] = None,
 ) extends Widget:
 
-  /** The content region inside the borders, the reserved title rows, and the padding. */
-  def inner(area: Rect): Rect =
+  /** The rectangle the frame itself occupies inside `area`: everything except the rows and columns given up to the
+    * shadow.
+    *
+    * A widget never draws outside the `Rect` it is handed, so — unlike a CSS box shadow, which spills beyond its
+    * element — the shadow is paid for *inside* the block's own area. A block with the default one-cell shadow is one
+    * column narrower and one row shorter than the area it was given, and the shadow occupies the strip that frees up.
+    *
+    * When the area is too small for the shadow to leave a usable frame behind (fewer than two rows or columns left),
+    * the shadow is dropped and the whole area is the frame. A shadow with nothing left to shade is worse than no
+    * shadow: it is the same degrade-quietly rule the rest of the widget follows on a tiny area.
+    */
+  private def frame(area: Rect): Rect =
+    shadow match
+      case Some(cast) =>
+        val width  = area.width - cast.reservedColumns
+        val height = area.height - cast.reservedRows
+        if width < 2 || height < 2 then area
+        else
+          // a negative offset casts up and to the left, so the frame moves down and right to make the room there
+          val x = area.x + (if cast.offsetX < 0 then cast.reservedColumns else 0)
+          val y = area.y + (if cast.offsetY < 0 then cast.reservedRows else 0)
+          Rect(x, y, width, height)
+      case None       => area
+
+  /** The content region inside the shadow, the borders, the reserved title rows, and the padding. */
+  def inner(outer: Rect): Rect =
+    val area        = frame(outer)
     val topInset    = rowsAbove(Borders.Top, TitlePosition.Top)
     val bottomInset = rowsAbove(Borders.Bottom, TitlePosition.Bottom)
     val left        = area.x + borderWidth(Borders.Left) + math.max(0, padding.left)
@@ -102,8 +134,11 @@ final case class Block(
     val height      = area.height - topInset - bottomInset - padding.verticalCells
     if width <= 0 || height <= 0 then Rect(left, top, 0, 0) else Rect(left, top, width, height)
 
-  def render(area: Rect, buffer: Buffer): Unit =
-    if !area.isEmpty then
+  def render(outer: Rect, buffer: Buffer): Unit =
+    if !outer.isEmpty then
+      val area   = frame(outer)
+      // painted first, so the frame, the fill and the titles all win wherever they meet the band
+      if area != outer then shadow.foreach(_.render(area, outer, buffer))
       // `mapStyle` with `patch`, not `setStyle`: the panel background has to layer *onto* whatever is already there,
       // keeping each cell's foreground colour and modifiers. `setStyle` would replace them outright.
       if style != Style.Default then buffer.mapStyle(area)(_.patch(style))

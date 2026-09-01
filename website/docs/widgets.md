@@ -206,6 +206,32 @@ edge of `QuadrantOutside` is `▌` and its right edge is `▐`. `BorderGlyphs.sy
 short spelling when both sides of an axis share a glyph, and `BorderGlyphs.uniform` when all
 eight do.
 
+### Drop shadows
+
+A `shadow` makes a dialog or a popup read as floating above the screen rather than cut into
+it:
+
+```scala
+Block(shadow = Some(Shadow.Default))                       // one cell down and right, dimming what is behind
+Block(shadow = Some(Shadow.shade(ShadowFill.MediumShade))) // painted with ▒ instead
+Block(shadow = Some(Shadow.dim(2, 1)))                     // a longer shadow to the right than below
+```
+
+Unlike a CSS box shadow, which spills outside its element, this one is paid for *inside* the
+block's own area — a widget in this toolkit never draws outside the rectangle it is handed.
+A block with the default one-cell shadow frames itself one column narrower and one row
+shorter, the freed strip becomes the shadow, and `inner` shrinks to match, so a layout never
+gets a surprise. A negative offset casts up and to the left instead, and the frame moves down
+and right to make the room there. On an area too small to leave a usable frame behind, the
+shadow is dropped and the block renders as if it had none.
+
+There are two ways to paint the band, and which one you want depends on the terminal.
+`ShadowFill.Dim` keeps the glyphs that were already there and only dims them, so text behind
+the panel stays legible while visibly receding — but a good many terminals render the dim
+attribute as nothing at all. `ShadowFill.LightShade`, `MediumShade`, `DarkShade` and `Solid`
+overwrite the band with `░`, `▒`, `▓` and `█`, which works everywhere; `ShadowFill.Symbol`
+takes a single-column glyph of your own.
+
 See [Layout & style](./layout-and-style) for constraints and [The app shell](./app-shell)
 for application-level composition.
 
