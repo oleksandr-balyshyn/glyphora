@@ -22,7 +22,7 @@ private[terminal] object Sgr:
     // appended to directly rather than collected into a List and joined: a full-change frame asks for one sequence per
     // run of same-styled cells, and the intermediate list was the bulk of what that allocated
     val codes     = StringBuilder(Esc).append("[0")
-    val effective = if depth == ColorDepth.Monochrome then monochromeStyle(style) else style
+    val effective = ColorDepth.legible(style, depth)
     if depth != ColorDepth.NoColor then
       effective.fg.foreach(color => appendParam(codes, foregroundCode(ColorDepth.downsample(color, depth))))
       effective.bg.foreach(color => appendParam(codes, backgroundCode(ColorDepth.downsample(color, depth))))
@@ -53,8 +53,8 @@ private[terminal] object Sgr:
   def sgrDelta(from: Style, to: Style, depth: ColorDepth): String =
     if from == to then ""
     else
-      val before = if depth == ColorDepth.Monochrome then monochromeStyle(from) else from
-      val after  = if depth == ColorDepth.Monochrome then monochromeStyle(to) else to
+      val before = ColorDepth.legible(from, depth)
+      val after  = ColorDepth.legible(to, depth)
       if !deltaIsSafe(before, after, depth) then sgr(to, depth) else buildDelta(before, after, depth)
 
   /** Whether the step from `from` to `to` can be written as a delta at all.
@@ -116,45 +116,6 @@ private[terminal] object Sgr:
     */
   private def appendParam(codes: StringBuilder, code: String): Unit =
     val _ = if codes.isEmpty then codes.append(code) else codes.append(';').append(code)
-
-  /** Keeps a style legible under [[ColorDepth.Monochrome]], where every color collapses onto one of two tones.
-    *
-    * Two colors that differ on a full palette can land on the same tone — red text on a blue background both threshold
-    * to dark — and the text would then be invisible. When that happens the background keeps the tone it thresholds to
-    * and the foreground is flipped to the opposite one.
-    *
-    * A style that sets a background but no foreground gets the same treatment: its text is drawn in the terminal's
-    * default foreground, which may itself threshold to the background's tone, so an explicit contrasting foreground is
-    * named rather than gambling on it. This is the ordinary selection highlight, which is exactly the row a user cannot
-    * afford to lose. The underline color is corrected the same way, because it thresholds independently of both and can
-    * otherwise sink into the background once the text is legible.
-    *
-    * A style that sets no background at all is left alone: it draws on whatever the terminal's own background is, which
-    * this code cannot know.
-    *
-    * Modifiers are not touched by color depth, so `Modifiers.Reverse` remains the way to express a highlight that
-    * survives every rung of the ladder.
-    */
-  private def monochromeStyle(style: Style): Style =
-    style.bg match
-      // No background means the cell draws on whatever the terminal's own background is, which this code cannot
-      // know, so there is no collision to detect and nothing to correct.
-      case None     => style
-      case Some(bg) =>
-        val contrast  = if ColorDepth.isLight(bg) then Color.Black else Color.White
-        // A style that sets *only* a background is the common selection highlight. Its text is drawn in the
-        // terminal's default foreground, which may well threshold to the same tone as the background and vanish —
-        // so name a foreground that contrasts rather than leaving the row unreadable.
-        val fixedFg   = style.fg match
-          case Some(fg) if ColorDepth.isLight(fg) != ColorDepth.isLight(bg) => fg
-          case _                                                            => contrast
-        // The underline color thresholds independently of the two above, so a curly underline can land on the
-        // background tone and disappear even once the text is legible.
-        val recolored = style.withFg(fixedFg)
-        recolored.underlineColor match
-          case Some(underline) if ColorDepth.isLight(underline) == ColorDepth.isLight(bg) =>
-            recolored.withUnderlineColor(contrast)
-          case _                                                                          => recolored
 
   /** SGR 4:n styled-underline selectors; `None`/`Straight` defer to the plain `4` from [[ModifierCodes]]. */
   private def underlineStyleCode(style: UnderlineStyle): Option[String] =

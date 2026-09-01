@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.Color
+import io.worxbend.tui.core.{Color, Style}
 
 import java.util.Locale
 
@@ -128,7 +128,51 @@ object ColorDepth:
     (2126 * r + 7152 * g + 722 * b) / 10000
 
   /** Which of the two tones [[Monochrome]] maps `color` to: `true` is the light one (white), `false` the dark one. */
-  private[terminal] def isLight(color: Color): Boolean = luminance(color) >= 128
+  private def isLight(color: Color): Boolean = luminance(color) >= 128
+
+  /** Keeps a style legible under [[Monochrome]], where every color collapses onto one of two tones.
+    *
+    * Two colors that differ on a full palette can land on the same tone — red text on a blue background both threshold
+    * to dark — and the text would then be invisible. When that happens the background keeps the tone it thresholds to
+    * and the foreground is flipped to the opposite one.
+    *
+    * A style that sets a background but no foreground gets the same treatment: its text is drawn in the terminal's
+    * default foreground, which may itself threshold to the background's tone, so an explicit contrasting foreground is
+    * named rather than gambling on it. This is the ordinary selection highlight, which is exactly the row a user cannot
+    * afford to lose. The underline color is corrected the same way, because it thresholds independently of both and can
+    * otherwise sink into the background once the text is legible.
+    *
+    * A style that sets no background at all is left alone: it draws on whatever the terminal's own background is, which
+    * this code cannot know.
+    *
+    * Modifiers are not touched by color depth, so `Modifiers.Reverse` remains the way to express a highlight that
+    * survives every rung of the ladder.
+    *
+    * Every depth but [[Monochrome]] answers `style` untouched, so a caller may hand every style through this without
+    * checking the depth first — the unconditional call is doing no hidden work at the other rungs.
+    */
+  private[terminal] def legible(style: Style, depth: ColorDepth): Style =
+    if depth != Monochrome then style
+    else
+      style.bg match
+        // No background means the cell draws on whatever the terminal's own background is, which this code cannot
+        // know, so there is no collision to detect and nothing to correct.
+        case None     => style
+        case Some(bg) =>
+          val contrast  = if isLight(bg) then Color.Black else Color.White
+          // A style that sets *only* a background is the common selection highlight. Its text is drawn in the
+          // terminal's default foreground, which may well threshold to the same tone as the background and vanish —
+          // so name a foreground that contrasts rather than leaving the row unreadable.
+          val fixedFg   = style.fg match
+            case Some(fg) if isLight(fg) != isLight(bg) => fg
+            case _                                      => contrast
+          // The underline color thresholds independently of the two above, so a curly underline can land on the
+          // background tone and disappear even once the text is legible.
+          val recolored = style.withFg(fixedFg)
+          recolored.underlineColor match
+            case Some(underline) if isLight(underline) == isLight(bg) =>
+              recolored.withUnderlineColor(contrast)
+            case _                                                    => recolored
 
   /** Nearest xterm-256 palette entry: the grayscale ramp for near-gray values, else the 6x6x6 color cube. */
   private def nearestIndexed(rgb: Color.Rgb): Int =
