@@ -208,6 +208,7 @@ export io.worxbend.tui.widgets.{
   MarkdownTheme,
   MenuEntry,
   MenuState,
+  MergeStrategy,
   NoticeLevel,
   OrbitPath,
   OrbitTrail,

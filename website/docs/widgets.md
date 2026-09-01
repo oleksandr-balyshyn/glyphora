@@ -195,6 +195,39 @@ Scrollbar.withSymbols(200, 40, ScrollbarSymbols.Ascii)
 The caps are also available one at a time as `beginSymbol` and `endSymbol`, with
 `capStyle` colouring both; leaving either as `None` gives that end plain track.
 
+### Merging touching borders
+
+Two panels that share a column both draw on it. By default the one drawn second wins,
+which gives a single wall but leaves the corners unjoined:
+
+```text
+┌──┐──┐        ┌──┬──┐
+│  │  │   →    │  │  │
+└──┘──┘        └──┴──┘
+```
+
+`.mergeBorders(MergeStrategy.Exact)` reads the box-drawing glyph already in the buffer,
+combines its four arms with the arms of the glyph about to be written, and writes the
+single glyph that shows both — so `┌` landing on `─` becomes `┬`, and `┘` landing on
+`┌` becomes `┼`. Anything that is not a box-drawing glyph (a title character, a space,
+content) is left to overwrite normally.
+
+```scala
+layers(
+  panel(left).length(20),
+  positioned(19, 0, 20, 10)(panel(right).mergeBorders(MergeStrategy.Exact)),
+)
+```
+
+`MergeStrategy.Fuzzy` behaves the same, except that when Unicode has no combined glyph
+it retries with double lines weakened to single ones — there is no double-meets-heavy
+junction in Unicode at all, so a double-walled panel touching a thick-walled one joins
+one weight lighter instead of not joining. `MergeStrategy.Replace` is the default and
+overwrites, exactly as before.
+
+Merging only ever looks at what is already in the buffer, so it depends on draw order:
+the panel drawn second is the one that joins.
+
 ### Panel padding and captions
 
 A panel reserves blank cells between its border and its children with `.padding(cells)`

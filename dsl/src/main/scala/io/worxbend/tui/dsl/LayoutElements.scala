@@ -34,13 +34,21 @@ final case class PanelElement(
     padding: w.Padding = w.Padding.zero,
     spacing: Int = 0,
     flex: Flex = Flex.Start,
+    mergeBorders: w.MergeStrategy = w.MergeStrategy.Replace,
     props: ElementProps = ElementProps(),
 ) extends FlexContainer:
   type Self = PanelElement
 
   def widget: Widget =
     (area, buffer) =>
-      val block = w.Block(blockTitles, padding = padding, borderStyle = props.style, borderType = borderType)
+      val block =
+        w.Block(
+          blockTitles,
+          padding = padding,
+          borderStyle = props.style,
+          borderType = borderType,
+          mergeBorders = mergeBorders,
+        )
       block.render(area, buffer)
       w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing, flex).render(block.inner(area), buffer)
 
@@ -93,6 +101,19 @@ extension (panel: PanelElement)
 
   /** A double-line border — the conventional "this box is important" cue. */
   def doubleBorder: PanelElement = panel.copy(borderType = w.BorderType.Double)
+
+  /** Joins this panel's border to any border already drawn where it lands, instead of overwriting it.
+    *
+    * Two panels laid side by side share a column. By default the second one drawn simply wins there, which gives one
+    * straight wall but leaves the corners unjoined — the seam reads as `┐` above `┘` where a single frame would show
+    * `┬` above `┴`. With `MergeStrategy.Exact` the two glyphs are combined into the one that shows both. `Fuzzy` does
+    * the same and additionally accepts a lighter joint where Unicode has no exact one, which is what a double-walled
+    * panel meeting a thick-walled one needs.
+    *
+    * Merging only looks at what is already in the buffer, so it depends on draw order: the panel drawn second is the
+    * one that has something to join to.
+    */
+  def mergeBorders(strategy: w.MergeStrategy): PanelElement = panel.copy(mergeBorders = strategy)
 
 /** Children laid out side by side, left to right. */
 final case class RowElement(

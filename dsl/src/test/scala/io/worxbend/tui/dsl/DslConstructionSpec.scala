@@ -18,7 +18,7 @@ final class DslConstructionSpec extends AnyFunSuite:
       text("Press 'q' to quit").dim,
     ).rounded
     tree match
-      case PanelElement(Some("Hello"), children, BorderType.Rounded, _, _, _, _, _, _) =>
+      case PanelElement(Some("Hello"), children, BorderType.Rounded, _, _, _, _, _, _, _) =>
         assert(children.size == 3)
         children(0) match
           case TextElement(content, _) => assert(content == "Welcome!")
@@ -197,6 +197,24 @@ final class DslConstructionSpec extends AnyFunSuite:
     )
     assert(thick.claim == SizeClaim.rows(1))
     assert(trimmedLines(rendered(rule("", BorderType.Double).widget, 6, 1)) == Seq("══════"))
+
+  /** The panel-side half of border merging: the builder reaches the widget, and the default is the no-op. */
+  test("panel .mergeBorders reaches the block and defaults to Replace"):
+    given Theme = Theme.default
+    assert(panel(text("a")).mergeBorders == io.worxbend.tui.widgets.MergeStrategy.Replace)
+    val merged  = panel(text("a")).mergeBorders(io.worxbend.tui.widgets.MergeStrategy.Exact)
+    assert(merged.mergeBorders == io.worxbend.tui.widgets.MergeStrategy.Exact)
+    // panels only merge where they actually overlap: a `row` gives each child its own columns, so the seam that needs
+    // joining is the one an overlapping overlay creates
+    val frame   = rendered(
+      layers(
+        panel(spacer).length(4),
+        positioned(3, 0, 5, 3)(panel(spacer).mergeBorders(io.worxbend.tui.widgets.MergeStrategy.Exact)),
+      ).widget,
+      8,
+      3,
+    )
+    assert(trimmedLines(frame) == Seq("┌──┬───┐", "│  │   │", "└──┴───┘"))
   /** `table` is a `FlexContainer`, so the alignment and gap builders every `row` and `column` has apply to its columns
     * too. Before that, fixed-width columns could only ever pack at the left of the area they were given.
     */
