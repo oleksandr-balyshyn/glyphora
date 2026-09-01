@@ -72,6 +72,20 @@ final class ParagraphSpec extends AnyFunSuite:
       assert(paragraph.heightAt(width).contains(drawn), s"width $width")
     }
 
+  test("widthAt reports the longest line, in columns rather than characters"):
+    val paragraph = Paragraph(Text.raw("ab\n你好世界\nc"))
+    assert(paragraph.widthAt(1).contains(8))  // four wide characters, two columns each
+    assert(paragraph.widthAt(99).contains(8)) // the height is not consulted
+    assert(Paragraph(Text.raw("")).widthAt(1).contains(0))
+    assert(Paragraph(Text(Seq.empty)).widthAt(1).contains(0))
+
+  test("the width widthAt reports is one at which nothing is clipped or wrapped"):
+    val text      = Text.raw("hello wide 你好 world")
+    val natural   = Paragraph(text).widthAt(1).getOrElse(0)
+    val paragraph = Paragraph(text, overflow = Overflow.Wrap)
+    assert(paragraph.heightAt(natural).contains(text.lines.size))
+    assert(trimmedLines(rendered(paragraph, natural, 1)) == Seq("hello wide 你好 world"))
+
   test("center alignment offsets each line by its own width"):
     val buffer = rendered(Paragraph(Text.raw("ab\nabcd"), alignment = Alignment.Center), 6, 2)
     assert(trimmedLines(buffer) == Seq("  ab", " abcd"))

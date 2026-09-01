@@ -56,6 +56,19 @@ final case class Paragraph(
       case Overflow.Wrap               => text.lines.map(line => math.max(1, Paragraph.wrapLine(line, width).size)).sum
     Some(rows)
 
+  /** The columns this text needs so that no line is clipped and no line has to wrap — the width counterpart of
+    * [[heightAt]], and always an answer, because the longest line is a property of the text itself and needs no
+    * layout to work out.
+    *
+    * The `height` argument is ignored: a paragraph flows top to bottom, so how many rows it is given does not change
+    * how wide it would like to be. The answer is the same for both [[Overflow]] modes on purpose — `Overflow.Clip`
+    * needs this width to avoid cutting a line off, `Overflow.Wrap` needs it to avoid reflowing one. It is the longest
+    * *line*, not the longest word: at the longest-word width the text still fits, but only after wrapping, which is
+    * the thing this number exists to avoid.
+    */
+  override def widthAt(height: Int): Option[Int] =
+    Some(text.width)
+
 object Paragraph:
 
   /** Breaks `line` into the rows it occupies at `width`, at word boundaries where the row has one.

@@ -952,7 +952,9 @@ the width it wraps at, `widthAt(height)` for content sized the other way. Return
 `None` means "I cannot say", and callers must treat that as unmeasurable rather than as
 a size. `widget(...)` needs no measurement wiring of its own: a wrapped `Paragraph`,
 `Markdown`, `Notice`, `Badge`, `Spinner`, `BigText`, `AnimatedText` or `Tooltip` already
-answers, so a `scrollView` over one scrolls the full content.
+answers, so a `scrollView` over one scrolls the full content. `Paragraph` answers
+`widthAt` too: the longest of its lines, measured in terminal columns, which is the
+narrowest area in which nothing is clipped and nothing has to wrap.
 
 Measuring is not the same as claiming, though, and only the measurement pass consults
 `Measured`. In a `row` or a `column` a wrapped widget claims everything its siblings
