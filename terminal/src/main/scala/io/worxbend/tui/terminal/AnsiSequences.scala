@@ -36,10 +36,16 @@ private[terminal] object AnsiSequences:
     * by a signal-terminated process is still handed back usable. Every sequence here is a DEC private-mode *reset*
     * (XTerm `ctlseqs.ms`, "DEC Private Mode Reset"), which is idempotent — resetting a mode that was never set is a
     * no-op, so the hook needs no knowledge of what was actually enabled.
+    *
+    * [[EndSynchronized]] leads. A frame is written as one `?2026h` … `?2026l` pair (see `JLine3Backend.draw`), which
+    * asks the terminal to hold everything back until the closing half arrives so a half-drawn frame is never shown. A
+    * process killed between the two halves leaves that update open: until the emulator's own timeout expires the screen
+    * stays frozen and would swallow the rest of this restore. Closing the update first makes everything after it appear
+    * at once, and closing one that was never opened does nothing.
     */
   val RestoreAll: String =
-    s"$DisableMouseCapture$ShowCursor$LeaveAlternateScreen$PopKittyKeyboard$DisableFocusReporting" +
-      s"$DisableBracketedPaste$ResetStyle"
+    s"$EndSynchronized$DisableMouseCapture$ShowCursor$LeaveAlternateScreen$PopKittyKeyboard" +
+      s"$DisableFocusReporting$DisableBracketedPaste$ResetStyle"
 
   /** OSC 8 hyperlink opener; pair every open with [[LinkClose]].
     *
