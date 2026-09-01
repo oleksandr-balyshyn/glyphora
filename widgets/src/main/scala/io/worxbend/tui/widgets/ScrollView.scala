@@ -14,11 +14,49 @@ final class ScrollViewState:
   private[widgets] var lastViewportHeight: Int = 1
   private[widgets] var lastContentHeight: Int  = 0
 
+  /** The furthest down the content can be scrolled: the last row of content, less a viewport's worth.
+    *
+    * Both figures are recorded by the most recent render, because the state has no way of knowing the size of an area
+    * it has never been drawn into. On a state that has never rendered this is `0`, so every move below is a no-op
+    * until the first frame — which is the right answer, since there is no content to move over yet.
+    */
+  private[widgets] def maxOffset: Int = math.max(0, lastContentHeight - lastViewportHeight)
+
+  /** Moves the offset `delta` rows — negative is toward the top — and clamps it into the scrollable range. Every other
+    * move on this class goes through here, so there is one owner of the clamp.
+    */
+  def scrollBy(delta: Int): Unit =
+    offset = math.max(0, math.min(maxOffset, offset + delta))
+
+  /** Scrolls so that content row `row` is the first one visible, clamped into the scrollable range. */
+  def scrollTo(row: Int): Unit =
+    offset = math.max(0, math.min(maxOffset, row))
+
   def scrollUp(count: Int = 1): Unit =
-    offset = math.max(0, offset - count)
+    scrollBy(-count)
 
   def scrollDown(count: Int = 1): Unit =
-    offset = math.min(math.max(0, lastContentHeight - lastViewportHeight), offset + count)
+    scrollBy(count)
+
+  /** Jumps to the top of the content — the Home key's move. */
+  def first(): Unit =
+    offset = 0
+
+  /** Jumps to the bottom of the content — the End key's move. A no-op before the first render, which is when the
+    * content and viewport heights this depends on are first recorded.
+    */
+  def last(): Unit =
+    offset = maxOffset
+
+  /** Scrolls up by one viewport — the PageUp move. Falls back to a single row before the first render, so a key press
+    * that arrives early still does something rather than nothing.
+    */
+  def pageUp(): Unit =
+    scrollBy(-math.max(1, lastViewportHeight))
+
+  /** Scrolls down by one viewport — the PageDown move, the mirror of [[pageUp]]. */
+  def pageDown(): Unit =
+    scrollBy(math.max(1, lastViewportHeight))
 
 /** A vertically scrollable window over content taller than the viewport.
   *

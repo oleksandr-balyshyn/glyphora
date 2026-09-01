@@ -130,6 +130,17 @@ private def scrollKeys(up: Int => Unit, down: Int => Unit): BuiltinKeyHandler =
         true
       case _                => false
 
+/** The jump half of the scrolling vocabulary: Home and End go to the top and bottom of the content.
+  *
+  * Layered over [[scrollKeys]] with `.orElse`, the same way [[selectionJumpKeys]] layers over [[selectionKeys]], so
+  * a viewport that has no notion of its own bottom can keep the Up/Down/Page pair alone.
+  */
+private def scrollJumpKeys(first: () => Unit, last: () => Unit): BuiltinKeyHandler =
+  keys {
+    case KeyEvent(KeyCode.Home, _) => first()
+    case KeyEvent(KeyCode.End, _)  => last()
+  }
+
 /** The caret and erase key vocabulary shared by every single-line text field: Backspace/Delete erase either side of the
   * caret, Left/Right/Home/End move it. `state` is the caller-owned editing state the keys mutate; anything else is left
   * unconsumed, which is what lets a field layer its own `Char` handling on top and fall through to this.

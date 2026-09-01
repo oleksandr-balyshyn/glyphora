@@ -81,7 +81,10 @@ final case class ScrollViewElement(
   private[dsl] override def withChildren(children: Seq[Element]): ScrollViewElement =
     copy(content = children.headOption.getOrElse(content))
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]            =
-    Some(scrollKeys(rows => state.scrollUp(rows), rows => state.scrollDown(rows)))
+    Some(
+      scrollKeys(rows => state.scrollUp(rows), rows => state.scrollDown(rows))
+        .orElse(scrollJumpKeys(() => state.first(), () => state.last()))
+    )
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler]        =
     Some(wheelScrolls(() => state.scrollUp(), () => state.scrollDown()))
 

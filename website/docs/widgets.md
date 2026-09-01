@@ -92,6 +92,14 @@ Core structural elements:
   itself to its text and has no anchor of its own, so it is `positioned` over a
   `layers` base at the cell it should point at.
 
+While a `scrollView` is focused, Up/Down scroll a row, PageUp/PageDown ten rows, and
+Home/End jump to the top and bottom of the content. `ScrollViewState` exposes the same
+moves for an app that wants its own bindings — `first()`, `last()`, `scrollBy(delta)`
+(negative moves toward the top), `scrollTo(row)`, and `pageUp()`/`pageDown()`, which
+move by whatever the viewport measured on the last frame rather than a fixed ten. All of
+them clamp to the content, and all of them are no-ops before the first render, because
+that is when the state first learns how tall the content and the viewport are.
+
 `scrollView` draws its own scrollbar. For the rarer case of a scroll indicator beside
 something the DSL is not scrolling — a custom render loop, a pane whose offset your own
 code owns — reach past the DSL for the raw `Scrollbar` widget. It has no DSL element and
