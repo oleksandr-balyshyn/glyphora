@@ -107,23 +107,9 @@ object Color:
         val (cr, cg, cb) = approximateRgb(Rgb(r, g, b))
         f"#$cr%02x$cg%02x$cb%02x"
       case Indexed(index) => math.max(0, math.min(255, index)).toString
-      case Reset          => "Reset"
-      case Black          => "Black"
-      case Red            => "Red"
-      case Green          => "Green"
-      case Yellow         => "Yellow"
-      case Blue           => "Blue"
-      case Magenta        => "Magenta"
-      case Cyan           => "Cyan"
-      case White          => "White"
-      case BrightBlack    => "BrightBlack"
-      case BrightRed      => "BrightRed"
-      case BrightGreen    => "BrightGreen"
-      case BrightYellow   => "BrightYellow"
-      case BrightBlue     => "BrightBlue"
-      case BrightMagenta  => "BrightMagenta"
-      case BrightCyan     => "BrightCyan"
-      case BrightWhite    => "BrightWhite"
+      // every remaining case is a singleton, whose derived `toString` is already its own name — the same
+      // derivation `asSource` relies on
+      case named          => named.toString
 
   /** Lowercases a written name and drops the separators it may carry, so `Bright_Red`, `bright red` and `bright-red`
     * all reduce to the one key [[namedColor]] matches on.
