@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyModifiers, MouseEvent, MouseEventKind, Position, Size}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position, Size}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -79,4 +79,69 @@ final class MouseCaptureModeSpec extends AnyFunSuite:
     // the smallest coordinates the protocol can express, one-based 1;1, are the zero-based origin
     assert(
       decoded(csi("<35;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.Moved, KeyModifiers.None))
+    )
+
+  test("urxvt reporting is requested before SGR and released after it"):
+    // both encodings lift X10's column ceiling; SGR is the better one because it names which button was released, so
+    // a terminal that understands both must end up in SGR. Enabling 1015 first and disabling it last is what does it
+    val enable  = AnsiSequences.EnableMouseCapture
+    val disable = AnsiSequences.DisableMouseCapture
+    assert(enable.indexOf(s"$Esc[?1015h") < enable.indexOf(s"$Esc[?1006h"))
+    assert(disable.indexOf(s"$Esc[?1006l") < disable.indexOf(s"$Esc[?1015l"))
+    // all-motion tracking gets the same encoding request, not a different one
+    assert(AnsiSequences.EnableMouseAllMotion.contains(s"$Esc[?1015h"))
+
+  test("pixel reporting is deliberately never requested"):
+    // mode 1016 reports coordinates in pixels, and every layer above the backend addresses cells
+    assert(!AnsiSequences.EnableMouseCapture.contains("1016"))
+    assert(!AnsiSequences.EnableMouseAllMotion.contains("1016"))
+
+  test("a urxvt press and release decode to Down and Up"):
+    assert(
+      decoded(csi("32;120;30M")*) == Event.Mouse(MouseEvent(Position(119, 29), MouseEventKind.Down, KeyModifiers.None))
+    )
+    // 35 is 32 + 3, and 3 in the button bits means "some button came up" — urxvt has no per-button release code
+    assert(
+      decoded(csi("35;120;30M")*) == Event.Mouse(MouseEvent(Position(119, 29), MouseEventKind.Up, KeyModifiers.None))
+    )
+
+  test("a urxvt report reaches columns the legacy encoding cannot express"):
+    // this is the entire reason mode 1015 is requested: X10 writes each coordinate as one biased byte and cannot
+    // name a column past 223, while this form writes them as decimal text
+    assert(
+      decoded(csi("32;300;40M")*) == Event.Mouse(MouseEvent(Position(299, 39), MouseEventKind.Down, KeyModifiers.None))
+    )
+
+  test("urxvt drag, hover and wheel share the SGR decoding rules"):
+    assert(decoded(csi("64;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Drag, KeyModifiers.None)))
+    assert(
+      decoded(csi("67;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Moved, KeyModifiers.None))
+    )
+    assert(
+      decoded(csi("96;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.ScrollUp, KeyModifiers.None))
+    )
+    assert(
+      decoded(csi("97;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.ScrollDown, KeyModifiers.None))
+    )
+
+  test("modifier bits survive a urxvt report"):
+    // 32 + 16 sets the ctrl bit, which sits two positions above the button bits
+    assert(decoded(csi("48;10;5M")*) == Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Down, KeyModifiers.Ctrl)))
+
+  test("a three-parameter sequence that is not a mouse report is not read as a click"):
+    // every real report carries the +32 bias, so a smaller first parameter cannot be one — without that guard an
+    // unrelated CSI sequence ending in M would arrive as a phantom click somewhere on screen
+    val iterator = (csi("1;2;3M") ++ Seq('q'.toInt)).iterator
+    val decoder  = InputDecoder(_ => if iterator.hasNext then iterator.next() else -2)
+    // the sequence is swallowed whole and produces nothing, and the keystroke behind it still arrives intact —
+    // a sequence read as a click would have surfaced as a mouse event here instead
+    assert(decoder.decode(10).isEmpty)
+    assert(decoder.decode(10) == Some(Event.Key(KeyEvent(KeyCode.Char('q'), KeyModifiers.None))))
+
+  test("the SGR form is still decoded as SGR, not stolen by the urxvt branch"):
+    assert(
+      decoded(csi("<0;120;30M")*) == Event.Mouse(MouseEvent(Position(119, 29), MouseEventKind.Down, KeyModifiers.None))
+    )
+    assert(
+      decoded(csi("<0;120;30m")*) == Event.Mouse(MouseEvent(Position(119, 29), MouseEventKind.Up, KeyModifiers.None))
     )

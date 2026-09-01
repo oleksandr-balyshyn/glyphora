@@ -12,12 +12,22 @@ private[terminal] object AnsiSequences:
   val ClearScreen: String           = clear(ClearType.All)
   val HideCursor: String            = s"$Esc[?25l"
   val ShowCursor: String            = s"$Esc[?25h"
-  val EnableMouseCapture: String    = s"$Esc[?1000h$Esc[?1002h$Esc[?1006h"
-  val EnableMouseAllMotion: String  = s"$Esc[?1000h$Esc[?1002h$Esc[?1003h$Esc[?1006h"
+  // Why four modes, in that order. 1000 asks for presses and releases and 1002 adds motion while a button is held;
+  // 1003 (see MouseCaptureMode) adds motion with none held. The other two are *encodings* of the report rather than
+  // requests for more of them. The original X10 encoding writes each coordinate as one byte biased by 32, which cannot
+  // express a column past 223 — and, because this decoder reads a UTF-8 stream, cannot be read past column 95 at all
+  // (see InputDecoder.decodeX10Mouse). 1015 (urxvt) and 1006 (SGR) both replace that with decimal text and lift the
+  // ceiling. 1015 is requested *before* 1006 and released *after* it, so a terminal understanding both settles on SGR,
+  // which is the better of the two because it names which button was released instead of reporting "one came up".
+  // 1015 is here only for a terminal that ignores 1006: without it such a terminal keeps sending X10, and its clicks
+  // are unreadable across most of a modern window. Pixel reporting (1016) is deliberately not requested — its
+  // coordinates are pixels, and every layer above `Backend` addresses cells.
+  val EnableMouseCapture: String    = s"$Esc[?1000h$Esc[?1002h$Esc[?1015h$Esc[?1006h"
+  val EnableMouseAllMotion: String  = s"$Esc[?1000h$Esc[?1002h$Esc[?1003h$Esc[?1015h$Esc[?1006h"
   // resets 1003 as well, whether or not it was ever set: a DEC private-mode reset for a mode that is already off is a
   // no-op on every terminal, and sending it unconditionally means no path can leave all-motion tracking stuck on,
   // flooding the user's shell with reports after the app has exited
-  val DisableMouseCapture: String   = s"$Esc[?1006l$Esc[?1003l$Esc[?1002l$Esc[?1000l"
+  val DisableMouseCapture: String   = s"$Esc[?1006l$Esc[?1015l$Esc[?1003l$Esc[?1002l$Esc[?1000l"
   val ResetStyle: String            = s"$Esc[0m"
   val EnableBracketedPaste: String  = s"$Esc[?2004h"
   val DisableBracketedPaste: String = s"$Esc[?2004l"

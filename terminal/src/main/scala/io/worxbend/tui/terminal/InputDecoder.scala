@@ -204,6 +204,7 @@ private[terminal] final class InputDecoder(
     if params.isEmpty && finalByte == 'M' then decodeX10Mouse()
     else if params.startsWith("<") && (finalByte == 'M' || finalByte == 'm') then
       decodeSgrMouse(params.drop(1), finalByte == 'M')
+    else if finalByte == 'M' && params.nonEmpty && !params.startsWith("<") then decodeUrxvtMouse(params)
     else if isPrivateReply(params) then None // DA/DECRPM/kitty-query replies: not input, must not surface as keys
     else
       val numbers = parameterNumbers(params)
@@ -387,6 +388,27 @@ private[terminal] final class InputDecoder(
       case Seq(button, column, row) => mouseEvent(button, column - 1, row - 1, isPress)
       case _                        => None
 
+  /** urxvt mouse report `CSI b ; x ; y M` (DEC mode 1015).
+    *
+    * The same button byte X10 uses, biased by 32, but with the coordinates written as decimal text rather than as raw
+    * bytes — so it is readable past the column 95 where [[decodeX10Mouse]] has to give up. It exists for a terminal
+    * that ignores the SGR request (mode 1006); a terminal that honours SGR never sends this form, because 1006 is
+    * requested after 1015 and wins.
+    *
+    * Like X10, and unlike SGR, it has no per-button release code — button bits `3` mean "some button came up" — so
+    * whether this is a press is derived from the bits, not from the final byte, which is always `M`.
+    *
+    * The `button >= 32` guard is what keeps some other three-parameter CSI sequence ending in `M` from being read as a
+    * click: every real report carries the +32 bias, so a smaller first parameter cannot be one.
+    */
+  private def decodeUrxvtMouse(params: String): Option[Event] =
+    parameterNumbers(params) match
+      case Seq(button, column, row) if button >= X10Bias =>
+        val bits    = button - X10Bias
+        val isPress = (bits & ButtonMask) != NoButtonHeld
+        mouseEvent(bits, column - 1, row - 1, isPress)
+      case _                                             => None
+
   /** Legacy X10 mouse report `CSI M b x y`: three raw bytes, each the value biased by 32.
     *
     * This branch exists only for a terminal that ignores [[AnsiSequences.EnableMouseCapture]]'s request for SGR 1006
@@ -409,10 +431,10 @@ private[terminal] final class InputDecoder(
     if button < 0 || column < 0 || row < 0 then None
     else if button > 0xff || column > 0xff || row > 0xff then None // a replacement character, not a coordinate byte
     else
-      val bits    = button - 32
+      val bits    = button - X10Bias
       // X10 has no separate release code: button 3 means "some button came up"
-      val isPress = (bits & 3) != 3
-      mouseEvent(bits, column - 32 - 1, row - 32 - 1, isPress)
+      val isPress = (bits & ButtonMask) != NoButtonHeld
+      mouseEvent(bits, column - X10Bias - 1, row - X10Bias - 1, isPress)
 
   private def mouseEvent(button: Int, x: Int, y: Int, isPress: Boolean): Option[Event] =
     val kind      =
@@ -530,6 +552,9 @@ private[terminal] object InputDecoder:
     * modifier bitmask uses 1/2/4.
     */
   private val MouseModifierShift = 2
+
+  /** Every coordinate and button value in an X10-derived mouse report is written biased by this much. */
+  private val X10Bias = 32
 
   /** Bit 5 of a mouse report's button byte: set when the report describes motion rather than a press or a release. */
   private val MotionBit = 32
