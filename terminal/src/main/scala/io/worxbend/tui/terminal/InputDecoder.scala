@@ -1,6 +1,16 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
+import io.worxbend.tui.core.{
+  Event,
+  KeyCode,
+  KeyEvent,
+  KeyEventKind,
+  KeyModifiers,
+  MouseButton,
+  MouseEvent,
+  MouseEventKind,
+  Position,
+}
 
 /** Decodes terminal input bytes into [[Event]]s: printable keys, control keys, ANSI CSI/SS3 escape sequences for
   * navigation and function keys, kitty-protocol keys, bracketed paste, and both SGR and legacy X10 mouse reports.
@@ -269,8 +279,8 @@ private[terminal] final class InputDecoder(
     else
       val numbers = parameterNumbers(params)
       numbers.drop(1).headOption match
-        case Some(code) => modifiersFromCode(code).flatMap(decodeCsiKey(numbers, finalByte, _))
-        case None       => decodeCsiKey(numbers, finalByte, KeyModifiers.None)
+        case Some(code) => modifiersFromCode(code).flatMap(decodeCsiKey(numbers, params, finalByte, _))
+        case None       => decodeCsiKey(numbers, params, finalByte, KeyModifiers.None)
 
   /** The numeric parameters of a CSI sequence, in order.
     *
@@ -285,7 +295,15 @@ private[terminal] final class InputDecoder(
   private def parameterNumbers(params: String): Seq[Int] =
     params.split(';').toSeq.filter(_.nonEmpty).flatMap(_.takeWhile(_ != ':').toIntOption)
 
-  private def decodeCsiKey(numbers: Seq[Int], finalByte: Int, modifiers: KeyModifiers): Option[Event] =
+  /** `params` is carried alongside the parsed `numbers` for the one shape that needs more than them: the kitty protocol
+    * writes the event type as a `:`-separated sub-parameter, which [[parameterNumbers]] deliberately discards.
+    */
+  private def decodeCsiKey(
+      numbers: Seq[Int],
+      params: String,
+      finalByte: Int,
+      modifiers: KeyModifiers,
+  ): Option[Event] =
     finalByte match
       case 'A'                                            => key(KeyCode.Up, modifiers)
       case 'B'                                            => key(KeyCode.Down, modifiers)
@@ -298,7 +316,7 @@ private[terminal] final class InputDecoder(
       case 'Z'                                            => key(KeyCode.Tab, modifiers | KeyModifiers.Shift)
       case 'I'                                            => Some(Event.FocusGained)
       case 'O'                                            => Some(Event.FocusLost)
-      case 'u'                                            => decodeKittyKey(numbers, modifiers)
+      case 'u'                                            => decodeKittyKey(numbers, params, modifiers)
       case '~' if numbers.headOption.contains(PasteStart) => Some(decodePaste())
       case '~'                                            => decodeTilde(numbers, modifiers)
       case _                                              => None
@@ -355,8 +373,32 @@ private[terminal] final class InputDecoder(
     * The code point vocabulary itself lives in [[KittyKeys]]; [[foldShiftedChar]] rewrites the one shape kitty reports
     * differently from every legacy terminal.
     */
-  private def decodeKittyKey(numbers: Seq[Int], modifiers: KeyModifiers): Option[Event] =
-    numbers.headOption.flatMap(KittyKeys.keyCode).map(c => Event.Key(foldShiftedChar(c, modifiers)))
+  private def decodeKittyKey(numbers: Seq[Int], params: String, modifiers: KeyModifiers): Option[Event] =
+    numbers.headOption
+      .flatMap(KittyKeys.keyCode)
+      // the shift fold has to run first: it decides which `KeyEvent` this is, and the kind is then attached to it
+      .map(c => Event.Key(foldShiftedChar(c, modifiers).copy(kind = kittyEventKind(params))))
+
+  /** Which moment of the keystroke a kitty `CSI code ; modifiers : type u` report describes.
+    *
+    * The event type is the *second* sub-parameter of the *second* parameter — `CSI 97;1:3u` is the `a` key coming back
+    * up. Everything else, including a sequence with no event type at all, is a press: a terminal only sends the field
+    * when the application pushed enhancement flag 2, so its absence is the ordinary case rather than a malformed one.
+    */
+  private def kittyEventKind(params: String): KeyEventKind =
+    subParameter(params, parameter = 1, sub = 1) match
+      case Some(2) => KeyEventKind.Repeat
+      case Some(3) => KeyEventKind.Release
+      case _       => KeyEventKind.Press
+
+  /** The `sub`-th `:`-separated sub-parameter of the `parameter`-th `;`-separated CSI parameter, when it is a number.
+    *
+    * A companion to [[parameterNumbers]] rather than a change to it: that method reads the main parameters and drops
+    * every sub-parameter on purpose, because a value it has no vocabulary for must not shift the ones after it out of
+    * position. This reads one named sub-parameter for a caller that does have a vocabulary for it.
+    */
+  private def subParameter(params: String, parameter: Int, sub: Int): Option[Int] =
+    params.split(';').lift(parameter).flatMap(_.split(':').lift(sub)).flatMap(_.toIntOption)
 
   /** Rewrites a kitty "base key plus a Shift bit" report into the single legacy encoding, so a key spec has one
     * spelling that works on every terminal.
