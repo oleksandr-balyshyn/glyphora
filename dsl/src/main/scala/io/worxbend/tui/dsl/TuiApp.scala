@@ -2,6 +2,8 @@ package io.worxbend.tui.dsl
 
 import io.worxbend.tui.core.{Effect, Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Size}
 import io.worxbend.tui.runtime.{
+  Async,
+  Cancelable,
   EventOutcome,
   Frame,
   GenerationalScope,
@@ -46,6 +48,18 @@ private final class RunState(val splash: SplashPlayer):
     */
   var layerCount: Int           = 0
   var topScreen: Option[Screen] = None
+
+  /** Whether the runner itself is producing ticks for this run — that is, whether the app configured a `tickRate`. When
+    * it is, the ambient ticker below stays out of the way entirely and nothing about ticking changes.
+    */
+  var runnerTicks: Boolean = false
+
+  /** The repeating tick this run started for itself because the frame it composed contained an animation, and the
+    * interval it is running at. Retargeted after every frame and cancelled on the way out; `None` means the app
+    * currently owes no ticks at all, which is the state an app showing nothing animated sits in.
+    */
+  var ambientTicker: Option[Cancelable]       = None
+  var ambientInterval: Option[FiniteDuration] = None
 
 /** The application entry point for the declarative DSL.
   *
@@ -420,6 +434,7 @@ trait TuiApp:
     val effectiveConfig =
       if intro.nonEmpty && config.tickRate.isEmpty then config.copy(tickRate = Some(SplashPlayer.TickRate))
       else config
+    run.runnerTicks = effectiveConfig.tickRate.isDefined
     try
       TerminalRunner(backend, effectiveConfig, redrawRequested = () => run.invalidated).run(
         handle =>
@@ -440,13 +455,29 @@ trait TuiApp:
       // than talking to a backend the runner has already closed
       activeHandle.set(None)
       activeFocus.set(None)
+      // this run started it, so this run stops it: an uncancelled `Async.every` is a process-lifetime daemon
+      run.ambientTicker.foreach(_.cancel())
+      run.ambientTicker = None
+      run.ambientInterval = None
       // a screen still on the stack when the run ends gets its `onLeave`, innermost first, *before* the app's own
       // `onStop`: a screen's cleanup runs while whatever the app opened for it is still there, and every `onEnter` on
       // every exit path — a quit, a Ctrl+C, a handler that threw — is matched by exactly one `onLeave`
-      resetScreens()
+      leaveRemainingScreens()
       onStop()
       // after `onStop`, so an app cancelling timers there still animates whatever its last frames show
       run.renderLoop.foreach(AnimationClock.releaseLoop)
+
+  /** Runs `Screen.onLeave` for everything still on the stack when a run ends, innermost first, so every `onEnter` is
+    * matched exactly once however the run finished.
+    *
+    * It deliberately does *not* clear the stack, which is why this is not simply [[resetScreens]]. By the time the
+    * `finally` runs, the runner has already handed its render loop back, so this thread is no longer a render thread —
+    * and a `Signal` write from here throws the render-thread guard whenever some other runner in the process is still
+    * registered. Leaving the value alone also matches every other piece of per-instance state, none of which `runWith`
+    * resets: running the same instance a second time keeps whatever the first run left behind.
+    */
+  private def leaveRemainingScreens(): Unit =
+    screenStack.peek.foreach(_.onLeave())
 
   // ---- the loop ----
 
@@ -461,6 +492,9 @@ trait TuiApp:
     if run.splash.isActive then run.splash.render(frame)
     else
       scope.beginGeneration()
+      // the demand is rebuilt from what *this* frame renders, so an animation that has just gone off screen stops
+      // costing ticks as soon as the frame without it is composed
+      AnimationClock.beginFrame()
       val rawTree = ResponsivePass.resolve(effectiveView(using scope), frameSize)
       syncFocusLayers(run)
       run.tracker.reconcile(FocusPass.focusKeys(rawTree))
@@ -468,6 +502,60 @@ trait TuiApp:
       run.lastTree = Some(tree)
       frame.renderWidget(tree.widget, frame.area)
       effects.applyTo(frame)
+      retargetAmbientTicker(run)
+
+  /** Turns this run's own repeating tick on, off, or onto a different interval, according to what the frame just
+    * composed actually needs.
+    *
+    * Why this exists: the ambient [[AnimationClock]] is what makes `spinner`, `marquee`, `indeterminateBar` and a timed
+    * `Effect` animate with no counter to thread through — but the ticks that advance it used to come only from a
+    * globally configured `config.tickRate`. An app that rendered a spinner and set no tick rate got a frozen spinner
+    * and no diagnostic at all. Meanwhile an app that *did* set one paid for a tick every interval forever, whether or
+    * not anything on screen was moving.
+    *
+    * Both are the same missing negotiation, and the render pass already knows the answer: every ambient animation reads
+    * the clock, and each read says how often it needs one. So after each frame this asks for the shortest interval
+    * anything on it wanted — plus a tick for the live toasts and post-render effects, which age in wall-clock time and
+    * are not part of the tree — and retargets a single `Async.every`. Nothing animated on the frame means no ticker at
+    * all.
+    *
+    * An app that configured a `tickRate` keeps being driven by the runner, exactly as before: this does nothing at all
+    * for such a run, so `onTick` and the frame cadence of every existing app are untouched. `onTick` is deliberately
+    * *not* called from the ambient tick either — it is documented as requiring a `config.tickRate`, and an app that
+    * never asked for ticks should not suddenly start receiving them.
+    *
+    * Runs on the render thread, at the end of the render pass, which is where `Async.every` must be armed for its body
+    * to come back to this loop.
+    *
+    * One limit worth knowing. A tick arrives as a task queued back to the render loop, and a loop with no configured
+    * `tickRate` blocks on input for up to 100ms between draining that queue — so an ambient animation advances at that
+    * granularity however short an interval it asked for. That is the difference between "the spinner spins" and "the
+    * spinner is perfectly smooth"; an app that wants the second still sets `config.tickRate`.
+    */
+  private def retargetAmbientTicker(run: RunState): Unit =
+    if !run.runnerTicks then
+      // the toasts and the post-render effects age in wall-clock time and are not part of the tree, so they ask for
+      // ticks separately; the ticker runs at whichever of the two demands is the shorter
+      val ageing = if !effects.isEmpty || toasts.isLive then Some(AnimationClock.DefaultInterval) else None
+      val wanted = (AnimationClock.frameDemand.toList ++ ageing.toList).minOption
+      if wanted != run.ambientInterval then
+        run.ambientTicker.foreach(_.cancel())
+        run.ambientInterval = wanted
+        run.ambientTicker = wanted.map(interval => Async.every(interval)(ambientTick()))
+
+  /** One ambient tick: advance the clock, age the toasts and the post-render effects, and ask for the frame that shows
+    * the result.
+    *
+    * The redraw is unconditional rather than conditional on something having changed, because the whole reason this
+    * ticker is running is that the last frame contained an animation whose next position is a function of the clock
+    * alone — and a `Signal` set to an equal value notifies nobody, so an "only if something changed" test would leave
+    * that animation frozen between the two frames where its glyph happens to repeat.
+    */
+  private def ambientTick(): Unit =
+    AnimationClock.advanceUnlessPinned()
+    toasts.age()
+    val _ = effects.prune()
+    requestRedraw()
 
   /** Moves focus into a layer that has just appeared, or back out of one that has gone, before the frame is reconciled.
     *

@@ -27,6 +27,11 @@ private[dsl] final class ToastStack:
   def push(message: String, level: NoticeLevel, duration: FiniteDuration): Unit =
     queued.update(_ :+ ActiveToast(message, level, System.nanoTime() + duration.toNanos))
 
+  /** Whether anything is queued, read without subscribing — so `TuiApp` can ask "does this run still owe ticks?"
+    * without the question itself becoming a reason to repaint.
+    */
+  def isLive: Boolean = queued.peek.nonEmpty
+
   /** Drops every toast, shown or still queued. */
   def dismissAll(): Unit =
     queued.set(Vector.empty)

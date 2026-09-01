@@ -14,7 +14,11 @@ import scala.concurrent.duration.FiniteDuration
   */
 private[dsl] object AnimationClockLock:
 
+  /** Pins the clock for the duration of `body` and lets it go again afterwards — including when `body` throws, so one
+    * failing assertion cannot leave every later test in the JVM running against a stopped clock.
+    */
   def frozenAt[A](elapsed: FiniteDuration)(body: => A): A =
     synchronized:
       AnimationClock.freezeAt(elapsed)
-      body
+      try body
+      finally AnimationClock.resume()

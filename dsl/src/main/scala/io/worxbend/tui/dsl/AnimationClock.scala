@@ -28,6 +28,12 @@ import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
   *
   * A caller belonging to no runner resolves the one shared unattributed loop, so plain unit tests and [[freezeAt]]
   * still see a single clock between them.
+  *
+  * **Reading the clock also asks for the ticks that advance it.** Each read records the interval the caller needs
+  * against the loop's current frame, and `TuiApp` turns one repeating tick on at the shortest interval anything on the
+  * frame asked for — and off again when a frame asks for nothing. That is why a `spinner` spins in an app that
+  * configured no `tickRate` at all, and why an app showing no animation costs no ticks. An app that *did* set
+  * `config.tickRate` keeps being driven by the runner exactly as before; the demand is then simply not consulted.
   */
 object AnimationClock:
 
@@ -44,14 +50,74 @@ object AnimationClock:
   // decides that runner's first frame. Volatile because it is written on one render thread and read on another.
   @volatile private var seed: FiniteDuration = 0L.nanos
 
-  /** The current animation time, subscribing the caller so its view repaints as the clock advances. */
-  def elapsed(using ReactiveScope): FiniteDuration = clock.get
+  /** How often a caller that names no rate of its own is served: fast enough that every built-in animation preset reads
+    * as smooth, slow enough that an idle spinner is not a busy loop.
+    */
+  val DefaultInterval: FiniteDuration = 80.millis
+
+  /** What the frame currently being composed on each render loop asked for: the shortest interval any caller named, or
+    * `None` when nothing read the clock at all.
+    *
+    * Keyed by render loop for the same reason the clocks are — a value belonging to one loop's frame must not be read
+    * by another's — and written and read only on that loop's own render thread.
+    */
+  private val demands = ConcurrentHashMap[RenderThread.RenderLoop, Option[FiniteDuration]]()
+
+  /** The current animation time, subscribing the caller so its view repaints as the clock advances.
+    *
+    * Reading it also *asks for* the ticks that make it advance, at [[DefaultInterval]] — see [[elapsedEvery]]. That is
+    * what lets an app render a `spinner` and have it spin without configuring anything.
+    */
+  def elapsed(using ReactiveScope): FiniteDuration = elapsedEvery(DefaultInterval)
+
+  /** [[elapsed]], but advertising the rate this particular caller needs.
+    *
+    * A marquee that steps once a second wants a tick a second, not twelve of them. The app's loop then runs at the
+    * shortest interval anything on the current frame asked for, so one slow animation costs one tick per step while a
+    * fast one beside it still moves smoothly.
+    */
+  def elapsedEvery(interval: FiniteDuration)(using ReactiveScope): FiniteDuration =
+    requestTicks(interval)
+    clock.get
+
+  /** Records that something on this frame wants a tick at least every `interval`. */
+  private def requestTicks(interval: FiniteDuration): Unit =
+    val loop = RenderThread.capture()
+    val _    = demands.merge(loop, Some(interval), (a, b) => (a.toList ++ b.toList).minOption)
+
+  /** Forgets what the previous frame asked for, so the demand is rebuilt from what *this* frame renders. Called from
+    * `TuiApp.renderFrame` before the view is evaluated.
+    */
+  private[dsl] def beginFrame(): Unit =
+    val _ = demands.remove(RenderThread.capture())
+
+  /** What the frame just composed on this loop asked for; `None` means nothing animated read the clock, and the app
+    * owes it no ticks at all until something does.
+    */
+  private[dsl] def frameDemand: Option[FiniteDuration] =
+    demands.getOrDefault(RenderThread.capture(), None)
 
   /** The current animation time without subscribing — for a caller that repaints for its own reasons. */
   def peek: FiniteDuration = clock.peek
 
-  /** Republishes the clock. Called from `TuiApp` on every tick, on the render thread. */
+  // Whether [[freezeAt]] currently holds the clock pinned. Volatile because the pin is applied from a test thread and
+  // read on whichever render thread is ticking.
+  @volatile private var pinned: Boolean = false
+
+  /** Republishes the clock. Called from `TuiApp` on every tick of a configured `config.tickRate`, on the render thread.
+    * A configured tick rate is an explicit request for ticks, so this advances even a pinned clock — a test that pins
+    * the clock and then asks for ticks is asking for the ticks.
+    */
   private[dsl] def advance(): Unit = publish((System.nanoTime() - origin).nanos)
+
+  /** [[advance]], unless [[freezeAt]] has the clock pinned. This is what the ticks an app never asked for use.
+    *
+    * The distinction matters because ticks are now negotiated from what a frame renders: an app that configures no
+    * `tickRate` and shows a spinner gets ticks anyway. A test that pinned the clock and started such an app would
+    * otherwise find its pinned moment overwritten within one interval — the pin used to hold by accident, because
+    * nothing at all advanced the clock in a tick-less app.
+    */
+  private[dsl] def advanceUnlessPinned(): Unit = if !pinned then advance()
 
   /** Sets this loop's clock and records the value as the starting point for any clock created after it. */
   private def publish(value: FiniteDuration): Unit =
@@ -76,6 +142,7 @@ object AnimationClock:
   /** Drops the clock bound to `loop`, once its runner has exited. */
   private[dsl] def releaseLoop(loop: RenderThread.RenderLoop): Unit =
     val _ = clocks.remove(loop)
+    val _ = demands.remove(loop)
 
   /** The signal this thread's render loop publishes its animation time on.
     *
@@ -113,11 +180,17 @@ object AnimationClock:
     * [[FreezeTimeout]] this gives up and returns rather than hanging the suite.
     */
   def freezeAt(elapsed: FiniteDuration): Unit =
+    pinned = true
     val applied = CountDownLatch(1)
     RenderThread.runOnRenderThread:
       publish(elapsed)
       applied.countDown()
     val _       = applied.await(FreezeTimeout.toMillis, TimeUnit.MILLISECONDS)
+
+  /** Releases a [[freezeAt]] pin, so the clock follows real time again. The counterpart of `freezeAt`, and what a suite
+    * that pinned the clock must call before leaving anything running that expects to animate.
+    */
+  def resume(): Unit = pinned = false
 
   /** How long [[freezeAt]] waits for its value to reach the render thread before giving up. Long enough that a busy
     * loop still gets there, short enough that a suite fails on an assertion rather than on a timeout.

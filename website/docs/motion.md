@@ -12,9 +12,25 @@ That keeps motion out of widget state and makes effects composable and replayabl
 Use motion to explain change, preserve context, or add a brief sense of arrival—not
 to delay every interaction.
 
-## Enable animation ticks
+## Animation ticks
 
-Motion needs the runtime to produce frames while time passes:
+Motion needs the runtime to produce frames while time passes, and an animated widget
+asks for those frames itself. This app animates with no configuration at all:
+
+```scala
+def view(using ReactiveScope, Theme): Element = spinner("deploying")
+```
+
+Reading the ambient `AnimationClock` — which every animated widget does — records how
+often that widget needs a frame. After each render the app turns one repeating tick on
+at the shortest interval anything on the frame asked for, and off again when a frame
+asks for nothing. So an app showing a spinner ticks, an app showing a static screen does
+not, and neither one had to say so.
+
+Ticks delivered this way arrive at the input loop's own cadence, which is about ten a
+second when no tick rate is configured. That is the difference between "the spinner
+spins" and "the spinner is perfectly smooth". For motion you want to look deliberate,
+set the rate explicitly:
 
 ```scala
 import scala.concurrent.duration.*
@@ -23,11 +39,12 @@ override def config = RunnerConfig(tickRate = Some(50.millis))
 ```
 
 Twenty frames per second is usually enough for terminal animation. Faster ticks
-increase CPU and terminal traffic without guaranteeing a smoother emulator.
+increase CPU and terminal traffic without guaranteeing a smoother emulator. A
+configured `tickRate` also drives `onTick`, which the negotiated ticks deliberately do
+not — an app that never asked for ticks does not start receiving that callback.
 
-That is the *only* setup an animated widget needs. There is no counter to declare,
-advance, or thread through a view — see [the animation clock](#the-animation-clock)
-below.
+Either way there is no counter to declare, advance, or thread through a view — see [the
+animation clock](#the-animation-clock) below.
 
 ## Three kinds of motion
 
