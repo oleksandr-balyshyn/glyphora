@@ -322,9 +322,17 @@ That is the direction a theme colour travels:
 Text.raw(body).under(theme.muted)
 ```
 
-A `Line` and a `Text` hold no style of their own — a line is its spans — so both methods
-are a fold over the spans rather than a field being set. That is why they compose the way
-plain `Style` calls do.
+`patchStyle(style)` is `under` with the two layers swapped: the argument goes on top and
+wins wherever it says something, while everything it stays silent about survives. "Make
+this already-styled line italic without disturbing its colours" is one call:
+
+```scala
+line.patchStyle(Style.Default.italic)
+```
+
+A `Line` and a `Text` hold no style of their own — a line is its spans — so all three
+methods are a fold over the spans rather than a field being set. That is why they compose
+the way plain `Style` calls do.
 
 ### Read the characters back out
 

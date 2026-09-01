@@ -23,6 +23,9 @@ final case class Text(lines: Seq[Line]):
   /** `base` laid underneath every span's own style, so a span that chose a setting keeps it — see [[Span.under]]. */
   def under(base: Style): Text = Text(lines.map(_.under(base)))
 
+  /** `style` layered on top of every span of every line — see [[Span.patchStyle]]. */
+  def patchStyle(style: Style): Text = Text(lines.map(_.patchStyle(style)))
+
 object Text:
   /** Splits `content` on newlines, keeping trailing empty lines; each resulting line carries `style`.
     *

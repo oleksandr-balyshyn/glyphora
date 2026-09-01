@@ -43,6 +43,11 @@ final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None):
     */
   def under(base: Style): Line = Line(spans.map(_.under(base)))
 
+  /** `style` layered on top of every span's own — see [[Span.patchStyle]]. The argument wins where it speaks, and
+    * each span keeps whatever the argument says nothing about, so the spans stay different from one another.
+    */
+  def patchStyle(style: Style): Line = Line(spans.map(_.patchStyle(style)))
+
 object Line:
   def raw(content: String): Line = Line(Seq(Span.raw(content)))
 

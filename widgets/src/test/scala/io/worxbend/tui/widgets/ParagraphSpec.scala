@@ -80,3 +80,9 @@ final class ParagraphSpec extends AnyFunSuite:
     val buffer = rendered(Paragraph(Text.raw("漢字").styled(_.withFg(Color.Red))), 6, 1)
     assert(trimmedLines(buffer) == Seq("漢字"))
     assert(buffer.get(2, 0).symbol == "字") // still two columns for the first character
+
+  test("patchStyle survives the render path and layers over the span's own style"):
+    val text   = Text(Seq(Line(Seq(Span("hi", Style.Default.withFg(Color.Green))))))
+    val buffer = rendered(Paragraph(text.patchStyle(Style.Default.italic)), 4, 1)
+    assert(buffer.get(0, 0).style.fg.contains(Color.Green))
+    assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Italic))

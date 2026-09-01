@@ -48,3 +48,30 @@ final class TextStylingSpec extends AnyFunSuite:
 
   test("Text.styled on an empty text is an empty text"):
     assert(Text(Seq.empty).styled(_.bold) == Text(Seq.empty))
+
+  test("patchStyle keeps per-span colours and adds the new attribute to all of them"):
+    val line = Line(Seq(Span("a", Style.Default.withFg(Color.Red)), Span("b", Style.Default.withFg(Color.Blue))))
+      .patchStyle(Style.Default.italic)
+    assert(line.spans.map(_.style.fg) == Seq(Some(Color.Red), Some(Color.Blue)))
+    assert(line.spans.forall(_.style.modifiers.hasAny(Modifiers.Italic)))
+
+  test("patchStyle lets the argument overrule a field the span already set"):
+    val span = Span("a", Style.Default.withFg(Color.Red)).patchStyle(Style.Default.withFg(Color.Blue))
+    assert(span.style.fg.contains(Color.Blue))
+
+  test("patchStyle is the mirror of under"):
+    val own  = Style.Default.withFg(Color.Red)
+    val base = Style.Default.withFg(Color.Blue).withBg(Color.Black)
+    assert(Span("a", own).under(base).style == base.patch(own))
+    assert(Span("a", own).patchStyle(base).style == own.patch(base))
+
+  test("patchStyle layers associatively across two calls"):
+    val text = Text.raw("a\nb")
+    val one  = Style.Default.bold
+    val two  = Style.Default.withFg(Color.Green)
+    assert(text.patchStyle(one).patchStyle(two) == text.patchStyle(one.patch(two)))
+
+  test("patchStyle on empty values is a no-op rather than an error"):
+    assert(Line(Seq.empty).patchStyle(Style.Default.bold) == Line(Seq.empty))
+    assert(Text(Seq.empty).patchStyle(Style.Default.bold) == Text(Seq.empty))
+    assert(Span.raw("").patchStyle(Style.Default).style == Style.Default)

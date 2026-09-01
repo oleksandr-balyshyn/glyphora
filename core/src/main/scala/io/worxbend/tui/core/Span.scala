@@ -20,6 +20,15 @@ final case class Span(content: String, style: Style):
     */
   def under(base: Style): Span = copy(style = base.patch(style))
 
+  /** This span with `style` layered on top of its own: the argument's explicit choices win, and everything the
+    * argument stays silent about survives.
+    *
+    * "Make this already-styled span italic without disturbing its colour" used to be
+    * `span.copy(style = span.style.patch(Style.Default.italic))` at every call site. This is that expression under a
+    * name. It is [[under]] with the two layers swapped: `under` puts the argument beneath, this puts it on top.
+    */
+  def patchStyle(style: Style): Span = copy(style = this.style.patch(style))
+
 object Span:
   def raw(content: String): Span = Span(content, Style.Default)
 
