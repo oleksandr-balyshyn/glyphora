@@ -326,7 +326,44 @@ override def bindings: KeyBindings = KeyBindings(
 ```
 
 `currentScreen` and `screenDepth` are reactive reads for `view`; `screenDepthNow` is the
-same depth read without subscribing, for a handler. That last binding is the usual
+same depth read without subscribing, for a handler.
+
+### Name the screens, and draw a breadcrumb
+
+A screen can carry a short human name. Nothing in the library draws it — it is there so
+the application can build its own trail:
+
+```scala
+pushScreen(Screen.full(settingsPage, label = "Settings"))
+pushScreen(Screen(confirmBody, label = "Confirm delete"))
+```
+
+```scala
+def view(using ReactiveScope, Theme): Element =
+  column(
+    text(("Home" +: screenLabels).mkString(" › ")),
+    body,
+  )
+```
+
+`screenLabels` lists the stacked screens outermost first, which is the order a breadcrumb
+reads in, and skips any screen that has no label — a dialog that never wanted a name adds
+a level of depth without opening a blank step in the trail. The app's own `view` is not in
+the list: it is the thing everything else is stacked on, and only the application knows
+what to call it, which is why `"Home"` above is written by hand.
+
+It is a reactive read like `screenDepth`, so a view that draws the trail repaints on the
+next push or pop by itself. A screen written as a class overrides `label` directly:
+
+```scala
+val settings = new Screen:
+  def view(using ReactiveScope, Theme): Element = settingsPage
+  override def label: Option[String] = Some("Settings")
+```
+
+There is deliberately no accessor for the screens themselves. Handing out the list would
+publish the order the stack happens to be stored in, and everything that has wanted it so
+far — a breadcrumb, a title bar — wants the names. That last binding is the usual
 reason to want it: one `Esc` that means "go back a level" while anything is pushed and
 "quit" at the top, without the app keeping a parallel counter of its own.
 

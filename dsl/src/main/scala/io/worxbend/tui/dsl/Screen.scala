@@ -40,6 +40,15 @@ trait Screen:
     */
   def bindings: KeyBindings = KeyBindings.empty
 
+  /** A short human-readable name for this screen — "Settings", "Confirm delete" — or `None` when it has none.
+    *
+    * The library never draws this by itself. It exists so an application can build its own chrome from the stack:
+    * `TuiApp.screenLabels` collects the named screens outermost-first, which is exactly the sequence a breadcrumb or a
+    * title bar wants. Deriving the name from the class instead is not an option here — that would mean runtime
+    * reflection, which this library refuses to depend on so that native images need no reflection configuration.
+    */
+  def label: Option[String] = None
+
   /** Runs on the render thread the moment this screen goes on the stack, before the frame that first shows it.
     *
     * This is a screen's own "now I am running", the counterpart of `TuiApp.onStart` for a subtree that comes and goes.
@@ -73,6 +82,9 @@ object Screen:
     * `onEnter`/`onLeave` are the same hooks the trait declares, for a screen small enough not to want a class of its
     * own: `Screen(detailView, onEnter = () => startPolling(), onLeave = () => stopPolling())`.
     *
+    * `label` names the screen for the application's own breadcrumbs and title bars — see [[Screen.label]]; leaving it
+    * empty means the screen is unnamed.
+    *
     * `keys` declares the shortcuts that exist only while this screen is on top — see [[Screen.bindings]] — so a dialog
     * can own its `Esc` without the app having to test the navigation depth:
     * `Screen(body, keys = KeyBindings(binding("esc", "close")(popScreen())))`.
@@ -82,8 +94,9 @@ object Screen:
       onEnter: () => Unit = () => (),
       onLeave: () => Unit = () => (),
       keys: KeyBindings = KeyBindings.empty,
+      label: String = "",
   ): Screen =
-    build(element, Presentation.Modal, onEnter, onLeave, keys)
+    build(element, Presentation.Modal, onEnter, onLeave, keys, label)
 
   /** A ready-made modal "are you sure?": Left/Right (and Tab) move between the two buttons, Space or Enter presses the
     * selected one, Esc cancels.
@@ -124,8 +137,9 @@ object Screen:
       onEnter: () => Unit = () => (),
       onLeave: () => Unit = () => (),
       keys: KeyBindings = KeyBindings.empty,
+      label: String = "",
   ): Screen =
-    build(element, Presentation.Full, onEnter, onLeave, keys)
+    build(element, Presentation.Full, onEnter, onLeave, keys, label)
 
   private def build(
       element: View,
@@ -133,6 +147,7 @@ object Screen:
       entering: () => Unit,
       leaving: () => Unit,
       keys: KeyBindings,
+      name: String,
   ): Screen =
     new Screen:
       def view(using ReactiveScope, Theme): Element = element
@@ -140,6 +155,9 @@ object Screen:
       override def onEnter(): Unit                  = entering()
       override def onLeave(): Unit                  = leaving()
       override def bindings: KeyBindings            = keys
+      // an empty string is the "no name given" spelling: the parameter has to have a default, and `Option[String]` as
+      // a parameter type would make every labelled call site write `Some(...)` for nothing
+      override def label: Option[String]            = Option(name).filter(_.nonEmpty)
 
 /** An intro shown before the first view render: `content` (typically a `bigText` logo composition) plays `effect` and
   * holds for at least `minimumDuration`; any key skips it. Wire via `TuiApp.splash`.

@@ -307,6 +307,22 @@ trait TuiApp:
   protected final def screenDepth(using scope: ReactiveScope): Int =
     screenStack.get(using scope).size
 
+  /** The names of the screens on the stack, outermost first — the sequence a breadcrumb wants — as a reactive read.
+    *
+    * A screen with no `Screen.label` contributes nothing rather than a blank, so a dialog that never wanted a name does
+    * not open a gap in the trail. The app's own [[view]] is not in this list: it is the thing everything else is
+    * stacked *on*, and only the application knows what to call it.
+    *
+    * {{{
+    * text(("Home" +: screenLabels).mkString(" > "))
+    * }}}
+    *
+    * There is deliberately no accessor for the screens themselves. Handing out the list would publish the order the
+    * stack happens to be stored in, and every use for it that came up — a breadcrumb, a title bar — wants the names.
+    */
+  protected final def screenLabels(using scope: ReactiveScope): Seq[String] =
+    screenStack.get(using scope).reverse.flatMap(_.label)
+
   /** [[screenDepth]] read without subscribing — the spelling for an event handler, which has no [[ReactiveScope]].
     *
     * What it is for: one global `Esc` binding that means "go back a level" while anything is pushed and "quit" at the
