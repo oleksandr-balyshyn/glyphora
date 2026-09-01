@@ -141,7 +141,8 @@ and exits non-zero.
 The app is a **class** with a one-line `object` on the end so that tests can build a
 fresh one per scenario: `TuiApp` keeps its state on the instance and never resets it
 between runs, so re-running a single `object` starts holding whatever the last run left
-behind. The launcher gets `object Counter`; a test writes `Pilot(CounterApp())`.
+behind. The launcher gets `object Counter`; a test writes
+`Pilot.start(Size(40, 10))(CounterApp().runWith)`.
 
 Three ideas carry through the entire toolkit:
 

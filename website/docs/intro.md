@@ -61,7 +61,8 @@ single `object`, for one reason: a test needs a fresh app for every scenario. `T
 keeps its state — signals, the screen stack, running effects — on the instance and
 never resets it between runs, so running one `object` twice starts the second run with
 whatever the first run left behind. Writing it as a class lets a test say
-`Pilot(CounterApp())` once per test while the launcher still gets its `object Counter`.
+`Pilot.start(Size(40, 10))(CounterApp().runWith)` once per test while the launcher
+still gets its `object Counter`.
 
 ## The mental model
 

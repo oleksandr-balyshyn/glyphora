@@ -117,7 +117,8 @@ TuiApp`? Because a test needs a *fresh* app for each scenario. `TuiApp` keeps it
 — the signals, the screen stack, any running effect — on the instance and never resets
 it between runs, so running the same object twice starts the second run holding
 whatever the first left behind. Splitting it lets [Testing](./testing) write
-`Pilot(CounterApp())` per test while the launcher still has its `object Counter`. The
+`Pilot.start(Size(40, 10))(CounterApp().runWith)` per test while the launcher still has
+its `object Counter`. The
 runnable twin of this app is [`examples/counter`](./examples).
 
 Run it in a terminal:
