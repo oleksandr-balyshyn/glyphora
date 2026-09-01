@@ -67,7 +67,7 @@ trait Element:
     *
     *   1. an explicit `.length(n)` the caller put on this node — the caller's own answer always wins, and any other
     *      explicit constraint (`.fill`, a percentage) is by definition the container's decision, so it measures as
-    *      unmeasurable;
+    *      unmeasurable (that first step is [[constrainedHeight]], which every override below shares);
     *   1. the widget itself, when it implements [[Measured]] — a wrapped paragraph, a markdown document, an animated
     *      text that needs room to bounce all know their own content;
     *   1. this node's default [[claim]], for the many one-row controls whose widget has nothing to add.
@@ -77,10 +77,19 @@ trait Element:
     * the arithmetic over their children is knowledge no single widget has.
     */
   private[dsl] def intrinsicHeight(width: Int): Option[Int] =
+    constrainedHeight(measuredHeight(width).orElse(claimedHeight))
+
+  /** The height an explicit constraint on this node fixes, or `fallback` when the caller set none.
+    *
+    * The policy every `intrinsicHeight` shares: an explicit `.length(n)` is the caller's own answer and always wins;
+    * any other explicit constraint (`.fill`, a percentage) is by definition the container's decision, so the node
+    * measures as unmeasurable. Only what to do with *no* constraint differs per node, and that is `fallback`.
+    */
+  private[dsl] final def constrainedHeight(fallback: => Option[Int]): Option[Int] =
     props.constraint match
       case Some(Constraint.Length(cells)) => Some(cells)
       case Some(_)                        => None
-      case None                           => measuredHeight(width).orElse(claimedHeight)
+      case None                           => fallback
 
   /** What the widget says about its own content, or nothing when it cannot say. */
   private def measuredHeight(width: Int): Option[Int] =

@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Constraint, Rect, Widget}
+import io.worxbend.tui.core.{Rect, Widget}
 import io.worxbend.tui.widgets as w
 
 /** A node that wraps exactly one other node and is transparent to everything but rendering.
@@ -21,16 +21,12 @@ private[dsl] trait DecoratingElement extends Element:
   private[dsl] override def builtinPasteHandler: Option[BuiltinPasteHandler] = inner.builtinPasteHandler
   private[dsl] override def claim: SizeClaim                                 = inner.claim
 
-  /** An explicit `.length(n)` on the decorator itself still wins — it is the caller's own measurement of the whole
-    * wrapper. With nothing set, the wrapped node's measurement is the decorator's. The trait default cannot serve here:
-    * a decorator's own `widget` is a lambda around `inner.widget`, so it is not a [[io.worxbend.tui.core.Measured]] and
+  /** With no constraint of its own, a decorator measures as whatever it wraps. The trait default cannot serve here: a
+    * decorator's own `widget` is a lambda around `inner.widget`, so it is not a [[io.worxbend.tui.core.Measured]] and
     * the wrapped node's own answer would be lost on the way through.
     */
   private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
-    props.constraint match
-      case Some(Constraint.Length(cells)) => Some(cells)
-      case Some(_)                        => None
-      case None                           => inner.intrinsicHeight(width)
+    constrainedHeight(inner.intrinsicHeight(width))
 
 /** Wraps a focusable element during the focus pass so its rendered area is recorded for click-to-focus hit-testing. */
 private[dsl] final case class TrackedElement(inner: Element, index: Int, tracker: FocusTracker)

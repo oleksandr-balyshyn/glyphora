@@ -41,11 +41,12 @@ final case class ResponsiveElement(
 
   private[dsl] override def claim: SizeClaim = resolved.map(_.claim).getOrElse(SizeClaim.Fill)
 
+  /** With no constraint of its own, this node measures as the branch [[ResponsivePass]] built — and as unmeasurable
+    * until it has one. The trait default cannot serve here: this node's `widget` is a lambda that either forwards to
+    * the branch or builds one from the render area, so it is never a [[io.worxbend.tui.core.Measured]] itself.
+    */
   private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
-    props.constraint match
-      case Some(Constraint.Length(cells)) => Some(cells)
-      case Some(_)                        => None
-      case None                           => resolved.flatMap(_.intrinsicHeight(width))
+    constrainedHeight(resolved.flatMap(_.intrinsicHeight(width)))
 
 /** A scrollable viewport over taller-than-the-screen content. Up/Down/PageUp/PageDown scroll while focused.
   *
