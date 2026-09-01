@@ -90,20 +90,20 @@
 ## 🚀 Your first app
 
 > [!NOTE]
-> **Not on Maven Central yet.** `v0.12.0` is tagged but unreleased, so the coordinates below
+> **Not on Maven Central yet.** `0.13.0` is not tagged or released yet, so the coordinates below
 > will not resolve. Until the first release lands, clone the repo and run `./mill __.publishLocal`
 > — that puts `tui-core`, `tui-terminal`, `tui-widgets`, `tui-runtime`, `tui-macros`, `tui-dsl`
-> and `tui-test` at `0.12.0` into `~/.ivy2/local`. Mill reads that cache by default; sbt needs
+> and `tui-test` at `0.13.0` into `~/.ivy2/local`. Mill reads that cache by default; sbt needs
 > `resolvers += Resolver.defaultLocal`. See [Build from source](#-build-from-source).
 
 ```scala
 // build.mill
-def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.12.0")
+def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.13.0")
 ```
 
 ```scala
 // build.sbt
-libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.12.0"
+libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.13.0"
 ```
 
 Then return an ordinary Scala `Element` tree:
@@ -242,7 +242,7 @@ text. Buffer helpers skip wide-character continuation cells, so assertions match
 
 > [!TIP]
 > `Pilot`, `BufferAssertions` and `GoldenFrames` ship as `io.worxbend::tui-test`, so add it as a
-> test-only dependency (`mvn"io.worxbend::tui-test:0.12.0"`) rather than copying the harness.
+> test-only dependency (`mvn"io.worxbend::tui-test:0.13.0"`) rather than copying the harness.
 
 🧪 **[Testing guide →](website/docs/testing.md)**
 
@@ -266,7 +266,7 @@ cd glyphora
 
 ./mill __.compile        # build everything
 ./mill __.test           # run every suite
-./mill __.publishLocal   # install 0.12.0 into your local Ivy cache
+./mill __.publishLocal   # install 0.13.0 into your local Ivy cache
 ```
 
 Day-to-day development:

@@ -20,10 +20,10 @@ structured enough for dashboards, forms, file browsers, and full-screen tools.
 
 :::caution Not on Maven Central yet
 
-`0.12.0` is tagged but unpublished, so `io.worxbend::tui-dsl:0.12.0` will not resolve
+`0.13.0` is not tagged or published yet, so `io.worxbend::tui-dsl:0.13.0` will not resolve
 from a public repository. Clone the repository and run `./mill __.publishLocal`, which
 installs `tui-core`, `tui-terminal`, `tui-widgets`, `tui-runtime`, `tui-macros`,
-`tui-dsl` and `tui-test` at `0.12.0` into `~/.ivy2/local`; Mill reads that cache by
+`tui-dsl` and `tui-test` at `0.13.0` into `~/.ivy2/local`; Mill reads that cache by
 default, and sbt needs `resolvers += Resolver.defaultLocal`. Full instructions are in
 [Getting started](./getting-started#1-add-glyphora).
 

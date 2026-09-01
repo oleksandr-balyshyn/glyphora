@@ -503,9 +503,12 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * that set it for as long as the terminal lives, and this library must never be the reason a user's shell scrolls
     * inside a box after the app exits.
     *
-    * The cursor is put back afterwards. Setting a region homes the cursor on essentially every terminal (DEC STD 070),
-    * so without the closing `moveTo` the next frame's first cell would be written relative to a cursor that had
-    * silently jumped to the top-left corner.
+    * The cursor is left at a position this method names, rather than wherever the region change put it. Setting a
+    * region homes the cursor on essentially every terminal (DEC STD 070), so the cursor after the scroll is at the
+    * screen's top-left corner and not where the caller left it. The closing `moveTo` puts it at the band's own top-left
+    * — a position stated here, not the one held before the call, which this does not save and cannot restore. That is
+    * enough because a full repaint follows, and every cell it writes is positioned with an absolute `moveTo` of its
+    * own; what the sequence must not do is leave the cursor somewhere nothing has stated.
     *
     * A full repaint is requested. The scroll moves rows the diff baseline still describes in their old places, and a
     * diff against that baseline would leave every moved row unwritten — the same reasoning, and the same mechanism, as

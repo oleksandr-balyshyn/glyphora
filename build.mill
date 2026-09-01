@@ -93,6 +93,6 @@ object `package` extends Module {
       developers = Seq(Developer("limpid-kzonix", "limpid-kzonix", "https://github.com/limpid-kzonix")),
     )
 
-    def publishVersion = "0.12.0"
+    def publishVersion = "0.13.0"
   }
 }
