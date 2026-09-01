@@ -59,13 +59,88 @@ private object FocusAnchor:
     */
   val Cleared: FocusAnchor = FocusAnchor(-1, scala.None)
 
+/** Where every element rendered in the frame being composed, in the order it was painted — the map click-to-focus hit
+  * testing resolves against, and the one an element's built-in mouse behavior reads its own area from.
+  *
+  * Two independent maps: focusables keyed by focus index (the depth-first tab order), and the non-focusable elements
+  * that carry an `onMouseEvent` keyed by the pointer id the decoration pass assigns, so mouse delivery can be filtered
+  * by pointer position for them too. The second is deliberately *not* part of hit-testing or the tab order: a pointer
+  * id is not a focus index.
+  *
+  * A container paints itself before its children and paints its children in order, so a later paint sequence means
+  * painted *over* — see [[PaintedArea]]. Owned by one [[FocusTracker]] and touched only on the render thread.
+  */
+private[dsl] final class PaintedAreas:
+
+  private val areas        = mutable.Map[Int, PaintedArea]()
+  private val pointerAreas = mutable.Map[Int, Rect]()
+  private var viewports    = List.empty[ViewportTransform]
+
+  /** How many areas have been recorded so far this frame; the paint sequence the next [[record]] stamps. */
+  private var paintCounter = 0
+
+  /** Records where the focusable at `index` rendered, mapped out of any offscreen scroll buffers it rendered inside:
+    * translated into screen coordinates and clipped to every enclosing viewport. A focusable scrolled out of view clips
+    * to nothing and is not recorded at all, so [[hitTest]] can never return it and [[areaOf]] never hands an empty area
+    * to a built-in mouse handler.
+    */
+  def record(index: Int, area: Rect): Unit =
+    val onScreen = onScreenArea(area)
+    if !onScreen.isEmpty then
+      areas(index) = PaintedArea(onScreen, paintCounter)
+      paintCounter += 1
+
+  /** Records where an element that carries an `onMouseEvent` but is not focusable rendered, keyed by the pointer id the
+    * decoration pass assigns. Translated onto the screen and dropped when scrolled out of view, as [[record]] does.
+    */
+  def recordPointer(id: Int, area: Rect): Unit =
+    val onScreen = onScreenArea(area)
+    if !onScreen.isEmpty then pointerAreas(id) = onScreen
+
+  /** Published by a scroll view for exactly the duration of its content render, and paired with [[popViewport]] in a
+    * `finally` so an exception mid-render cannot leak a translation into a sibling subtree.
+    */
+  def pushViewport(viewport: ViewportTransform): Unit = viewports = viewport :: viewports
+
+  def popViewport(): Unit = viewports = viewports.drop(1)
+
+  /** A rendered rect translated out of every offscreen scroll buffer it was drawn into, innermost first: an inner
+    * scroll view's transform maps into the *enclosing* content space, and the enclosing one then maps that onward.
+    */
+  private def onScreenArea(area: Rect): Rect =
+    viewports.foldLeft(area)((rect, viewport) => viewport(rect))
+
+  /** Starts a frame: everything recorded for the previous one is dropped, and the next [[record]] paints first. */
+  def clear(): Unit =
+    areas.clear()
+    pointerAreas.clear()
+    paintCounter = 0
+    viewports = Nil
+
+  def areaOf(index: Int): Option[Rect] = areas.get(index).map(_.area)
+
+  def pointerAreaOf(id: Int): Option[Rect] = pointerAreas.get(id)
+
+  /** The focusable the user can actually *see* at `pos`, if any: of every focusable covering that cell, the one painted
+    * last. `pos` is absolute, the same coordinate space a [[io.worxbend.tui.core.MouseEvent]] reports in.
+    *
+    * Before, this picked the smallest covering rectangle instead. That rule assumes the innermost rectangle is also the
+    * visible one, which holds inside a single subtree — a button nested in a panel is both smaller and painted later —
+    * but fails between `layers`: a modal panel drawn over a small button underneath it is the *larger* rectangle, so a
+    * click on the modal was handed to the button the modal hides. Paint order answers both cases with one rule, and it
+    * is the same rule [[EventRouter]] already uses for overlapping handler-carrying siblings, so the two halves of hit
+    * testing no longer disagree.
+    */
+  def hitTest(pos: Position): Option[Int] =
+    val hits = areas.filter((_, area) => area.area.contains(pos))
+    hits.maxByOption((_, area) => area.sequence).map((index, _) => index)
+
 /** Per-app focus bookkeeping, owned by a single `TuiApp.runWith` invocation and touched only on the render thread:
   * which focusable (by depth-first order index) has focus, how many exist, and where each rendered last frame (for
   * click-to-focus hit-testing).
   *
-  * It also carries a second, independent area map for the non-focusable elements that carry an `onMouseEvent`, so
-  * [[EventRouter]] can filter mouse delivery by pointer position for them too. That map is deliberately *not* part of
-  * hit-testing or the tab order: a pointer id is not a focus index.
+  * Where things rendered is [[PaintedAreas]]' job, held as a field and forwarded: this class decides where focus *is*,
+  * that one remembers where the frame *put* everything.
   */
 private[dsl] final class FocusTracker:
 
@@ -91,51 +166,26 @@ private[dsl] final class FocusTracker:
     */
   private var focusKeysSeen = Vector.empty[Option[String]]
   private var lastAutofocus = Option.empty[AutofocusRequest]
-  private val areas         = mutable.Map[Int, PaintedArea]()
-  private val pointerAreas  = mutable.Map[Int, Rect]()
-  private var viewports     = List.empty[ViewportTransform]
 
-  /** How many areas have been recorded so far this frame; the paint sequence the next [[record]] stamps. */
-  private var paintCounter = 0
-
-  /** Records where `index` rendered, mapped out of any offscreen scroll buffers it rendered inside: translated into
-    * screen coordinates and clipped to every enclosing viewport. A focusable scrolled out of view clips to nothing and
-    * is not recorded at all, so [[hitTest]] can never return it and [[areaOf]] never hands an empty area to a built-in
-    * mouse handler.
+  /** Where everything rendered this frame — a separate job from "where focus is", forwarded rather than exposed so a
+    * caller cannot record into a tracker whose focus state disagrees.
     */
-  def record(index: Int, area: Rect): Unit =
-    val onScreen = onScreenArea(area)
-    if !onScreen.isEmpty then
-      areas(index) = PaintedArea(onScreen, paintCounter)
-      paintCounter += 1
+  private val painted = PaintedAreas()
 
-  /** Records where an element that carries an `onMouseEvent` but is not focusable rendered, so mouse delivery can be
-    * filtered by pointer position the way click-to-focus already is. Keyed by the pointer id the decoration pass
-    * assigns — a numbering independent of the focus index, and invisible to the tab order. Translated onto the screen
-    * and dropped when scrolled out of view, exactly as [[record]] does.
-    */
-  def recordPointer(id: Int, area: Rect): Unit =
-    val onScreen = onScreenArea(area)
-    if !onScreen.isEmpty then pointerAreas(id) = onScreen
+  /** @see [[PaintedAreas.record]] */
+  def record(index: Int, area: Rect): Unit = painted.record(index, area)
 
-  /** Published by a scroll view for exactly the duration of its content render, and paired with [[popViewport]] in a
-    * `finally` so an exception mid-render cannot leak a translation into a sibling subtree.
-    */
-  def pushViewport(viewport: ViewportTransform): Unit = viewports = viewport :: viewports
+  /** @see [[PaintedAreas.recordPointer]] */
+  def recordPointer(id: Int, area: Rect): Unit = painted.recordPointer(id, area)
 
-  def popViewport(): Unit = viewports = viewports.drop(1)
+  /** @see [[PaintedAreas.pushViewport]] */
+  def pushViewport(viewport: ViewportTransform): Unit = painted.pushViewport(viewport)
 
-  /** A rendered rect translated out of every offscreen scroll buffer it was drawn into, innermost first: an inner
-    * scroll view's transform maps into the *enclosing* content space, and the enclosing one then maps that onward.
-    */
-  private def onScreenArea(area: Rect): Rect =
-    viewports.foldLeft(area)((rect, viewport) => viewport(rect))
+  /** @see [[PaintedAreas.popViewport]] */
+  def popViewport(): Unit = painted.popViewport()
 
-  def clearAreas(): Unit =
-    areas.clear()
-    pointerAreas.clear()
-    paintCounter = 0
-    viewports = Nil
+  /** @see [[PaintedAreas.clear]] */
+  def clearAreas(): Unit = painted.clear()
 
   /** Re-anchors focus against the focus keys of the tree that is about to render (depth-first order, `None` for unkeyed
     * focusables): a keyed element keeps focus even when its position moved, and the index is clamped into the new
@@ -253,23 +303,14 @@ private[dsl] final class FocusTracker:
     // an index outside the range would render a frame with nothing focused at all
     anchor = FocusAnchor(clampedIndex(index), scala.None)
 
-  def areaOf(index: Int): Option[Rect] = areas.get(index).map(_.area)
+  /** @see [[PaintedAreas.areaOf]] */
+  def areaOf(index: Int): Option[Rect] = painted.areaOf(index)
 
-  def pointerAreaOf(id: Int): Option[Rect] = pointerAreas.get(id)
+  /** @see [[PaintedAreas.pointerAreaOf]] */
+  def pointerAreaOf(id: Int): Option[Rect] = painted.pointerAreaOf(id)
 
-  /** The focusable the user can actually *see* at `pos`, if any: of every focusable covering that cell, the one painted
-    * last. `pos` is absolute, the same coordinate space a [[io.worxbend.tui.core.MouseEvent]] reports in.
-    *
-    * Before, this picked the smallest covering rectangle instead. That rule assumes the innermost rectangle is also the
-    * visible one, which holds inside a single subtree — a button nested in a panel is both smaller and painted later —
-    * but fails between `layers`: a modal panel drawn over a small button underneath it is the *larger* rectangle, so a
-    * click on the modal was handed to the button the modal hides. Paint order answers both cases with one rule, and it
-    * is the same rule [[EventRouter]] already uses for overlapping handler-carrying siblings, so the two halves of hit
-    * testing no longer disagree.
-    */
-  def hitTest(pos: Position): Option[Int] =
-    val hits = areas.filter((_, painted) => painted.area.contains(pos))
-    hits.maxByOption((_, painted) => painted.sequence).map((index, _) => index)
+  /** @see [[PaintedAreas.hitTest]] */
+  def hitTest(pos: Position): Option[Int] = painted.hitTest(pos)
 
 private[dsl] object FocusPass:
 
