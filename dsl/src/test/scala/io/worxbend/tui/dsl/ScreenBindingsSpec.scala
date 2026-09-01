@@ -194,8 +194,8 @@ final class ScreenBindingsSpec extends AnyFunSuite:
     assert(app.helps == 1)
     quitApp(pilot)
 
-  /** An app whose command list holds a palette-only entry: a command with no key at all, which the user reaches by
-    * name through `Ctrl+P` rather than by pressing something.
+  /** An app whose command list holds a palette-only entry: a command with no key at all, which the user reaches by name
+    * through `Ctrl+P` rather than by pressing something.
     */
   private final class KeylessApp extends TuiApp:
     var exported: Int = 0

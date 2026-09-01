@@ -12,7 +12,13 @@ import scala.concurrent.duration.Duration
   * A scrolling region is the band of rows a terminal will let a scroll move. It is the primitive behind inserting lines
   * above a live interface without repainting the interface, and it is also the one primitive here that can leave a
   * terminal unusable if it is left set — hence the reset in `RestoreAll`, pinned below.
-  */final class ScrollRegionSpec extends AnyFunSuite:
+  *
+  * The frame-record half matters as much as the sequences. A backend's `draw` writes only the cells that differ from
+  * the frame it last flushed. The moment the terminal shifts rows on its own, that record stops describing the screen:
+  * every row of the scrolled band reads as changed, and the next frame repaints all of them — which is exactly the work
+  * the scroll was asked for to avoid. So the record is shifted the same way, and these tests pin that too.
+  */
+final class ScrollRegionSpec extends AnyFunSuite:
 
   private val Esc = ""
 
@@ -116,7 +122,6 @@ import scala.concurrent.duration.Duration
     assert(backend.scrollRegionUp(0, 9, 1) == Right(()))
     backend.resizeTo(Size(20, 6))
     assertThrows[IllegalArgumentException](backend.scrollRegionUp(0, 9, 1))
-
 
   private final class BareBackend extends Backend:
     def size: Either[BackendError, Size]                                  = Right(Size(10, 3))

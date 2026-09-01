@@ -24,24 +24,24 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   // blinking is the terminal's own default, so that is where a freshly built backend starts
   @volatile private var cursorBlinking                         = true
 
-  @volatile private var cursorShape: CursorShape               = CursorShape.Default
-  @volatile private var lastClipboard: Option[String]          = None
-  @volatile private var lastTitle: Option[String]              = None
-  @volatile private var caret: Option[Position]                = None
-  @volatile private var inlineRows                             = 0
-  private val caretMoveCounter                                 = AtomicLong(0)
-  private val appendedLineCounter                              = AtomicLong(0)
-  private val drawCounter                                      = AtomicLong(0)
-  private val idleReadCounter                                  = AtomicLong(0)
-  private val suspendCounter                                   = AtomicLong(0)
-  private val wakeCounter                                      = AtomicLong(0)
-  private val fullRedrawCounter                                = AtomicLong(0)
-  private val printedLines                                     = scala.collection.mutable.ArrayBuffer.empty[String]
-  private val clears                                           = scala.collection.mutable.ArrayBuffer.empty[ClearType]
-  private val insertedBlocks  = scala.collection.mutable.ArrayBuffer.empty[Buffer]
-  private val scrolledRegions = scala.collection.mutable.ArrayBuffer.empty[ScrolledRegion]
-  private val sizeRequests    = scala.collection.mutable.ArrayBuffer.empty[Size]
-  private val scrolls         =
+  @volatile private var cursorShape: CursorShape      = CursorShape.Default
+  @volatile private var lastClipboard: Option[String] = None
+  @volatile private var lastTitle: Option[String]     = None
+  @volatile private var caret: Option[Position]       = None
+  @volatile private var inlineRows                    = 0
+  private val caretMoveCounter                        = AtomicLong(0)
+  private val appendedLineCounter                     = AtomicLong(0)
+  private val drawCounter                             = AtomicLong(0)
+  private val idleReadCounter                         = AtomicLong(0)
+  private val suspendCounter                          = AtomicLong(0)
+  private val wakeCounter                             = AtomicLong(0)
+  private val fullRedrawCounter                       = AtomicLong(0)
+  private val printedLines                            = scala.collection.mutable.ArrayBuffer.empty[String]
+  private val clears                                  = scala.collection.mutable.ArrayBuffer.empty[ClearType]
+  private val insertedBlocks                          = scala.collection.mutable.ArrayBuffer.empty[Buffer]
+  private val scrolledRegions                         = scala.collection.mutable.ArrayBuffer.empty[ScrolledRegion]
+  private val sizeRequests                            = scala.collection.mutable.ArrayBuffer.empty[Size]
+  private val scrolls                                 =
     scala.collection.mutable.ArrayBuffer.empty[(RowRange, Int, ScrollDirection)]
 
   def size: Either[BackendError, Size] = Right(terminalSize)

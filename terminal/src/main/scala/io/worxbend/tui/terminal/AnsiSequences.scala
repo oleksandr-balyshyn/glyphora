@@ -7,11 +7,11 @@ private[terminal] object AnsiSequences:
 
   private val Esc = "\u001b"
 
-  val EnterAlternateScreen: String  = s"$Esc[?1049h"
-  val LeaveAlternateScreen: String  = s"$Esc[?1049l"
-  val ClearScreen: String           = clear(ClearType.All)
-  val HideCursor: String            = s"$Esc[?25l"
-  val ShowCursor: String            = s"$Esc[?25h"
+  val EnterAlternateScreen: String = s"$Esc[?1049h"
+  val LeaveAlternateScreen: String = s"$Esc[?1049l"
+  val ClearScreen: String          = clear(ClearType.All)
+  val HideCursor: String           = s"$Esc[?25l"
+  val ShowCursor: String           = s"$Esc[?25h"
 
   /** DECSCUSR with parameter 0: hands the cursor's shape back to the user's own terminal configuration. */
   val ResetCursorShape: String      = s"$Esc[0 q"

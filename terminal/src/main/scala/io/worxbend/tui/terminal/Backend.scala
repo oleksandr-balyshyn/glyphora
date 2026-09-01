@@ -415,6 +415,7 @@ private[terminal] object Backend:
       rows += row.result().reverse.dropWhile(_ == ' ').reverse
       y += 1
     rows.result()
+
   /** The answer both scroll-region defaults give: this backend has no scroll region to offer.
     *
     * A failure rather than a silent success, because the caller's fallback is to repaint the rows itself. A no-op that

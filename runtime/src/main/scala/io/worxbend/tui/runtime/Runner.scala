@@ -94,8 +94,8 @@ trait Runner:
   * the new method — which is the intended outcome, since the alternative is an implementation that compiles and then
   * does nothing — but it means a release that adds one is not a drop-in replacement for the release before it.
   * [[insertBefore]] was added on those terms in 0.13.0. The trait is written to be *called*, not implemented, so the
-  * population this affects is test doubles; a double that wants the old behaviour can implement the new method as
-  * `()` in one line.
+  * population this affects is test doubles; a double that wants the old behaviour can implement the new method as `()`
+  * in one line.
   */
 trait RunnerHandle:
   def quit(): Unit

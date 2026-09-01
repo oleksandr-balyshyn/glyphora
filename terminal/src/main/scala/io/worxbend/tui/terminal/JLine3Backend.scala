@@ -35,12 +35,12 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   // whether *this* backend turned the caret's blink off. Only what an app suppressed is restored on the way out: a
   // user whose emulator is configured for a steady caret would otherwise have that preference overwritten by every
   // glyphora app that exits, including the ones that never touched blink at all.
-  @volatile private var cursorBlinkSuppressed = false
+  @volatile private var cursorBlinkSuppressed                        = false
 
   /** Whether this backend has moved the cursor's shape away from the user's own configuration, and so owes a reset. */
-  @volatile private var cursorShaped          = false
-  @volatile private var suspendedState        = TerminalState.Undressed
-  @volatile private var inlineRows            = 0
+  @volatile private var cursorShaped   = false
+  @volatile private var suspendedState = TerminalState.Undressed
+  @volatile private var inlineRows     = 0
 
   // What the terminal is believed to be showing: the frame `draw` last flushed, kept so the next frame can be sent as
   // a diff against it. Owned by the render thread alone — no other thread may read or write it. A thread that takes the
@@ -603,7 +603,14 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     */
   private def releaseTerminal(): TerminalRelease = screenOwnership.synchronized:
     val state    =
-      TerminalState(isRawMode, alternateScreenActive, cursorHidden, cursorShaped, mouseCaptureActive, cursorBlinkSuppressed)
+      TerminalState(
+        isRawMode,
+        alternateScreenActive,
+        cursorHidden,
+        cursorShaped,
+        mouseCaptureActive,
+        cursorBlinkSuppressed,
+      )
     val failures = Seq.newBuilder[BackendError]
 
     def undress(active: Boolean, step: => Either[BackendError, Unit]): Unit =
@@ -698,8 +705,8 @@ private[terminal] final case class TerminalState(
 )
 
 private[terminal] object TerminalState:
-  /** Nothing was dressed up: cooked mode, primary screen, visible, blinking cursor of the user's own shape, no
-    * mouse capture.
+  /** Nothing was dressed up: cooked mode, primary screen, visible, blinking cursor of the user's own shape, no mouse
+    * capture.
     */
   val Undressed: TerminalState = TerminalState(false, false, false, false, None, false)
 

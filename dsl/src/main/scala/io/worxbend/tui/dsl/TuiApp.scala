@@ -241,7 +241,7 @@ trait TuiApp:
     */
   private def merged(top: Option[Screen]): KeyBindings =
     top.fold(bindings) { screen =>
-      val claimed = screen.bindings.bindings.flatMap(_.triggers).toSet
+      val claimed  = screen.bindings.bindings.flatMap(_.triggers).toSet
       // `triggers.nonEmpty &&` matters: `forall` on an empty sequence answers true, so a command with no keys at all
       // — a palette-only entry, reached by name through Ctrl+P and by nothing else — read as "the screen claimed
       // every one of its keys" and was dropped for as long as any screen was on the stack. A binding with no trigger
