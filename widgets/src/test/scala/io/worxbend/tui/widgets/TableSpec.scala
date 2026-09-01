@@ -206,3 +206,65 @@ final class TableSpec extends AnyFunSuite:
       widths = Seq(Constraint.Length(3)),
     )
     assert(trimmedLines(rendered(table, 4, 2)) == Seq("選", ""))
+
+  test("a spanning header cell covers several columns and the gaps between them"):
+    val table  = Table(
+      rows = Seq(row("1", "2", "3", "4")),
+      widths = Seq.fill(4)(Constraint.Length(3)),
+      header = Some(Seq(TableCell(Line.raw("inbound"), 2), TableCell(Line.raw("egress"), 2))),
+      columnSpacing = 1,
+    )
+    val buffer = rendered(table, 16, 2)
+    // two columns of three plus the one-cell gap between them is seven columns for each caption
+    assert(trimmedLines(buffer) == Seq("inbound egress", "1   2   3   4"))
+
+  test("a spanning cell pushes the cells after it along rather than overwriting them"):
+    val table  = Table(
+      rows = Seq(Seq(TableCell(Line.raw("ab"), 2), Line.raw("c"))),
+      widths = Seq.fill(3)(Constraint.Length(2)),
+      columnSpacing = 0,
+    )
+    val buffer = rendered(table, 6, 1)
+    assert(buffer.get(0, 0).symbol == "a")
+    assert(buffer.get(4, 0).symbol == "c") // the third column, not the second
+
+  test("a bare Line cell and the one-column TableCell it stands for draw the same thing"):
+    val widths = Seq(Constraint.Length(3), Constraint.Length(3))
+    val bare   = Table(rows = Seq(row("a", "b")), widths = widths)
+    val spelt  = Table(rows = Seq(Seq(TableCell(Line.raw("a")), TableCell(Line.raw("b")))), widths = widths)
+    assert(trimmedLines(rendered(bare, 8, 1)) == trimmedLines(rendered(spelt, 8, 1)))
+
+  test("a span is clamped to the columns that remain, so it cannot draw outside the table"):
+    val table  = Table(
+      rows = Seq(Seq(Line.raw("a"), TableCell(Line.raw("bbbbbbbb"), 9))),
+      widths = Seq(Constraint.Length(2), Constraint.Length(2)),
+      columnSpacing = 0,
+    )
+    val buffer = rendered(table, 6, 1)
+    assert(trimmedLines(buffer) == Seq("a bb"))
+
+  test("a span below one is read as one column"):
+    val widths = Seq(Constraint.Length(2), Constraint.Length(2))
+    val zero = Table(rows = Seq(Seq(TableCell(Line.raw("ab"), 0), Line.raw("cd"))), widths = widths, columnSpacing = 0)
+    val one  = Table(rows = Seq(row("ab", "cd")), widths = widths, columnSpacing = 0)
+    assert(trimmedLines(rendered(zero, 4, 1)) == trimmedLines(rendered(one, 4, 1)))
+
+  test("the equal-columns fallback counts a span at its full width"):
+    val table  = Table(
+      rows = Seq(row("a", "b")),
+      widths = Seq.empty,
+      header = Some(Seq(TableCell(Line.raw("both"), 2))),
+      columnSpacing = 0,
+    )
+    val buffer = rendered(table, 8, 2)
+    // two columns derived from the span, not one: the second data cell lands halfway across
+    assert(buffer.get(4, 1).symbol == "b")
+
+  test("a spanning cell is clipped by display width, not character count"):
+    // "選択肢" is three characters and six terminal columns; a five-column span keeps two of them
+    val table = Table(
+      rows = Seq(Seq(TableCell(Line.raw("選択肢"), 2))),
+      widths = Seq(Constraint.Length(2), Constraint.Length(2)),
+      columnSpacing = 1,
+    )
+    assert(trimmedLines(rendered(table, 5, 1)) == Seq("選択"))

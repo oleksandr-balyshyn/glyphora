@@ -376,6 +376,25 @@ Table(
 )
 ```
 
+A cell is likewise either a bare `Line`, covering one column, or a `TableCell`, which
+covers several. That is how a grouped header is drawn — two captions, each centred over
+its own pair of data columns:
+
+```scala
+Table(
+  rows = data,
+  widths = Seq.fill(4)(Constraint.Length(8)),
+  header = Some(Seq(TableCell(Line.raw("inbound"), 2), TableCell(Line.raw("egress"), 2))),
+)
+```
+
+A span covers the `columnSpacing` gaps between the columns it merges, so it is one
+continuous run rather than several cells with holes, and it pushes the cells after it
+along instead of overwriting them. It is clamped to at least one column and to no more
+than the columns left in the row, so a span that ran off the end clips rather than
+drawing outside the table. Spans are a `Table` feature; `DataTable`'s cells are plain
+strings and stay one column each.
+
 `TableRow` carries a `height`, a `topMargin`, a `bottomMargin`, and an optional per-row
 `style` that layers over the table's own. The height and margins reserve vertical room —
 a blank line under a group, breathing space in a sparse table — they do not wrap text,

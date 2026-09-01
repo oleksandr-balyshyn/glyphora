@@ -1,25 +1,26 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Line, Style}
+import io.worxbend.tui.core.Style
 
 /** One row of a [[Table]], with the vertical room it takes and the style it is drawn in.
   *
-  * A [[Table]]'s `rows` accepts either a bare `Seq[Line]` — a row of cells, one terminal line tall, which is all a row
-  * could ever be before this type existed — or a `TableRow`, and the two may be mixed in one table. The union follows
-  * the shape [[ListView]] already uses for its `String | Line` items: a caller who wants none of this pays no ceremony
-  * for it, and every table written against the older signature still compiles and still draws the same thing.
+  * A [[Table]]'s `rows` accepts either a bare sequence of cells — one terminal line tall, which is all a row could ever
+  * be before this type existed — or a `TableRow`, and the two may be mixed in one table. The union follows the shape
+  * [[ListView]] already uses for its `String | Line` items: a caller who wants none of this pays no ceremony for it,
+  * and every table written against the older signature still compiles and still draws the same thing.
   *
   * What the extra room buys is spacing a table could not express at all. `bottomMargin = 1` on the last header-like row
   * puts a blank line under it; `height = 2` gives a row breathing space in a sparse table; `topMargin` opens a gap
   * above a group of rows.
   *
   * @param cells
-  *   the row's cells, one per column, laid out on the table's solved column widths. Extra cells beyond the last column
-  *   are dropped, as they always were.
+  *   the row's cells, laid out on the table's solved column widths. A cell is either a bare `Line`, which occupies one
+  *   column, or a [[TableCell]], which can span several. Extra cells beyond the last column are dropped, as they always
+  *   were.
   * @param height
-  *   how many terminal lines the row occupies. The cells are single [[Line]]s, so they are drawn on the *first* of
-  *   those lines and the rest are left blank — this reserves vertical room, it does not wrap text. Clamped to at least
-  *   one: a zero-height row would draw nothing while still being walked, which is exactly the shape that lets a
+  *   how many terminal lines the row occupies. A cell is a single line of text, so the cells are drawn on the *first*
+  *   of those lines and the rest are left blank — this reserves vertical room, it does not wrap text. Clamped to at
+  *   least one: a zero-height row would draw nothing while still being walked, which is exactly the shape that lets a
   *   ten-thousand-row table scan itself looking for something to show.
   * @param topMargin
   *   blank lines above the row. Negative counts clamp to zero.
@@ -32,7 +33,7 @@ import io.worxbend.tui.core.{Line, Style}
   *   check, a stale record — had to restyle every [[io.worxbend.tui.core.Span]] in it by hand.
   */
 final case class TableRow(
-    cells: Seq[Line],
+    cells: Seq[TableCell.Source],
     height: Int = 1,
     topMargin: Int = 0,
     bottomMargin: Int = 0,
@@ -51,13 +52,13 @@ final case class TableRow(
 object TableRow:
 
   /** Either shape a [[Table]] accepts for one row. */
-  type Source = Seq[Line] | TableRow
+  type Source = Seq[TableCell.Source] | TableRow
 
-  /** A bare `Seq[Line]` read as the one-line, unmargined, unstyled row it has always meant. */
+  /** A bare sequence of cells read as the one-line, unmargined, unstyled row it has always meant. */
   def of(source: Source): TableRow =
     source match
-      case row: TableRow               => row
-      case cells: Seq[Line @unchecked] => TableRow(cells)
+      case row: TableRow                           => row
+      case cells: Seq[TableCell.Source @unchecked] => TableRow(cells)
 
   /** The rows that fit in `lines`, normalised, walking no further into `sources` than it had to.
     *

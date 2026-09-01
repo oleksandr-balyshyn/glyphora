@@ -8,9 +8,10 @@ import io.worxbend.tui.core.{Buffer, Constraint, Direction, Flex, Layout, Line, 
   * philosophy.
   *
   * @param rows
-  *   each row is either a bare `Seq[Line]` — one cell per column, one terminal line tall — or a [[TableRow]], which
-  *   adds a height, top and bottom margins, and a per-row style. Both shapes may appear in the same table; see
-  *   [[TableRow]] for what the extra room is for.
+  *   each row is either a bare sequence of cells — one terminal line tall — or a [[TableRow]], which adds a height, top
+  *   and bottom margins, and a per-row style. A cell in either shape is a [[Line]] covering one column, or a
+  *   [[TableCell]] covering several. All the shapes may appear in the same table; see [[TableRow]] and [[TableCell]]
+  *   for what the extra room and the spans are for.
   *
   * @param widths
   *   one [[Constraint]] per column. An empty sequence means "equal columns": the table counts the cells in the header
@@ -36,8 +37,8 @@ import io.worxbend.tui.core.{Buffer, Constraint, Direction, Flex, Layout, Line, 
 final case class Table(
     rows: Seq[TableRow.Source],
     widths: Seq[Constraint],
-    header: Option[Seq[Line]] = None,
-    footer: Option[Seq[Line]] = None,
+    header: Option[Seq[TableCell.Source]] = None,
+    footer: Option[Seq[TableCell.Source]] = None,
     columnSpacing: Int = 1,
     flex: Flex = Flex.Start,
     style: Style = Style.Default,
@@ -54,7 +55,7 @@ final case class Table(
       // bounded by the area, not the data: drawing 50 visible rows must not walk a 10 000-row Seq
       val body        = TableRow.fitting(rows.iterator, math.max(0, area.height - headerRows - footerRows))
       // the fallback only walks the rows that are about to be drawn, which is why `body` is taken first
-      val cellCounts  = (header.iterator ++ body.iterator.map(_.cells) ++ footer.iterator).map(_.size)
+      val cellCounts  = (header.iterator ++ body.iterator.map(_.cells) ++ footer.iterator).map(TableCell.columnCount)
       val constraints = TableColumns.resolve(widths, cellCounts)
       val columns     = Layout(Direction.Horizontal, constraints, columnSpacing, flex).split(area)
       var y           = area.y
@@ -71,10 +72,27 @@ final case class Table(
       }
       if footerRows == 1 then footer.foreach(cells => renderRow(buffer, columns, cells, area.bottom - 1, footerStyle))
 
-  private def renderRow(buffer: Buffer, columns: Seq[Rect], cells: Seq[Line], y: Int, rowStyle: Style): Unit =
-    columns.zip(cells).foreach { (column, cell) =>
-      if !column.isEmpty then
-        val _ = LineRenderer.render(buffer, column.x, y, cell, column.width, rowStyle)
+  /** Draws one row's cells left to right, giving each the merged rectangle of the columns it spans.
+    *
+    * The column pointer advances by the cell's span rather than by one, which is what makes a spanning cell push the
+    * cells after it along instead of overwriting them.
+    */
+  private def renderRow(
+      buffer: Buffer,
+      columns: Seq[Rect],
+      cells: Seq[TableCell.Source],
+      y: Int,
+      rowStyle: Style,
+  ): Unit =
+    var column = 0
+    cells.foreach { source =>
+      if column < columns.size then
+        val cell = TableCell.of(source)
+        val span = math.max(1, math.min(cell.columnSpan, columns.size - column))
+        val area = TableCell.merge(columns, column, span)
+        if !area.isEmpty then
+          val _ = LineRenderer.render(buffer, area.x, y, cell.content, area.width, rowStyle)
+        column += span
     }
 
 object Table:
