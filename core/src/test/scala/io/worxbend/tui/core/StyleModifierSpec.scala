@@ -82,3 +82,27 @@ final class StyleModifierSpec extends AnyFunSuite:
     assert((Modifiers.Italic | Modifiers.Bold).show == "Bold|Italic")
     assert(Modifiers.None.show == "None")
     assert((Modifiers.Bold | Modifiers.Italic).names == Seq("Bold", "Italic"))
+
+  test("Modifiers.All holds every named flag and stays in step with the name table"):
+    assert(Modifiers.All.hasAll(Modifiers.Bold | Modifiers.Italic | Modifiers.Hidden | Modifiers.CrossedOut))
+    assert(
+      Modifiers.All.names == Seq("Bold", "Dim", "Italic", "Underline", "Blink", "Reverse", "Hidden", "CrossedOut")
+    )
+    assert(Modifiers.All.without(Modifiers.All).isEmpty)
+    assert(!Modifiers.None.hasAny(Modifiers.All))
+
+  test("& keeps only the flags present in both bitsets"):
+    val left  = Modifiers.Bold | Modifiers.Italic | Modifiers.Dim
+    val right = Modifiers.Italic | Modifiers.Dim | Modifiers.Reverse
+    assert((left & right).show == "Dim|Italic")
+    assert((left & right).show == left.without(left.without(right)).show)
+
+  test("& with nothing in common, with None, and with itself"):
+    assert((Modifiers.Bold & Modifiers.Italic).isEmpty)
+    assert((Modifiers.Bold & Modifiers.None).isEmpty)
+    val both = Modifiers.Bold | Modifiers.Underline
+    assert((both & both).show == both.show)
+    assert((both & Modifiers.All).show == both.show)
+
+  test("& binds tighter than |"):
+    assert((Modifiers.Bold & Modifiers.None | Modifiers.Italic).show == "Italic")

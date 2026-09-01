@@ -18,8 +18,39 @@ object Modifiers:
   val Hidden: Modifiers     = 1 << 6
   val CrossedOut: Modifiers = 1 << 7
 
+  /** Every flag paired with its name, in bit order. The single table both [[names]] and [[show]] read, so a new flag is
+    * added in one place rather than in one place per rendering.
+    */
+  private val Named: Seq[(Modifiers, String)] = Seq(
+    Bold       -> "Bold",
+    Dim        -> "Dim",
+    Italic     -> "Italic",
+    Underline  -> "Underline",
+    Blink      -> "Blink",
+    Reverse    -> "Reverse",
+    Hidden     -> "Hidden",
+    CrossedOut -> "CrossedOut",
+  )
+
+  /** Every flag at once — the opposite of [[None]] (ratatui spells it `Modifier::all()`).
+    *
+    * Derived from the [[Named]] table above rather than written out as an OR chain, so a flag added to that table joins
+    * this value automatically instead of being forgotten here. Pass it wherever the intent is "no text attributes at
+    * all" rather than a named list: `style.without(Modifiers.All)` is what [[Style.Reset]] uses.
+    */
+  val All: Modifiers = Named.foldLeft(Modifiers.None) { case (accumulated, (flag, _)) => accumulated | flag }
+
   extension (m: Modifiers)
     def |(other: Modifiers): Modifiers = (m: Int) | (other: Int)
+
+    /** The flags set in *both* bitsets — set intersection. `(Bold | Italic) & (Italic | Dim)` is `Italic`, and anything
+      * intersected with [[None]] is `None`. This is the plain name for "what do these two styles agree on", which
+      * previously had to be spelled `m.without(m.without(other))` — correct, but a puzzle to read.
+      *
+      * Scala binds `&` tighter than `|`, so `a & b | c` groups as `(a & b) | c`, the way flag arithmetic groups in
+      * every other language.
+      */
+    def &(other: Modifiers): Modifiers = (m: Int) & (other: Int)
 
     /** Whether *any* flag of `flag` is set. With a single flag — the overwhelmingly common call — that reads exactly as
       * it looks; with several ORed together it is an any-of test, so `(Bold | Italic).hasAny(Bold | Underline)` is
@@ -42,17 +73,3 @@ object Modifiers:
       * `Modifiers` should print instead of the raw `Int` the opaque type erases to.
       */
     def show: String = if m.isEmpty then "None" else names.mkString("|")
-
-  /** Every flag paired with its name, in bit order. The single table both [[names]] and [[show]] read, so a new flag is
-    * added in one place rather than in one place per rendering.
-    */
-  private val Named: Seq[(Modifiers, String)] = Seq(
-    Bold       -> "Bold",
-    Dim        -> "Dim",
-    Italic     -> "Italic",
-    Underline  -> "Underline",
-    Blink      -> "Blink",
-    Reverse    -> "Reverse",
-    Hidden     -> "Hidden",
-    CrossedOut -> "CrossedOut",
-  )

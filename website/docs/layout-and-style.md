@@ -220,7 +220,11 @@ withStyle(_.bold) {
 The `not*` builders and the plain ones are last-call-wins in both directions:
 `.notBold.bold` is bold, `.bold.notBold` is not.
 
-Apply a base style to a whole subtree with `withStyle`:
+`Modifiers.All` is the whole set of text attributes in one value, so
+`style.without(Modifiers.All)` clears every attribute without naming the eight of them.
+The bitset operators are `a | b` (the flags set in either), `a.without(b)` (the flags in
+`a` that are not in `b`), and `a & b` (the flags set in both — for asking what two styles
+agree on).
 
 ```scala
 withStyle(_.withFg(Color.Cyan)) {
