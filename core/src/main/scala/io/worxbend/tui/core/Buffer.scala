@@ -25,8 +25,8 @@ final class Buffer(val area: Rect):
     * can never destroy content; and the cell to the left of a flagged cell is always two columns wide.
     *
     * The relationship used to be inferred at diff time by measuring the left neighbour's width, which misclassified
-    * real content as filler as soon as a second, independent write landed on that column — and [[diff]] then silently
-    * refused to flush it.
+    * real content as a continuation as soon as a second, independent write landed on that column — and [[diff]] then
+    * silently refused to flush it.
     */
   private val continuations: Array[Boolean] = Array.fill(area.area)(false)
 
@@ -66,7 +66,7 @@ final class Buffer(val area: Rect):
     * owned it, since that grapheme can no longer draw across a column somebody else has claimed.
     *
     * Writing [[Cell.Empty]] over a continuation is the one exception and leaves the pair intact — that pair is how
-    * callers spell the filler itself, so treating it as a claim would erase the grapheme they just wrote.
+    * callers spell the continuation cell itself, so treating it as a claim would erase the grapheme they just wrote.
     *
     * A wide cell aimed at the last column of a row is stored as a blank in `cell`'s style rather than as itself: there
     * is no column left to reserve, and a terminal handed a two-column glyph in a one-column slot wraps the row. The
@@ -80,16 +80,16 @@ final class Buffer(val area: Rect):
     */
   private def setMeasured(x: Int, y: Int, cell: Cell, width: Int): Unit =
     if area.contains(x, y) then
-      val index    = indexOf(x, y)
+      val index             = indexOf(x, y)
       // `&&` short-circuits, so the structural compare (which walks `Style`) only runs on the rare flagged column
-      val isFiller = continuations(index) && cell == Cell.Empty
-      if !isFiller then
+      val isOwnContinuation = continuations(index) && cell == Cell.Empty
+      if !isOwnContinuation then
         if continuations(index) then cells(index - 1) = Cell.Empty
         write(index, x, cell, width)
 
-  /** [[set]]'s tail, once the addressed cell is known not to be a wide grapheme's filler: stores `cell` and re-derives
-    * the continuation to its right. `x` is passed only to test the row's right edge — `index + 1` would otherwise wrap
-    * onto the next row.
+  /** [[set]]'s tail, once the addressed cell is known not to be a wide grapheme's continuation: stores `cell` and
+    * re-derives the continuation to its right. `x` is passed only to test the row's right edge — `index + 1` would
+    * otherwise wrap onto the next row.
     */
   private def write(index: Int, x: Int, cell: Cell, width: Int): Unit =
     val hasRight = x + 1 < area.right
@@ -269,7 +269,7 @@ final class Buffer(val area: Rect):
     * Continuation cells (the second column of a two-column grapheme) are left alone: the terminal paints the wide
     * grapheme across both columns from the *left* cell's style, so restyling the right one changes nothing on screen
     * while breaking the invariant that a flagged cell holds [[Cell.Empty]] — the test [[set]] uses to tell a caller's
-    * own filler apart from real content landing on a reserved column.
+    * own continuation cell apart from real content landing on a reserved column.
     */
   def setStyle(region: Rect, style: Style): Unit =
     mapStyle(region)(_ => style)
@@ -539,10 +539,10 @@ final class Buffer(val area: Rect):
   /** [[diff]] with a workaround for terminals that draw an emoji presentation sequence in one column.
     *
     * A cluster containing U+FE0F — the variation selector that asks for a character's colourful emoji form — is two
-    * columns wide by the Unicode rules this toolkit measures with, so the buffer reserves the column to its right as
-    * filler and never emits that column: painting the glyph paints both halves. Several terminals draw such a sequence
-    * in a single column anyway, and then the second column is never repainted at all, so whatever stood there in an
-    * earlier frame stays on screen next to the emoji.
+    * columns wide by the Unicode rules this toolkit measures with, so the buffer reserves the column to its right as a
+    * continuation and never emits that column: painting the glyph paints both halves. Several terminals draw such a
+    * sequence in a single column anyway, and then the second column is never repainted at all, so whatever stood there
+    * in an earlier frame stays on screen next to the emoji.
     *
     * With `clearEmojiTrailingCell` set, a changed cell holding such a cluster is followed by a blank emitted into its
     * reserved column, carrying the owning cell's style so a background fill stays continuous across the pair.
@@ -562,75 +562,76 @@ final class Buffer(val area: Rect):
     )
     // a next frame one row shorter is diffed over the rows the two share, the way ratatui does; the rows only `next`
     // has are the caller's to paint, because this buffer has nothing to compare them against
-    val rows       = math.min(area.height, next.area.height)
-    val width      = area.width
-    val originX    = area.x
-    val originY    = area.y
+    val rows              = math.min(area.height, next.area.height)
+    val width             = area.width
+    val originX           = area.x
+    val originY           = area.y
     // `next.cells` and `next.continuations` are readable from here because Scala's `private` is private to the class,
     // not to the instance: no accessor is added, and neither array escapes the method
-    val nextCells  = next.cells
-    val nextFiller = next.continuations
-    val nextRules  = next.directives
-    var row        = 0
+    val nextCells         = next.cells
+    val nextContinuations = next.continuations
+    val nextDirectives    = next.directives
+    var row               = 0
     while row < rows do
       val start = row * width
       val end   = start + width
-      if !rowUnchanged(nextCells, nextFiller, nextRules, start, end) then
+      if !rowUnchanged(nextCells, nextContinuations, nextDirectives, start, end) then
         val y     = originY + row
         var index = start
         while index < end do
           val candidate = nextCells(index)
           // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
-          val changed   = nextRules(index) == Buffer.AlwaysUpdateCode ||
+          val changed   = nextDirectives(index) == Buffer.AlwaysUpdateCode ||
             !sameCell(cells(index), candidate) ||
-            vacatedTrailing(nextFiller, index, start) ||
-            released(nextRules, index)
-          if changed && !nextFiller(index) && nextRules(index) != Buffer.SkipCode then
+            vacatedContinuation(nextContinuations, index, start) ||
+            released(nextDirectives, index)
+          if changed && !nextContinuations(index) && nextDirectives(index) != Buffer.SkipCode then
             emit(originX + index - start, y, candidate)
             // the reserved column exists only for a two-column cluster, so this is the pair the workaround is about
-            if clearEmojiTrailingCell && index + 1 < end && nextFiller(index + 1)
+            if clearEmojiTrailingCell && index + 1 < end && nextContinuations(index + 1)
               && CharWidth.hasEmojiPresentationSelector(candidate.symbol)
             then emit(originX + index + 1 - start, y, Cell(" ", candidate.style))
           index += 1
       row += 1
 
   /** Whether the row spanning `[from, until)` of the flat grids is identical in both frames — the same cells and the
-    * same wide-grapheme filler flags.
+    * same wide-grapheme continuation flags.
     *
-    * The flags are part of the comparison and not an afterthought: [[vacatedTrailing]] emits a column whose cell did
-    * not change but whose filler flag did, and a scan that looked only at cells would skip the row it lives in.
+    * The flags are part of the comparison and not an afterthought: [[vacatedContinuation]] emits a column whose cell
+    * did not change but whose continuation flag did, and a scan that looked only at cells would skip the row it lives
+    * in.
     *
     * `previous` is this buffer; the arrays are index-aligned because [[diff]] has already required both frames to be
     * the same width and to start at the same column.
     */
   private def rowUnchanged(
       nextCells: Array[Cell],
-      nextFiller: Array[Boolean],
-      nextRules: Array[Byte],
+      nextContinuations: Array[Boolean],
+      nextDirectives: Array[Byte],
       from: Int,
       until: Int,
   ): Boolean =
     var index = from
-    while index < until && positionUnchanged(nextCells, nextFiller, nextRules, index) do index += 1
+    while index < until && positionUnchanged(nextCells, nextContinuations, nextDirectives, index) do index += 1
     index == until
 
   /** Whether one position of the row can be passed over without running the per-cell emit machinery.
     *
     * Three questions, and a "no" to any of them puts the row back on the slow path: the cell must be the same value,
-    * the wide-grapheme filler flag must be the same (see [[vacatedTrailing]]), and the [[DiffDirective]] must be the
-    * same *and* not [[DiffDirective.AlwaysUpdate]] — a position that asks to be re-emitted is by definition one this
-    * scan must not declare finished.
+    * the wide-grapheme continuation flag must be the same (see [[vacatedContinuation]]), and the [[DiffDirective]] must
+    * be the same *and* not [[DiffDirective.AlwaysUpdate]] — a position that asks to be re-emitted is by definition one
+    * this scan must not declare finished.
     */
   private def positionUnchanged(
       nextCells: Array[Cell],
-      nextFiller: Array[Boolean],
-      nextRules: Array[Byte],
+      nextContinuations: Array[Boolean],
+      nextDirectives: Array[Byte],
       index: Int,
   ): Boolean =
     sameCell(cells(index), nextCells(index)) &&
-      continuations(index) == nextFiller(index) &&
-      directives(index) == nextRules(index) &&
-      nextRules(index) != Buffer.AlwaysUpdateCode
+      continuations(index) == nextContinuations(index) &&
+      directives(index) == nextDirectives(index) &&
+      nextDirectives(index) != Buffer.AlwaysUpdateCode
 
   /** Emits every cell of this buffer, in the same row-major order and with the same continuation rule as [[diff]] — the
     * full repaint the first frame after a resize or a resume from suspend needs.
@@ -641,9 +642,10 @@ final class Buffer(val area: Rect):
     * error. Splitting the two makes the resize path something a test can name, and turns the mistake back into one.
     *
     * The columns holding the right half of a two-column grapheme are skipped here as well: emitting the grapheme itself
-    * repaints both of its columns, and a terminal handed the filler would draw a stray blank over the half already
-    * painted. So are the positions marked [[DiffDirective.Skip]] — a resize is exactly the moment a blind full repaint
-    * would erase an image somebody else painted, so the owner of such a region redraws it rather than this buffer.
+    * repaints both of its columns, and a terminal handed the continuation cell would draw a stray blank over the half
+    * already painted. So are the positions marked [[DiffDirective.Skip]] — a resize is exactly the moment a blind full
+    * repaint would erase an image somebody else painted, so the owner of such a region redraws it rather than this
+    * buffer.
     */
   def emitAll(emit: (Int, Int, Cell) => Unit): Unit =
     forEachIndex(area): (x, y, index) =>
@@ -757,19 +759,19 @@ final class Buffer(val area: Rect):
     * `next` does not, and that grapheme's style painted across the column.
     *
     * Before this test, such a column was never flushed. Both frames hold [[Cell.Empty]] at it — the previous frame's
-    * filler is an ordinary blank, and so is the new content — so the cell compare said "unchanged" and the backend
-    * skipped it. On screen the terminal was still painting the right half of the old glyph: replace a red-backed `漢`
-    * with a plain `a` and the red block to its right stayed. Emitting the new (blank) cell repaints it.
+    * continuation cell is an ordinary blank, and so is the new content — so the cell compare said "unchanged" and the
+    * backend skipped it. On screen the terminal was still painting the right half of the old glyph: replace a
+    * red-backed `漢` with a plain `a` and the red block to its right stayed. Emitting the new (blank) cell repaints it.
     *
-    * The `index - 1` read is the grapheme that owned the filler. `rowStart` is where the row begins in the flat grid,
-    * and a filler flag can never sit in the row's first column — a wide grapheme reserves the cell to its *right* — so
-    * the guard against reading the previous row's last cell is the flag itself, checked first.
+    * The `index - 1` read is the grapheme that owned the continuation. `rowStart` is where the row begins in the flat
+    * grid, and a continuation flag can never sit in the row's first column — a wide grapheme reserves the cell to its
+    * *right* — so the guard against reading the previous row's last cell is the flag itself, checked first.
     *
-    * `nextFiller` is `next`'s flag array and `index` is the position in both grids, which [[diff]] may pass directly
-    * because it has required the two frames to be the same width and to start at the same column.
+    * `nextContinuations` is `next`'s flag array and `index` is the position in both grids, which [[diff]] may pass
+    * directly because it has required the two frames to be the same width and to start at the same column.
     */
-  private def vacatedTrailing(nextFiller: Array[Boolean], index: Int, rowStart: Int): Boolean =
-    continuations(index) && !nextFiller(index) && index > rowStart && visibleOnBlank(cells(index - 1).style)
+  private def vacatedContinuation(nextContinuations: Array[Boolean], index: Int, rowStart: Int): Boolean =
+    continuations(index) && !nextContinuations(index) && index > rowStart && visibleOnBlank(cells(index - 1).style)
 
   /** Whether `index` is a position an out-of-band painter has just given back: [[DiffDirective.Skip]] in this (the
     * previous) frame and not in `next`.
@@ -779,8 +781,8 @@ final class Buffer(val area: Rect):
     * is one this renderer cannot compare against. An ordinary content compare would call the position unchanged and
     * leave the last frame of a dismissed image on screen.
     */
-  private def released(nextRules: Array[Byte], index: Int): Boolean =
-    directives(index) == Buffer.SkipCode && nextRules(index) != Buffer.SkipCode
+  private def released(nextDirectives: Array[Byte], index: Int): Boolean =
+    directives(index) == Buffer.SkipCode && nextDirectives(index) != Buffer.SkipCode
 
   /** The single bounds-check-and-index site behind [[get]]. Kept separate from [[get]] so the hot diff loop reads a
     * `private` method the compiler can inline freely.
