@@ -319,14 +319,9 @@ private[terminal] final class InputDecoder(
     if params.isEmpty && finalByte == 'M' then decodeX10Mouse()
     else if params.startsWith("<") && (finalByte == 'M' || finalByte == 'm') then
       decodeSgrMouse(params.drop(1), finalByte == 'M')
-    else if finalByte == 'M' && params.nonEmpty && !params.startsWith("<") then decodeUrxvtMouse(params)
-    else if isPrivateReply(params) then
-      // DA/DECRPM/kitty-query replies: never input, and never a key. During a capability probe they are also the
-      // answers being waited for, so they are read on the way past instead of only being dropped.
-      if probing then
-        probed = CapabilityReplies.fold(probed, params, finalByte)
-        if CapabilityReplies.endsProbe(finalByte) then probeFenceReached = true
-      None
+    // empty params and the `<` prefix were both taken above, so a bare `M` here is the urxvt form
+    else if finalByte == 'M' then decodeUrxvtMouse(params)
+    else if isPrivateReply(params) then captureProbeReply(params, finalByte)
     // A cursor-position report is caught here rather than down in `decodeCsiKey`, because its second parameter is a
     // *column*, and the modifier extraction below rejects any second parameter above 16 — so a report from anywhere
     // right of column 16 would never have reached a case at all.
@@ -387,6 +382,18 @@ private[terminal] final class InputDecoder(
       case '~' if numbers.headOption.contains(PasteStart) => Some(decodePaste())
       case '~'                                            => decodeTilde(numbers, modifiers)
       case _                                              => None
+
+  /** Folds a DA/DECRPM/kitty-query reply into the capability set being probed, and reports no event for it.
+    *
+    * These replies are never input and never a key. During a capability probe they are also the answers being waited
+    * for, so they are read on the way past instead of only being dropped; outside a probe the read is skipped and the
+    * reply is dropped exactly as before.
+    */
+  private def captureProbeReply(params: String, finalByte: Int): Option[Event] =
+    if probing then
+      probed = CapabilityReplies.fold(probed, params, finalByte)
+      if CapabilityReplies.endsProbe(finalByte) then probeFenceReached = true
+    None
 
   /** Records a cursor-position report and reports no event for it.
     *
