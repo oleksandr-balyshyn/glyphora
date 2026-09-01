@@ -93,14 +93,14 @@ This lets an input consume normal text and editing keys while a parent still han
 ## Handle custom mouse behavior
 
 `MouseEvent` carries a `Position` (the absolute terminal cell the pointer was over), a
-`MouseEventKind`, and keyboard modifiers:
+`MouseEventKind`, keyboard modifiers, and a `MouseButton`:
 
 ```scala
 panel("Canvas")(canvasView).onMouseEvent {
-  case MouseEvent(Position(x, y), MouseEventKind.Down, _) =>
+  case MouseEvent(Position(x, y), MouseEventKind.Down, _, MouseButton.Left) =>
     selectedCell.set((x, y))
     true
-  case MouseEvent(_, MouseEventKind.ScrollDown, _) =>
+  case MouseEvent(_, MouseEventKind.ScrollDown, _, _) =>
     zoom.update(value => math.max(1, value - 1))
     true
   case _ =>
@@ -113,6 +113,36 @@ in absolute screen cells and zero-based, the same coordinate space a `Rect` uses
 handler that wants coordinates relative to its own area subtracts that area's origin
 (`event.position.x - area.x`). Custom widgets should compare the position with the
 element's known model, or use built-in interactive elements when possible.
+
+## Which button
+
+`MouseButton` is `Left`, `Middle`, `Right`, or `Unknown`. Matching on it is how an
+application tells a context-menu click apart from an ordinary one:
+
+```scala
+panel("Files")(fileList).onMouseEvent { event =>
+  event.button match {
+    case MouseButton.Right =>
+      contextMenuAt.set(Some(event.position))
+      true
+    case MouseButton.Middle =>
+      pasteSelection()
+      true
+    case _ =>
+      false
+  }
+}
+```
+
+`Unknown` is not a failure case — it is what the terminal reports when the event names no
+button at all. A wheel notch (`ScrollUp`/`ScrollDown`) presses nothing, and the legacy X10
+mouse encoding has one "some button came up" release code that does not say which button it
+was. Modern terminals negotiate the SGR encoding, which keeps the button identity on the
+release as well as the press, so a right-button drag-and-release reports `Right` throughout.
+
+Built-in click behavior — a `button`, a `checkbox`, a `toggle` — fires on `MouseButton.Left`
+only. A right-click over one of those controls is left unconsumed and keeps bubbling, so your
+own handler, or an ancestor's, can open a menu instead of the button firing underneath it.
 
 ## Built-in mouse behavior
 

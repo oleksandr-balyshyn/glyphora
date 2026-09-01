@@ -7,6 +7,7 @@ import io.worxbend.tui.core.{
   KeyCode,
   KeyEvent,
   KeyModifiers,
+  MouseButton,
   MouseEvent,
   MouseEventKind,
   Position,
@@ -90,17 +91,36 @@ final class Pilot private (
     mouseDown(x, y)
     mouseUp(x, y)
 
+  /** [[click]] with a button other than the left one — a right-click for a context menu, a middle-click for a paste.
+    *
+    * A separate method rather than a defaulted parameter on [[click]], because [[click]] takes no modifiers either and
+    * growing it two optional arguments would make the common two-argument call harder to read, not easier.
+    */
+  def clickWith(x: Int, y: Int, button: MouseButton): Pilot =
+    postMouse(x, y, MouseEventKind.Down, KeyModifiers.None, button)
+    postMouse(x, y, MouseEventKind.Up, KeyModifiers.None, button)
+
   /** Posts a button press at `(x, y)` and nothing else, leaving the button held as far as the app is concerned. */
-  def mouseDown(x: Int, y: Int, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
-    postMouse(x, y, MouseEventKind.Down, modifiers)
+  def mouseDown(
+      x: Int,
+      y: Int,
+      modifiers: KeyModifiers = KeyModifiers.None,
+      button: MouseButton = MouseButton.Left,
+  ): Pilot =
+    postMouse(x, y, MouseEventKind.Down, modifiers, button)
 
   /** Posts a button release at `(x, y)`. */
-  def mouseUp(x: Int, y: Int, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
-    postMouse(x, y, MouseEventKind.Up, modifiers)
+  def mouseUp(
+      x: Int,
+      y: Int,
+      modifiers: KeyModifiers = KeyModifiers.None,
+      button: MouseButton = MouseButton.Left,
+  ): Pilot =
+    postMouse(x, y, MouseEventKind.Up, modifiers, button)
 
   /** Posts a pointer move to `(x, y)` with no button held — what a terminal reports under mouse-motion tracking. */
   def mouseMove(x: Int, y: Int): Pilot =
-    postMouse(x, y, MouseEventKind.Moved, KeyModifiers.None)
+    postMouse(x, y, MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown)
 
   /** Posts a whole drag gesture: `Down` at the start point, one `Drag` at the end point, then `Up` there.
     *
@@ -108,10 +128,17 @@ final class Pilot private (
     * and not the route taken; a test that needs the route posts the steps itself with [[mouseDown]] and this sequence's
     * parts.
     */
-  def drag(fromX: Int, fromY: Int, toX: Int, toY: Int, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
-    postMouse(fromX, fromY, MouseEventKind.Down, modifiers)
-    postMouse(toX, toY, MouseEventKind.Drag, modifiers)
-    postMouse(toX, toY, MouseEventKind.Up, modifiers)
+  def drag(
+      fromX: Int,
+      fromY: Int,
+      toX: Int,
+      toY: Int,
+      modifiers: KeyModifiers = KeyModifiers.None,
+      button: MouseButton = MouseButton.Left,
+  ): Pilot =
+    postMouse(fromX, fromY, MouseEventKind.Down, modifiers, button)
+    postMouse(toX, toY, MouseEventKind.Drag, modifiers, button)
+    postMouse(toX, toY, MouseEventKind.Up, modifiers, button)
 
   /** Posts `times` scroll-up notches at `(x, y)`. */
   def scrollUp(x: Int, y: Int, times: Int = 1, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
@@ -124,12 +151,13 @@ final class Pilot private (
   private def scroll(x: Int, y: Int, kind: MouseEventKind, times: Int, modifiers: KeyModifiers): Pilot =
     var remaining = times
     while remaining > 0 do
-      postMouse(x, y, kind, modifiers)
+      // a wheel notch presses nothing, so it names no button — the same thing a real terminal reports
+      postMouse(x, y, kind, modifiers, MouseButton.Unknown)
       remaining -= 1
     this
 
-  private def postMouse(x: Int, y: Int, kind: MouseEventKind, modifiers: KeyModifiers): Pilot =
-    backend.postEvent(Event.Mouse(MouseEvent(Position(x, y), kind, modifiers)))
+  private def postMouse(x: Int, y: Int, kind: MouseEventKind, modifiers: KeyModifiers, button: MouseButton): Pilot =
+    backend.postEvent(Event.Mouse(MouseEvent(Position(x, y), kind, modifiers, button)))
     this
 
   def resize(width: Int, height: Int): Pilot =

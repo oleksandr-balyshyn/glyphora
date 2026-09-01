@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{KeyCode, KeyEvent, MouseEventKind, Style}
+import io.worxbend.tui.core.{KeyCode, KeyEvent, MouseButton, MouseEventKind, Style}
 import io.worxbend.tui.widgets as w
 
 // ---- the shared built-in vocabulary ----
@@ -43,10 +43,14 @@ extension (handler: BuiltinKeyHandler)
 private def focusStyled(props: ElementProps): Style =
   if props.focused then props.style.patch(props.focusStyle) else props.style
 
-/** A mouse press activates the control (focus already moved on the press). */
+/** A left-button press activates the control (focus already moved on the press).
+  *
+  * Only the left button. A right-click over a control has to fall through — the handler returns `false`, so the event
+  * keeps bubbling — or an application could never put a context menu on a button: the button would fire first.
+  */
 private def clickActivates(activate: () => Unit): BuiltinMouseHandler =
   (event, _) =>
-    if event.kind == MouseEventKind.Down then
+    if event.kind == MouseEventKind.Down && event.button == MouseButton.Left then
       activate()
       true
     else false

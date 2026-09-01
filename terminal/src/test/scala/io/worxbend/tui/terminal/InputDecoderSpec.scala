@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -91,12 +91,45 @@ final class InputDecoderSpec extends AnyFunSuite:
   test("a drag report decodes to Drag"):
     assert(decoded(csi("<32;4;4M")*) == Event.Mouse(MouseEvent(Position(3, 3), MouseEventKind.Drag, KeyModifiers.None)))
 
-  test("wheel reports decode to scroll events"):
+  test("wheel reports decode to scroll events naming no button"):
+    // a wheel notch presses nothing, so there is no button identity to report and the decoder says so
     assert(
-      decoded(csi("<64;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollUp, KeyModifiers.None))
+      decoded(csi("<64;1;1M")*) ==
+        Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollUp, KeyModifiers.None, MouseButton.Unknown))
     )
     assert(
-      decoded(csi("<65;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollDown, KeyModifiers.None))
+      decoded(csi("<65;1;1M")*) ==
+        Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollDown, KeyModifiers.None, MouseButton.Unknown))
+    )
+
+  test("the low two button bits name the button that was pressed"):
+    def buttonOf(report: String): MouseButton =
+      decoded(csi(report)*) match
+        case Event.Mouse(event) => event.button
+        case other              => fail(s"expected a mouse event, got $other")
+
+    assert(buttonOf("<0;10;5M") == MouseButton.Left)
+    assert(buttonOf("<1;10;5M") == MouseButton.Middle)
+    assert(buttonOf("<2;10;5M") == MouseButton.Right)
+
+  test("an SGR release still names its button, unlike the legacy encoding"):
+    assert(
+      decoded(csi("<2;3;3m")*) ==
+        Event.Mouse(MouseEvent(Position(2, 2), MouseEventKind.Up, KeyModifiers.None, MouseButton.Right))
+    )
+
+  test("a drag report carries the button that is being held"):
+    // 32 is the motion flag, 2 the right button
+    assert(
+      decoded(csi("<34;4;4M")*) ==
+        Event.Mouse(MouseEvent(Position(3, 3), MouseEventKind.Drag, KeyModifiers.None, MouseButton.Right))
+    )
+
+  test("the button bits and the modifier bits do not collide"):
+    // 16 is the ctrl bit, 2 the right button: both must survive the same report
+    assert(
+      decoded(csi("<18;2;2M")*) ==
+        Event.Mouse(MouseEvent(Position(1, 1), MouseEventKind.Down, KeyModifiers.Ctrl, MouseButton.Right))
     )
 
   test("mouse modifier bits decode to key modifiers"):

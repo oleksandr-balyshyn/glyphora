@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -102,9 +102,20 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     val report = Seq(Esc, '['.toInt, 'M'.toInt, 32 + 0, 32 + 33, 32 + 33)
     assert(decoded(report*) == Event.Mouse(MouseEvent(Position(32, 32), MouseEventKind.Down, KeyModifiers.None)))
 
-  test("an X10 button-3 report is a release"):
+  test("an X10 button-3 report is a release that cannot name its button"):
+    // X10 has one release code for every button, so the identity is genuinely gone rather than guessable
     val report = Seq(Esc, '['.toInt, 'M'.toInt, 32 + 3, 32 + 5, 32 + 5)
-    assert(decoded(report*) == Event.Mouse(MouseEvent(Position(4, 4), MouseEventKind.Up, KeyModifiers.None)))
+    assert(
+      decoded(report*) ==
+        Event.Mouse(MouseEvent(Position(4, 4), MouseEventKind.Up, KeyModifiers.None, MouseButton.Unknown))
+    )
+
+  test("an X10 press still names its button"):
+    val rightPress = Seq(Esc, '['.toInt, 'M'.toInt, 32 + 2, 32 + 5, 32 + 5)
+    assert(
+      decoded(rightPress*) ==
+        Event.Mouse(MouseEvent(Position(4, 4), MouseEventKind.Down, KeyModifiers.None, MouseButton.Right))
+    )
 
   test("a truncated X10 report is dropped rather than half-decoded"):
     dropped(Esc, '['.toInt, 'M'.toInt, 32)
@@ -236,10 +247,12 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     dropped(csi("<67;1;1M")*)
     // the vertical wheel still works
     assert(
-      decoded(csi("<64;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollUp, KeyModifiers.None))
+      decoded(csi("<64;1;1M")*) ==
+        Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollUp, KeyModifiers.None, MouseButton.Unknown))
     )
     assert(
-      decoded(csi("<65;1;1M")*) == Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollDown, KeyModifiers.None))
+      decoded(csi("<65;1;1M")*) ==
+        Event.Mouse(MouseEvent(Position(0, 0), MouseEventKind.ScrollDown, KeyModifiers.None, MouseButton.Unknown))
     )
 
   test("an unpaired surrogate is dropped rather than delivered as half a character"):

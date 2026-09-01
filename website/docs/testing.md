@@ -249,7 +249,11 @@ pilot.mouseDown(20, 4).mouseMove(20, 9).mouseUp(20, 9).waitForIdle()
 ```
 
 `click` is exactly `mouseDown` followed by `mouseUp`. Each one takes an optional
-`modifiers` argument for a Ctrl- or Shift-click.
+`modifiers` argument for a Ctrl- or Shift-click, and an optional `button` argument
+(`MouseButton.Left`, `Middle`, or `Right`) for anything that is not an ordinary left
+click. `clickWith(x, y, MouseButton.Right)` is the down/up pair with a chosen button —
+the gesture to reach for when testing a context menu, since the built-in click behavior
+of a `button` or `checkbox` fires on the left button only.
 
 When an assertion has to wait for something other than the queue going quiet, use
 `waitUntil` rather than a sleep — it re-checks the condition, re-raises any failure the

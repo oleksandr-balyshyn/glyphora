@@ -72,6 +72,34 @@ final class MouseInteractionSpec extends AnyFunSuite:
     assert(pressed == 1)
     quitApp(pilot)
 
+  test("a right click over a button does not activate it and stays available to a handler"):
+    // a context menu is only possible if the built-in click behaviour declines every button but the left one
+    var pressed     = 0
+    var rightClicks = 0
+    val pilot       = startApp(
+      column(button("OK") { pressed += 1 }, text("below")).onMouseEvent { event =>
+        if event.button == MouseButton.Right && event.kind == MouseEventKind.Down then
+          rightClicks += 1
+          true
+        else false
+      }
+    )
+    val before      = pilot.screenLines
+    pilot.clickWith(5, 0, MouseButton.Right).waitForIdle()
+    assert(pressed == 0)
+    assert(rightClicks == 1)
+    assert(pilot.screenLines == before)
+    pilot.clickWith(5, 0, MouseButton.Left).waitForIdle()
+    assert(pressed == 1)
+    quitApp(pilot)
+
+  test("a middle click over a button does not activate it either"):
+    var pressed = 0
+    val pilot   = startApp(column(button("OK") { pressed += 1 }, text("below")))
+    pilot.clickWith(5, 0, MouseButton.Middle).waitForIdle()
+    assert(pressed == 0)
+    quitApp(pilot)
+
   test("clicking a checkbox toggles its signal"):
     val checked = Signal(false)
     val pilot   = startApp(column(checkbox("opt in", checked), text("x")))

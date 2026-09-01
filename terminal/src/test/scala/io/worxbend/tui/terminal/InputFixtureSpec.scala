@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -84,7 +84,7 @@ final class InputFixtureSpec extends AnyFunSuite:
         Event.Mouse(MouseEvent(Position(9, 4), MouseEventKind.Down, KeyModifiers.None)),
         Event.Mouse(MouseEvent(Position(11, 6), MouseEventKind.Drag, KeyModifiers.None)),
         Event.Mouse(MouseEvent(Position(11, 6), MouseEventKind.Up, KeyModifiers.None)),
-        Event.Mouse(MouseEvent(Position(11, 6), MouseEventKind.ScrollUp, KeyModifiers.None)),
+        Event.Mouse(MouseEvent(Position(11, 6), MouseEventKind.ScrollUp, KeyModifiers.None, MouseButton.Unknown)),
         key(KeyCode.Char('k')),
       )
     )

@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind, Position}
+import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position}
 
 /** Decodes terminal input bytes into [[Event]]s: printable keys, control keys, ANSI CSI/SS3 escape sequences for
   * navigation and function keys, kitty-protocol keys, bracketed paste, and both SGR and legacy X10 mouse reports.
@@ -422,7 +422,26 @@ private[terminal] final class InputDecoder(
       else Some(MouseEventKind.Up)
     // a mouse report carries the same shift/alt/ctrl bitmask as a CSI modifier parameter, shifted up by two positions
     val modifiers = modifiersFromBits(button >> MouseModifierShift)
-    kind.map(k => Event.Mouse(MouseEvent(Position(math.max(0, x), math.max(0, y)), k, modifiers)))
+    val pressed   = pressedButton(button)
+    kind.map(k => Event.Mouse(MouseEvent(Position(math.max(0, x), math.max(0, y)), k, modifiers, pressed)))
+
+  /** Which button the report names.
+    *
+    * The low two bits are the button number: 0 left, 1 middle, 2 right. The fourth value, 3, is X10's "some button came
+    * up" release, which genuinely does not say which one — it becomes [[MouseButton.Unknown]] rather than an invented
+    * guess. A wheel report (bit 64) reuses those same two bits for the scroll direction, so it names no button either.
+    *
+    * SGR 1006, unlike X10, keeps the button number on the release as well as the press, which is what makes a
+    * right-button drag-and-release usable.
+    */
+  private def pressedButton(button: Int): MouseButton =
+    if (button & 64) != 0 then MouseButton.Unknown
+    else
+      button & 3 match
+        case 0 => MouseButton.Left
+        case 1 => MouseButton.Middle
+        case 2 => MouseButton.Right
+        case _ => MouseButton.Unknown
 
   /** Wheel buttons 64 and 65 are wheel-up and wheel-down; 66 and 67 are wheel-left and wheel-right, which
     * [[MouseEventKind]] has no vocabulary for.
