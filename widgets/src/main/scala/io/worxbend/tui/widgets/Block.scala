@@ -43,8 +43,10 @@ enum TitlePosition:
   * to put it.
   *
   * A block may carry several — the common shape is a name at the top left and a status at the bottom right, which needs
-  * two. Titles never widen the block and never change [[Block.inner]]: they are written *over* border cells that are
-  * being drawn anyway, so adding one costs no content row.
+  * two. A title never widens the block, and on a side that has a border it costs no content row either: it is written
+  * *over* border cells that are being drawn anyway, so [[Block.inner]] is unchanged. On a side with *no* border there
+  * is no such row to borrow, so the block reserves the outermost row for the title and [[Block.inner]] starts one row
+  * in — otherwise the title would be painted straight over the first line of content.
   */
 final case class BlockTitle(line: Line, position: TitlePosition, alignment: Alignment)
 
@@ -90,12 +92,14 @@ final case class Block(
     borderSet: Option[BorderGlyphs] = None,
 ) extends Widget:
 
-  /** The content region inside the borders and padding. */
+  /** The content region inside the borders, the reserved title rows, and the padding. */
   def inner(area: Rect): Rect =
-    val left   = area.x + borderWidth(Borders.Left) + math.max(0, padding.left)
-    val top    = area.y + borderWidth(Borders.Top) + math.max(0, padding.top)
-    val width  = area.width - borderWidth(Borders.Left) - borderWidth(Borders.Right) - padding.horizontalCells
-    val height = area.height - borderWidth(Borders.Top) - borderWidth(Borders.Bottom) - padding.verticalCells
+    val topInset    = rowsAbove(Borders.Top, TitlePosition.Top)
+    val bottomInset = rowsAbove(Borders.Bottom, TitlePosition.Bottom)
+    val left        = area.x + borderWidth(Borders.Left) + math.max(0, padding.left)
+    val top         = area.y + topInset + math.max(0, padding.top)
+    val width       = area.width - borderWidth(Borders.Left) - borderWidth(Borders.Right) - padding.horizontalCells
+    val height      = area.height - topInset - bottomInset - padding.verticalCells
     if width <= 0 || height <= 0 then Rect(left, top, 0, 0) else Rect(left, top, width, height)
 
   def render(area: Rect, buffer: Buffer): Unit =
@@ -182,3 +186,16 @@ final case class Block(
 
   private def borderWidth(side: Borders): Int =
     if borders.hasAny(side) then 1 else 0
+
+  /** How many rows one horizontal edge of the block costs the content: one for a border, one for a title with no border
+    * under it, and one — not two — when there is both.
+    *
+    * A title is written *over* the border row, so a bordered side costs the same whether it carries a title or not. A
+    * side with no border is the case this exists for: the title still has to go somewhere, and it goes on the block's
+    * outermost row. Before this the content area started on that same row, so a titled borderless block drew its first
+    * line of content and then painted the title straight over the top of it.
+    */
+  private def rowsAbove(side: Borders, position: TitlePosition): Int =
+    if borders.hasAny(side) then 1
+    else if titles.exists(_.position == position) then 1
+    else 0
