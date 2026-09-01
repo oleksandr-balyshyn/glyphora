@@ -743,5 +743,12 @@ object Buffer:
     }
     buffer
 
-  /** [[withLines]] for a whole [[Text]] value, for a caller that already has one. */
-  def withText(text: Text): Buffer = withLines(text.lines*)
+  /** [[withLines]] for a whole [[Text]] value, for a caller that already has one.
+    *
+    * The text's own [[Text.style]] is laid under each line's, exactly as [[io.worxbend.tui.core.Text]] is rendered:
+    * `Paragraph` folds the text style in and `withLines` folds the line style in, so a helper that dropped the outer
+    * layer built an expected frame that could never equal the real one. `text.alignment` is not applied — this builds
+    * a buffer only as wide as the widest line, so there is nothing for a line to be aligned inside of.
+    */
+  def withText(text: Text): Buffer =
+    withLines(text.lines.map(line => line.copy(style = text.style.patch(line.style)))*)

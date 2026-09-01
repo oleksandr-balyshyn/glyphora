@@ -518,5 +518,17 @@ final class BufferSpec extends AnyFunSuite:
     val text = Text(Seq(Line.raw("a"), Line.raw("bb")))
     assert(Buffer.withText(text) == Buffer.withLines(Line.raw("a"), Line.raw("bb")))
 
+  test("withText folds in the text's own base style, the way rendering it does"):
+    // `Paragraph` lays the text's style under each line's, so a frame built with this helper to compare against a
+    // rendered one has to lay it under too — otherwise every expected frame written for a styled text differs from
+    // the real one in nothing but the style, which is exactly the difference the comparison exists to catch
+    val red      = Style.Default.withFg(Color.Red)
+    val expected = Buffer.withText(Text.raw("hi").withStyle(red))
+    assert(expected.get(0, 0).style.fg.contains(Color.Red))
+    // a span's own style still wins over the text's, as it does everywhere else
+    val layered  = Buffer.withText(Text(Seq(Line(Seq(Span("hi", Style.Default.bold)))), style = red))
+    assert(layered.get(0, 0).style.fg.contains(Color.Red))
+    assert(layered.get(0, 0).style.modifiers.hasAny(Modifiers.Bold))
+
   test("adding the companion did not shadow the buffer constructor"):
     assert(Buffer(Rect(1, 2, 3, 4)).area == Rect(1, 2, 3, 4))
