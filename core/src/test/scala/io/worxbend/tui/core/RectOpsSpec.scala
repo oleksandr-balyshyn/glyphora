@@ -56,3 +56,39 @@ final class RectOpsSpec extends AnyFunSuite:
 
   test("union with an empty rect returns the other"):
     assert(Rect.Zero.union(Rect(3, 3, 2, 2)) == Rect(3, 3, 2, 2))
+
+  test("clamp leaves a rect that already fits alone"):
+    val container = Rect(0, 0, 80, 24)
+    assert(Rect(10, 5, 20, 6).clamp(container) == Rect(10, 5, 20, 6))
+
+  test("clamp slides a rect back inside instead of cropping it"):
+    val container = Rect(0, 0, 80, 24)
+    val popup     = Rect(45, 20, 40, 10)
+    assert(popup.clamp(container) == Rect(40, 14, 40, 10))
+    // the contrast with intersection, which crops: same area before and after for clamp, smaller for intersection
+    assert(popup.clamp(container).area == popup.area)
+    assert(popup.intersection(container) == Rect(45, 20, 35, 4))
+
+  test("clamp pushes a rect hanging off the top-left corner back to the container origin"):
+    val container = Rect(5, 3, 20, 10)
+    assert(Rect(-4, -1, 6, 4).clamp(container) == Rect(5, 3, 6, 4))
+
+  test("clamp shrinks a rect larger than the container to the container"):
+    val container = Rect(5, 3, 20, 10)
+    val result    = Rect(0, 0, 100, 100).clamp(container)
+    assert(result == container)
+
+  test("clamp always lands inside a non-empty container"):
+    val container  = Rect(5, 3, 20, 10)
+    val candidates =
+      for
+        x <- -10 to 40
+        y <- -10 to 30
+      yield Rect(x, y, 7, 4).clamp(container)
+    assert(candidates.forall(r => r.x >= container.x && r.right <= container.right))
+    assert(candidates.forall(r => r.y >= container.y && r.bottom <= container.bottom))
+
+  test("clamp against an empty container yields a zero-sized rect at that container's origin"):
+    val result = Rect(9, 9, 40, 10).clamp(Rect(4, 4, 0, 0))
+    assert(result == Rect(4, 4, 0, 0))
+    assert(result.isEmpty)

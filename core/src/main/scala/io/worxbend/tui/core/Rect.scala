@@ -46,6 +46,34 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
   /** Whether `pos` lies inside this rectangle. */
   def contains(pos: Position): Boolean = contains(pos.x, pos.y)
 
+  /** Applies `f` to every cell coordinate in this rectangle, row-major: left to right within a row, then top to bottom.
+    * Does nothing when the rectangle covers no cells, so a caller needs no `isEmpty` guard.
+    *
+    * This, rather than [[positions]], is the primitive a renderer should reach for. Filling or scanning a region walks
+    * tens of thousands of coordinates per frame, and handing back one [[Position]] object per cell allocates on the
+    * hottest path in the toolkit — the same reasoning already written on the two-argument [[contains]]. Because it is
+    * an `inline def` taking an `inline` function, the compiler splices the body of `f` straight into the loop, so
+    * calling it costs the same as writing the nested `while` by hand.
+    */
+  inline def foreachPosition(inline f: (Int, Int) => Unit): Unit =
+    var row = y
+    while row < bottom do
+      var col = x
+      while col < right do
+        f(col, row)
+        col += 1
+      row += 1
+
+  /** Every cell coordinate in this rectangle as [[Position]] values, row-major; empty when the rectangle covers no
+    * cells.
+    *
+    * This allocates one `Position` per cell, so it is meant for tests, assertions and cold paths. A renderer walking a
+    * region every frame should use [[foreachPosition]] instead.
+    */
+  def positions: Iterator[Position] =
+    if isEmpty then Iterator.empty
+    else Iterator.range(y, bottom).flatMap(row => Iterator.range(x, right).map(col => Position(col, row)))
+
   /** This rectangle shrunk by `margin` cells on every side; zero-sized when the margin exhausts it. */
   def inset(margin: Int): Rect = inset(margin, margin)
 
@@ -70,11 +98,52 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
   /** Moves this rectangle by `dx`/`dy` without resizing it. */
   def offset(dx: Int, dy: Int): Rect = copy(x = x + dx, y = y + dy)
 
+  /** The one-row rectangles this rectangle is made of, top to bottom: `Rect(x, y + i, width, 1)` for each of its
+    * `height` rows. Empty when this rectangle covers no cells, so a caller can iterate with no guard.
+    *
+    * An `Iterator` rather than a `Seq` on purpose: a renderer usually walks the few visible rows of a tall area and
+    * stops, and an iterator lets it `take` them without building a collection every frame. Prefer this over the
+    * equivalent `Layout.vertical(Seq.fill(height)(Constraint.Length(1))*).split(this)`, which runs the whole constraint
+    * solver to compute what is plain addition.
+    */
+  def rows: Iterator[Rect] =
+    if isEmpty then Iterator.empty
+    else Iterator.range(y, bottom).map(rowY => Rect(x, rowY, width, 1))
+
+  /** The one-column rectangles this rectangle is made of, left to right: `Rect(x + i, y, 1, height)` for each of its
+    * `width` columns. Empty when this rectangle covers no cells.
+    *
+    * A column here is one terminal *cell* wide, not one grapheme wide: a double-width cluster such as `世` occupies two
+    * of these. Anything that needs display width still goes through [[CharWidth]].
+    */
+  def columns: Iterator[Rect] =
+    if isEmpty then Iterator.empty
+    else Iterator.range(x, right).map(colX => Rect(colX, y, 1, height))
+
   /** A `w`×`h` rectangle centered inside this one, clamped so it never exceeds these bounds. */
   def centered(w: Int, h: Int): Rect =
     val cw = math.min(w, width)
     val ch = math.min(h, height)
     Rect(x + (width - cw) / 2, y + (height - ch) / 2, cw, ch)
+
+  /** This rectangle shrunk to at most `container`'s extent and then *moved* so that it lies fully inside it.
+    *
+    * This is not [[intersection]], which crops. A 40×10 dialog whose right edge runs three columns past the screen
+    * comes back from `clamp` still 40×10, slid three columns to the left; `intersection` would instead return a 37×10
+    * rectangle with the last three columns of its content cut off. Sliding is what caller-positioned overlays want: a
+    * tooltip anchored at the mouse, or a dropdown opened under a field near the bottom row.
+    *
+    * When this rectangle is larger than `container` on an axis, that axis is shrunk to the container's and pinned to
+    * the container's origin — there is nowhere else for it to go. An empty `container` yields a zero-sized rectangle at
+    * the container's origin, because it holds no cell to move into.
+    */
+  def clamp(container: Rect): Rect =
+    val clampedWidth  = math.max(0, math.min(width, container.width))
+    val clampedHeight = math.max(0, math.min(height, container.height))
+    // the outer `max` is what pins an oversized or empty container's result to its origin instead of left of it
+    val clampedX      = math.max(container.x, math.min(x, container.right - clampedWidth))
+    val clampedY      = math.max(container.y, math.min(y, container.bottom - clampedHeight))
+    Rect(clampedX, clampedY, clampedWidth, clampedHeight)
 
   /** True when the two rectangles share at least one cell.
     *
