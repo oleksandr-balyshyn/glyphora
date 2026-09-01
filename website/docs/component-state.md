@@ -58,7 +58,7 @@ Both take their starting value by name, and evaluate it only on the frame that c
 the slot — an expensive initial value costs nothing on later frames.
 
 These are not a second reactivity system. `useSignal` hands you the same `Signal` type
-documented in [State & signals](state-and-signals.md), with the same `get` / `peek` /
+documented in [State & signals](./state-and-signals), with the same `get` / `peek` /
 `set` / `update` and the same render-thread rules. All that changes is who owns it.
 
 ## The one rule: same calls, same order, every frame
