@@ -912,6 +912,23 @@ history scrolls off the left — the behaviour a live metric wants, because the 
 reader is watching never moves. `dualSparkline(upper, lower, SparkDirection.RightToLeft)`
 does the same for both halves at once.
 
+A sample that was never taken is not a zero. Plotting a missing reading as `0` says the
+metric *was* measured and came out empty, which is a different claim; the raw widget
+`Sparkline.ofReadings` takes `Seq[Option[Long]]` and draws the `None`s as gaps instead:
+
+```scala
+import io.worxbend.tui.widgets.Sparkline
+
+val trace = Sparkline.ofReadings(readings, max = Some(1000L), absentSymbol = Some("·"))
+val element = widget(trace).fill
+```
+
+An absent column is left untouched by default, which shows the gap as a hole in the trace
+and lets the sparkline be drawn over an existing background; `absentSymbol` marks it
+explicitly instead, which reads better when the bars have a visible track behind them.
+Absent points are also left out of the scale, so a placeholder value can never pull the
+whole trace out of shape.
+
 Each `Dataset` picks how it is drawn with `graphType`. `GraphType.Line` joins the points,
 `GraphType.Scatter` leaves them separate, `GraphType.Bar` drops an upright bar from each
 point to a baseline, and `GraphType.Area` fills everything between the line and that
