@@ -4,6 +4,9 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Line, Measured, Rect, Span, Styl
 
 /** Multi-line styled text with alignment and optional wrapping.
   *
+  * `alignment` places every line; a [[Line]] that carries an alignment of its own overrides it for that one row, and a
+  * wrapped line keeps its alignment on every row it spills onto.
+  *
   * With [[Overflow.Wrap]] the text breaks at grapheme-cluster boundaries (not word boundaries — good enough for v1 and
   * never splits a wide character or emoji); with [[Overflow.Clip]], the default, long lines are cut at the area edge.
   *
@@ -26,7 +29,9 @@ final case class Paragraph(
         case Overflow.Clip => text.lines.iterator
       lines.take(area.height).zipWithIndex.foreach { (line, row) =>
         val lineWidth = math.min(line.width, area.width)
-        val startX    = alignment.originAt(area.x, area.width, lineWidth)
+        // the line's own alignment wins over the paragraph's; `None` means "use the paragraph's", which is what
+        // every line said before `Line` could carry one
+        val startX    = line.alignment.getOrElse(alignment).originAt(area.x, area.width, lineWidth)
         val _         = LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, style)
       }
 
@@ -52,7 +57,7 @@ object Paragraph:
       var currentWidth = 0
 
       def flush(): Unit =
-        wrapped += Line(currentSpans)
+        wrapped += Line(currentSpans, line.alignment)
         currentSpans = Vector.empty
         currentWidth = 0
 

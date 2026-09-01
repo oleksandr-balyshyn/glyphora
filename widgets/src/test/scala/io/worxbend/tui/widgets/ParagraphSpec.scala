@@ -41,3 +41,32 @@ final class ParagraphSpec extends AnyFunSuite:
   test("excess lines are clipped at the area height"):
     val buffer = rendered(Paragraph(Text.raw("1\n2\n3")), 3, 2)
     assert(trimmedLines(buffer) == Seq("1", "2"))
+
+  test("a line's own alignment overrides the paragraph's for that row only"):
+    val text   = Text(Seq(Line.raw("ab"), Line.raw("ab").centered, Line.raw("ab").rightAligned))
+    val buffer = rendered(Paragraph(text), 6, 3)
+    assert(trimmedLines(buffer) == Seq("ab", "  ab", "    ab"))
+
+  test("a line marked left-aligned escapes a right-aligned paragraph"):
+    val text   = Text(Seq(Line.raw("ab").leftAligned, Line.raw("ab")))
+    val buffer = rendered(Paragraph(text, alignment = Alignment.Right), 6, 2)
+    assert(trimmedLines(buffer) == Seq("ab", "    ab"))
+
+  test("a wrapped line keeps its own alignment on every row it spills onto"):
+    val paragraph = Paragraph(Text(Seq(Line.raw("abcdef").rightAligned)), overflow = Overflow.Wrap)
+    val buffer    = rendered(paragraph, 4, 2)
+    assert(trimmedLines(buffer) == Seq("abcd", "  ef"))
+    assert(paragraph.heightAt(4).contains(2))
+
+  test("a line's alignment is measured in display columns, not characters"):
+    // "你好" is two characters but four terminal columns, so centring it in nine columns starts it at column 2.
+    val buffer = rendered(Paragraph(Text(Seq(Line.raw("你好").centered))), 9, 1)
+    assert(trimmedLines(buffer) == Seq("  你好"))
+
+  test("a line wider than the area is pinned to the left edge whatever it asked for"):
+    val buffer = rendered(Paragraph(Text(Seq(Line.raw("abcdef").rightAligned))), 4, 1)
+    assert(trimmedLines(buffer) == Seq("abcd"))
+
+  test("a one-column area clips a centred line instead of starting it off-screen"):
+    val buffer = rendered(Paragraph(Text(Seq(Line.raw("ab").centered))), 1, 1)
+    assert(trimmedLines(buffer) == Seq("a"))

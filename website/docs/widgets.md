@@ -173,6 +173,12 @@ line("Status: ".styled(identity), "OK".styled(_.withFg(Color.Green)))
 `identity` leaves that run alone. The element's own style is the base each span layers
 onto, so `line(...).dim` dims the whole row and a span that set its own colour keeps it.
 
+A `line` can also place itself: `line(...).rightAligned` (and `leftAligned`, `centered`,
+`aligned(Alignment.Center)`) sets the alignment on the underlying `Line`, which wins over
+the alignment the paragraph drawing it was given. Stack them in a `column` to get a
+left-aligned heading above right-aligned figures without a second widget. See
+[Layout and style](./layout-and-style.md#align-one-row-of-text-on-its-own).
+
 The alternative before `line` existed was a `row` of `text` elements with hand-counted
 widths: `row(text("Status: ").length(8), text("OK").fg(Color.Green))`. Do not do that.
 The `8` is a display width written by hand, and it is wrong the moment the label is

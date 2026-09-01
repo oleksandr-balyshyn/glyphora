@@ -75,6 +75,26 @@ centered(42, 9) {
 }
 ```
 
+### Align one row of text on its own
+
+`Alignment` also travels *inside* a block of text: a `line(...)` can say where that single
+row sits, and it wins over whatever the widget drawing it was told to do. That is what a
+label-on-the-left, total-on-the-right row wants, with no hand-counted padding between them:
+
+```scala
+column(
+  line(span("Deployments")).leftAligned,
+  line(span("42 healthy"), span("  ")).rightAligned,
+  line(span("updated 12s ago")).centered,
+)
+```
+
+The builders are `leftAligned`, `centered`, `rightAligned`, and `aligned(Alignment.Right)`
+when the choice is computed rather than written out. A line that sets none of them keeps
+the old behaviour: it is placed the way the surrounding widget was told to place it. The
+offsets are measured in terminal columns via `CharWidth`, so a CJK or emoji line lands
+where it looks like it should rather than where its character count would put it.
+
 For independent horizontal and vertical alignment, use `place`:
 
 ```scala

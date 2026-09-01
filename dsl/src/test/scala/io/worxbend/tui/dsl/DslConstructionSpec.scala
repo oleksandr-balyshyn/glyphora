@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Color, Constraint, KeyCode, KeyEvent, KeyModifiers, Modifiers}
+import io.worxbend.tui.core.{Alignment, Color, Constraint, KeyCode, KeyEvent, KeyModifiers, Modifiers, Span}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 import io.worxbend.tui.widgets.{BigText, BorderType}
 
@@ -165,3 +165,20 @@ final class DslConstructionSpec extends AnyFunSuite:
     val consumed = EventRouter.dispatchKey(tree, KeyEvent(KeyCode.Enter, KeyModifiers.None))
     assert(!consumed)
     assert(seen.toSeq == Seq("inner", "outer"))
+
+  test("a line's placement builders travel into the Line the element renders"):
+    val element = line(Span.raw("Total"), Span.raw(" 42")).rightAligned
+    assert(element.align.contains(Alignment.Right))
+    element.widget match
+      case paragraph: io.worxbend.tui.widgets.Paragraph =>
+        assert(paragraph.text.lines.map(_.alignment) == Seq(Some(Alignment.Right)))
+      case other                                        => fail(s"expected a Paragraph, got $other")
+
+  test("a line with no placement builder leaves the choice to the widget drawing it"):
+    val element = line(Span.raw("Total"))
+    assert(element.align.isEmpty)
+    assert(trimmedLines(rendered(element.widget, 8, 1)) == Seq("Total"))
+
+  test("a right-aligned line pushes its spans to the right edge when rendered"):
+    val element = line(Span.raw("Total")).rightAligned
+    assert(trimmedLines(rendered(element.widget, 8, 1)) == Seq("   Total"))

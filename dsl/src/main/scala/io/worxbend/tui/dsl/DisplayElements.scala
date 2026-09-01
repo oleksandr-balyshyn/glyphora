@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{CharWidth, Color, Constraint, Line, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{Alignment, CharWidth, Color, Constraint, Line, Span, Style, Text, Widget}
 import io.worxbend.tui.widgets as w
 
 import java.time.LocalTime
@@ -24,11 +24,29 @@ final case class TextElement(content: String, props: ElementProps = ElementProps
   * The element's own style is the base each span layers onto, so `line(...).dim` dims the whole row while a span that
   * set its own colour keeps it.
   */
-final case class LineElement(spans: Seq[Span], props: ElementProps = ElementProps()) extends Element:
+final case class LineElement(spans: Seq[Span], align: Option[Alignment] = None, props: ElementProps = ElementProps())
+    extends Element:
   type Self = LineElement
   def widget: Widget                                           =
-    w.Paragraph(Text(Seq(Line(spans.map(span => span.copy(style = props.style.patch(span.style)))))))
+    w.Paragraph(Text(Seq(Line(spans.map(span => span.copy(style = props.style.patch(span.style))), align))))
   private[dsl] def withProps(props: ElementProps): LineElement = copy(props = props)
+
+  /** Places this row inside whatever width it is given; without one of these it sits at the left edge.
+    *
+    * The alignment is carried by the `Line` itself rather than by the paragraph that draws it, so stacking a plain
+    * `line(...)` above a `line(...).rightAligned` in one `column` puts a label on the left and a total on the right
+    * with no hand-counted padding in between.
+    */
+  def aligned(alignment: Alignment): LineElement = copy(align = Some(alignment))
+
+  /** This row pinned to the left edge — the default, spelled out. */
+  def leftAligned: LineElement = aligned(Alignment.Left)
+
+  /** This row centred in the columns it is given. */
+  def centered: LineElement = aligned(Alignment.Center)
+
+  /** This row pinned to the right edge, which is what a column of numbers wants. */
+  def rightAligned: LineElement = aligned(Alignment.Right)
 
   /** Exactly one row, and exactly as wide as the spans measure — in display columns, via `CharWidth`. */
   private[dsl] override def claim: SizeClaim = SizeClaim.box(spans.map(_.width).sum, 1)
