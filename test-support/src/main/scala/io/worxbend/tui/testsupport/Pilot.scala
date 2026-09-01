@@ -54,13 +54,7 @@ final class Pilot private (
     * `binding` does: a key spec is written by hand and a typo in one is a mistake in the test, not a condition to
     * handle.
     */
-  def press(specs: String*): Pilot =
-    specs.foreach { spec =>
-      KeyEvent.parse(spec) match
-        case Right(event)  => backend.postEvent(Event.Key(event))
-        case Left(problem) => throw IllegalArgumentException(s"bad key spec '$spec': $problem")
-    }
-    this
+  def press(specs: String*): Pilot = postKeySpecs(specs, Event.Key.apply)
 
   /** Posts one key *release* per key spec, in order — the mirror of [[press]] for an app that reads releases.
     *
@@ -70,10 +64,15 @@ final class Pilot private (
     *
     * A malformed spec throws [[IllegalArgumentException]], exactly as [[press]] does and for the same reason.
     */
-  def release(specs: String*): Pilot =
+  def release(specs: String*): Pilot = postKeySpecs(specs, Event.KeyRelease.apply)
+
+  /** Parses each spec and posts the event `asEvent` wraps it in, in order, then returns this pilot for chaining. The
+    * one place [[press]] and [[release]] decide what a malformed spec does.
+    */
+  private def postKeySpecs(specs: Seq[String], asEvent: KeyEvent => Event): Pilot =
     specs.foreach { spec =>
       KeyEvent.parse(spec) match
-        case Right(event)  => backend.postEvent(Event.KeyRelease(event))
+        case Right(event)  => backend.postEvent(asEvent(event))
         case Left(problem) => throw IllegalArgumentException(s"bad key spec '$spec': $problem")
     }
     this
