@@ -54,6 +54,44 @@ Signals add tracked reactivity where another part of the tree also needs the val
 > `ListState()`, or `DataTableState()` inside `view` would reset editing, selection,
 > and scrolling on every redraw.
 
+## Choosing one option out of many
+
+`select(options, chosen)` is a one-row cycler: Left and Right step through the options,
+and only the current one is ever visible. That is right for three options and wrong for
+forty — choosing the thirtieth takes thirty keystrokes, and the user cannot see what they
+are choosing between.
+
+`dropdown(...)` shows the list. It draws one row while closed and, when opened, the whole
+option list beneath that row as a bordered, scrolling popup:
+
+```scala
+import io.worxbend.tui.dsl.*
+
+private val regionState = DropdownState()   // caller-owned, outside `view`
+private val region      = Signal(0)
+
+def view(using ReactiveScope, Theme): Element =
+  column(
+    text("Region").dim,
+    dropdown(regions, region.get, regionState)(index => region.set(index)),
+  )
+```
+
+Enter, Space or Down opens the list, and so does a click on the row. While it is open,
+Up and Down move the highlight, the wheel moves it too, and Enter or a click on an option
+commits that option through the callback. Escape closes the list and changes nothing — the
+highlight is not the chosen value until it is committed, which is what makes "open it,
+look around, back out" safe.
+
+Two things are worth knowing before reaching for it. An open dropdown **consumes Escape**,
+so an app that binds Escape globally will not see it while a list is showing. And the popup
+is drawn inside the node's own area rather than floated over the screen, so while the list
+is open the node claims `1 + maxVisibleRows + 2` rows and whatever sits below it moves down.
+That is what lets it work inside any panel or column with no overlay machinery; the cost is
+that a dropdown near the bottom of a short area gets a clipped list rather than one that
+opens upwards. `maxVisibleRows` (8 by default) caps the popup, and a longer list scrolls
+inside it.
+
 ## One name for the chosen thing
 
 Every widget that draws one of its items differently because it is the chosen one

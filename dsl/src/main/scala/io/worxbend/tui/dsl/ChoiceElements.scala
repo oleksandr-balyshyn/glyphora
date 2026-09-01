@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{KeyCode, KeyEvent, MouseEventKind, Text, Widget}
+import io.worxbend.tui.core.{KeyCode, KeyEvent, MouseEvent, MouseEventKind, Rect, Text, Widget}
 import io.worxbend.tui.widgets as w
 
 /** A labelled checkbox. Space/Enter (or a click) flips it while focused.
@@ -57,6 +57,112 @@ final case class SelectElement(
   private[dsl] override def claim: SizeClaim                                 = SizeClaim.OneRow
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     =
     Some(stepsWrapping(options.size, selected, onSelect))
+
+/** A collapsed option chooser: one row showing the option in force, and, while open, the whole option list beneath it
+  * as a bordered popup.
+  *
+  * The difference from [[SelectElement]] is what happens with a long list. `select` steps one option per keystroke and
+  * never shows more than the current one, so choosing the thirtieth of forty options takes thirty keystrokes and the
+  * user cannot see what they are choosing between. A dropdown shows the list.
+  *
+  * Keys while focused. Closed: Enter, Space or Down opens the list. Open: Up/Down move the highlight, Enter commits it
+  * through `onSelect`, Escape closes without changing anything. Note that an open dropdown *consumes* Escape — an app
+  * that binds Escape globally will not see it while a list is showing, which is the same bargain any modal makes and
+  * the reason the highlight is not the committed value.
+  *
+  * A click on the closed row opens the list; a click on an option commits it; a click on the row while open closes it
+  * again. The wheel moves the highlight.
+  *
+  * The popup is drawn inside the node's own area, not floated over the screen, so while it is open the node claims
+  * `1 + popup` rows and the layout around it moves down. That is what makes it work inside any panel or column today,
+  * with no overlay machinery; the visible cost is that a dropdown near the bottom of a short area gets a clipped list
+  * rather than one that opens upwards.
+  */
+final case class DropdownElement(
+    options: Seq[String],
+    selected: Int,
+    state: w.DropdownState,
+    onSelect: Int => Unit,
+    maxVisibleRows: Int = 8,
+    props: ElementProps = ElementProps(focusable = true),
+) extends Element:
+  type Self = DropdownElement
+
+  def widget: Widget =
+    val dropdown = w.Dropdown(options, selected, maxVisibleRows, focusStyled(props), props.focusStyle)
+    (area, buffer) => dropdown.render(area, buffer, state)
+
+  private[dsl] def withProps(props: ElementProps): DropdownElement = copy(props = props)
+
+  /** One row when closed; the row plus the popup when open. The claim changes with the state on purpose — that is how
+    * the container above makes room for the list on the frame it opens.
+    */
+  private[dsl] override def claim: SizeClaim =
+    if state.open then SizeClaim.rows(w.Dropdown(options, selected, maxVisibleRows).openHeight) else SizeClaim.OneRow
+
+  private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     = Some(handleKey)
+  private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] = Some(handleMouse)
+
+  /** The entries the popup's own navigation helpers work over. Rebuilt per event rather than stored, because the node
+    * is an immutable value rebuilt every frame and the option list can change between frames.
+    */
+  private def entries: Seq[w.MenuEntry] = options.map(label => w.MenuEntry.Item(label))
+
+  private def handleKey(event: KeyEvent): Boolean =
+    if !state.open then openingKey(event)
+    else
+      event match
+        case KeyEvent(KeyCode.Enter | KeyCode.Char(' '), _) =>
+          state.menu.selected.filter(options.indices.contains).foreach(onSelect)
+          state.close()
+          true
+        case KeyEvent(KeyCode.Escape, _)                    =>
+          state.close()
+          true
+        case KeyEvent(KeyCode.Down, _)                      =>
+          state.menu.selectNext(entries)
+          true
+        case KeyEvent(KeyCode.Up, _)                        =>
+          state.menu.selectPrevious(entries)
+          true
+        case _                                              => false
+
+  /** Anything else is left alone while closed, so Tab still reaches focus traversal and an app binding still sees its
+    * own keys — a closed dropdown is a label, and should behave like one.
+    */
+  private def openingKey(event: KeyEvent): Boolean =
+    event match
+      case KeyEvent(KeyCode.Enter | KeyCode.Char(' ') | KeyCode.Down, _) if options.nonEmpty =>
+        state.openAt(selected)
+        true
+      case _                                                                                 => false
+
+  private def handleMouse(event: MouseEvent, area: Rect): Boolean =
+    event.kind match
+      case MouseEventKind.ScrollUp if state.open   =>
+        state.menu.selectPrevious(entries)
+        true
+      case MouseEventKind.ScrollDown if state.open =>
+        state.menu.selectNext(entries)
+        true
+      case MouseEventKind.Down                     => handlePress(event.position.y - area.y)
+      case _                                       => false
+
+  /** `offsetY` is how many rows below the node's own top the press landed. Row 0 is the closed row; the popup starts at
+    * row 1, and its first option is at row 2 because row 1 is the popup's top border.
+    */
+  private def handlePress(offsetY: Int): Boolean =
+    if offsetY == 0 then
+      if state.open then state.close() else if options.nonEmpty then state.openAt(selected)
+      true
+    else if state.open then
+      val row = offsetY - 2 + state.menu.offset
+      if options.indices.contains(row) then
+        state.menu.selected = Some(row)
+        onSelect(row)
+        state.close()
+      true
+    else false
 
 /** Mutually exclusive options: Up/Down move the selection while focused. */
 final case class RadioGroupElement(

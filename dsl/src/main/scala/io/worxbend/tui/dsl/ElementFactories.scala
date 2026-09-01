@@ -772,6 +772,20 @@ private[dsl] trait ElementFactories:
   def menu(items: Seq[w.MenuEntry], state: w.MenuState)(onSelect: Int => Unit): MenuElement =
     MenuElement(items, state, onSelect)
 
+  /** A collapsed option chooser: one row showing the option in force, and, while open, the whole option list beneath it
+    * as a bordered popup. Enter, Space or Down (or a click) opens it; Enter or a click on an option commits it through
+    * `onSelect`; Escape closes it without changing anything.
+    *
+    * Reach for this rather than [[select]] when the list is long enough that stepping through it one option per
+    * keystroke is work, or when the user needs to see the options to choose between them. `state` is caller-owned, like
+    * every other widget state: it holds whether the list is showing and where the highlight sits, and it must outlive a
+    * single frame, so keep it in a field rather than building one inside `view`.
+    */
+  def dropdown(options: Seq[String], selected: Int, state: w.DropdownState, maxVisibleRows: Int = 8)(
+      onSelect: Int => Unit
+  ): DropdownElement =
+    DropdownElement(options, selected, state, onSelect, maxVisibleRows)
+
   /** A bordered popup of help text sized to its content — overlay it near what it describes (see [[positioned]]). */
   def tooltip(text: String): WidgetElement =
     val tip = w.Tooltip(text)
