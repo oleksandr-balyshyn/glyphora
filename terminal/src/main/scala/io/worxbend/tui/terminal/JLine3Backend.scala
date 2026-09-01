@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Event, Position, Rect, Size}
+import io.worxbend.tui.core.{Buffer, Event, Position, Rect, Size, Widget}
 
 import org.jline.terminal.{Attributes, Terminal, TerminalBuilder}
 import org.jline.utils.InfoCmp
@@ -321,6 +321,37 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       }
       terminal.writer().flush()
     }
+
+  /** Renders `widget` into a block `height` rows tall and prints it into the terminal's real scrollback, styling and
+    * all.
+    *
+    * Same trip out to the primary screen as [[printAbove]] — that is what makes the lines durable, since the alternate
+    * screen has no scrollback — but the rows are encoded by [[FrameEncoder.encodeRow]] rather than stripped down to
+    * plain text, so colours, bold and hyperlinks survive. Each row ends with a style reset and a `\r\n`, so the block
+    * behaves like any other command output the shell scrolled past.
+    *
+    * `encodeRow` rather than [[FrameEncoder.encode]]: a frame diff is a stream of absolute cursor moves, and absolute
+    * positions mean nothing for text the terminal is placing on a line of its own choosing. The block is measured
+    * against the width the terminal has *now*, so a resize between two calls simply produces a differently sized block.
+    */
+  override def insertBefore(height: Int, widget: Widget): Either[BackendError, Unit] =
+    if height <= 0 then Right(())
+    else
+      attempt {
+        val area   = Rect(0, 0, currentSize.width, height)
+        val buffer = Buffer(area)
+        widget.render(area, buffer)
+        buffer
+      }.flatMap { buffer =>
+        suspend {
+          var y = 0
+          while y < height do
+            terminal.writer().write(frameEncoder.encodeRow(buffer, y))
+            terminal.writer().write("\r\n")
+            y += 1
+          terminal.writer().flush()
+        }
+      }
 
   /** Scrolls the screen up by `n` rows with SU (`CSI n S`).
     *

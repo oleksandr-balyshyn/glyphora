@@ -130,3 +130,41 @@ final class FrameEncoderSpec extends AnyFunSuite:
       buffer.setString(1, 0, "y", Style.Default)
     }
     assert(encoder.encode(previous, next) == AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + smuggled + "y")
+
+  // ---------------------------------------------------------------- rows printed into the scrollback
+
+  test("a row encoded for printing carries its styling and no cursor movement"):
+    // `encodeRow` is what `insertBefore` writes into the terminal's scrollback. Absolute cursor moves are exactly wrong
+    // there: the terminal, not the app, decides which line printed text lands on.
+    val warning = Style.Default.withFg(Color.Rgb(220, 160, 40)).bold
+    val row     = frame(_.setString(0, 0, "warn", warning))
+    val encoded = encoder.encodeRow(row, 0)
+    assert(encoded == sgr(warning) + "warn" + AnsiSequences.ResetStyle)
+    assert(!encoded.contains(AnsiSequences.moveTo(0, 0)))
+
+  test("an encoded row always ends with a style reset"):
+    // without it, a background colour set for the last cell bleeds into whatever the shell prints next — and that line
+    // is durable scrollback, so the bleed stays on screen
+    val row = frame(_.setString(0, 0, "x", Style.Default.withBg(Color.Rgb(80, 0, 0))))
+    assert(encoder.encodeRow(row, 0).endsWith(AnsiSequences.ResetStyle))
+
+  test("trailing padding is not encoded, so the line does not paint to the window edge"):
+    val row = frame(_.setString(0, 0, "ab", Style.Default))
+    assert(encoder.encodeRow(row, 0) == sgr(Style.Default) + "ab" + AnsiSequences.ResetStyle)
+
+  test("a wide grapheme is written once, without its continuation column"):
+    val row = frame(_.setString(0, 0, "漢b", Style.Default))
+    assert(encoder.encodeRow(row, 0) == sgr(Style.Default) + "漢b" + AnsiSequences.ResetStyle)
+
+  test("a blank row encodes to nothing at all"):
+    assert(encoder.encodeRow(frame(_ => ()), 0) == "")
+
+  test("a row outside the buffer encodes to nothing rather than failing"):
+    assert(encoder.encodeRow(frame(_.setString(0, 0, "x", Style.Default)), 9) == "")
+
+  test("a hyperlink in a printed row is opened and closed within that row"):
+    val linked  = Style.Default.withLink("https://example.invalid")
+    val row     = frame(_.setString(0, 0, "docs", linked))
+    val encoded = encoder.encodeRow(row, 0)
+    assert(encoded.contains(AnsiSequences.linkOpen("https://example.invalid")))
+    assert(encoded.contains(AnsiSequences.LinkClose))

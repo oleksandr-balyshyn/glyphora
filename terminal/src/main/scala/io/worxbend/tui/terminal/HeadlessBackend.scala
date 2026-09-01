@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Event, Position, Size}
+import io.worxbend.tui.core.{Buffer, Event, Position, Rect, Size, Widget}
 
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
@@ -34,6 +34,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val fullRedrawCounter                                = AtomicLong(0)
   private val printedLines                                     = scala.collection.mutable.ArrayBuffer.empty[String]
   private val clears                                           = scala.collection.mutable.ArrayBuffer.empty[ClearType]
+  private val insertedBlocks                                   = scala.collection.mutable.ArrayBuffer.empty[Buffer]
 
   def size: Either[BackendError, Size] = Right(terminalSize)
 
@@ -142,6 +143,24 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     printedLines.synchronized { printedLines ++= lines }
     Right(())
 
+  /** Records the rendered block itself, not only its text.
+    *
+    * The inherited implementation would render the widget and then flatten it to plain strings for [[printAbove]],
+    * which throws away the styling that is the whole reason this method exists — a test could then never tell a bold
+    * red `ERROR` prefix from the word "ERROR". The block is kept as a [[Buffer]] for [[insertedAbove]] to hand out, and
+    * its text is *also* appended to [[printedAbove]], so a test written against the plain-text view still sees
+    * everything the app emitted above the UI, in the order it emitted it.
+    */
+  override def insertBefore(height: Int, widget: Widget): Either[BackendError, Unit] =
+    if height <= 0 then Right(())
+    else
+      val area   = Rect(0, 0, terminalSize.width, height)
+      val buffer = Buffer(area)
+      widget.render(area, buffer)
+      insertedBlocks.synchronized { val _ = insertedBlocks += buffer }
+      printedLines.synchronized { printedLines ++= Backend.plainRows(buffer) }
+      Right(())
+
   /** Adds `n` to the running total a test asserts on. There is no simulated scrollback to move rows into, so the count
     * is the whole observable effect — which is exactly the question an inline-viewport test asks: how much room did the
     * app ask the shell for?
@@ -225,7 +244,12 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   /** The erases requested via [[clearRegion]], in order. */
   def clearedRegions: Seq[ClearType] = clears.synchronized(clears.toSeq)
 
-  /** The lines emitted above the app via [[printAbove]], in order. */
+  /** The styled blocks emitted above the app via [[insertBefore]], in order, each as the [[Buffer]] the widget was
+    * rendered into. Their text also appears in [[printedAbove]]; this is the view that still carries the styling.
+    */
+  def insertedAbove: Seq[Buffer] = insertedBlocks.synchronized(insertedBlocks.toSeq)
+
+  /** The lines emitted above the app via [[printAbove]] or [[insertBefore]], in order. */
   def printedAbove: Seq[String] = printedLines.synchronized(printedLines.toSeq)
 
   /** Total rows scrolled off the top via [[appendLines]] — how much room an inline viewport asked the shell for. */

@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Event, Position, Size}
+import io.worxbend.tui.core.{Buffer, Event, Position, Rect, Size, Widget}
 
 import scala.concurrent.duration.Duration
 
@@ -142,6 +142,32 @@ trait Backend:
     val _ = lines
     Right(())
 
+  /** [[printAbove]] with styling: renders `widget` into a `height`-row block and emits *that* into the scrollback above
+    * the live UI, colours, bold and hyperlinks included.
+    *
+    * `printAbove` takes plain strings and strips every control sequence out of them before they reach the terminal,
+    * which is the right thing to do with text of unknown provenance and also means an inserted line can carry no style
+    * at all — no coloured log level, no bold prefix, no link. Here the caller draws instead of printing: `widget` is
+    * handed a [[io.worxbend.tui.core.Buffer]] covering `Rect(0, 0, terminalWidth, height)` and whatever it paints is
+    * what lands in the scrollback. It is the counterpart of ratatui's `insert_before`.
+    *
+    * The block is emitted once, at the moment of the call; it does not become part of any later frame and is not
+    * repainted on a resize, exactly like the shell output above it. Must run on the render thread. A `height` of zero
+    * or less inserts nothing and succeeds, so a caller computing a height from its content needs no guard.
+    *
+    * The default renders the block and then hands its rows to [[printAbove]] as plain text, so a backend that only
+    * knows how to write strings stays correct and loses only the styling. Backends that can do better override it.
+    */
+  def insertBefore(height: Int, widget: Widget): Either[BackendError, Unit] =
+    if height <= 0 then Right(())
+    else
+      size.flatMap { terminalSize =>
+        val area   = Rect(0, 0, terminalSize.width, height)
+        val buffer = Buffer(area)
+        widget.render(area, buffer)
+        printAbove(Backend.plainRows(buffer))
+      }
+
   /** Erases part of the screen, as `kind` describes.
     *
     * Must run on the render thread. It also invalidates the diff baseline through [[requestFullRedraw]], because after
@@ -208,6 +234,30 @@ private[terminal] object Backend:
     */
   def requirePositiveTimeout(timeout: Duration): Unit =
     require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
+
+  /** The text of `buffer`, one string per row, with trailing blanks removed.
+    *
+    * How [[Backend.insertBefore]]'s default implementation flattens a rendered block back down to the plain lines
+    * [[Backend.printAbove]] takes. Styling is dropped — that is the whole point of the fallback — but the glyphs and
+    * their columns are kept.
+    *
+    * Continuation columns are skipped rather than printed. A two-column grapheme (a CJK ideograph, most emoji) occupies
+    * two cells, and the second one is a reserved blank the terminal never draws: writing it out would push everything
+    * after it one column to the right. Trailing blanks go because a row is padded to the terminal's full width, and a
+    * scrollback line that carries that padding is a line whose background bleeds to the edge of the window.
+    */
+  def plainRows(buffer: Buffer): Seq[String] =
+    val rows = Seq.newBuilder[String]
+    var y    = buffer.area.y
+    while y < buffer.area.bottom do
+      val row = StringBuilder()
+      var x   = buffer.area.x
+      while x < buffer.area.right do
+        if !buffer.isContinuation(x, y) then row ++= buffer.get(x, y).symbol
+        x += 1
+      rows += row.result().reverse.dropWhile(_ == ' ').reverse
+      y += 1
+    rows.result()
 
 /** Which part of the screen [[Backend.clearRegion]] erases.
   *

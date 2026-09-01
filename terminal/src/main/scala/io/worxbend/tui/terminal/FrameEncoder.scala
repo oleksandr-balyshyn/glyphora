@@ -67,6 +67,58 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
     body.result()
 
+  /** One row of `buffer` as styled ANSI text, with no cursor movement in it at all.
+    *
+    * [[encode]] is for a frame that owns the screen: it positions the cursor at each run of changed cells, which is
+    * exactly wrong for text that is being *printed* into the terminal's scrollback, where the terminal itself decides
+    * which line the text lands on. This writes only style sequences and glyphs, so the caller can print the result
+    * followed by a newline the way it would print any other line of output.
+    *
+    * Trailing cells that are blank in the default style are dropped: a rendered block is padded to the full width of
+    * the terminal, and a scrollback line carrying that padding is one whose background colour runs to the edge of the
+    * window and stays there for as long as the line does. Continuation columns — the second half of a two-column
+    * grapheme — are skipped, because the terminal paints them from the cell to their left.
+    *
+    * The result ends with an explicit style reset, so a colour set for the last cell cannot leak into whatever the
+    * shell prints next. Rows outside `buffer.area` encode to the empty string.
+    */
+  def encodeRow(buffer: Buffer, y: Int): String =
+    val end = lastInterestingColumn(buffer, y)
+    if end < buffer.area.x then ""
+    else
+      val body                        = StringBuilder()
+      var currentStyle                = ""
+      var currentLink: Option[String] = None
+      var x                           = buffer.area.x
+      while x <= end do
+        if !buffer.isContinuation(x, y) then
+          val cell = buffer.get(x, y)
+          val sgr  = AnsiSequences.sgr(cell.style, colorDepth)
+          if sgr != currentStyle then
+            body ++= sgr
+            currentStyle = sgr
+          if cell.style.link != currentLink then
+            if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
+            cell.style.link.foreach(url => body ++= AnsiSequences.linkOpen(url))
+            currentLink = cell.style.link
+          body ++= cell.symbol
+        x += 1
+      if currentLink.nonEmpty then body ++= AnsiSequences.LinkClose
+      body ++= AnsiSequences.ResetStyle
+      body.result()
+
+  /** The rightmost column of row `y` that carries anything worth writing, or one less than the row's first column when
+    * the whole row is blank in the default style.
+    */
+  private def lastInterestingColumn(buffer: Buffer, y: Int): Int =
+    var last = buffer.area.x - 1
+    var x    = buffer.area.x
+    while x < buffer.area.right do
+      val cell = buffer.get(x, y)
+      if !buffer.isContinuation(x, y) && (cell.symbol != " " || cell.style != Style.Default) then last = x
+      x += 1
+    last
+
   /** How many columns the terminal's cursor has moved after the cell at `(x, y)` was written.
     *
     * The answer comes from the buffer's own bookkeeping rather than from measuring the symbol again: a cell is two
