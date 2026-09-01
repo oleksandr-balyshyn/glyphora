@@ -420,6 +420,27 @@ Do not measure with it. `plainText.length` counts UTF-16 code units, which is no
 number of terminal columns the text occupies: one CJK character is one code unit and two
 columns, and a combining accent is one code unit and no column at all. `width` is the
 accessor that answers in columns, and it goes through `CharWidth`.
+## Turn a style back into code
+
+When a cell assertion or a golden-frame comparison fails, the message shows the style it
+found — `Style(fg=Cyan, modifiers=Bold)`. That reads well, but you cannot paste it into
+the test as the expected value, because it is prose rather than an expression.
+
+`asSource` prints the same value as the code that builds it:
+
+```scala
+Style.Default.withFg(Color.Cyan).bold.asSource
+// "Style.Default.withFg(Color.Cyan).bold"
+
+Color.Rgb(1, 2, 3).asSource
+// "Color.Rgb(1,2,3)"
+```
+
+The builder order is fixed — colors, set modifiers, cleared modifiers, underline, link —
+so two equal styles always print the same text, whatever order they were built in, and
+the text always evaluates back to an equal style. `toString` stays what it was; this is a
+second formatter beside it, for pasting rather than reading.
+
 ## Derive one color from another
 
 `Color` can compute related colors instead of making you type a second hex literal.

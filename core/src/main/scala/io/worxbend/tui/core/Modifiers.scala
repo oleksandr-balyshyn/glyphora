@@ -73,3 +73,10 @@ object Modifiers:
       * `Modifiers` should print instead of the raw `Int` the opaque type erases to.
       */
     def show: String = if m.isEmpty then "None" else names.mkString("|")
+
+    /** The set flags spelled as the [[Style]] builder calls that turn them on — `Seq("bold", "italic")`.
+      *
+      * Derived from [[names]] by lower-casing the first letter rather than listing the flags a second time, so a new
+      * flag is still added in exactly one place. Feeds [[Style.asSource]], which prints a whole style as code.
+      */
+    def builderNames: Seq[String] = names.map(name => name.updated(0, name.charAt(0).toLower))

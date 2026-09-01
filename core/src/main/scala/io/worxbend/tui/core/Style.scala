@@ -143,6 +143,36 @@ final case class Style(
     ).flatten
     if parts.isEmpty then "Style.Default" else parts.mkString("Style(", ", ", ")")
 
+  /** This style spelled as the Scala expression that rebuilds it:
+    * `Style.Default.withFg(Color.Cyan).bold.notItalic`.
+    *
+    * [[toString]] is written to be *read* — it is what a failure message shows. This one is written to be *pasted*:
+    * into the expected value of the assertion that just failed, or into a REPL. A style with nothing set prints as
+    * `Style.Default`, which is exactly the expression that builds it.
+    *
+    * The builder order is fixed — colors, then the modifiers that are set, then the modifiers that were cleared, then
+    * the underline, then the link — and each flag appears once, so two equal styles always print the same text and the
+    * text always evaluates back to an equal style. Two details of that order are deliberate rather than incidental:
+    *
+    *   - a foreground or background of [[Color.Reset]] prints as `withoutFg`/`withoutBg`. Both spellings build the
+    *     same value, but those are the builders documented for "no color, and I mean it", so they are what a reader
+    *     pasting the text should see.
+    *   - cleared modifiers come after set ones, because [[setting]] withdraws a clear. Printing `notBold` before
+    *     `bold` would produce text that no longer records the clear when it is evaluated.
+    */
+  def asSource: String =
+    val calls =
+      Seq(
+        fg.map(color => if color == Color.Reset then "withoutFg" else s"withFg(${color.asSource})"),
+        bg.map(color => if color == Color.Reset then "withoutBg" else s"withBg(${color.asSource})"),
+      ).flatten
+        ++ modifiers.builderNames
+        ++ clearedModifiers.builderNames.map(name => s"not${name.updated(0, name.charAt(0).toUpper)}")
+        ++ Option.when(underlineStyle != UnderlineStyle.None)(s"withUnderlineStyle(UnderlineStyle.$underlineStyle)")
+        ++ underlineColor.map(color => s"withUnderlineColor(${color.asSource})")
+        ++ link.map(url => s"withLink(${Style.quote(url)})")
+    calls.foldLeft("Style.Default")((expression, call) => s"$expression.$call")
+
 object Style:
 
   /** The style that states nothing: every field silent, so patching anything with it changes nothing. */
@@ -188,3 +218,13 @@ object Style:
     * overload taking one would be hard to tell at a glance from one taking a color.
     */
   def mods(modifiers: Modifiers): Style = Style(modifiers = modifiers)
+
+  /** `value` as a Scala string literal, with the two characters that would break out of one escaped, so a link
+    * containing a quote or a backslash still pastes back as the same string.
+    */
+  private def quote(value: String): String =
+    val escaped = value.flatMap:
+      case '\\'  => "\\\\"
+      case '"'   => "\\\""
+      case other => other.toString
+    "\"" + escaped + "\""

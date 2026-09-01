@@ -22,6 +22,14 @@ enum Color:
   case Rgb(r: Int, g: Int, b: Int)
   case Indexed(index: Int)
 
+  /** This color spelled as the Scala expression that rebuilds it: `Color.Red`, `Color.Rgb(1,2,3)`, `Color.Indexed(9)`.
+    *
+    * The derived `toString` already prints the shape — `Rgb(1,2,3)` — but without the `Color.` qualifier, which is the
+    * one thing that stops it from compiling when pasted back into a test. See [[Style.asSource]], which builds on this
+    * to print a whole style as code.
+    */
+  def asSource: String = s"Color.$this"
+
 object Color:
 
   /** Builds an [[Rgb]] color, clamping each channel to `0..255`. */
