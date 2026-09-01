@@ -6,6 +6,15 @@ final case class Text(lines: Seq[Line]):
 
   def width: Int = if lines.isEmpty then 0 else lines.map(_.width).max
 
+  /** Every line's [[Line.plainText]] joined with `\n`, with no trailing newline added.
+    *
+    * The inverse of [[Text.raw]] up to styling: `Text.raw(s).plainText == s` for any `s` that contains no `\r`,
+    * because `raw` splits on `\n` keeping empty trailing lines and this joins them back the same way. As with
+    * [[Line.plainText]], the result is for logging, clipboard payloads and test assertions — not for measuring, which
+    * is what [[width]] and [[height]] are for.
+    */
+  def plainText: String = lines.map(_.plainText).mkString("\n")
+
 object Text:
   /** Splits `content` on newlines, keeping trailing empty lines; each resulting line carries `style`.
     *

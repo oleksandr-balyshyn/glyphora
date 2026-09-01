@@ -295,6 +295,33 @@ Descendants can still add or override their own style. Raw `widget(...)` leaves 
 images intentionally ignore the element style because their renderer owns its
 cells directly.
 
+## Work with text values directly
+
+Underneath the elements are three plain immutable values from `tui-core`, and one
+`import io.worxbend.tui.dsl.*` reaches all of them. A `Span` is a run of characters plus
+one `Style`; a `Line` is a sequence of spans making up one terminal row; a `Text` is a
+sequence of lines.
+
+### Read the characters back out
+
+`plainText` flattens a value back to an ordinary string with every style dropped — the
+text a user would copy out of the terminal. Use it for logging, clipboard payloads and
+test assertions:
+
+```scala
+val line = Line(Seq(Span("ok", Style.Default.withFg(Color.Green)), Span(" done", Style.Default)))
+line.plainText            // "ok done"
+Text.raw("a\nb").plainText // "a\nb"
+```
+
+`Text.plainText` joins the lines with `\n` and adds no trailing newline, so
+`Text.raw(s).plainText == s` for any `s` without a carriage return.
+
+Do not measure with it. `plainText.length` counts UTF-16 code units, which is not the
+number of terminal columns the text occupies: one CJK character is one code unit and two
+columns, and a combining accent is one code unit and no column at all. `width` is the
+accessor that answers in columns, and it goes through `CharWidth`.
+
 ## Build with themes, not scattered colors
 
 For application chrome and reusable components, take the `Theme` as a context

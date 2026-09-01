@@ -172,7 +172,7 @@ final class DegenerateInputSpec extends AnyFunSuite:
   test("a cluster wider than the wrap width is clipped, not deleted"):
     assert(Paragraph.wrapLine(Line.raw("日本語"), 1).size == 3)
     assert(Paragraph.wrapLine(Line.raw("ab日cd"), 1).size == 5)
-    assert(Paragraph.wrapLine(Line.raw("ab👍cd"), 1).map(_.spans.map(_.content).mkString).mkString == "ab👍cd")
+    assert(Paragraph.wrapLine(Line.raw("ab👍cd"), 1).map(_.plainText).mkString == "ab👍cd")
 
   test("heightAt agrees with the rows a paragraph renders"):
     val cases = Seq(

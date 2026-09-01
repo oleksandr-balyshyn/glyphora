@@ -22,6 +22,14 @@ final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None):
   /** Pins this row to the right edge, which is what a column of numbers wants. */
   def rightAligned: Line = aligned(Alignment.Right)
 
+  /** The line's characters with every [[Style]] dropped — the string a user would copy out of the terminal.
+    *
+    * The spans are concatenated in order with nothing inserted between them. `plainText.length` counts UTF-16 code
+    * units, which says nothing about how many terminal columns the line occupies: ask [[width]] for that. Intended for
+    * logging, clipboard payloads and test assertions, never for layout arithmetic.
+    */
+  def plainText: String = spans.map(_.content).mkString
+
 object Line:
   def raw(content: String): Line = Line(Seq(Span.raw(content)))
 
