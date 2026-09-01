@@ -180,6 +180,45 @@ write for the wrong side.
 Padding is charged to the panel's measured height too, so a padded panel inside a
 `scrollView` still reports the rows it really occupies.
 
+## Choose which sides have a border, and where the captions sit
+
+A `panel` frames all four sides by default. `.borders(sides)` picks which ones are
+actually drawn, and `.borderless` drops the frame while keeping the padding, the flex
+layout and the children:
+
+```scala
+panel("Filters")(filterList).borders(Borders.Right)      // a column separator
+panel(header).borders(Borders.Top | Borders.Bottom)      // a horizontal band
+panel("Group")(members).padding(1).borderless            // grouping, no frame
+```
+
+`Borders.Top`, `.Right`, `.Bottom`, `.Left`, `.All` and `.None` combine with `|`. Corner
+glyphs appear only where two drawn sides meet, so a half-framed panel has no dangling
+corners, and the measured height charges only the sides that are drawn — a
+`Borders.Top` panel reserves one row of chrome, not two.
+
+Captions live in border cells, so they never cost a content row and never widen the box
+(an over-long one is clipped). The top caption starts at the left and the bottom one at
+the right; `.titleAligned(...)` and `.titleBottomAligned(...)` move them:
+
+```scala
+panel("Settings")(body).titleAligned(Alignment.Center)
+panel("Queue")(body).titleBottom("3 pending").titleBottomAligned(Alignment.Left)
+```
+
+`title` and `titleBottom` take a plain `String` and paint it in one style. For a caption
+made of differently-styled runs — or simply a third and fourth caption — use `.titles`,
+which takes `BlockTitle` values, and a `BlockTitle` carries a `Line`:
+
+```scala
+panel("build")(body).titles(
+  BlockTitle.top(Line(Seq("ok ".styled(identity), "2 warnings".styled(_.fg(Color.Yellow))))),
+)
+```
+
+Captions sharing a border *and* an alignment are drawn as one run separated by a single
+space, in the order given, with `title`/`titleBottom` first.
+
 ## Wrap and align text
 
 `text(...)` cuts a line off at the right edge of its area by default, and starts every

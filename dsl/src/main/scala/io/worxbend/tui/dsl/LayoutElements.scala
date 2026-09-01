@@ -18,9 +18,19 @@ trait FlexContainer extends Element:
 
 /** A bordered box with an optional title, stacking its children vertically inside the border.
   *
-  * Two captions are available, and neither costs a content row: `title` is written into the top border at the left,
-  * `titleBottom` into the bottom border at the right — the name-above / status-below shape most panes in a real
-  * application want. [[padding]] reserves blank cells between the border and the children.
+  * Two captions are available, and neither costs a content row: `title` is written into the top border and
+  * `titleBottom` into the bottom border — the name-above / status-below shape most panes in a real application want.
+  * Each has its own alignment (left for the top one, right for the bottom one, unless `.titleAligned` /
+  * `.titleBottomAligned` say otherwise), and `.titles(...)` adds any number of further captions built as
+  * [[io.worxbend.tui.widgets.BlockTitle]]s, which is how a caption made of differently-styled runs gets in — a
+  * `BlockTitle` carries a `Line`, and a `Line` carries spans.
+  *
+  * `borders` chooses which sides are drawn. The default is all four, but a pane can be a horizontal rule above its
+  * content (`Borders.Top`), a column separated from its neighbour by a single line (`Borders.Left`), or unframed
+  * entirely (`.borderless`) while keeping the panel's padding and captions. Where two drawn sides meet, the block
+  * draws a corner glyph; where they do not, it does not, so a half-framed panel has no dangling corners.
+  *
+  * [[padding]] reserves blank cells between the border and the children.
   *
   * The children are stacked by the same `w.Column` a [[ColumnElement]] builds, so a panel is a [[FlexContainer]] too:
   * `.gap`/`.center`/`.spaceBetween` work inside the border without wrapping the children in a `column` first.
@@ -35,22 +45,32 @@ final case class PanelElement(
     spacing: Int = 0,
     flex: Flex = Flex.Start,
     mergeBorders: w.MergeStrategy = w.MergeStrategy.Replace,
+    borders: w.Borders = w.Borders.All,
+    titleAlignment: w.Alignment = w.Alignment.Left,
+    titleBottomAlignment: w.Alignment = w.Alignment.Right,
+    extraTitles: Seq[w.BlockTitle] = Seq.empty,
     props: ElementProps = ElementProps(),
 ) extends FlexContainer:
   type Self = PanelElement
 
+  /** The block this panel frames itself with — one value, so `render` and the height measurement below cannot disagree
+    * about how many cells the chrome costs.
+    */
+  private def block: w.Block =
+    w.Block(
+      blockTitles,
+      borders,
+      padding,
+      borderStyle = props.style,
+      borderType = borderType,
+      mergeBorders = mergeBorders,
+    )
+
   def widget: Widget =
     (area, buffer) =>
-      val block =
-        w.Block(
-          blockTitles,
-          padding = padding,
-          borderStyle = props.style,
-          borderType = borderType,
-          mergeBorders = mergeBorders,
-        )
-      block.render(area, buffer)
-      w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing, flex).render(block.inner(area), buffer)
+      val framed = block
+      framed.render(area, buffer)
+      w.Column(children.map(_.layoutItem(Direction.Vertical)), spacing, flex).render(framed.inner(area), buffer)
 
   def withFlex(mode: Flex): PanelElement    = copy(flex = mode)
   def withSpacing(cells: Int): PanelElement = copy(spacing = math.max(0, cells))
@@ -64,11 +84,40 @@ final case class PanelElement(
     */
   private def blockTitles: Seq[w.BlockTitle] =
     val captionStyle = titleStyle.getOrElse(props.style)
-    title.map(text => w.BlockTitle.top(Line.styled(text, captionStyle))).toSeq ++
-      titleBottom.map(text => w.BlockTitle.bottom(Line.styled(text, captionStyle), w.Alignment.Right)).toSeq
+    title.map(text => w.BlockTitle.top(Line.styled(text, captionStyle), titleAlignment)).toSeq ++
+      titleBottom.map(text => w.BlockTitle.bottom(Line.styled(text, captionStyle), titleBottomAlignment)).toSeq ++
+      extraTitles
 
   /** A second caption, written into the bottom border at the right — a status, a count, a keybinding hint. */
   def titleBottom(text: String): PanelElement = copy(titleBottom = Some(text))
+
+  /** Moves the top caption along the top border: left (the default), centre, or right. */
+  def titleAligned(alignment: w.Alignment): PanelElement = copy(titleAlignment = alignment)
+
+  /** Moves the bottom caption along the bottom border. It starts at the right, where a status belongs. */
+  def titleBottomAligned(alignment: w.Alignment): PanelElement = copy(titleBottomAlignment = alignment)
+
+  /** Adds further captions, built by hand as `BlockTitle.top(line, alignment)` / `BlockTitle.bottom(...)`.
+    *
+    * `title` and `titleBottom` take a plain `String` and paint it in one style, which cannot say "build" in the
+    * default colour and "failed" in red. A `BlockTitle` carries a `Line`, and a `Line` carries differently-styled
+    * spans, so this is the way to a mixed-style caption — or simply to a third and fourth one.
+    *
+    * Captions sharing a border *and* an alignment are drawn as one run separated by a single space, in the order
+    * given, with the `title`/`titleBottom` pair first. Captions never widen the box and never cost a content row: they
+    * are written over border cells that are being drawn anyway.
+    */
+  def titles(more: w.BlockTitle*): PanelElement = copy(extraTitles = extraTitles ++ more)
+
+  /** Draws only the named sides: `.borders(Borders.Top | Borders.Bottom)` for a horizontal band, `Borders.Left` for a
+    * plain column separator. Corner glyphs appear only where two drawn sides meet.
+    */
+  def borders(sides: w.Borders): PanelElement = copy(borders = sides)
+
+  /** Draws no border at all, while keeping the panel's padding, its flex layout and its captions — a grouping box with
+    * no frame around it. (Captions live *in* the border cells, so with no border there is nowhere to write them.)
+    */
+  def borderless: PanelElement = copy(borders = w.Borders.None)
 
   /** Styles the captions independently of the border, which keeps the element's own style. */
   def titleStyle(transform: Style => Style): PanelElement =
@@ -85,13 +134,17 @@ final case class PanelElement(
   private[dsl] def withProps(props: ElementProps): PanelElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PanelElement = copy(children = children)
   private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
-    // the same fact twice: `w.Block`'s border eats a column on each side and a row at the top and bottom, and the
-    // padding eats whatever it was asked for on top of that
-    val chrome  = PanelBorderCells + padding.horizontalCells
+    // Every drawn border side eats one cell across its own axis, and the padding eats whatever it was asked for on
+    // top of that. Counting the sides that are actually drawn, rather than assuming all four, is what keeps a
+    // `.borders(Borders.Top)` panel from reserving two rows it never paints.
+    val chrome  = borderCells(w.Borders.Left) + borderCells(w.Borders.Right) + padding.horizontalCells
+    val rows    = borderCells(w.Borders.Top) + borderCells(w.Borders.Bottom) + padding.verticalCells
     val gaps    = spacing * math.max(0, children.size - 1)
     val heights = children.map(_.intrinsicHeight(math.max(0, width - chrome)))
-    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + gaps + PanelBorderCells + padding.verticalCells)
-    else None
+    if heights.forall(_.nonEmpty) then Some(heights.flatten.sum + gaps + rows) else None
+
+  /** One cell if that side of the frame is drawn, none if it is not — the same rule `w.Block.inner` applies. */
+  private def borderCells(side: w.Borders): Int = if borders.hasAny(side) then 1 else 0
 
 /** Border glyph sets, on the one node type where a border exists at all.
   *

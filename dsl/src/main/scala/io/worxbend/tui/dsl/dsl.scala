@@ -141,13 +141,22 @@ val KeyModifiers: io.worxbend.tui.core.KeyModifiers.type = io.worxbend.tui.core.
   * a value alias, not an `export`, for the reason given on [[KeyModifiers]]: it is an opaque type, and an exported
   * opaque type loses its companion's extension methods (`|`, `hasAny`, `hasAll`, `names`, `show`).
   *
-  * `widgets.Borders` is the third opaque type in the library and is deliberately *not* re-exported: no signature the
-  * DSL exposes names it — per-side borders are a `tui-widgets`-level knob on `Block`, and `panel` exposes border
-  * *style* (`BorderType`) instead. An application that reaches for `Block` directly is already importing
-  * `io.worxbend.tui.widgets` for `Block` itself.
+  * [[Borders]] below is the third opaque type in the library and is spelled the same way for the same reason.
   */
 type Modifiers = io.worxbend.tui.core.Modifiers
 val Modifiers: io.worxbend.tui.core.Modifiers.type = io.worxbend.tui.core.Modifiers
+
+/** Which sides of a `panel`'s frame are drawn — `Borders.Top | Borders.Left`, `Borders.All`, `Borders.None`.
+  *
+  * Named by `PanelElement.borders(sides)`, so an application that wants a half-framed pane has to be able to write the
+  * value. It used to be reachable only through `widgets.Block`, which meant a second import for one bitset.
+  *
+  * The third opaque type in the library, and written as a type alias plus a value alias rather than an `export` for
+  * the reason given on [[KeyModifiers]]: an exported opaque type loses its companion's extension methods, and without
+  * `|` the sides could not be combined at all.
+  */
+type Borders = io.worxbend.tui.widgets.Borders
+val Borders: io.worxbend.tui.widgets.Borders.type = io.worxbend.tui.widgets.Borders
 
 // `AsyncErrorHandler` and `QueuedTaskFailures` are here for the same reason as everything else in this block: they are
 // named by signatures this package already exports. `Async.run`'s `onError` parameter takes an `AsyncErrorHandler`, and

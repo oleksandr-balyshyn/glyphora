@@ -22,9 +22,6 @@ private val SplitStep       = 5
 
 private def clampSplit(percent: Int): Int = math.max(MinSplitPercent, math.min(MaxSplitPercent, percent))
 
-/** Cells a [[PanelElement]]'s border takes off the inner area along one axis — one on each side. */
-private val PanelBorderCells = 2
-
 /** A key table: the listed keys run their action and consume the event, anything else is declined.
   *
   * The alternative — a `match` ending in `case _ => false` — spells out the same fact once per node, and every one of
