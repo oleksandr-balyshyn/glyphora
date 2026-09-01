@@ -273,6 +273,58 @@ object Color:
     else if steps == 1 then Seq(mix(from, to, 0))
     else Seq.tabulate(steps)(i => mix(from, to, i.toDouble / (steps - 1)))
 
+  /** The WCAG relative luminance of `color`: how much light it emits, from `0.0` (black) to `1.0` (white).
+    *
+    * "Relative luminance" is the brightness a human eye perceives, not the average of the three channels. Green carries
+    * most of the perceived brightness and blue almost none, which is why the weights below are so uneven, and each
+    * channel is first un-done from the sRGB encoding that display hardware applies. This is the standard definition
+    * from the Web Content Accessibility Guidelines, and it is the input [[contrastRatio]] needs.
+    *
+    * Computed over [[approximateRgb]], so every colour answers. For the sixteen named ANSI colours the RGB a terminal
+    * actually paints is chosen by the terminal emulator, not by this library, so the number is '''nominal''': it
+    * describes the palette this library assumes — which is what a theme definition can be checked against — and not
+    * what any particular terminal shows.
+    */
+  def luminance(color: Color): Double =
+    val (r, g, b) = approximateRgb(color)
+    0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
+
+  /** The WCAG contrast ratio between two colors, from `1.0` (indistinguishable) to `21.0` (black against white).
+    *
+    * This is the number accessibility guidance is written in: WCAG AA asks for at least `4.5` for normal text and `3.0`
+    * for large text or interface components, AAA for `7.0`. Symmetric in its arguments — swapping foreground and
+    * background gives the same ratio — and it carries the same nominal-palette caveat as [[luminance]].
+    */
+  def contrastRatio(a: Color, b: Color): Double =
+    val la      = luminance(a)
+    val lb      = luminance(b)
+    val lighter = math.max(la, lb)
+    val darker  = math.min(la, lb)
+    (lighter + 0.05) / (darker + 0.05)
+
+  /** [[Black]] or [[White]], whichever reads better on `background` — the label colour to use over a colour that was
+    * computed rather than chosen, such as a heat-map cell or a generated series swatch.
+    *
+    * A tie goes to `Black`, following the convention that dark text is the default over an unknown mid-tone.
+    *
+    * This picks the better of two colours; it cannot promise the result is good enough. A background near the middle of
+    * the range leaves neither black nor white far from it — against the nominal `Red` here, the better of the two
+    * reaches only about `4.1`, short of the `4.5` WCAG AA asks for normal text. When a threshold has to be met, check
+    * it with [[contrastRatio]] and change the background, which is the only thing that can actually fix it.
+    */
+  def readableOn(background: Color): Color =
+    if contrastRatio(Black, background) >= contrastRatio(White, background) then Black else White
+
+  /** One sRGB channel in `0..255` converted to its linear-light value, per WCAG 2.x.
+    *
+    * Display hardware does not treat a channel of 128 as half the light of 255 — the encoding is deliberately curved so
+    * that the values available are spread the way the eye notices differences. Luminance arithmetic has to undo that
+    * curve first, which is what this does.
+    */
+  private def linearize(channel: Int): Double =
+    val c = channel / 255.0
+    if c <= 0.04045 then c / 12.92 else math.pow((c + 0.055) / 1.055, 2.4)
+
   /** The same derivations as the functions above, written as methods on the color so a chain reads in the order it
     * happens: `theme.mixedWith(accent, 0.3).darken(0.1)` instead of `darken(mix(theme, accent, 0.3), 0.1)`.
     *
@@ -314,6 +366,16 @@ object Color:
 
     /** [[Color.toInt]]: this color packed into one `0x00RRGGBB` integer. */
     def packed: Int = Color.toInt(color)
+
+    /** [[Color.luminance]]: this color's WCAG relative luminance, `0.0` (black) to `1.0` (white). */
+    // named `relativeLuminance` for the same reason `asHsl` is not `toHsl`: an extension's receiver becomes its first
+    // parameter, so an extension called `luminance` would be ambiguous with the companion function at every call site
+    def relativeLuminance: Double = Color.luminance(color)
+
+    /** [[Color.contrastRatio]]: the WCAG contrast ratio between this color and `other`, `1.0` to `21.0`. Spelled to
+      * read at the call site as `fg.contrastWith(bg)`.
+      */
+    def contrastWith(other: Color): Double = Color.contrastRatio(color, other)
 
     /** [[Color.toHsl]]: this color as `(hue, saturation, lightness)`.
       *

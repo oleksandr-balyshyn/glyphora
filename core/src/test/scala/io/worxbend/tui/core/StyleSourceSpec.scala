@@ -38,7 +38,7 @@ final class StyleSourceSpec extends AnyFunSuite:
     assert(Style.Default.bold.dim.italic.underline.blink.reverse.hidden.crossedOut == style)
 
   test("every cleared modifier prints as its not* builder, in bit order"):
-    val style = Style.Default.notBold.notDim.notItalic.notUnderline.notBlink.notReverse.notHidden.notCrossedOut
+    val style    = Style.Default.notBold.notDim.notItalic.notUnderline.notBlink.notReverse.notHidden.notCrossedOut
     val expected =
       "Style.Default.notBold.notDim.notItalic.notUnderline.notBlink.notReverse.notHidden.notCrossedOut"
     assert(style.asSource == expected)
@@ -56,7 +56,7 @@ final class StyleSourceSpec extends AnyFunSuite:
     assert(Style.Default.bold == style)
 
   test("underline style, underline color and link print after the modifiers"):
-    val style = Style.Default.bold.curlyUnderline.withUnderlineColor(Color.Red).withLink("https://example.com")
+    val style    = Style.Default.bold.curlyUnderline.withUnderlineColor(Color.Red).withLink("https://example.com")
     val expected =
       "Style.Default.bold" +
         ".withUnderlineStyle(UnderlineStyle.Curly)" +

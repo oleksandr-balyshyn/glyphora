@@ -99,6 +99,13 @@ ragged.
 This remains understandable in monochrome terminals and high-contrast modes.
 `Theme.HighContrast` is available when the application needs stronger separation.
 
+To check a pairing rather than assume it, `Color.contrastRatio(fg, bg)` returns the WCAG
+ratio — 4.5 is the AA threshold for normal text, 3 for large text and interface elements
+— and `Color.readableOn(bg)` picks whichever of black and white reads better on a
+computed background. See [Check that text will be
+readable](./layout-and-style#check-that-text-will-be-readable) for the two caveats that
+come with it.
+
 ## Offer a way to turn motion down
 
 Persistent animation is the accessibility hazard most terminal toolkits ignore. When

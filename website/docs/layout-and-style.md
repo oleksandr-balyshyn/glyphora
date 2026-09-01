@@ -476,6 +476,38 @@ lightness, so generated palettes cannot produce an out-of-range color. `Color.to
 is the inverse, and it answers for named and 256-color values too by going through their
 RGB approximation.
 
+## Check that text will be readable
+
+Accessibility guidance is written in *contrast ratios* — a number from 1 (two colors you
+cannot tell apart) to 21 (black against white). The Web Content Accessibility Guidelines
+ask for at least 4.5 for normal text, 3 for large text and interface elements, and 7 for
+their strictest level.
+
+`Color.contrastRatio(a, b)` computes it, and `Color.luminance(c)` gives the underlying
+perceived brightness on a 0-to-1 scale:
+
+```scala
+Color.contrastRatio(Color.White, Color.Black)   // 21.0
+Color.Cyan.contrastWith(Color.Black) >= 4.5     // the same check, read left to right
+```
+
+When the background is computed rather than chosen — a heat-map cell, a generated series
+swatch — `Color.readableOn(background)` returns whichever of black and white reads better
+on it:
+
+```scala
+val swatch = Color.hsl(hue, 0.65, 0.55)
+text(label).fg(Color.readableOn(swatch)).bg(swatch)
+```
+
+Two honest caveats. `readableOn` picks the better of two colors; it cannot promise the
+result clears a threshold, because a background near the middle of the range leaves
+neither black nor white far from it. And for the sixteen *named* colors the RGB a
+terminal actually paints is chosen by the terminal emulator, so a ratio involving them
+describes the palette this library assumes, not what a given terminal shows. Ratios
+between explicit `Color.Rgb` values — the Tailwind palette below, for instance — have no
+such caveat.
+
 ## Reach for a ready-made palette
 
 The sixteen named colors (`Color.Red`, `Color.BrightBlue`, …) are whatever the user's
