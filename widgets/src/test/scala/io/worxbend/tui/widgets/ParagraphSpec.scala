@@ -86,3 +86,9 @@ final class ParagraphSpec extends AnyFunSuite:
     val buffer = rendered(Paragraph(text.patchStyle(Style.Default.italic)), 4, 1)
     assert(buffer.get(0, 0).style.fg.contains(Color.Green))
     assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Italic))
+
+  test("a Text accumulated span by span renders like the same text written out"):
+    val built   = Text.Empty.appendedToLast(Span.raw("ab")).appended(Line.raw("cd"))
+    val literal = Text(Seq(Line(Seq(Span.raw("ab"))), Line(Seq(Span.raw("cd")))))
+    assert(trimmedLines(rendered(Paragraph(built), 4, 2)) == trimmedLines(rendered(Paragraph(literal), 4, 2)))
+    assert(trimmedLines(rendered(Paragraph(built), 4, 2)) == Seq("ab", "cd"))

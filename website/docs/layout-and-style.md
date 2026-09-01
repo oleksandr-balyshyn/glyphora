@@ -334,6 +334,23 @@ A `Line` and a `Text` hold no style of their own — a line is its spans — so 
 methods are a fold over the spans rather than a field being set. That is why they compose
 the way plain `Style` calls do.
 
+### Build a value up a piece at a time
+
+These are immutable values, so nothing is pushed into them: each helper returns a copy and
+leaves the receiver alone. `Line.appended(span)` adds a span to the right of a row,
+`Text.appended(line)` adds a row below a block, and `appendedAll` does the same with a
+whole value. `Line.Empty` and `Text.Empty` are the identities to fold from:
+
+```scala
+val row = spans.foldLeft(Line.Empty)(_.appended(_))
+val doc = rows.foldLeft(Text.Empty)(_.appended(_))
+```
+
+`Text.appendedToLast(span)` extends the *last* row rather than starting a new one, and it
+owns the case that is easy to get wrong: a text with no rows at all has no last row, so
+one is started holding just that span. A text whose last row exists but is empty is not
+that case — the span joins that row and the row count does not change.
+
 ### Read the characters back out
 
 `plainText` flattens a value back to an ordinary string with every style dropped — the

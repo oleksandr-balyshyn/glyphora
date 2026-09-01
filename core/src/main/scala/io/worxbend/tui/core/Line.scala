@@ -48,7 +48,22 @@ final case class Line(spans: Seq[Span], alignment: Option[Alignment] = None):
     */
   def patchStyle(style: Style): Line = Line(spans.map(_.patchStyle(style)))
 
+  /** This line with `span` added after its existing spans, i.e. further to the right.
+    *
+    * A `Line` is an immutable value, so nothing is pushed anywhere: the receiver is unchanged and a new line is
+    * returned. The name follows the Scala collections vocabulary (`appended`, not `push`) for exactly that reason.
+    */
+  def appended(span: Span): Line = Line(spans :+ span)
+
+  /** This line with every span of `other` added after its own, in order — the two rows laid end to end. */
+  def appendedAll(other: Line): Line = Line(spans ++ other.spans)
+
 object Line:
+  /** A line with no spans: zero columns wide, and the identity for [[Line.appendedAll]], so a fold that accumulates
+    * spans has somewhere to start.
+    */
+  val Empty: Line = Line(Seq.empty)
+
   def raw(content: String): Line = Line(Seq(Span.raw(content)))
 
   def styled(content: String, style: Style): Line = Line(Seq(Span(content, style)))

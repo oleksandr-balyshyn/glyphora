@@ -26,7 +26,32 @@ final case class Text(lines: Seq[Line]):
   /** `style` layered on top of every span of every line — see [[Span.patchStyle]]. */
   def patchStyle(style: Style): Text = Text(lines.map(_.patchStyle(style)))
 
+  /** This text with `line` added below its existing lines. The receiver is unchanged; a new value is returned. */
+  def appended(line: Line): Text = Text(lines :+ line)
+
+  /** This text with every line of `other` added below its own, in order. */
+  def appendedAll(other: Text): Text = Text(lines ++ other.lines)
+
+  /** This text with `span` added to the right-hand end of its last line.
+    *
+    * When the text has no lines at all there is no last line to extend, so one is started holding just `span` and the
+    * result is a one-line text. That empty case is the whole reason this method exists: code that accumulates a text
+    * span by span otherwise has to test `lines.isEmpty` itself at every call site, and the two branches are easy to
+    * get the wrong way round.
+    *
+    * A text whose last line is present but has no spans is *not* the empty case — `span` becomes that line's only
+    * span, and the line count does not change.
+    */
+  def appendedToLast(span: Span): Text =
+    if lines.isEmpty then Text(Seq(Line(Seq(span))))
+    else Text(lines.init :+ lines.last.appended(span))
+
 object Text:
+  /** A text with no lines: zero rows, zero columns, and the identity for [[Text.appendedAll]], so a fold that
+    * accumulates lines has somewhere to start.
+    */
+  val Empty: Text = Text(Seq.empty)
+
   /** Splits `content` on newlines, keeping trailing empty lines; each resulting line carries `style`.
     *
     * The split is on `\n` alone: the caller owns newline normalisation. CRLF (`\r\n`) input therefore leaves a carriage
