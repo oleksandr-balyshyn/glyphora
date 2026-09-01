@@ -476,6 +476,23 @@ lightness, so generated palettes cannot produce an out-of-range color. `Color.to
 is the inverse, and it answers for named and 256-color values too by going through their
 RGB approximation.
 
+The same distinction applies to ramps between two colors. `Color.gradient` interpolates
+each channel on its own, which is right for a fade toward a background — but halfway from
+red to cyan the channels cancel and you get a dead grey. `Color.gradientHsl` travels
+round the color wheel instead, taking the shorter arc, so every stop stays as saturated
+as its ends:
+
+```scala
+Color.gradient(Color.Rgb(255, 0, 0), Color.Rgb(0, 255, 255), 7)     // sags through grey
+Color.gradientHsl(Color.Rgb(255, 0, 0), Color.Rgb(0, 255, 255), 7)  // stays vivid
+```
+
+`Color.mixHsl(a, b, t)` is the single-point version, and both read as methods too —
+`a.mixedThroughHueWith(b, 0.5)` and `a.hueGradientTo(b, 7)`. When one end is a grey it
+has no hue to travel from, so the other end's hue is used for both and only saturation
+and lightness move; that is what stops a fade toward grey from swinging through red on
+the way.
+
 ## Write a hex color the compiler checks
 
 `Color.hex("#ff8800")` returns an `Option`, because the string it is handed might come

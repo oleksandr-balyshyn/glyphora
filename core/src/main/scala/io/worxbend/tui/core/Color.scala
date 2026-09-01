@@ -273,6 +273,45 @@ object Color:
     else if steps == 1 then Seq(mix(from, to, 0))
     else Seq.tabulate(steps)(i => mix(from, to, i.toDouble / (steps - 1)))
 
+  /** Mixes two colors the short way around the color wheel, in HSL rather than RGB: `t = 0` yields `a`, `t = 1` yields
+    * `b`. Returns an [[Rgb]].
+    *
+    * [[mix]] interpolates the three channels independently, which is the right thing for a fade to a background but the
+    * wrong thing for a ramp between two hues. Halfway from red to cyan in RGB is a dead grey, because the channels
+    * cross over rather than travelling round the wheel; here it is the yellow-green that lies between them.
+    *
+    * The hue takes the shorter of the two arcs — red to magenta goes through purple, not through green — because a
+    * two-colour ramp is nearly always meant as the short way. When a specific direction matters, build the stops with
+    * [[hsl]] and the hue arithmetic you want.
+    *
+    * A grey has no hue to travel from, so when either end is unsaturated the hue of the other end is used for both and
+    * only saturation and lightness move. Without that, mixing toward grey would swing the hue to `0` (red) on the way.
+    */
+  def mixHsl(a: Color, b: Color, t: Double): Color =
+    val (ah, as, al) = toHsl(a)
+    val (bh, bs, bl) = toHsl(b)
+    val f            = clampUnit(t)
+    // an unsaturated end has no meaningful hue of its own: borrow the other end's rather than swing through red
+    val fromHue      = if as == 0.0 then bh else ah
+    val toHue        = if bs == 0.0 then ah else bh
+    // the signed short way round: wrapHue puts the difference in 0..360, and anything past a half turn is shorter
+    // travelled backwards
+    val forward      = wrapHue(toHue - fromHue)
+    val arc          = if forward > 180.0 then forward - 360.0 else forward
+    hsl(fromHue + arc * f, as + (bs - as) * f, al + (bl - al) * f)
+
+  /** `steps` evenly-spaced colors from `from` to `to` inclusive, interpolated through HSL — the hue-space counterpart
+    * of [[gradient]], built on [[mixHsl]] exactly as that one is built on [[mix]].
+    *
+    * This is what a chart ramp or a generated palette wants: the stops stay saturated all the way across instead of
+    * sagging through grey in the middle. A 1-step gradient is just `from`, and a non-positive `steps` asks for no
+    * colors and gets none.
+    */
+  def gradientHsl(from: Color, to: Color, steps: Int): Seq[Color] =
+    if steps <= 0 then Seq.empty
+    else if steps == 1 then Seq(mixHsl(from, to, 0))
+    else Seq.tabulate(steps)(i => mixHsl(from, to, i.toDouble / (steps - 1)))
+
   /** The WCAG relative luminance of `color`: how much light it emits, from `0.0` (black) to `1.0` (white).
     *
     * "Relative luminance" is the brightness a human eye perceives, not the average of the three channels. Green carries
@@ -366,6 +405,12 @@ object Color:
 
     /** [[Color.toInt]]: this color packed into one `0x00RRGGBB` integer. */
     def packed: Int = Color.toInt(color)
+
+    /** [[Color.mixHsl]]: this color mixed toward `other` through HSL, the short way around the color wheel. */
+    def mixedThroughHueWith(other: Color, t: Double): Color = Color.mixHsl(color, other, t)
+
+    /** [[Color.gradientHsl]]: `steps` evenly-spaced colors from this one to `to`, interpolated through HSL. */
+    def hueGradientTo(to: Color, steps: Int): Seq[Color] = Color.gradientHsl(color, to, steps)
 
     /** [[Color.luminance]]: this color's WCAG relative luminance, `0.0` (black) to `1.0` (white). */
     // named `relativeLuminance` for the same reason `asHsl` is not `toHsl`: an extension's receiver becomes its first
