@@ -598,6 +598,27 @@ landed on, or writing a reflow rule the built-in wrapping does not cover. The re
 iterator is stateful, single-use and owned by the calling thread — walk it once, and call
 the method again rather than storing one.
 
+### Build a value out of mixed pieces in one call
+
+When you already have all the pieces, `Line.of` and `Text.of` take them as arguments and
+promote the plain ones for you. `Line.of` accepts a `String` or a `Span` in any order and
+in any mixture; `Text.of` accepts a `String` or a `Line`:
+
+```scala
+Line.of("Name: ", "Remy".styled(_.bold))          // two spans, only the second styled
+Text.of("Summary", Line.of("ok ", failures))      // two rows
+```
+
+A plain string becomes an unstyled piece, and anything already built is taken exactly as
+it is — its style, and a line's alignment, come through untouched. The saving is the
+wrapper around every plain piece: the first line above would otherwise be
+`Line(Seq(Span.raw("Name: "), "Remy".styled(_.bold)))`.
+
+One difference to keep in mind: `Text.of` does **not** split on newlines. Each argument is
+exactly one row, so a `\n` inside one of the strings would end up inside a row, where it
+occupies no column but one cell and pushes the rest of that row a column out of place.
+`Text.raw` is the one that splits; pass strings that may contain newlines to that instead.
+
 ### Build a value up a piece at a time
 
 These are immutable values, so nothing is pushed into them: each helper returns a copy and

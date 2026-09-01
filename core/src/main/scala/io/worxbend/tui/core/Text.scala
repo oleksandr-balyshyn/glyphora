@@ -119,3 +119,20 @@ object Text:
     * lines yet and puts the style straight onto the spans it makes.
     */
   def styled(lines: Seq[Line], style: Style): Text = Text(lines, None, style)
+
+  /** `Text.of("header", Line.of("body ", highlighted))` — one row per argument, built from a mixture of plain strings
+    * and already-built [[Line]]s.
+    *
+    * Unlike [[Text.raw]] and [[Text.styled]], this does **not** split anything on newlines: each argument is exactly
+    * one row, and a `\n` inside one of the strings would end up in a row as a character that occupies no column,
+    * pushing the rest of that row one column out of place. Pass such a string to `Text.raw` instead, or split it
+    * yourself.
+    *
+    * The name is `of` rather than another `apply` overload for the same reason as [[Line.of]]: a varargs `apply` would
+    * erase into a collision with the published `apply(Seq[Line])`.
+    */
+  def of(parts: (String | Line)*): Text =
+    Text(parts.map {
+      case content: String => Line.raw(content)
+      case line: Line      => line
+    })

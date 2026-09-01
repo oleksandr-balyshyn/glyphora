@@ -125,3 +125,23 @@ object Line:
     * [[raw]] under a shorter name; `raw` stays for call sites that pass the function itself (`titles.map(Line.raw)`).
     */
   def apply(content: String): Line = raw(content)
+
+  /** `Line.of("Name: ", "Remy".styled(_.bold))` — one row built from a mixture of plain strings and already-styled
+    * [[Span]]s, in the order given.
+    *
+    * A plain `String` becomes an unstyled span; a `Span` is taken as it is. This is for the common shape of a status
+    * row, where most of the text is a fixed label and only a word or two carries a colour, and where the alternative is
+    * `Line(Seq(Span.raw("Name: "), someSpan))` — the same row with two extra wrappers to read past.
+    *
+    * The name is `of` rather than another `apply` overload on purpose: after erasure a varargs `apply` would collide
+    * with the published `apply(Seq[Span])`, and the two would be ambiguous at the call site rather than at this
+    * definition, which is the worse place to find out.
+    *
+    * The resulting line carries no alignment and no base style, as any other freshly built line does; add them with
+    * [[Line.centered]] and [[Line.withStyle]].
+    */
+  def of(parts: (String | Span)*): Line =
+    Line(parts.map {
+      case content: String => Span.raw(content)
+      case span: Span      => span
+    })
