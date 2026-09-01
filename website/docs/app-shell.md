@@ -241,6 +241,22 @@ override def bindings = KeyBindings(
 Focused/local handlers run before global bindings. Use local `.onKey(...)` for
 behavior owned by one element, and app bindings for commands meaningful everywhere.
 
+An element-level handler can be written with the same key-spec strings a `binding`
+uses, so a key has one spelling everywhere in an app:
+
+```scala
+panel("Editor")(editor)
+  .onKey("ctrl+s") { save() }        // the spec string, as in binding("ctrl+s", …)
+  .onKey("down", "j") { next() }     // several specs, one action
+  .onKey(Key.Escape) { cancel() }    // the typed vocabulary, still available
+```
+
+Both forms build the same `KeyEvent` — the string goes through the same parser
+`binding(…)` and `Pilot.press(…)` use — so `.onKey("ctrl+s")` and
+`.onKey(Key.ctrl('s'))` are interchangeable. A spec the parser rejects (a misspelt
+`"ctlr+s"`, a key name that does not exist) throws where the element is built, rather
+than turning into a binding that silently never fires.
+
 ## Navigate with screens
 
 A `Screen` is a tracked view pushed on the app's stack:

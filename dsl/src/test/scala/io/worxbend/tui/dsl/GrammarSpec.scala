@@ -115,3 +115,55 @@ final class GrammarSpec extends AnyFunSuite:
     el match
       case TextElement(content, _) => assert(content == "from a view alias")
       case other                   => fail(s"expected a TextElement, got $other")
+
+  /** The point of the spec overload is that one key has one spelling. Every spec below is bound both ways and the two
+    * handlers must agree about which event fires them.
+    */
+  test("a key-spec string binds the same event the typed Key vocabulary does"):
+    val cases = Seq(
+      "q"         -> Key.char('q'),
+      "ctrl+s"    -> Key.ctrl('s'),
+      "shift+tab" -> Key.BackTab,
+      "esc"       -> Key.Escape,
+      "f2"        -> Key.f(2),
+      "up"        -> Key.Up,
+      "+"         -> Key.char('+'),
+      "space"     -> Key.Space,
+    )
+    cases.foreach { (spec, event) =>
+      var fromSpec  = false
+      var fromTyped = false
+      val bySpec    = text("x").onKey(spec) { fromSpec = true }
+      val byTyped   = text("x").onKey(event) { fromTyped = true }
+      assert(bySpec.props.onKey.exists(_(event)), s"spec '$spec' did not fire on $event")
+      assert(byTyped.props.onKey.exists(_(event)))
+      assert(fromSpec && fromTyped, s"spec '$spec' and its typed twin disagree")
+    }
+
+  test("a spec-string binding declines an unbound key, so it keeps bubbling"):
+    var fired = false
+    val el    = text("x").onKey("ctrl+s") { fired = true }
+    assert(el.props.onKey.exists(handler => !handler(Key.ctrl('d'))))
+    assert(!fired)
+
+  test("several spec strings share one action, and the overload composes with the typed one"):
+    var count = 0
+    val el    = text("x").onKey("down", "j") { count += 1 }.onKey(Key.Up) { count += 10 }
+    el.props.onKey.foreach { handler =>
+      val _ = handler(Key.Down)
+      val _ = handler(Key.char('j'))
+      val _ = handler(Key.Up)
+      val _ = handler(Key.char('z'))
+    }
+    assert(count == 12)
+
+  /** The annotation is half the assertion: like the typed overload, the spec overload hands back the element's own
+    * type, so `.rounded` still resolves after the binding.
+    */
+  test("a spec-string binding keeps the element's own type"):
+    val bound: PanelElement = panel(text("x")).onKey("enter") { () }.rounded
+    assert(bound.borderType == BorderType.Rounded)
+
+  test("a misspelt spec fails where the element is built, not silently at run time"):
+    val failure = intercept[IllegalArgumentException](text("x").onKey("ctlr+s") { () })
+    assert(failure.getMessage.contains("ctlr+s"))

@@ -87,15 +87,39 @@ extension (key: KeyEvent)
 extension [E <: Element](element: E)
 
   def onKey(keys: KeyEvent*)(handler: => Unit): element.Self =
-    val previous = element.props.onKey
-    element.withProps(
-      element.props.copy(onKey = Some { event =>
-        if keys.contains(event) then
-          handler
-          true
-        else previous.exists(_(event))
-      })
-    )
+    bindKeys(element)(keys)(handler)
+
+  /** The same binding written in the key-spec vocabulary the rest of the library speaks.
+    *
+    * An app-level binding is declared as a string — `binding("ctrl+s", "save")` — and a test presses the same string —
+    * `pilot.press("ctrl+s")`. Before this overload existed an element-level handler was the one place that had to say
+    * it differently, as `.onKey(Key.ctrl('s'))`; now `.onKey("ctrl+s") { save() }` names the key the way the binding
+    * and the test do. The two forms build exactly the same `KeyEvent`, because both go through
+    * [[io.worxbend.tui.core.KeyEvent.parse]].
+    *
+    * A malformed spec throws where the element is built, exactly as `binding` does. A view is a static declaration, so
+    * a typo like `"ctlr+s"` is a programmer error, and failing at start-up is better than a key that silently never
+    * fires.
+    *
+    * The first spec is a separate parameter rather than the whole list being a `String*` because `onKey(keys:
+    * KeyEvent*)` and `onKey(specs: String*)` would erase to the same signature and could not both exist.
+    */
+  def onKey(spec: String, more: String*)(handler: => Unit): element.Self =
+    bindKeys(element)((spec +: more).map(parseSpec))(handler)
+
+/** The body both `onKey` overloads share: consume `keys`, and hand anything else to the handler the element already
+  * carried, so several `.onKey(…)` calls layer instead of overwriting each other.
+  */
+private def bindKeys[E <: Element](element: E)(keys: Seq[KeyEvent])(handler: => Unit): element.Self =
+  val previous = element.props.onKey
+  element.withProps(
+    element.props.copy(onKey = Some { event =>
+      if keys.contains(event) then
+        handler
+        true
+      else previous.exists(_(event))
+    })
+  )
 
 /** Pushes a default style onto a whole subtree (terminus's auto-restoring `foreground.green { … }`, as a retained
   * transform): every style-aware descendant renders with `transform(...)` as its base, with any style the node set
