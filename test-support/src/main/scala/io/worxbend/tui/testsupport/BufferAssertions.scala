@@ -1,6 +1,6 @@
 package io.worxbend.tui.testsupport
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Line, Position, Rect, StatefulWidget, Style, Widget}
+import io.worxbend.tui.core.{Buffer, Cell, Line, Position, Rect, StatefulWidget, Style, Widget}
 
 import java.util.regex.Pattern
 
@@ -181,14 +181,15 @@ object BufferAssertions:
 
   /** One row of the buffer as a string, stepping over the continuation cells of wide graphemes.
     *
-    * The lower bound of 1 on the step is load-bearing: a zero-width symbol (a combining mark, or anything the width
-    * table reports as 0) would otherwise leave `x` unchanged and loop forever. Do not reduce it to `CharWidth.of`.
+    * Continuation columns are skipped by asking the buffer which columns it reserved for a wide grapheme, not by
+    * re-measuring the glyph just read — `Buffer.continuations` records why measuring misclassifies content, and
+    * `FrameEncoder.advanceOf` steps the real terminal by the same rule. Stepping one column at a time also removes any
+    * need for a zero-width guard.
     */
   private def rowText(buffer: Buffer, y: Int): String =
     val row = StringBuilder()
     var x   = buffer.area.x
     while x < buffer.area.right do
-      val cell = buffer.get(x, y)
-      row ++= cell.symbol
-      x += math.max(1, CharWidth.of(cell.symbol))
+      if !buffer.isContinuation(x, y) then row ++= buffer.get(x, y).symbol
+      x += 1
     row.result()
