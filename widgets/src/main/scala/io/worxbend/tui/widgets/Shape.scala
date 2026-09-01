@@ -161,3 +161,31 @@ object Shape:
   private def sampleCount(wanted: Double): Int =
     if !wanted.isFinite then MinimumSamples
     else math.max(MinimumSamples, math.min(MaximumSamples.toDouble, wanted.ceil)).toInt
+
+  /** The world's coastlines, in EPSG:4326 degrees: x is longitude from −180 to 180, y is latitude from −90 to 90.
+    *
+    * Those are the bounds to give the canvas as well — `Canvas((-180.0, 180.0), (-90.0, 90.0), Seq(Shape.WorldMap()))`
+    * — because a shape drawn in degrees and a canvas scaled to something else would put the coastlines somewhere no map
+    * has them. A narrower window is a legitimate thing to ask for and works the way every other shape does: bounds of
+    * `((-11.0, 32.0), (35.0, 72.0))` draw Europe filling the pane, with everything outside clipped away.
+    *
+    * The projection is plate carrée — longitude straight onto x, latitude straight onto y — which is what the raw
+    * coordinates give and what a terminal, whose cells are already twice as tall as they are wide, can show without
+    * pretending to an accuracy it does not have.
+    *
+    * `resolution` picks how densely the outline is sampled; see [[MapResolution]]. Pair [[MapResolution.High]] with
+    * [[CanvasResolution.Braille]] on a large pane, and leave the default [[MapResolution.Low]] anywhere smaller, where
+    * the extra points cost four times the drawing to produce the same picture.
+    */
+  final case class WorldMap(
+      resolution: MapResolution = MapResolution.Low,
+      style: Style = Style.Default,
+  ) extends Shape:
+    def draw(painter: Painter): Unit =
+      val points = resolution.points
+      // a plain index walk over the flat array rather than a grouped/zipped view: this runs once per frame over up to
+      // five thousand points, and every intermediate tuple it does not build is one the collector never sees
+      var index  = 0
+      while index + 1 < points.length do
+        painter.paint(points(index), points(index + 1), style)
+        index += 2

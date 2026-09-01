@@ -1330,6 +1330,34 @@ selection region, a heat cell. It is a separate shape rather than a flag on
 All three fill by scanline on the canvas's own dot grid, so the fill is solid at every
 resolution and costs one paint per dot rather than one per guessed step.
 
+`Shape.WorldMap()` paints the world's coastlines. Its coordinates are geographic —
+longitude from −180 to 180 on x, latitude from −90 to 90 on y — so the canvas has to be
+given those same bounds, or the coastlines land somewhere no map has them:
+
+```scala
+canvas((-180.0, 180.0), (-90.0, 90.0))(
+  Shape.WorldMap(MapResolution.High),
+  Shape.Points(Seq((-0.13, 51.51), (139.69, 35.69)), Style.Default.fg(Color.Yellow)),
+).braille
+```
+
+The projection is plate carrée — longitude straight onto x, latitude straight onto y —
+which is what the raw coordinates give and all a terminal, whose cells are already twice
+as tall as they are wide, can honestly claim. A narrower window works the way it does for
+every other shape: bounds of `(-11.0, 32.0)` and `(35.0, 72.0)` draw Europe filling the
+pane and clip everything else away.
+
+`MapResolution` picks how densely the outline is sampled: `Low` (the default) is about a
+thousand points, `High` about five thousand. They are the same coastlines at two
+densities, so the map does not change shape between them. Pair `High` with
+`CanvasResolution.Braille` on a large pane, where each cell carries eight dots and the
+lower-detail outline starts to look polygonal; leave the default anywhere smaller, where
+the extra points cost four times the drawing to produce the same picture.
+
+The coordinates themselves live in a generated file, `WorldTable.scala`, built by
+`tools/generate-world-table.py` from the public-domain dataset behind every terminal world
+map. Do not edit it by hand.
+
 ### Canvas resolution
 
 A canvas draws sub-pixels — several drawable dots inside one terminal cell — by picking a

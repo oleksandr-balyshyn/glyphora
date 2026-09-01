@@ -239,6 +239,7 @@ export io.worxbend.tui.widgets.{
   ListDirection,
   ListState,
   LogState,
+  MapResolution,
   Marker,
   MarkdownTheme,
   MenuEntry,
