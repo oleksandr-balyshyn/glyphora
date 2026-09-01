@@ -82,6 +82,13 @@ final case class Style(
     */
   def withoutBg: Style = copy(bg = Some(Color.Reset))
 
+  /** This style with everything [[Style.Reset]] clears layered on top — the same value as `patch(Style.Reset)`.
+    *
+    * Named `reset` to match the terminal vocabulary and ratatui's `Stylize::reset`. See [[Style.Reset]] for the two
+    * fields it deliberately leaves alone.
+    */
+  def reset: Style = patch(Style.Reset)
+
   /** Colors the underline separately from the glyph (SGR 58) — terminals without support draw a default-colored line.
     */
   def withUnderlineColor(color: Color): Style = copy(underlineColor = Some(color))
@@ -137,4 +144,47 @@ final case class Style(
     if parts.isEmpty then "Style.Default" else parts.mkString("Style(", ", ", ")")
 
 object Style:
+
+  /** The style that states nothing: every field silent, so patching anything with it changes nothing. */
   val Default: Style = Style()
+
+  /** The style that says "everything back to the terminal's virgin state" — the value to [[Style.patch]] on top of an
+    * inherited style when nothing about that style should survive.
+    *
+    * [[Default]] is the opposite value. It is silent about every field, so layering it changes nothing. `Reset` is loud
+    * about every field it can be loud about: foreground, background and underline color become [[Color.Reset]] (the
+    * terminal default, an explicit choice that wins in [[patch]] the way any other color does), and every text
+    * attribute is recorded in [[Style.clearedModifiers]] so the clear survives the layering too.
+    *
+    * It deliberately does *not* reset [[Style.underlineStyle]] or [[Style.link]]. `patch` treats `UnderlineStyle.None`
+    * and `link = None` as the silent cases, so neither field has a spelling for "explicitly off" that could be put
+    * here. Call [[Style.withUnderlineStyle]] yourself if a curly underline has to go.
+    */
+  val Reset: Style = Style(
+    fg = Some(Color.Reset),
+    bg = Some(Color.Reset),
+    underlineColor = Some(Color.Reset),
+    clearedModifiers = Modifiers.All,
+  )
+
+  /** A style that sets only the foreground: `Style.fg(Color.Red)` is `Style.Default.withFg(Color.Red)`.
+    *
+    * ratatui reaches this shape through `impl Into<Style> for Color`, so any API taking a style accepts a bare color.
+    * Here it is a named factory rather than an implicit conversion, for the reason written on the `styled` extension in
+    * `dsl.scala`: a conversion needs a `scala.language.implicitConversions` import at every call site and hides which
+    * type the call site actually produced, and neither is worth the handful of characters it saves.
+    */
+  def fg(color: Color): Style = Style(fg = Some(color))
+
+  /** A style that sets only the background. See [[fg]] for why this is a plain method rather than a conversion. */
+  def bg(color: Color): Style = Style(bg = Some(color))
+
+  /** A style that sets both colors — the `(foreground, background)` pair widget constructors take most often. */
+  def of(fg: Color, bg: Color): Style = Style(fg = Some(fg), bg = Some(bg))
+
+  /** A style that sets only text attributes: `Style.mods(Modifiers.Bold | Modifiers.Italic)`.
+    *
+    * Named `mods` rather than being a third overload of [[of]], because [[Modifiers]] is an opaque `Int` and an
+    * overload taking one would be hard to tell at a glance from one taking a color.
+    */
+  def mods(modifiers: Modifiers): Style = Style(modifiers = modifiers)

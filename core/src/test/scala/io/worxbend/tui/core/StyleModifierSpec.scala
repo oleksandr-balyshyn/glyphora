@@ -106,3 +106,47 @@ final class StyleModifierSpec extends AnyFunSuite:
 
   test("& binds tighter than |"):
     assert((Modifiers.Bold & Modifiers.None | Modifiers.Italic).show == "Italic")
+
+  test("without(Modifiers.All) drops every attribute and records the clear"):
+    val plain = Style.Default.bold.italic.underline.without(Modifiers.All)
+    assert(plain.modifiers.isEmpty)
+    assert(plain.clearedModifiers == Modifiers.All)
+    assert(Style.Default.bold.patch(plain).modifiers.isEmpty)
+
+  test("Style.Reset is loud about every field it can be loud about"):
+    val themed = Style.Default.withFg(Color.Red).withBg(Color.Blue).bold.italic
+    val plain  = themed.patch(Style.Reset)
+    assert(plain.fg.contains(Color.Reset))
+    assert(plain.bg.contains(Color.Reset))
+    assert(plain.underlineColor.contains(Color.Reset))
+    assert(plain.modifiers.isEmpty)
+    // the clear is carried forward, so patching the result onto a bold ancestor still yields unbold text
+    assert(plain.clearedModifiers == Modifiers.All)
+    assert(Style.Default.bold.patch(plain).modifiers.isEmpty)
+
+  test("style.reset is the same value as patching Style.Reset"):
+    val themed = Style.Default.withFg(Color.Red).bold
+    assert(themed.reset == themed.patch(Style.Reset))
+
+  test("a level below Style.Reset can still re-set a flag it cleared"):
+    val relit = Style.Reset.patch(Style.Default.bold)
+    assert(relit.modifiers.hasAny(Modifiers.Bold))
+    assert(!relit.clearedModifiers.hasAny(Modifiers.Bold))
+
+  test("Style.Reset leaves underline style and link alone"):
+    val fancy = Style.Default.curlyUnderline.withLink("https://example.invalid")
+    val plain = fancy.patch(Style.Reset)
+    assert(plain.underlineStyle == UnderlineStyle.Curly)
+    assert(plain.link.contains("https://example.invalid"))
+
+  test("companion factories are the styles their builder chains spell out"):
+    assert(Style.fg(Color.Red) == Style.Default.withFg(Color.Red))
+    assert(Style.fg(Color.Red).bg.isEmpty && Style.fg(Color.Red).modifiers.isEmpty)
+    assert(Style.bg(Color.Blue) == Style.Default.withBg(Color.Blue))
+    assert(Style.of(Color.Red, Color.Blue) == Style.Default.withFg(Color.Red).withBg(Color.Blue))
+    assert(Style.mods(Modifiers.Bold | Modifiers.Italic) == Style.Default.bold.italic)
+    assert(Style.mods(Modifiers.Bold).clearedModifiers.isEmpty)
+
+  test("the factories layer the way the builders they replace do"):
+    assert(Style.Default.patch(Style.fg(Color.Red)) == Style.fg(Color.Red))
+    assert(Style.fg(Color.Red).patch(Style.bg(Color.Blue)) == Style.of(Color.Red, Color.Blue))

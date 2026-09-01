@@ -226,6 +226,38 @@ The bitset operators are `a | b` (the flags set in either), `a.without(b)` (the 
 `a` that are not in `b`), and `a & b` (the flags set in both — for asking what two styles
 agree on).
 
+To drop *everything* an inherited style said, patch `Style.Reset` on top of it, or call
+`.reset` on the style, which is the same thing:
+
+```scala
+val themed = Style.Default.withFg(Color.Cyan).bold
+themed.patch(Style.Reset) // default-colored, unbold text
+themed.patch(Style.Default) // unchanged: Default is silent about every field
+```
+
+`Style.Reset` sets the foreground, background and underline color to `Color.Reset` (the
+terminal default) and records every text attribute as cleared, so all of that survives
+further layering. The two fields it leaves alone are `underlineStyle` and `link`, because
+`patch` reads `UnderlineStyle.None` and an absent link as "silent" rather than "off" —
+call `withUnderlineStyle(UnderlineStyle.None)` yourself to remove a curly underline.
+
+## Style factories
+
+For the common case of a style that sets one or two things, the `Style` companion has
+short factories. Each is exactly the builder chain beside it:
+
+| Factory | The same value as |
+| --- | --- |
+| `Style.fg(Color.Green)` | `Style.Default.withFg(Color.Green)` |
+| `Style.bg(Color.Black)` | `Style.Default.withBg(Color.Black)` |
+| `Style.of(Color.Green, Color.Black)` | `Style.Default.withFg(Color.Green).withBg(Color.Black)` |
+| `Style.mods(Modifiers.Bold)` | `Style.Default.bold` |
+
+They are plain methods rather than implicit conversions from `Color`, so a call site that
+passes a style always says the word `Style`.
+
+Apply a base style to a whole subtree with `withStyle`:
+
 ```scala
 withStyle(_.withFg(Color.Cyan)) {
   column(
