@@ -109,6 +109,22 @@ buffer.setStyle(titleArea, Style.Default.reverse)
 buffer.mapStyle(body)(_.dim)
 ```
 
+A widget laying a row out as a run of segments passes a column budget as a fifth
+argument. `setString(x, y, text, style, maxWidth)` stops at whichever comes first, the
+budget or the area's right edge, and answers how many columns it actually wrote — so
+the next segment starts at `x + answer` with no second measurement of the text:
+
+```scala
+var column = row.x
+Seq("Name", " · ", "Value").foreach { segment =>
+  column += buffer.setString(column, row.y, segment, Style.Default, row.right - column)
+}
+```
+
+The answer can be one less than the budget: a two-column grapheme that would only half
+fit is dropped whole rather than split, because a terminal handed half of one draws it
+across the column beyond the budget.
+
 ## tui-terminal
 
 The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks to

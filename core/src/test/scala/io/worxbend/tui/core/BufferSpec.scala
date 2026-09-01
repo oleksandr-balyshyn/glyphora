@@ -327,3 +327,47 @@ final class BufferSpec extends AnyFunSuite:
     assert(calls == 2)
     assert(buf.get(1, 0).style == Style.Default.withFg(Color.Red).bold)
     assert(buf.get(3, 0).style == Style.Default.withFg(Color.Blue).bold)
+  test("a bounded write stops at the column budget and reports how far it got"):
+    val buf = buffer(10, 1)
+    assert(buf.setString(0, 0, "hello", Style.Default, 3) == 3)
+    assert((0 until 4).map(x => buf.get(x, 0).symbol) == Seq("h", "e", "l", " "))
+
+  test("a bounded write shorter than its budget reports the text's own width"):
+    val buf = buffer(10, 1)
+    assert(buf.setString(2, 0, "hi", Style.Default, 6) == 2)
+
+  test("a bounded write never crosses the area's right edge, whatever the budget says"):
+    val buf = buffer(4, 1)
+    assert(buf.setString(2, 0, "hello", Style.Default, 100) == 2)
+    assert(buf.setString(0, 1, "hello", Style.Default, 4) == 0) // the row is outside the area
+
+  test("a bounded write drops a two-column cluster that only half-fits the budget"):
+    // splitting the cluster would draw its right half one column past the budget, so it is dropped whole and the
+    // answer is one less than the budget — which is the point of returning the advance instead of the budget
+    val buf = buffer(10, 1)
+    assert(buf.setString(0, 0, "漢字", Style.Default, 3) == 2)
+    assert(buf.get(0, 0).symbol == "漢")
+    assert(buf.get(2, 0) == Cell.Empty)
+
+  test("a bounded write with a zero or negative budget writes nothing"):
+    val buf = buffer(6, 1)
+    assert(buf.setString(0, 0, "hi", Style.Default, 0) == 0)
+    assert(buf.setString(0, 0, "hi", Style.Default, -5) == 0)
+    assert(buf.get(0, 0) == Cell.Empty)
+
+  test("a bounded write counts a combining mark as part of its base character"):
+    val buf = buffer(6, 1)
+    // "e" + combining acute is one grapheme cluster, so it fills one column and leaves two of the budget
+    assert(buf.setString(0, 0, "e" + 0x0301.toChar.toString + "xy", Style.Default, 3) == 3)
+    assert(buf.get(0, 0).symbol == "e" + 0x0301.toChar.toString)
+    assert(buf.get(2, 0).symbol == "y")
+
+  test("consecutive bounded writes chain by their own answers"):
+    // the reason the count is returned at all: laying a row out as segments without measuring any of them twice
+    val buf     = buffer(8, 1)
+    var column  = 0
+    Seq("漢", "ab", "cdef").foreach { segment =>
+      column += buf.setString(column, 0, segment, Style.Default, 8 - column)
+    }
+    assert(column == 8)
+    assert((0 until 8).map(x => buf.get(x, 0).symbol) == Seq("漢", " ", "a", "b", "c", "d", "e", "f"))

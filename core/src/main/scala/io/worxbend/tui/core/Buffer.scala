@@ -110,35 +110,58 @@ final class Buffer(val area: Rect):
     * off-window by design, is what makes that the common case rather than a corner one.
     */
   def setString(x: Int, y: Int, text: String, style: Style): Unit =
-    if y < area.y || y >= area.bottom then ()
-    else if CharWidth.isPrintableAscii(text) then setAsciiString(x, y, text, style)
+    writeString(x, y, text, style, area.right)
+
+  /** Writes `text` at `(x, y)` stopping after at most `maxWidth` columns, and answers how many columns it wrote.
+    *
+    * Two things this adds over the four-argument [[setString]]. The bound: the write stops at whichever comes first,
+    * the area's right edge or `x + maxWidth`, so a caller with a column budget no longer has to cut the string to
+    * size beforehand. And the answer: the returned column count is exactly how far the cursor advanced, so a caller
+    * laying a row out as a run of segments adds it to `x` instead of measuring the text a second time.
+    *
+    * The count can be smaller than `maxWidth` even with text left over. A two-column cluster that would only half-fit
+    * inside the bound is dropped whole rather than split — a terminal handed half a wide glyph draws it across the
+    * column beyond the budget — so a budget of 3 filled with `漢字` writes 2 columns and reports 2. A negative
+    * `maxWidth` is treated as zero: nothing is written and the answer is 0.
+    */
+  def setString(x: Int, y: Int, text: String, style: Style, maxWidth: Int): Int =
+    writeString(x, y, text, style, math.min(area.right, x + math.max(0, maxWidth)))
+
+  /** The shared body of both [[setString]] overloads: writes clusters left to right while the write head stays below
+    * `limit` (an exclusive column bound already clipped to the area), and answers the columns written.
+    */
+  private def writeString(x: Int, y: Int, text: String, style: Style, limit: Int): Int =
+    if y < area.y || y >= area.bottom || limit <= x then 0
+    else if CharWidth.isPrintableAscii(text) then writeAsciiString(x, y, text, style, limit)
     else
       var column   = x
       // set by the branch below, so that "dropped a half-fitting cluster" is a distinct exit from "ran out of columns"
       var stopped  = false
       val clusters = CharWidth.graphemeClusters(text)
-      while clusters.hasNext && !stopped && column < area.right do
+      while clusters.hasNext && !stopped && column < limit do
         val cluster = clusters.next()
         // `ofCluster`, not `of`: the iterator has already established this is exactly one cluster, and `of` would
         // build a second cluster iterator over it. The width is then handed to `setMeasured` rather than re-derived.
         val width   = CharWidth.ofCluster(cluster)
         // a zero-width cluster (a combining mark with no base character before it) claims no cell at all
         if width > 0 then
-          if column + width <= area.right then
+          if column + width <= limit then
             setMeasured(column, y, Cell(cluster, style), width)
             column += width
           else stopped = true // a wide cluster that only half-fits at the edge
       end while
+      column - x
 
-  /** Allocation-free [[setString]] for printable ASCII: one column per char, symbols taken from a shared table. */
-  private def setAsciiString(x: Int, y: Int, text: String, style: Style): Unit =
+  /** Allocation-free [[writeString]] for printable ASCII: one column per char, symbols taken from a shared table. */
+  private def writeAsciiString(x: Int, y: Int, text: String, style: Style, limit: Int): Int =
     var index  = 0
     var column = x
-    while index < text.length && column < area.right do
+    while index < text.length && column < limit do
       // printable ASCII is one column by definition, so the width needs no measuring at all
       setMeasured(column, y, Cell(CharWidth.asciiSymbol(text.charAt(index)), style), 1)
       column += 1
       index += 1
+    column - x
 
   /** Writes `cell` into every column of `region` that falls inside `area`; anything outside is clipped away, exactly as
     * [[set]] clips a single write.
