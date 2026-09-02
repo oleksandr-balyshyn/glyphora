@@ -42,3 +42,20 @@ final class SgrSpec extends AnyFunSuite:
   test("plain underline modifier still emits bare 4, styled underline adds the 4:n selector"):
     assert(Sgr.sgr(Style.Default.underline) == s"$Esc[0;4m")
     assert(Sgr.sgr(Style.Default.underline.curlyUnderline) == s"$Esc[0;4;4:3m")
+
+  test("out-of-range rgb channels and palette indexes are clamped, never emitted raw"):
+    // Color.Rgb takes its channels unchecked, and the encoder used to interpolate them straight into the escape:
+    // `Rgb(999, -1, 0)` became ESC[…;38;2;999;-1;0m. A negative CSI parameter is not valid SGR, and a terminal that
+    // aborts the sequence prints the rest of it as text on the user's screen.
+    val style = Style.Default.withFg(Color.Rgb(999, -1, 0)).withBg(Color.Indexed(999))
+    assert(Sgr.sgr(style, ColorDepth.TrueColor) == s"$Esc[0;38;2;255;0;0;48;5;255m")
+
+  test("an out-of-range underline color is clamped too"):
+    val style = Style.Default.withUnderlineColor(Color.Rgb(300, -5, 10))
+    assert(Sgr.sgr(style, ColorDepth.TrueColor) == s"$Esc[0;58:2::255:0:10m")
+
+  test("downsampling an out-of-range rgb color stays inside the 256-color palette"):
+    val style = Style.Default.withFg(Color.Rgb(999, -1, 0))
+    val code  = Sgr.sgr(style, ColorDepth.Ansi256)
+    val index = code.stripPrefix(s"$Esc[0;38;5;").stripSuffix("m").toInt
+    assert(index >= 0 && index <= 255, code)

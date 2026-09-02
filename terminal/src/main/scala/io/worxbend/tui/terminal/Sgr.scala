@@ -129,10 +129,11 @@ private[terminal] object Sgr:
   /** SGR 58 sets the underline color independently of the foreground; 256/truecolor forms mirror SGR 38. */
   private def underlineColorCode(color: Color): String =
     color match
-      case Color.Indexed(index) => s"58:5:$index"
-      case Color.Rgb(r, g, b)   => s"58:2::$r:$g:$b"
-      case named                =>
-        val (r, g, b) = Color.approximateRgb(named)
+      case Color.Indexed(index) => s"58:5:${Color.clampIndex(index)}"
+      case other                =>
+        // `Color.approximateRgb` clamps, which is the point of routing an `Rgb` through it as well as a named colour:
+        // the channels of an `Rgb` are whatever the caller passed, and an out-of-range one must not reach the terminal.
+        val (r, g, b) = Color.approximateRgb(other)
         s"58:2::$r:$g:$b"
 
   /** The base SGR code of the foreground colour group; every other foreground code is an offset from it. */
@@ -176,8 +177,12 @@ private[terminal] object Sgr:
       case Color.BrightMagenta  => s"${base + 65}"
       case Color.BrightCyan     => s"${base + 66}"
       case Color.BrightWhite    => s"${base + 67}"
-      case Color.Indexed(index) => s"${base + 8};5;$index"
-      case Color.Rgb(r, g, b)   => s"${base + 8};2;$r;$g;$b"
+      // Both extended forms clamp: an index or a channel outside `0..255` is not a valid CSI parameter, and a negative
+      // one is not even syntactically SGR — a terminal that gives up on the sequence prints the remainder on screen.
+      case Color.Indexed(index) => s"${base + 8};5;${Color.clampIndex(index)}"
+      case rgb: Color.Rgb       =>
+        val (r, g, b) = Color.approximateRgb(rgb)
+        s"${base + 8};2;$r;$g;$b"
 
   /** Every text attribute with its SGR code, in the order they are emitted.
     *

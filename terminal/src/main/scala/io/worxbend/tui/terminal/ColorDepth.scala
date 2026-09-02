@@ -176,8 +176,10 @@ object ColorDepth:
 
   /** Nearest xterm-256 palette entry: the grayscale ramp for near-gray values, else the 6x6x6 color cube. */
   private def nearestIndexed(rgb: Color.Rgb): Int =
-    val Color.Rgb(r, g, b) = rgb
-    val isGrayish          = math.abs(r - g) < 10 && math.abs(g - b) < 10
+    // through `approximateRgb`, which clamps: reading the channels raw let an out-of-range literal such as
+    // `Rgb(999, -1, 0)` push the cube arithmetic past the palette and produce index 880, which is not a colour
+    val (r, g, b) = Color.approximateRgb(rgb)
+    val isGrayish = math.abs(r - g) < 10 && math.abs(g - b) < 10
     if isGrayish && r >= 4 && r <= 243 then 232 + math.min(23, math.max(0, (r - 8) / 10))
     else 16 + 36 * cubeStep(r) + 6 * cubeStep(g) + cubeStep(b)
 
