@@ -745,6 +745,15 @@ private[terminal] object InputDecoder:
     */
   private[terminal] val EndOfStream = -1
 
+  /** What the read function returns when the wait elapsed and no character arrived — JLine's `READ_EXPIRED`.
+    *
+    * This is the sentinel a *scripted* reader wants once its script runs dry: it means "nothing right now", which is
+    * what a quiet terminal reports, whereas [[EndOfStream]] means the stream is gone for good and makes the decoder
+    * answer `Event.EndOfInput`. A test harness that hands back `EndOfStream` instead is telling the decoder the
+    * terminal died, and will be told so on every subsequent call.
+    */
+  private[terminal] val ReadExpired = -2
+
   private val NoChar             = -1
   private val Bel                = 7
   private val PasteTimeoutMillis = 200L

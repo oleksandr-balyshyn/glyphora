@@ -277,12 +277,19 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     */
   def postInput(codeUnits: Seq[Int]): Unit =
     val remaining = codeUnits.iterator
-    // the decoder's read function: hand over the next code unit, or the "nothing available" sentinel once they run out
-    val decoder   = InputDecoder(_ => if remaining.hasNext then remaining.next() else -1)
+    // The read function hands over the next code unit, then reports that nothing arrived. It must answer
+    // `ReadExpired`, not `EndOfStream`: end of file is a permanent condition the decoder reports as
+    // `Event.EndOfInput` on every later call, so a script that ended with it would decode into an unbounded run of
+    // those events rather than stopping — the loop below would never see the `None` that ends it.
+    val decoder   = InputDecoder(_ => if remaining.hasNext then remaining.next() else InputDecoder.ReadExpired)
     var draining  = codeUnits.nonEmpty
     while draining do
       decoder.decode(0L) match
-        case Some(event) => postEvent(event)
+        // A decoded event does not end the drain — the decoder may still hold a pushed-back character — but the
+        // same exhaustion test has to run here too, or a decoder that keeps answering would spin forever.
+        case Some(event) =>
+          postEvent(event)
+          draining = remaining.hasNext || decoder.hasPushback
         // an undecodable sequence yields no event but may have consumed only part of the input, so keep going while
         // there is any left — or while the decoder is holding a character it pushed back, which is the whole reason a
         // decoded event does not end the loop either. `ESC [ ESC` ends that way: the torn CSI hands the trailing `ESC`
