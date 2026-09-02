@@ -162,10 +162,15 @@ final class Buffer(val area: Rect):
     * The count can be smaller than `maxWidth` even with text left over. A two-column cluster that would only half-fit
     * inside the bound is dropped whole rather than split — a terminal handed half a wide glyph draws it across the
     * column beyond the budget — so a budget of 3 filled with `漢字` writes 2 columns and reports 2. A negative `maxWidth`
-    * is treated as zero: nothing is written and the answer is 0.
+    * is treated as zero: nothing is written and the answer is 0. An arbitrarily large one is treated as "no limit of my
+    * own, stop at the area's edge": the bound `x + maxWidth` is added in `Long` and then clamped, because in `Int` that
+    * sum overflows for a budget near `Int.MaxValue` and the wrapped-negative bound stopped the write before it began.
+    * `Int.MaxValue` is the natural spelling for an uncapped budget — `Constraint.Max` already uses it for one — so it
+    * is the value that must not misbehave.
     */
   def setString(x: Int, y: Int, text: String, style: Style, maxWidth: Int): Int =
-    writeString(x, y, text, style, math.min(area.right, x + math.max(0, maxWidth)))
+    val bound = x.toLong + math.max(0, maxWidth)
+    writeString(x, y, text, style, math.min(area.right.toLong, bound).toInt)
 
   /** Writes `span`'s content at `(x, y)` in at most `maxWidth` columns, and answers how many columns it wrote.
     *

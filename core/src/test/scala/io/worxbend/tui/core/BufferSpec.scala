@@ -553,3 +553,12 @@ final class BufferSpec extends AnyFunSuite:
     buf.fill(Rect(1, 0, 3, 1), Cell.Empty)
     assert(buf.get(0, 0) == Cell.Empty)
     assert(!buf.isContinuation(1, 0))
+
+  test("setString accepts a column budget too large to add to x without overflowing"):
+    // Int.MaxValue is the natural spelling for "no column limit" (LayoutSolver already uses it for an uncapped
+    // Constraint.Max); `x + maxWidth` wrapped negative and the write silently stopped before it started
+    val buf     = buffer(10, 1)
+    val written = buf.setString(1, 0, "hi", Style.Default, Int.MaxValue)
+    assert(written == 2)
+    assert(buf.get(1, 0).symbol == "h")
+    assert(buf.get(2, 0).symbol == "i")
