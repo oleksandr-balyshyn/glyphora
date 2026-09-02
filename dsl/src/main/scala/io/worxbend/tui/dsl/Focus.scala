@@ -191,6 +191,10 @@ private[dsl] final class FocusTracker:
     * focusables): a keyed element keeps focus even when its position moved, and the index is clamped into the new
     * range. Areas recorded for the previous frame are dropped — this frame's render re-records them.
     *
+    * A remembered key outlives frames its element is missing from. While it is gone the clamped index decides which
+    * element renders focused — some element has to — but the key is not overwritten from that index, so the element
+    * reclaims focus on the first frame it is back in.
+    *
     * The "nothing is focused" state survives this. A tracker at `-1` — which is where [[clearFocus]] leaves it — stays
     * at `-1` however the tree changed shape, because the clamp is what an *existing* focus needs and re-anchoring a
     * deliberately dropped one would put the cursor back where the app asked it not to be.
@@ -205,9 +209,14 @@ private[dsl] final class FocusTracker:
     focusableCount = keys.size
     if anchor.index < 0 then anchor = FocusAnchor.Cleared
     else
-      val reanchored = anchor.key.map(key => keys.indexOf(Some(key))).filter(_ >= 0).getOrElse(anchor.index)
-      val index      = clampedIndex(reanchored)
-      anchor = FocusAnchor(index, keys.lift(index).flatten)
+      val reanchored = anchor.key.map(key => keys.indexOf(Some(key))).filter(_ >= 0)
+      val index      = clampedIndex(reanchored.getOrElse(anchor.index))
+      // A remembered key is *kept* while its element is missing, and only an anchor that never had one adopts the key
+      // of whatever now sits at the index. A collapsed section or an untaken `if` branch takes its element out of the
+      // tree for a frame; rewriting the key from the index there would hand the memory to a neighbouring element, and
+      // the field coming back could never reclaim focus. An explicit move (`focusTo`, a click, Tab) clears the key
+      // itself, so this only preserves a key nobody asked to give up.
+      anchor = FocusAnchor(index, anchor.key.orElse(keys.lift(index).flatten))
     val appeared = autofocus.filterNot(request => lastAutofocus.contains(request))
     lastAutofocus = autofocus
     // an element that has just appeared takes focus even from the cleared state: asking for it is the whole point

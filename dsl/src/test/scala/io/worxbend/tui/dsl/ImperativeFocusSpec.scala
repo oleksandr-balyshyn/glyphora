@@ -30,6 +30,7 @@ final class ImperativeFocusSpec extends AnyFunSuite:
       binding("ctrl+b", "drop focus")(clearFocus()),
       binding("ctrl+r", "read the focused key") { keyUnderFocus = focusedKey },
       binding("ctrl+g", "hide the email field")(showEmail.set(false)),
+      binding("ctrl+u", "show the email field again")(showEmail.set(true)),
       binding("ctrl+q", "quit")(quit()),
     )
     // the three services are `protected` on TuiApp, so the "not running" test reaches them through the app itself
@@ -148,3 +149,23 @@ final class ImperativeFocusSpec extends AnyFunSuite:
     assert(!app.moveFocusOutsideARun("email"))
     app.dropFocusOutsideARun()
     assert(app.readFocusedKeyOutsideARun.isEmpty)
+
+  /** The memory a keyed move installs has to survive the element being absent for a frame.
+    *
+    * A collapsed section or an `if` in the view removes the element from the tree without anybody asking focus to move,
+    * and the frame after it comes back is the one where the promise "focus follows that element" is either kept or
+    * quietly broken. It used to be broken: the frame without the element re-derived the remembered key from whatever
+    * happened to sit at the old index, so the field could never reclaim focus when it reappeared.
+    */
+  test("a keyed focus survives a frame in which its element is not rendered"):
+    val app   = FormApp()
+    val pilot = start(app)
+    pilot.pressKey(KeyCode.Char('e'), KeyModifiers.Ctrl).waitForIdle() // focus the email field by key
+    pilot.pressKey(KeyCode.Char('g'), KeyModifiers.Ctrl).waitForIdle() // it disappears for a frame
+    pilot.pressKey(KeyCode.Char('u'), KeyModifiers.Ctrl).waitForIdle() // and comes back
+    pilot.pressKey(KeyCode.Char('r'), KeyModifiers.Ctrl).waitForIdle()
+    assert(app.keyUnderFocus.contains("email"))
+    pilot.typeText("back").waitForIdle()
+    assert(app.email.value == "back")
+    assert(app.notes.value == "")
+    quitApp(pilot)
