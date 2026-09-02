@@ -92,8 +92,12 @@ private[widgets] object BlockLadder:
     * single-row bar, more for a thick one — every row painted with the same glyph, so a thick bar is a thin bar
     * repeated downwards rather than a separate algorithm.
     *
-    * `value` outside `0..ceiling` is clamped. Cells past the fill are left untouched rather than blanked, which is what
-    * lets a chart draw over an existing background.
+    * `value` outside `0..ceiling` is clamped.
+    *
+    * `set` picks the glyphs, exactly as it does for [[fillColumn]], and its `empty` decides what happens to the cells
+    * past the fill in the same way: left untouched by default, painted with the empty glyph when the set names one. The
+    * set's ladder is written for an upright bar, so it is turned on its side by [[sideways]] before it is used here — a
+    * set that says "fill a cell four eighths" means the *left* four eighths of the cell in this direction.
     *
     * Renders into `buffer` and nothing else, so it carries the same thread constraint as any
     * [[io.worxbend.tui.core.Widget]]: call it from the render thread that owns the buffer.
@@ -107,19 +111,47 @@ private[widgets] object BlockLadder:
       value: Long,
       ceiling: Long,
       style: Style,
+      set: BarSet = BarSet.Eighths,
   ): Unit =
     val width   = right - left + 1
     val clamped = math.max(0L, math.min(value, ceiling))
+    val ladder  = sideways(set.eighths)
     var eighths = math.round(clamped.toDouble / ceiling * width * 8).toInt
     var x       = left
     while x <= right && eighths > 0 do
       val levelIndex = math.min(eighths, 8)
-      var row        = 0
-      while row < rows do
-        buffer.set(x, y + row, Cell(LeftEighths(levelIndex - 1), style))
-        row += 1
+      paintColumn(buffer, x, rows, y, ladder(levelIndex - 1), style)
       eighths -= levelIndex
       x += 1
+    set.empty.foreach { glyph =>
+      // whatever is left of the track past the fill: from where the loop above stopped up to the bar's last column
+      while x <= right do
+        paintColumn(buffer, x, rows, y, glyph, style)
+        x += 1
+    }
+
+  /** The same ladder drawn sideways: each upward-growing block element swapped for the rightward-growing one that fills
+    * the same fraction of a cell, and every other glyph left exactly as it is.
+    *
+    * A [[BarSet]] carries one ladder, and it is written the way a column chart reads it — `▄` means "the bottom half of
+    * this cell". Drawn along a row that same fraction is the *left* half, `▌`. Glyphs with no such twin, such as the
+    * `#` of [[BarSet.Ascii]] or a caller's own [[BarSet.uniform]] marker, look the same in both directions and so pass
+    * straight through; that is why the substitution is a lookup rather than a second ladder on the set, which would
+    * make every caller define a sideways spelling of a glyph that does not have one.
+    */
+  private def sideways(eighths: Vector[String]): Vector[String] =
+    eighths.map(glyph => Sideways.getOrElse(glyph, glyph))
+
+  private val Sideways: Map[String, String] = Eighths.zip(LeftEighths).toMap
+
+  /** Writes one glyph down the `rows` cells a bar occupies in column `x`. A thick bar is a thin bar repeated downwards,
+    * so there is one loop for it rather than a second algorithm.
+    */
+  private def paintColumn(buffer: Buffer, x: Int, rows: Int, y: Int, glyph: String, style: Style): Unit =
+    var row = 0
+    while row < rows do
+      buffer.set(x, y + row, Cell(glyph, style))
+      row += 1
 
   /** Writes one glyph across the `columns` cells a bar occupies on row `y`. A wide bar is a thin bar repeated sideways,
     * so there is one loop for it rather than a second algorithm.

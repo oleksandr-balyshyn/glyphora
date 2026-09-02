@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.Direction
+import io.worxbend.tui.core.{Buffer, Cell, Direction, Rect, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -135,3 +135,20 @@ final class BarChartSpec extends AnyFunSuite:
     val asked = rendered(BarChart(Seq(("", 4)), barWidth = 1, barGap = 0, max = Some(8), showValues = false), 1, 4)
     assert(trimmedLines(plain) == trimmedLines(asked))
     assert(!trimmedLines(plain).mkString.contains("4"))
+
+  test("a horizontal bar honours a substituted glyph set"):
+    val chart  = BarChart(Seq(("a", 8L)), max = Some(8L), barSet = BarSet.Ascii, direction = Direction.Horizontal)
+    val buffer = rendered(chart, 10, 1)
+    assert(trimmedLines(buffer) == Seq("a ########"))
+
+  test("a horizontal bar paints the empty track past its end"):
+    val buffer = Buffer(Rect(0, 0, 10, 1))
+    (2 until 10).foreach(x => buffer.set(x, 0, Cell("x", Style.Default)))
+    BarChart(Seq(("a", 4L)), max = Some(8L), barSet = BarSet.Ascii, direction = Direction.Horizontal)
+      .render(Rect(0, 0, 10, 1), buffer)
+    assert(trimmedLines(buffer) == Seq("a ####"))
+
+  test("a horizontal eighths bar grows rightward rather than upward"):
+    val chart  = BarChart(Seq(("a", 1L)), max = Some(64L), direction = Direction.Horizontal)
+    val buffer = rendered(chart, 10, 1)
+    assert(trimmedLines(buffer) == Seq("a ▏"))

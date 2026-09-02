@@ -104,6 +104,7 @@ final case class BarChart(
             value = value,
             ceiling = ceiling,
             style = BarStyling.styleAt(barStyle, barStyleFor, index, value),
+            set = barSet,
           )
           if gutter > 0 then RowChart.drawGutterLabel(buffer, area, barTop, gutter, label, labelStyle)
           if showValues then drawValueBeside(buffer, barTop, plotLeft, plotWidth, value, ceiling)
