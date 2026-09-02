@@ -90,8 +90,10 @@
 ## 🚀 Your first app
 
 > [!NOTE]
-> **Not on Maven Central yet.** `0.13.0` is not tagged or released yet, so the coordinates below
-> will not resolve. Until the first release lands, clone the repo and run `./mill __.publishLocal`
+> **Not on Maven Central yet.** `0.13.0` is tagged and has a
+> [GitHub release](https://github.com/oleksandr-balyshyn/glyphora/releases/tag/v0.13.0), but no
+> artifacts have been published, so the coordinates below will not resolve. Until the first release
+> lands, clone the repo and run `./mill __.publishLocal`
 > — that puts `tui-core`, `tui-terminal`, `tui-widgets`, `tui-runtime`, `tui-macros`, `tui-dsl`
 > and `tui-test` at `0.13.0` into `~/.ivy2/local`. Mill reads that cache by default; sbt needs
 > `resolvers += Resolver.defaultLocal`. See [Build from source](#-build-from-source).
@@ -218,6 +220,21 @@ Every interactive state object is caller-owned. Every widget renders into a `Buf
 width calculation goes through grapheme-aware `CharWidth`.
 
 🧩 **[Browse the complete catalog →](website/docs/widgets.md)**
+
+### New in 0.13.0
+
+| | |
+|---|---|
+| **Share the terminal** | An app can run in an *inline* viewport instead of seizing the alternate screen, so its output stays in the scrollback like any other command. `insertBefore` writes styled lines above a live UI. |
+| **Escape the pane** | `portal` draws a dropdown or menu outside its parent's bounds, clipped only by the terminal, and it is clicked and tabbed to where it is actually drawn. |
+| **State beside the view** | `useSignal` and `useState` let a reusable view helper own private state at its call site, instead of every piece of state being hoisted onto the app object. |
+| **Degrade honestly** | A `Monochrome` colour rung maps colour to contrast rather than discarding it, and ASCII glyph sets replace box drawing where a terminal cannot show it. |
+| **More input** | Key *release* events behind an opt-in, the media and lock keys, the horizontal wheel, hover through all-motion mouse tracking, and the terminal's pixel size. |
+
+Much of this release came from reading [ratatui](https://github.com/ratatui/ratatui) and
+[jatatui](https://github.com/oyvindberg/jatatui) side by side with this codebase and closing the
+gaps worth closing. Some were deliberately left open — where a feature would have contradicted a
+decision this library has already made, the reasoning is written down next to the code.
 
 ## 🧪 Test the terminal without a terminal
 
