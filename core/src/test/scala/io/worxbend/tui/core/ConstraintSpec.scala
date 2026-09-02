@@ -60,3 +60,8 @@ final class ConstraintSpec extends AnyFunSuite:
     // is against the solver's answer already clamped the way `Layout` would clamp it
     for c <- cases; axis <- Seq(0, 1, 7, 20, 33)
     do assert(c.sizeIn(axis) == math.min(axis, LayoutSolver.solve(Seq(c), axis).head))
+
+  test("Fill(0) measures the same through sizeIn as through a one-element solve"):
+    val area = Rect(0, 0, 20, 1)
+    assert(Constraint.Fill(0).sizeIn(area.width) == 20)
+    assert(Layout.horizontal(Constraint.Fill(0)).split(area).map(_.width) == Seq(20))

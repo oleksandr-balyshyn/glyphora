@@ -92,7 +92,7 @@ object LayoutSolver:
     * deducted). Sizes may exceed `available` when the fixed demands do; [[Layout]] clamps at the far edge.
     */
   def solve(constraints: Seq[Constraint], available: Int): IndexedSeq[Int] =
-    val demands  = constraints.map(demandOf(_, available)).toIndexedSeq
+    val demands  = withGrowthWhenEveryWeightIsZero(constraints.map(demandOf(_, available)).toIndexedSeq)
     val fixed    = demands.map(_.fixed)
     // summed as `Long`: two `Min(Int.MaxValue)` floors add up to more than an `Int` holds, and an `Int` sum there would
     // wrap around to a negative total and report a huge leftover to share out
@@ -103,6 +103,23 @@ object LayoutSolver:
       // a `Fill`/`Min`/`Max` claimed the slack, so what is still unclaimed is real free space for `Flex` to position
       if growthShares.sum > 0 then fixed.indices.map(i => fixed(i) + growthShares(i))
       else absorbProportionalRemainder(demands, fixed, leftover)
+
+  /** Gives every constraint that is allowed to grow an equal share when they all state a weight of zero.
+    *
+    * A weight is a *share* of the leftover — it says how much one segment takes relative to its siblings, and it says
+    * nothing on its own. `Constraint.Fill(0)` is the only way to reach this method, because `Min` and `Max` set their
+    * weight to one themselves. With every weight zero there is no ratio to honour, so the segments that can grow split
+    * the leftover evenly; a lone `Fill(0)` is then the whole axis, which is what `Constraint.sizeIn` has always
+    * answered for it. Before this, zero-weighted fills were skipped by [[shareLeftover]] and a pane a caller had
+    * measured as 20 cells wide rendered as nothing.
+    *
+    * A zero weight beside a non-zero one is untouched and still claims nothing: there the ratio is real, and 0:1 means
+    * "all of it to the other segment".
+    */
+  private def withGrowthWhenEveryWeightIsZero(demands: IndexedSeq[Demand]): IndexedSeq[Demand] =
+    val growable = demands.filter(_.growthCap > 0)
+    if growable.isEmpty || growable.exists(_.growthWeight > 0) then demands
+    else demands.map(demand => if demand.growthCap > 0 then demand.copy(growthWeight = 1) else demand)
 
   /** Hands the integer-division remainder to the proportional segments so they fill the container exactly.
     *
