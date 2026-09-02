@@ -380,9 +380,27 @@ private[terminal] final class InputDecoder(
   private def parameterFields(params: String): Seq[String] =
     params.split(';').toSeq.filter(_.nonEmpty)
 
+  /** Decodes a CSI key sequence, then applies the kitty event type the sequence carried.
+    *
+    * The event type is read once, here, rather than inside the arm for the kitty `u` form. A terminal asked for event
+    * types by [[Backend.enableKeyEventTypes]] reports them on *every* key it sends, and the keys that kept their legacy
+    * shapes — `CSI 1;1:3B` for a released Down arrow, `CSI 3;1:3~` for a released Delete — carry it in the same
+    * sub-parameter of the same parameter. Reading it in one place is what keeps an arrow release from arriving as a
+    * second press, which made a list scroll two rows per keystroke in an application that opted in.
+    */
   private def decodeCsiKey(
       numbers: Seq[Int],
       params: String,
+      finalByte: Int,
+      modifiers: KeyModifiers,
+  ): Option[Event] =
+    decodeCsiKeyPress(numbers, finalByte, modifiers).map(withEventType(_, kittyEventType(params)))
+
+  /** The event a CSI key sequence names, always as a press; [[decodeCsiKey]] turns it into a release when the sequence
+    * said so.
+    */
+  private def decodeCsiKeyPress(
+      numbers: Seq[Int],
       finalByte: Int,
       modifiers: KeyModifiers,
   ): Option[Event] =
@@ -401,7 +419,7 @@ private[terminal] final class InputDecoder(
       case 'Z'                                            => key(KeyCode.Tab, modifiers | KeyModifiers.Shift)
       case 'I'                                            => Some(Event.FocusGained)
       case 'O'                                            => Some(Event.FocusLost)
-      case 'u'                                            => decodeKittyKey(numbers, modifiers, kittyEventType(params))
+      case 'u'                                            => decodeKittyKey(numbers, modifiers)
       case '~' if numbers.headOption.contains(PasteStart) => Some(decodePaste())
       case '~'                                            => decodeTilde(numbers, modifiers)
       case _                                              => None
@@ -478,11 +496,18 @@ private[terminal] final class InputDecoder(
     * The code point vocabulary itself lives in [[KittyKeys]]; [[foldShiftedChar]] rewrites the one shape kitty reports
     * differently from every legacy terminal.
     */
-  private def decodeKittyKey(numbers: Seq[Int], modifiers: KeyModifiers, eventType: Int): Option[Event] =
-    numbers.headOption.flatMap(KittyKeys.keyCode).map { code =>
-      val key = foldShiftedChar(code, modifiers)
-      if eventType == KittyRelease then Event.KeyRelease(key) else Event.Key(key)
-    }
+  private def decodeKittyKey(numbers: Seq[Int], modifiers: KeyModifiers): Option[Event] =
+    numbers.headOption.flatMap(KittyKeys.keyCode).map(code => Event.Key(foldShiftedChar(code, modifiers)))
+
+  /** Rewrites a decoded press as a release when the sequence carried [[KittyRelease]], and leaves it alone otherwise.
+    *
+    * Only a [[Event.Key]] is rewritten. The other things a CSI key sequence can decode to — focus in/out, a bracketed
+    * paste — are not keypresses and have no released form, so an event type reported alongside them means nothing.
+    */
+  private def withEventType(event: Event, eventType: Int): Event =
+    event match
+      case Event.Key(key) if eventType == KittyRelease => Event.KeyRelease(key)
+      case other                                       => other
 
   /** The event-type sub-parameter of a kitty key report — the `3` in `CSI 97;5:3u`.
     *

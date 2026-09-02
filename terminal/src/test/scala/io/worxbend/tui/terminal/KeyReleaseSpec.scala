@@ -66,3 +66,17 @@ final class KeyReleaseSpec extends AnyFunSuite:
 
   test("a backend that cannot report event types answers success and emits no releases"):
     assert(HeadlessBackend(io.worxbend.tui.core.Size(10, 3)).enableKeyEventTypes() == Right(()))
+
+  /** A terminal that has been asked for event types reports them on *every* key it sends, not only on the ones that use
+    * the kitty `u` form. Arrows, function keys and the navigation keys keep their legacy shapes and carry the event
+    * type in the same sub-parameter, so a release on those forms must decode as a release too — otherwise an app that
+    * opted in sees two presses per arrow keystroke and a list scrolls two rows at a time.
+    */
+  test("a release on a legacy CSI form is a release, not a second press"):
+    assert(decoded("3;1:3~").contains(Event.KeyRelease(KeyEvent.of(KeyCode.Delete))))
+    assert(decoded("1;1:3B").contains(Event.KeyRelease(KeyEvent.of(KeyCode.Down))))
+    assert(decoded("1;1:3P").contains(Event.KeyRelease(KeyEvent.of(KeyCode.F(1)))))
+
+  test("a legacy CSI form with no event type is still a press"):
+    assert(decoded("3;1~").contains(Event.Key(KeyEvent.of(KeyCode.Delete))))
+    assert(decoded("1;2B").contains(Event.Key(KeyEvent(KeyCode.Down, KeyModifiers.Shift))))
