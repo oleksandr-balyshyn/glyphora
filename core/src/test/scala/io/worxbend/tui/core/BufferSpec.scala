@@ -55,13 +55,14 @@ final class BufferSpec extends AnyFunSuite:
     assert(buf.get(0, 0).symbol == "a")
     assert(buf.get(1, 0).symbol == "b")
 
-  test("writing the empty cell onto a continuation leaves the wide grapheme intact"):
-    // `set(x, wide)` followed by `set(x + 1, Cell.Empty)` is how setString and seven widgets spell the filler; the
-    // second write must not be read as a claim on the column, or every wide glyph erases itself
+  test("writing the empty cell onto a continuation blanks the wide grapheme that reserved it"):
+    // a blank claims its column exactly as any other cell does. The grapheme can no longer draw across a column
+    // somebody else has taken, so leaving it behind would show it inside a region the caller had blanked
     val buf = buffer(4, 1)
     buf.setString(0, 0, "你", Style.Default)
     buf.set(1, 0, Cell.Empty)
-    assert(buf.get(0, 0).symbol == "你")
+    assert(buf.get(0, 0) == Cell.Empty)
+    assert(!buf.isContinuation(1, 0))
     assert(buf.get(1, 0) == Cell.Empty)
 
   test("setString drops a wide character that would only half-fit at the right edge"):
@@ -293,8 +294,8 @@ final class BufferSpec extends AnyFunSuite:
     assert(buf.get(0, 0).style == Style.Default)
 
   test("setStyle leaves the continuation cell of a wide grapheme empty"):
-    // a styled continuation stops comparing equal to Cell.Empty, which is the test `set` uses to tell a caller's own
-    // filler apart from real content landing on a reserved column — restyling it would break that invariant
+    // the terminal paints a wide grapheme across both of its columns from the *left* cell's style, so restyling the
+    // right one changes nothing on screen while breaking the invariant that a flagged cell holds Cell.Empty
     val buf = buffer(4, 1)
     buf.setString(0, 0, "你好", Style.Default)
     buf.setStyle(Rect(0, 0, 4, 1), Style.Default.bold)
@@ -302,9 +303,9 @@ final class BufferSpec extends AnyFunSuite:
     assert(buf.get(1, 0) == Cell.Empty)
     assert(buf.get(2, 0) == Cell("好", Style.Default.bold))
     assert(buf.get(3, 0) == Cell.Empty)
-    // and the pair still survives a caller writing its own filler over the reserved column
-    buf.set(1, 0, Cell.Empty)
-    assert(buf.get(0, 0).symbol == "你")
+    // and both reservations are still flagged, so the diff still knows which columns it must not paint twice
+    assert(buf.isContinuation(1, 0))
+    assert(buf.isContinuation(3, 0))
 
   test("mapStyle derives each new style from the current one and writes nothing when it is unchanged"):
     val buf    = buffer(3, 1)
@@ -532,3 +533,23 @@ final class BufferSpec extends AnyFunSuite:
 
   test("adding the companion did not shadow the buffer constructor"):
     assert(Buffer(Rect(1, 2, 3, 4)).area == Rect(1, 2, 3, 4))
+
+  test("blitting a blank fragment over the right half of a wide grapheme erases the grapheme"):
+    // an overlay rendered into its own buffer and composited at an odd column used to leave the CJK character on
+    // screen, spilling one column into the rectangle the overlay had declared blank
+    val dest = buffer(4, 1)
+    dest.setString(0, 0, "漢", Style.Default)
+    val src  = buffer(2, 1)
+    dest.blit(src, Position(1, 0))
+    assert(dest.get(0, 0) == Cell.Empty)
+    assert(!dest.isContinuation(1, 0))
+    assert(dest.get(1, 0) == Cell.Empty)
+
+  test("filling with the default blank clears a wide grapheme the region's left edge cuts in half"):
+    // `fill` is the one owner of "blank a box"; filling with a coloured style already cleared the pair, and only the
+    // default blank — the cell every "clear this box" caller passes — was silently refused
+    val buf = buffer(4, 1)
+    buf.setString(0, 0, "漢", Style.Default)
+    buf.fill(Rect(1, 0, 3, 1), Cell.Empty)
+    assert(buf.get(0, 0) == Cell.Empty)
+    assert(!buf.isContinuation(1, 0))

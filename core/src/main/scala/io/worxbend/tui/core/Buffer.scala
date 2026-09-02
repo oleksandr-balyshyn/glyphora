@@ -74,11 +74,16 @@ final class Buffer(val area: Rect):
     *
     * A write can also mutate the neighbouring cell, because a two-column grapheme owns two cells and a terminal cannot
     * draw half of one: writing a wide cell reserves the cell to its right as its continuation; overwriting a wide cell
-    * releases the continuation it held; and writing real content over a continuation blanks the wide grapheme that
-    * owned it, since that grapheme can no longer draw across a column somebody else has claimed.
+    * releases the continuation it held; and writing over a continuation blanks the wide grapheme that owned it, since
+    * that grapheme can no longer draw across a column somebody else has claimed.
     *
-    * Writing [[Cell.Empty]] over a continuation is the one exception and leaves the pair intact — that pair is how
-    * callers spell the continuation cell itself, so treating it as a claim would erase the grapheme they just wrote.
+    * That last rule holds for every cell written, [[Cell.Empty]] included. A blank used to be exempt, on the theory
+    * that a caller writing one onto a reserved column was re-spelling the continuation the buffer had just created for
+    * it. Nothing in the toolkit spells a continuation that way — [[blit]] is the only caller that ever copies one, and
+    * it skips those columns because the wide cell it copied a moment earlier already reserved them — while the
+    * exemption made the commonest blank of all unable to erase. `fill(region, Cell.Empty)` and a default-styled overlay
+    * composited over CJK text both left the character on screen, one column inside the rectangle they had declared
+    * blank.
     *
     * A wide cell aimed at the last column of a row is stored as a blank in `cell`'s style rather than as itself: there
     * is no column left to reserve, and a terminal handed a two-column glyph in a one-column slot wraps the row. The
@@ -92,12 +97,10 @@ final class Buffer(val area: Rect):
     */
   private def setMeasured(x: Int, y: Int, cell: Cell, width: Int): Unit =
     if area.contains(x, y) then
-      val index             = indexOf(x, y)
-      // `&&` short-circuits, so the structural compare (which walks `Style`) only runs on the rare flagged column
-      val isOwnContinuation = continuations(index) && cell == Cell.Empty
-      if !isOwnContinuation then
-        if continuations(index) then cells(index - 1) = Cell.Empty
-        write(index, x, cell, width)
+      val index = indexOf(x, y)
+      // the column was the right half of a wide grapheme, which can no longer draw across a column this write claims
+      if continuations(index) then cells(index - 1) = Cell.Empty
+      write(index, x, cell, width)
 
   /** [[set]]'s tail, once the addressed cell is known not to be a wide grapheme's continuation: stores `cell` and
     * re-derives the continuation to its right. `x` is passed only to test the row's right edge — `index + 1` would
@@ -339,16 +342,23 @@ final class Buffer(val area: Rect):
         val y  = clipped.y + dy
         var dx = 0
         while dx < clipped.width do
-          val cell = source.get(clipped.x + dx, y)
-          val safe =
-            // a wide grapheme cut in half by the *window* edge would render torn — blank the half instead. This is a
-            // different edge from the destination's own: `set` blanks a wide cell that does not fit the destination
-            // row, but a window narrower than the destination would otherwise let the glyph spill one column past
-            // the region the caller asked to copy.
-            if dx == 0 && source.isContinuation(clipped.x, y) then Cell.Empty
-            else if dx == clipped.width - 1 && CharWidth.ofCluster(cell.symbol) == 2 then Cell.Empty
-            else cell
-          set(originX + dx, originY + dy, safe)
+          val cell                  = source.get(clipped.x + dx, y)
+          // A column the source reserved for the wide grapheme in the column before it needs no write of its own: the
+          // previous iteration copied that grapheme, and writing it reserved the destination column in the same
+          // breath. Writing the source's blank over the reservation would instead read as content landing on a
+          // reserved column and blank the grapheme just copied. `dx == 0` is not such a column — the grapheme that
+          // owned it is outside the region being copied, so the half is blanked by `safe` below rather than skipped.
+          val ownedByPreviousColumn = dx > 0 && source.isContinuation(clipped.x + dx, y)
+          if !ownedByPreviousColumn then
+            val safe =
+              // a wide grapheme cut in half by the *window* edge would render torn — blank the half instead. This is
+              // a different edge from the destination's own: `set` blanks a wide cell that does not fit the
+              // destination row, but a window narrower than the destination would otherwise let the glyph spill one
+              // column past the region the caller asked to copy.
+              if dx == 0 && source.isContinuation(clipped.x, y) then Cell.Empty
+              else if dx == clipped.width - 1 && CharWidth.ofCluster(cell.symbol) == 2 then Cell.Empty
+              else cell
+            set(originX + dx, originY + dy, safe)
           // the directive travels with the cell: a sub-buffer that reserved columns for an image protocol must keep
           // that reservation once it is composited into the frame, or the frame flushes over the picture
           copyDirective(originX + dx, originY + dy, source, clipped.x + dx, y)
