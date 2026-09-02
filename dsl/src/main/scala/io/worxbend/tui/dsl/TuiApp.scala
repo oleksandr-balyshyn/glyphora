@@ -791,8 +791,12 @@ trait TuiApp:
       case Event.EndOfInput      => false
       case Event.Resize(size)    =>
         // the render pass sets this too, from the frame it is about to draw; doing it here as well means an
-        // `onResize` override — and anything it calls — already peeks the new size rather than the previous frame's
-        terminalSizeSignal.set(size)
+        // `onResize` override — and anything it calls — already peeks the new size rather than the previous frame's.
+        // What is published is the app's own area, not the terminal's: an inline app owns the bottom few rows, so the
+        // two differ in height, and the frame about to be composed publishes the area. Writing the terminal size here
+        // let an `onResize` — and any view recomputed from it — lay itself out for a height it does not have.
+        val area = config.viewport.areaIn(size)
+        terminalSizeSignal.set(Size(area.width, area.height))
         onResize(size)
         true
       case Event.Tick            => handleTick(run)
