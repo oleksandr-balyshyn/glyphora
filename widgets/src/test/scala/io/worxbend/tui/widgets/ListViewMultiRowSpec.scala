@@ -89,7 +89,13 @@ final class ListViewMultiRowSpec extends AnyFunSuite:
     val buffer = rendered(ListView(Seq(item)), ListState(), 10, 3)
     assert(buffer.get(2, 0).style.fg.contains(Color.Blue))
 
+  test("an offset past a tall last item still renders content rather than a blank area"):
+    val tall   = ListView(Seq("a", text("b", "c", "d", "e")))
+    val buffer = rendered(tall, ListState(selected = None, offset = 2), 10, 3)
+    assert(trimmedLines(buffer) == Seq("  b", "  c", "  d"))
+
 /** The row-counting scroll rule on its own. */
+
 final class ScrollWindowItemsSpec extends AnyFunSuite:
 
   test("uniform heights agree with the index-based rule"):
@@ -121,3 +127,9 @@ final class ScrollWindowItemsSpec extends AnyFunSuite:
 
   test("a height of zero is treated as one row so an item is never skipped"):
     assert(ScrollWindow.offsetForItems(0, Some(2), Seq(0, 0, 0), 2) == 1)
+
+  test("an item taller than the viewport still caps the offset inside the list"):
+    // Seq(1, 4) in a 3-row viewport: the last item alone overflows, so no offset makes the remaining items "fit".
+    // The answer must still be an item index the caller can slice with — 1, the tall item's own top — because an
+    // offset of 2 would drop every item and paint the whole area blank.
+    assert(ScrollWindow.offsetForItems(2, None, Seq(1, 4), 3) == 1)

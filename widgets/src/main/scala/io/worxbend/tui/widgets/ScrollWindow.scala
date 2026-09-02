@@ -68,14 +68,17 @@ private[widgets] object ScrollWindow:
     if count == 0 || viewportHeight <= 0 then 0
     else
       val rows      = heights.map(height => math.max(1, height)).toArray
-      // the largest offset whose remaining items still fill the viewport: walk back from the end while they fit
+      // the largest offset whose remaining items still fill the viewport: walk back from the end while they fit.
+      // The walk starts at `count` — one past the last item — and stops without moving when even the last item alone
+      // overflows the viewport, so its result is capped at `count - 1`: an offset equal to the item count would slice
+      // every item away and paint a blank area over content the reader can still be shown the top of.
       val maxOffset =
         var index = count
         var taken = 0
         while index > 0 && taken + rows(index - 1) <= viewportHeight do
           taken += rows(index - 1)
           index -= 1
-        index
+        math.min(index, count - 1)
       val clamped   = math.max(0, math.min(offset, maxOffset))
       selected match
         case None        => clamped
