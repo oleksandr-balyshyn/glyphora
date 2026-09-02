@@ -217,10 +217,33 @@ object Layout:
       direction,
       constraints.map {
         case cells: Int             => Constraint.Length(cells)
-        case fraction: Double       => Constraint.Percentage((fraction * 100).toInt)
+        case fraction: Double       => Constraint.Percentage(percentageOf(fraction))
         case constraint: Constraint => constraint
       },
     )
+
+  /** The whole percentage points in `fraction`, read from the decimal the caller wrote rather than from the binary
+    * number the machine stored.
+    *
+    * A `Double` cannot hold most decimals exactly: the nearest `Double` to `0.29` is very slightly *below* it, so the
+    * plain product `0.29 * 100` is `28.999999999999996` and truncating it gave 28 — a caller who asked for an exact 29%
+    * of the axis got 28%. `BigDecimal.valueOf` goes through the shortest decimal that round-trips to the same `Double`
+    * (`"0.29"`), so the multiplication happens in base ten and yields exactly `29.0`.
+    *
+    * Truncation is still what happens to a genuinely inexact fraction — `0.333` becomes 33, not 34 — because a fraction
+    * that cannot be said in whole percentage points has no exact answer to round to, and rounding up would make three
+    * thirds claim 102% of the axis.
+    *
+    * A fraction that is not a finite number claims nothing, and one large enough to overflow an `Int` is held at
+    * `Int.MaxValue`, because `BigDecimal.toInt` on an out-of-range value silently returns the wrong number rather than
+    * failing. Negative fractions become zero here for the same reason `Constraint.Percentage` floors them at zero: a
+    * segment cannot claim less than none of the axis.
+    */
+  private def percentageOf(fraction: Double): Int =
+    if !fraction.isFinite then 0
+    else
+      val points = BigDecimal.valueOf(fraction) * 100
+      points.max(BigDecimal(0)).min(BigDecimal(Int.MaxValue)).toInt
 
   def horizontal(constraints: (Int | Double | Constraint)*): Layout =
     apply(Direction.Horizontal)(constraints*)

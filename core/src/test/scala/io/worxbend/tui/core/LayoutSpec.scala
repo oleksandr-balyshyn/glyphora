@@ -148,3 +148,24 @@ final class LayoutSpec extends AnyFunSuite:
       .splitWithSpacers(Rect(0, 0, 7, 1))
     // the shared column belongs to both neighbours; it is not a gap, so the spacer between them is empty
     assert(spacers.map(_.width) == Seq(0, 0, 0))
+
+  test("the Double shorthand reads the decimal the caller wrote, not its binary approximation"):
+    // 0.29 * 100 is 28.999999999999996 as an IEEE-754 double, so truncating the product produced Percentage(28)
+    val layout = Layout(Direction.Vertical)(0.29, 0.57, 0.58)
+    assert(layout.constraints == Seq(Constraint.Percentage(29), Constraint.Percentage(57), Constraint.Percentage(58)))
+
+  test("a Double shorthand paired with a flexible constraint keeps its exact percentage of the axis"):
+    val rects = Layout.horizontal(0.29, Constraint.Min(0)).split(Rect(0, 0, 100, 1))
+    assert(rects.map(_.width) == Seq(29, 71))
+
+  test("a lone Fill takes the whole axis whatever its weight"):
+    val rects = Layout.horizontal(Constraint.Fill(0)).split(Rect(0, 0, 20, 1))
+    assert(rects == Seq(Rect(0, 0, 20, 1)))
+
+  test("Fills that all carry weight zero share the leftover equally"):
+    val rects = Layout.horizontal(Constraint.Fill(0), Constraint.Fill(0)).split(Rect(0, 0, 20, 1))
+    assert(rects.map(_.width) == Seq(10, 10))
+
+  test("a Fill with weight zero beside a weighted Fill still claims nothing"):
+    val rects = Layout.horizontal(Constraint.Fill(0), Constraint.Fill(1)).split(Rect(0, 0, 20, 1))
+    assert(rects.map(_.width) == Seq(0, 20))
