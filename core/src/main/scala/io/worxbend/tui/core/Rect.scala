@@ -7,7 +7,23 @@ package io.worxbend.tui.core
   */
 final case class Rect(x: Int, y: Int, width: Int, height: Int):
 
+  /** How many cells this rectangle covers, as an `Int`.
+    *
+    * `width * height` is computed in 32-bit arithmetic, so a rectangle with more than `Int.MaxValue` cells reports a
+    * wrapped-around number — `Rect(0, 0, 65536, 65536)` answers 0. No terminal is anywhere near that size, and the
+    * signature is part of the published 0.x API, so this stays an `Int`; what protects callers is that the one place
+    * the number is turned into memory, the [[Buffer]] constructor, checks [[cellCount]] instead and refuses an
+    * oversized rectangle with a message naming it. Code doing its own capacity arithmetic should use [[cellCount]].
+    */
   def area: Int = if isEmpty then 0 else width * height
+
+  /** How many cells this rectangle covers, counted in 64-bit arithmetic so it is exact for every `Int` extent.
+    *
+    * This is the same number as [[area]] for any rectangle small enough to be a real render target, and the honest
+    * answer where [[area]] would silently wrap around. Callers sizing a collection, comparing against a budget, or
+    * checking a rectangle before allocating for it want this one.
+    */
+  def cellCount: Long = if isEmpty then 0L else width.toLong * height.toLong
 
   /** Whether this rectangle covers no cells. A negative extent counts as empty: it can only come from arithmetic
     * upstream, and the standard `if !area.isEmpty` widget guard must reject it rather than render into a region that

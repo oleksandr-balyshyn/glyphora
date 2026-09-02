@@ -17,6 +17,18 @@ package io.worxbend.tui.core
   */
 final class Buffer(val area: Rect):
 
+  // Validated before the first allocation below, because every plane of this buffer is indexed by `area.area` and that
+  // product is 32-bit: a rectangle of more than `Int.MaxValue` cells wraps around to a small — possibly zero — length,
+  // and the mismatch only shows up later as an ArrayIndexOutOfBoundsException from inside an unrelated write, while
+  // `area.contains` keeps answering true for the very coordinate that threw. Failing here instead names the offending
+  // rectangle at the moment somebody asked for it. It is an IllegalArgumentException rather than an `Either` because
+  // no terminal can produce such a rectangle: reaching this is a bug in the calling code, not a condition to recover
+  // from, and a constructor has nowhere to return a failure value anyway.
+  require(
+    area.cellCount <= Buffer.MaxCells,
+    s"Buffer area $area covers ${area.cellCount} cells, more than the ${Buffer.MaxCells} a buffer can address",
+  )
+
   private val cells: Array[Cell] = Array.fill(area.area)(Cell.Empty)
 
   /** Which cells are the second column of a two-column grapheme, recorded by [[set]] rather than measured.
@@ -800,6 +812,14 @@ final class Buffer(val area: Rect):
   * right size by hand and calling `setString` once per row.
   */
 object Buffer:
+
+  /** The largest number of cells one buffer can hold.
+    *
+    * Every plane of a buffer is a single flat array indexed by `(row * width) + column`, and a JVM array is indexed by
+    * an `Int`, so `Int.MaxValue` cells is the hard ceiling of that representation. A rectangle above it is rejected by
+    * the constructor. For scale, a 1000x1000 terminal is one million cells, four thousand times under this limit.
+    */
+  val MaxCells: Long = Int.MaxValue.toLong
 
   /** The [[DiffDirective]] ordinals the diff loop compares against, resolved once rather than per cell. */
   private val DefaultCode: Byte      = DiffDirective.Default.ordinal.toByte
