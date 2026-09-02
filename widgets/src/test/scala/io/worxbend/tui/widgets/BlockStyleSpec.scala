@@ -100,3 +100,25 @@ final class BlockStyleSpec extends AnyFunSuite:
     )
     assert(styled.get(1, 0) == explicit.get(1, 0))
     assert(styled.get(1, 0).style.fg.contains(Color.Blue))
+
+  test("a title line's own base style survives being joined with its neighbours"):
+    // The titles sharing one border are drawn as a single row, which used to be rebuilt from the spans alone: a base
+    // style set with `Line.withStyle` (the middle layer of the text cascade) was dropped on the floor, so a bold
+    // caption came out plain. Buffer.setLine and Paragraph both honour that layer, and so must the block.
+    val block  = Block(Seq(BlockTitle.top(Line.raw("hi").withStyle(Style.Default.bold))), borders = Borders.All)
+    val buffer = rendered(block, 10, 3)
+    assert(buffer.get(1, 0).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("a joined title row keeps each title's own base style rather than sharing one"):
+    val titles = Seq(
+      BlockTitle.top(Line.raw("a").withStyle(Style.Default.withFg(Color.Red))),
+      BlockTitle.top(Line.raw("b").withStyle(Style.Default.withFg(Color.Blue))),
+    )
+    val buffer = rendered(Block(titles, borders = Borders.All), 10, 3)
+    assert(buffer.get(1, 0).style.fg.contains(Color.Red))
+    assert(buffer.get(3, 0).style.fg.contains(Color.Blue))
+
+  test("a span inside a title still overrules the title line's base style"):
+    val line   = Line.styled(Seq(Span("x", Style.Default.withFg(Color.Blue))), Style.Default.withFg(Color.Red))
+    val buffer = rendered(Block(Seq(BlockTitle.top(line)), borders = Borders.All), 10, 3)
+    assert(buffer.get(1, 0).style.fg.contains(Color.Blue))

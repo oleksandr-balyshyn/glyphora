@@ -206,13 +206,17 @@ final case class Block(
       insetLeft: Int,
       available: Int,
   ): Unit =
-    val line   = Line(group.map(_.line.spans).reduce((left, right) => left ++ Seq(Span.raw(" ")) ++ right))
-    val y      = position match
+    // Each title keeps its own base style: the group is drawn as one row, so the row cannot carry per-title styles in
+    // `Line.style`. Folding a title's base style into its spans with `Span.under` puts it exactly where the cascade
+    // wants it — under each span's own style, over whatever the block's caption style says — instead of dropping it.
+    val spansOf = (title: BlockTitle) => title.line.under(title.line.style).spans
+    val line    = Line(group.map(spansOf).reduce((left, right) => left ++ Seq(Span.raw(" ")) ++ right))
+    val y       = position match
       case TitlePosition.Top    => area.y
       case TitlePosition.Bottom => area.bottom - 1
-    val width  = math.min(line.width, available)
-    val startX = alignment.originAt(area.x + insetLeft, available, width)
-    val _      = LineRenderer.render(buffer, startX, y, line, available - (startX - area.x - insetLeft), captionStyle)
+    val width   = math.min(line.width, available)
+    val startX  = alignment.originAt(area.x + insetLeft, available, width)
+    val _       = LineRenderer.render(buffer, startX, y, line, available - (startX - area.x - insetLeft), captionStyle)
 
   /** The style the border glyphs and titles are drawn in: the whole-area [[style]] with [[borderStyle]] layered on top.
     *
