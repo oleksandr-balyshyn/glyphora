@@ -284,9 +284,10 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
       decoder.decode(0L) match
         case Some(event) => postEvent(event)
         // an undecodable sequence yields no event but may have consumed only part of the input, so keep going while
-        // there is any left; the decoder may also be holding a pushed-back character, which is why a decoded event
-        // does not end the loop either
-        case None        => draining = remaining.hasNext
+        // there is any left — or while the decoder is holding a character it pushed back, which is the whole reason a
+        // decoded event does not end the loop either. `ESC [ ESC` ends that way: the torn CSI hands the trailing `ESC`
+        // back, and only the next decode turns it into the Escape keypress a real terminal would have delivered
+        case None        => draining = remaining.hasNext || decoder.hasPushback
 
   /** Sets the pixel size [[windowSize]] reports, or clears it with `None`.
     *

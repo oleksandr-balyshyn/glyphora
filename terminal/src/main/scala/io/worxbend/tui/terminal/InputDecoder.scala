@@ -689,6 +689,15 @@ private[terminal] final class InputDecoder(
       c
     else read(timeoutMillis)
 
+  /** Whether a character read speculatively is waiting to be decoded again.
+    *
+    * A caller that drives the decoder from a finite script — [[HeadlessBackend.postInput]] — cannot tell from its own
+    * script iterator whether the decoder is done: a CSI torn off by a fresh `ESC` hands that `ESC` back, so the last
+    * character of the script can still be inside the decoder after the iterator has run dry. A blocking reader never
+    * needs this, because it simply reads again.
+    */
+  private[terminal] def hasPushback: Boolean = pushedBack >= 0
+
   private def pushBack(c: Int): Unit =
     if c >= 0 then pushedBack = c
 
