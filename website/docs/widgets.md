@@ -215,9 +215,11 @@ Scrollbar(contentLength = 200, position = 40, viewportLength = Some(8))
 ```
 
 Arrow caps mark the two ends of the strip, which is how a reader tells a scrollbar from a
-plain border line in a screenshot. Each cap takes one cell away from the track — two for a
-double-width glyph — so a 10-row bar with both caps places its thumb in the 8 rows between
-them. `ScrollbarSymbols` collects the conventional glyph sets and `Scrollbar.withSymbols`
+plain border line in a screenshot. Each cap takes one cell away from the track, so a 10-row
+bar with both caps places its thumb in the 8 rows between them. On a *horizontal* bar a
+double-width glyph takes two cells instead, because there the strip's cells are columns and
+a wide glyph covers two of them; on a vertical bar the cells are rows, and no glyph is two
+rows tall. `ScrollbarSymbols` collects the conventional glyph sets and `Scrollbar.withSymbols`
 builds a bar from one:
 
 | Set | Track | Thumb | Caps |

@@ -1,7 +1,7 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.Direction
-import io.worxbend.tui.testsupport.BufferAssertions.{lines, rendered}
+import io.worxbend.tui.core.{Direction, Rect}
+import io.worxbend.tui.testsupport.BufferAssertions.{lines, rendered, renderedInto}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -142,3 +142,20 @@ final class ScrollbarSpec extends AnyFunSuite:
   test("a declared viewport that swallows the content still fills the track"):
     val buffer = rendered(Scrollbar(6, 0, viewportLength = Some(9), thumbWhenFits = true), 1, 3)
     assert(lines(buffer) == Seq("█", "█", "█"))
+
+  test("a wide cap on a vertical bar takes one row, not two"):
+    // a glyph's *column* width says nothing about how many rows of a vertical strip it takes: the strip's cells are
+    // rows, so an emoji arrow must still leave every row between the two caps to the track
+    val bar    = Scrollbar(100, 0, side = ScrollbarSide.Near, beginSymbol = Some("⬆️"), endSymbol = Some("⬇️"))
+    val buffer = rendered(bar, 2, 10)
+    val strip  = (0 until 10).map(row => buffer.get(0, row).symbol)
+    assert(strip.head == "⬆️")
+    assert(strip.last == "⬇️")
+    assert(strip.slice(1, 9).forall(symbol => symbol == "█" || symbol == "│"))
+
+  test("a wide symbol with no column left inside the area is blanked rather than drawn past its edge"):
+    // the bar owns columns 0..2 of a 6-column buffer; a two-column glyph in column 2 would claim column 3, which
+    // belongs to whatever is drawn beside the bar
+    val bar    = Scrollbar(100, 0, trackSymbol = "🟦", thumbSymbol = "🟦")
+    val buffer = renderedInto(bar, Rect(0, 0, 3, 4), 6, 4)
+    assert((0 until 4).forall(row => buffer.get(2, row).symbol == " " && buffer.get(3, row).symbol == " "))

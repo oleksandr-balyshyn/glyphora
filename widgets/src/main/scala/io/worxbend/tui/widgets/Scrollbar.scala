@@ -64,8 +64,10 @@ final case class Scrollbar(
       val extent                                               = orientation match
         case Direction.Vertical   => area.height
         case Direction.Horizontal => area.width
-      // a cap is measured, not counted: a double-width glyph such as an emoji arrow takes two cells of the strip, and
-      // starting the track one cell later would let the track's first character land on the cap's right half
+      // a cap is measured, not counted, but only on a horizontal bar: there a double-width glyph such as an emoji
+      // arrow takes two cells of the strip, and starting the track one cell later would let the track's first
+      // character land on the cap's right half. A vertical strip's cells are *rows*, and a glyph's column width says
+      // nothing about how many rows it covers, so there a cap always takes exactly one cell.
       val trackStart                                           = beginSymbol.fold(0)(capCells)
       val endCells                                             = endSymbol.fold(0)(capCells)
       val trackLength                                          = math.max(0, extent - trackStart - endCells)
@@ -78,12 +80,17 @@ final case class Scrollbar(
       val row                                                  = side match
         case ScrollbarSide.Near => area.y
         case ScrollbarSide.Far  => area.bottom - 1
+      // a two-column glyph in the area's last column would claim the column beyond it, which belongs to whatever is
+      // drawn beside the bar. `Buffer.set` already refuses that at the buffer's own right edge; this is the same rule
+      // one boundary in, at the edge of the rectangle this widget was handed.
+      def fitted(symbol: String, x: Int): String               =
+        if CharWidth.of(symbol) == 2 && x + 1 >= area.right then " " else symbol
       // paint one cell `at` cells along the strip, ignoring anything that would fall outside it
       def put(at: Int, symbol: String, cellStyle: Style): Unit =
         if at >= 0 && at < extent then
           orientation match
-            case Direction.Vertical   => buffer.set(column, area.y + at, Cell(symbol, cellStyle))
-            case Direction.Horizontal => buffer.set(area.x + at, row, Cell(symbol, cellStyle))
+            case Direction.Vertical   => buffer.set(column, area.y + at, Cell(fitted(symbol, column), cellStyle))
+            case Direction.Horizontal => buffer.set(area.x + at, row, Cell(fitted(symbol, area.x + at), cellStyle))
       // the end cap goes down first so that on a one-cell strip, where both caps want the same cell, the begin cap
       // is the one left visible rather than whichever happened to be written last
       endSymbol.foreach(symbol => put(extent - capCells(symbol), symbol, capStyle))
@@ -94,12 +101,19 @@ final case class Scrollbar(
         put(trackStart + along, if inThumb then thumbSymbol else trackSymbol, if inThumb then thumbStyle else style)
         along += 1
 
-  /** How many cells of the strip a cap glyph occupies: two for a double-width character, one for everything else. A
-    * zero-width cluster — a lone combining mark, say — would otherwise reserve nothing and be painted over, so it is
-    * charged one cell like any ordinary character.
+  /** How many cells of the strip a cap glyph occupies.
+    *
+    * The strip's cells run along its own axis, and only a horizontal bar's axis is the one `CharWidth` measures: there
+    * a double-width character takes two cells and everything else takes one. A vertical bar's cells are rows, and no
+    * character is two rows tall, so every cap takes exactly one of them however wide it is.
+    *
+    * On the horizontal side a zero-width cluster — a lone combining mark, say — would otherwise reserve nothing and be
+    * painted over, so it is charged one cell like any ordinary character.
     */
   private def capCells(symbol: String): Int =
-    math.max(1, CharWidth.of(symbol))
+    orientation match
+      case Direction.Vertical   => 1
+      case Direction.Horizontal => math.max(1, CharWidth.of(symbol))
 
   /** How much of the content is on screen: whatever the caller declared, or the length of the track when it declared
     * nothing. A declared value of zero or less would make the thumb arithmetic meaningless, so it is raised to one.
