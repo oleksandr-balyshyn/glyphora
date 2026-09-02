@@ -197,6 +197,11 @@ final class Buffer(val area: Rect):
     * that span and every one after it. Writing stops as soon as the budget is gone, so the tail of a very long line is
     * never even measured.
     *
+    * Writing also stops at the first span the budget could not draw whole, even when columns are left over. A
+    * two-column cluster is dropped rather than split, so a span can end one column short of its budget — and letting
+    * the next span start in the column that cluster gave up would draw a character from later in the line as though it
+    * came first. A budget of 1 filled with `漢` then `x` writes nothing and reports 0; it does not draw `x` at column 0.
+    *
     * This places the line where it is told and nowhere else. Centring or right-aligning a row against a wider area is a
     * decision about layout rather than about writing cells, and belongs to the widget making it — see
     * `io.worxbend.tui.core.Alignment` for the arithmetic the widgets share.
@@ -205,9 +210,14 @@ final class Buffer(val area: Rect):
     val budget    = math.max(0, maxWidth)
     val lineStyle = baseStyle.patch(line.style)
     var written   = 0
+    // set once a span draws fewer columns than it is wide: the budget cut it short, so nothing after it may be drawn
+    var truncated = false
     val spans     = line.spans.iterator
-    while spans.hasNext && written < budget do
-      written += setSpan(x + written, y, spans.next(), budget - written, lineStyle)
+    while spans.hasNext && written < budget && !truncated do
+      val span  = spans.next()
+      val drawn = setSpan(x + written, y, span, budget - written, lineStyle)
+      written += drawn
+      truncated = drawn < span.width
     written
 
   /** The shared body of both [[setString]] overloads: writes clusters left to right while the write head stays below

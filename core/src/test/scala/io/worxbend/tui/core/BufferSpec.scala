@@ -562,3 +562,18 @@ final class BufferSpec extends AnyFunSuite:
     assert(written == 2)
     assert(buf.get(1, 0).symbol == "h")
     assert(buf.get(2, 0).symbol == "i")
+
+  test("setLine does not promote a later span into the column a half-fitting wide cluster gave up"):
+    // the loop only stopped when the budget was spent, so a leading span that could draw nothing was skipped and the
+    // next span was written at its column — the row then showed a character from later in the line as if it were first
+    val buf     = buffer(10, 1)
+    val written = buf.setLine(0, 0, Line(Seq(Span.raw("漢"), Span.raw("x"))), 1)
+    assert(written == 0)
+    assert(buf.get(0, 0) == Cell.Empty)
+
+  test("setLine stops at the span the budget cut short rather than drawing the one after it"):
+    val buf     = buffer(10, 1)
+    val written = buf.setLine(0, 0, Line(Seq(Span.raw("a漢"), Span.raw("x"))), 2)
+    assert(written == 1)
+    assert(buf.get(0, 0).symbol == "a")
+    assert(buf.get(1, 0) == Cell.Empty)
