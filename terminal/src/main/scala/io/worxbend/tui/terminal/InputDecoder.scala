@@ -7,8 +7,17 @@ import scala.concurrent.duration.Duration
 /** Decodes terminal input bytes into [[Event]]s: printable keys, control keys, ANSI CSI/SS3 escape sequences for
   * navigation and function keys, kitty-protocol keys, bracketed paste, and both SGR and legacy X10 mouse reports.
   *
-  * Reads through an injected `read(timeoutMillis) => Int` function (negative result = nothing available), so the
-  * decoder is testable with scripted input and independent of JLine.
+  * Reads through an injected `read(timeoutMillis) => Int` function, so the decoder is testable with scripted input and
+  * independent of JLine. That function answers with a character code, or with one of two *different* negative values,
+  * spelled the way JLine's `NonBlockingReader` spells them:
+  *
+  *   - [[InputDecoder.EndOfStream]] (`-1`) — end of file. The other end of the stream is gone (piped input that ran
+  *     out, a closed terminal) and no later read can ever produce a character. This decodes to `Event.EndOfInput`.
+  *   - any other negative value, in practice `-2` — the read timed out with nothing available. This decodes to `None`,
+  *     and the next read may well produce a character.
+  *
+  * Telling those two apart is the whole point of the distinction: while they were collapsed into one "nothing
+  * available" answer, a caller polling after end of file got an instant `None` every time and spun at 100% CPU.
   *
   * A sequence the decoder does not recognize — a device-attributes reply, a cursor-position report, a torn sequence
   * that timed out mid-flight — decodes to `None` and is dropped. It must never be reported as a key: synthesizing an
@@ -36,6 +45,15 @@ private[terminal] final class InputDecoder(
 
   /** One character of lookahead, so a speculative read can be undone instead of swallowing input. */
   private var pushedBack = NoChar
+
+  /** Whether the stream has already reported end of file.
+    *
+    * End of file is permanent, so this is a latch: once it is set, [[decode]] answers `Event.EndOfInput` without
+    * reading again. Remembering it is what keeps a caller from being told "nothing available" a moment later and going
+    * back to waiting on a stream that can never speak — and it means the underlying reader is not touched again after
+    * it has said it is finished.
+    */
+  private var ended = false
 
   /** Events decoded while [[readCursorReport]] was waiting for its reply, waiting their turn.
     *
@@ -82,9 +100,14 @@ private[terminal] final class InputDecoder(
 
   /** [[decode]] without the deferred queue: one read, one decode. */
   private def decodeOnce(timeoutMillis: Long): Option[Event] =
-    val first = next(timeoutMillis)
-    if first < 0 then None
-    else decodeFirst(first)
+    if ended then Some(Event.EndOfInput)
+    else
+      val first = next(timeoutMillis)
+      if first == EndOfStream then
+        ended = true
+        Some(Event.EndOfInput)
+      else if first < 0 then None
+      else decodeFirst(first)
 
   /** Reads the terminal's reply to a Device Status Report, giving up after `timeout`.
     *
@@ -679,6 +702,14 @@ private[terminal] object InputDecoder:
 
     /** The sequence outgrew its size budget, so its parameters are incomplete and the whole sequence is dropped. */
     case Overrun
+
+  /** What the read function returns when the input stream has reached end of file.
+    *
+    * The value is JLine's: `NonBlockingReader.EOF`. Its sibling `READ_EXPIRED` is `-2`, and everything in the decoder
+    * that merely asks "did a character arrive?" mid-sequence still tests `< 0`, because a sequence torn off by end of
+    * file is torn exactly as one torn off by a timeout is. Only the *first* read of an event distinguishes them.
+    */
+  private[terminal] val EndOfStream = -1
 
   private val NoChar             = -1
   private val Bel                = 7

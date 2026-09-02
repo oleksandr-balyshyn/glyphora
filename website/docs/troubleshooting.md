@@ -195,6 +195,17 @@ descriptor, so restoration does not depend on the backend still being intact.
 
 `SIGKILL` cannot be caught by anything; after `kill -9`, run `reset`.
 
+### The app pins a CPU core when its input is piped in
+
+It no longer does. When standard input reaches end of file — input redirected from a file
+that ran out (`my-app < script.txt`), or a terminal closed while the process kept running —
+the backend now reports `Event.EndOfInput` instead of the same "nothing available right now"
+answer an ordinary poll timeout gives. The runner offers that event to the application (so it
+can save its work) and then stops the loop and restores the terminal, whatever the handler
+answers: unlike `Ctrl+C`, the end of the stream is not a request an application may decline,
+because there is no input left to deliver. Before this, the loop could not tell the two apart
+and went straight back to reading a dead stream, spinning at 100% CPU until it was killed.
+
 Set `GLYPHORA_DEBUG=1` to have failed teardown steps report themselves on stderr rather
 than being swallowed.
 

@@ -197,18 +197,26 @@ final class TerminalRunner(
     /** Dispatches one event; `true` when the frame should be repainted afterward. */
     def dispatch(event: Event): Boolean =
       event match
-        case Event.Interrupt =>
+        case Event.Interrupt  =>
           // an app that does not consume Ctrl+C quits cleanly, so teardown runs on the normal path
           if guarded(handleEvent(event, handle)) == EventOutcome.Redraw then true
           else
             handle.quit()
             false
-        case _: Event.Resize =>
+        case Event.EndOfInput =>
+          // Not a request the app may decline, unlike the interrupt above: the stream is gone, so there is nothing
+          // left to read and a loop that kept polling it would spin at 100% CPU. The handler still runs, and runs
+          // first, so an app can save its work; whatever it answers, the loop quits. No repaint either — the frame
+          // that would be drawn is one nobody will look at, and drawing it only delays the terminal restore.
+          val _ = guarded(handleEvent(event, handle))
+          handle.quit()
+          false
+        case _: Event.Resize  =>
           // a resize always repaints, whatever the handler answers, because the composed frame no longer fits the
           // terminal. The handler still runs, and runs first, so an app that tracks its own dimensions sees the event.
           val _ = guarded(handleEvent(event, handle))
           true
-        case _               => guarded(handleEvent(event, handle)) == EventOutcome.Redraw
+        case _                => guarded(handleEvent(event, handle)) == EventOutcome.Redraw
 
     /** Whether a frame is owed for a reason no event asked for: caller-owned state mutated through
       * [[RunnerHandle.requestRedraw]], or whatever the host's own `redrawRequested` tracks (a DSL app's signals).

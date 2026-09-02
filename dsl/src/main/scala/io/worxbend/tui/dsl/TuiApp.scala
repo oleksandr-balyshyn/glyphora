@@ -776,6 +776,10 @@ trait TuiApp:
         onTerminalFocus(false)
         run.invalidated
       case Event.Interrupt       => onInterrupt()
+      // Deliberately routed nowhere. The runner is stopping the loop whatever this answers, so handing the end of the
+      // stream to the focused element would only invite a handler to redraw a frame nobody will see; an app that wants
+      // to act on it overrides `handleEvent` itself. `false`: no repaint is owed.
+      case Event.EndOfInput      => false
       case Event.Resize(size)    =>
         // the render pass sets this too, from the frame it is about to draw; doing it here as well means an
         // `onResize` override — and anything it calls — already peeks the new size rather than the previous frame's

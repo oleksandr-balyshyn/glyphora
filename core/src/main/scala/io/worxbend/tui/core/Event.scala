@@ -36,3 +36,18 @@ enum Event:
     * the terminal is restored. An application that does not consume it quits cleanly.
     */
   case Interrupt
+
+  /** The input stream ended and can never deliver another event.
+    *
+    * What causes it: stdin reached end of file. Input piped in from a file or another program ran out (`my-app <
+    * script.txt`), or the terminal on the other end was closed while the process kept running. This is not the same
+    * thing as "no input right now" — a poll that finds nothing simply produces no event at all, and the next one may
+    * well produce a key.
+    *
+    * Unlike [[Interrupt]] this is not a request the application may decline. The handler is offered the event so it can
+    * save its work, and the runner then stops the loop and restores the terminal whatever the handler answered: there
+    * is no input left to wait for, and a loop that kept polling a dead stream would spin at 100% CPU.
+    *
+    * A backend with no real input stream — `HeadlessBackend`, and anything driving a test — never produces it.
+    */
+  case EndOfInput
