@@ -106,7 +106,7 @@ object Color:
       case Rgb(r, g, b)   =>
         val (cr, cg, cb) = approximateRgb(Rgb(r, g, b))
         f"#$cr%02x$cg%02x$cb%02x"
-      case Indexed(index) => math.max(0, math.min(255, index)).toString
+      case Indexed(index) => clampIndex(index).toString
       // every remaining case is a singleton, whose derived `toString` is already its own name — the same
       // derivation `asSource` relies on
       case named          => named.toString
@@ -515,6 +515,15 @@ object Color:
       BrightWhite,
     )
 
+  /** Brings a palette index inside the 256-colour palette, the way [[approximateRgb]] already does for the colour it
+    * returns.
+    *
+    * [[Indexed]] takes its index unchecked, so `Indexed(999)` is a value a caller can build. Anything that writes an
+    * index out — an escape sequence, a rendered colour name — has to clamp first, because a parameter outside `0..255`
+    * is not a valid palette selector and a terminal may abort the sequence and print the rest of it as text.
+    */
+  def clampIndex(index: Int): Int = clampChannel(index)
+
   private def clampChannel(value: Int): Int = math.max(0, math.min(255, value))
 
   /** Clamps an interpolation factor to `0.0..1.0`. `NaN` — a divide-by-zero in an animation clock, say — clamps to
@@ -528,7 +537,10 @@ object Color:
     * wheel. `NaN` becomes `0.0`, for the reason [[clampUnit]] gives.
     */
   private def wrapHue(degrees: Double): Double =
-    if degrees.isNaN then 0.0
+    // `isFinite` rather than `isNaN`: an infinite angle is not caught by the NaN test, but `Infinity % 360.0` *is*
+    // NaN, and that NaN then flowed on into the wheel arithmetic and came back out as a wrong colour rather than an
+    // obviously broken one. Both infinities and NaN answer the same 0.0 the doc promises.
+    if !degrees.isFinite then 0.0
     else
       val remainder = degrees % 360.0
       if remainder < 0.0 then remainder + 360.0 else remainder

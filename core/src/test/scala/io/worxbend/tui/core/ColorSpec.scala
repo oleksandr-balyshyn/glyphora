@@ -237,6 +237,17 @@ final class ColorSpec extends AnyFunSuite:
       assert(Color.hsl(hue, 1.0, 0.0) == Color.Rgb(0, 0, 0))
       assert(Color.hsl(hue, 1.0, 1.0) == Color.Rgb(255, 255, 255))
 
+  test("hsl treats a non-finite hue as zero rather than painting a broken colour"):
+    // `Infinity % 360.0` is NaN, and a NaN hue used to fall through the wheel arithmetic into a channel that was
+    // silently zeroed — the colour came out wrong instead of merely arbitrary. Both infinities and NaN now wrap to 0.
+    for hue <- Seq(Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN) do
+      assert(Color.hsl(hue, 0.5, 0.5) == Color.hsl(0.0, 0.5, 0.5), s"hue $hue")
+    // A rotation by an infinite angle lands on no particular point of the wheel, so what is pinned here is only that
+    // the three non-finite spellings agree and name the hue-zero colour rather than a channel silently zeroed.
+    val (_, saturation, lightness) = Color.toHsl(Color.Rgb(1, 2, 3))
+    for degrees <- Seq(Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN) do
+      assert(Color.Rgb(1, 2, 3).rotateHue(degrees) == Color.hsl(0.0, saturation, lightness), s"rotation $degrees")
+
   test("hsl wraps the hue and clamps saturation and lightness"):
     assert(Color.hsl(-30, 0.5, 0.5) == Color.hsl(330, 0.5, 0.5))
     assert(Color.hsl(720 + 40, 0.5, 0.5) == Color.hsl(40, 0.5, 0.5))
