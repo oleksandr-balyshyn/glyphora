@@ -132,10 +132,13 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     // smaller area where no amount of repainting reaches them — see ScreenReset for why only a shrink pays for this
     val erasing = ScreenReset.clearsOnShrink(baseline.area, buffer.area)
     val result  = attempt {
-      // After an erase, or when a full repaint was asked for, the frame is diffed against blankness rather than
-      // against a picture the terminal no longer shows.
-      val previous = baseline.prepareFor(buffer.area, blank = forced || erasing)
-      val body     = frameEncoder.encode(previous, buffer)
+      // After an erase, when a full repaint was asked for, and after any resize, the baseline no longer describes what
+      // is on screen — so it answers `RepaintAll` and every cell of the frame is written, blanks included. Diffing
+      // against a blanked grid instead would emit only the frame's non-blank cells, leaving whatever the previous
+      // frame had drawn in every column this one leaves empty.
+      val body = baseline.prepareFor(buffer.area, blank = forced || erasing) match
+        case FrameSource.DiffAgainst(previous) => frameEncoder.encode(previous, buffer)
+        case FrameSource.RepaintAll            => frameEncoder.encodeAll(buffer)
       // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent — unless
       // the erase itself has to go out, which is the one case where "nothing changed" still needs a write
       if body.nonEmpty || erasing then

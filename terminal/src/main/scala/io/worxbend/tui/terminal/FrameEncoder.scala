@@ -22,16 +22,31 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     * changes — that suppression is most of the reason a diffed frame is small enough to write in one go. Returns the
     * empty string when the frame is unchanged.
     *
-    * `previous` and `next` covering different rectangles is not a difference that can be encoded — that happens when
-    * the terminal was resized, and the grid the old frame described no longer exists — so every cell of `next` is
-    * written instead. Anything narrower would leave the parts of the new grid the old one never covered unpainted.
+    * `previous` must be what the terminal is actually showing; [[FrameBaseline.prepareFor]] hands one out only while
+    * that holds, and answers [[FrameSource.RepaintAll]] otherwise, which is [[encodeAll]]'s job. `previous` and `next`
+    * covering different rectangles is not a difference that can be encoded — that happens when the terminal was
+    * resized, and the grid the old frame described no longer exists — so every cell of `next` is written instead.
     *
     * Style is written in two forms. The first painted cell of a frame gets the absolute sequence, which begins with a
     * reset, so nothing the terminal was left holding can leak into this frame. Every later style change on the same
     * frame gets only the attributes that moved (see [[Sgr.sgrDelta]]) — a run that differs from its predecessor in the
     * bold flag alone costs a few bytes rather than a restatement of both colours.
     */
-  def encode(previous: Buffer, next: Buffer): String =
+  def encode(previous: Buffer, next: Buffer): String = write(Some(previous), next)
+
+  /** Every cell of `next`, blanks included, as one positioned and styled run per row.
+    *
+    * What a frame drawn against an unknown screen needs — the first frame, the frame after a resize, a frame after
+    * something else owned the terminal. A diff against a blank grid is *not* the same thing and is the bug this exists
+    * to prevent: a cell that is blank in `next` differs from blankness in nothing, so it would never be written, and
+    * whatever the older frame left in that column would stay on screen for the rest of the run.
+    */
+  def encodeAll(next: Buffer): String = write(None, next)
+
+  /** The shared body of [[encode]] and [[encodeAll]]: `previous` is the frame on screen when there is one, and `None`
+    * says nothing is known about the screen, which is what makes every cell of `next` get written.
+    */
+  private def write(previous: Option[Buffer], next: Buffer): String =
     val body                            = StringBuilder()
     var expectedX                       = -1
     var currentY                        = -1
@@ -62,7 +77,9 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
         currentY = y
         expectedX = x + advanceOf(next, x, y, cell)
       }
-    if previous.area == next.area then previous.diff(next, paint) else next.emitAll(paint)
+    previous match
+      case Some(shown) if shown.area == next.area => shown.diff(next, paint)
+      case _                                      => next.emitAll(paint)
     // a link left open would swallow everything drawn after this frame
     carryLink(body, currentLink, None)
     body.result()
