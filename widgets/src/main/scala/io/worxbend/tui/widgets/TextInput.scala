@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Rect, StatefulWidget, Style}
+import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Style}
 
 /** Caller-owned single-line editing state. The text is stored as grapheme clusters, so the cursor can never land inside
   * a combining sequence or split an emoji; the cursor is a cluster index in `[0, length]` (the top value meaning
@@ -82,7 +82,11 @@ final case class TextInput(
 
   private def renderEmpty(area: Rect, buffer: Buffer): Unit =
     buffer.setString(area.x, area.y, CharWidth.substringByWidth(placeholder, area.width), placeholderStyle)
-    if showCursor then buffer.set(area.x, area.y, Cell(ClusterRow.drawnSymbol(placeholderCursorSymbol), cursorStyle))
+    // The cursor goes through the same gate as every other cluster: a two-column glyph in a one-column field is
+    // refused, not clipped. Written straight into the buffer it claimed a continuation cell outside `area` and painted
+    // over whatever the widget next door had put there.
+    if showCursor then
+      val _ = ClusterRow.put(buffer, area.x, area.y, placeholderCursorSymbol, cursorStyle, area.right)
 
   private def placeholderCursorSymbol: String =
     val clusters = CharWidth.graphemeClusters(placeholder)

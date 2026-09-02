@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.Modifiers
+import io.worxbend.tui.core.{Buffer, Modifiers, Rect}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -127,6 +127,14 @@ final class TextInputSpec extends AnyFunSuite:
     val buffer = rendered(input, state, 1, 1)
     assert(state.scrollCluster == 0)
     assert(buffer.get(0, 0).symbol == " ", "nothing fits, so the field is blank rather than hung")
+
+  test("a wide placeholder cursor is refused rather than drawn outside the area"):
+    // The cursor cell used to be written straight into the buffer, bypassing the check that refuses a cluster
+    // straddling the right edge: a two-column glyph in a one-column field painted the neighbouring widget's column.
+    val buffer = new Buffer(Rect(0, 0, 4, 1))
+    TextInput(placeholder = "\u6f22x").render(Rect(0, 0, 1, 1), buffer, TextInputState(""))
+    assert(buffer.get(0, 0).symbol == " ", "the wide cursor does not fit, so the cell stays blank")
+    assert(buffer.get(1, 0).symbol == " ", "and the column outside the area is left alone")
 
   /** Controls and marks spelled by codepoint: a literal one in a source file is invisible. */
   private val Escape: String         = 0x1b.toChar.toString
