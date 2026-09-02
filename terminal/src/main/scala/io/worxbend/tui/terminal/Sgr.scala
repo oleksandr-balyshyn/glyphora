@@ -98,9 +98,9 @@ private[terminal] object Sgr:
     ModifierCodes.foreach((flag, code) => if added.hasAny(flag) then appendParam(codes, code))
     if depth != ColorDepth.NoColor then
       // `Color.Reset` is SGR 39/49, "back to the terminal's own colour", which is exactly what a colour going from
-      // `Some` to `None` means. It is substituted *after* the downsample rather than before it: under
-      // [[ColorDepth.Monochrome]] every colour is pushed onto black or white, and a `Reset` fed through that would come
-      // back out as an explicit white — turning "let the terminal choose" into "paint it white".
+      // `Some` to `None` means. A style that names `Color.Reset` outright means the same thing and reaches the same
+      // code, because [[ColorDepth.downsample]] passes `Reset` through at every rung rather than thresholding it —
+      // otherwise "let the terminal choose" would come back out of [[ColorDepth.Monochrome]] as "paint it white".
       if from.fg != to.fg then
         appendParam(codes, foregroundCode(to.fg.fold(Color.Reset)(ColorDepth.downsample(_, depth))))
       if from.bg != to.bg then

@@ -149,6 +149,18 @@ final class ColorDepthSpec extends AnyFunSuite:
     val darkSelection  = Style.Default.withBg(Color.Black)
     assert(Sgr.sgr(darkSelection, ColorDepth.Monochrome) == "[0;37;40m")
 
+  test("Monochrome leaves Color.Reset alone, because it names no colour to threshold"):
+    // `Color.Reset` is not a colour but an instruction: "use whatever the terminal's own colour is". Thresholding it
+    // by luminance turned that into an explicit white block, under a foreground the application never chose either.
+    assert(ColorDepth.downsample(Color.Reset, ColorDepth.Monochrome) == Color.Reset)
+    val defaultBg = Style.Default.withBg(Color.Reset)
+    assert(Sgr.sgr(defaultBg, ColorDepth.Monochrome) == s"${AnsiSequences.Esc}[0;49m")
+    assert(Sgr.sgr(defaultBg, ColorDepth.Monochrome) == Sgr.sgr(defaultBg, ColorDepth.Ansi16))
+    // 49 is the background going back to the terminal's own; 39 is the foreground doing the same, because the red
+    // background it is leaving had been given an explicit contrasting foreground to stay readable.
+    val fromRed   = Sgr.sgrDelta(Style.Default.withBg(Color.Red), defaultBg, ColorDepth.Monochrome)
+    assert(fromRed == s"${AnsiSequences.Esc}[39;49m")
+
   test("Monochrome lifts an underline color off the background tone"):
     val onDark  = Style.Default.withBg(Color.Black).curlyUnderline.withUnderlineColor(Color.Rgb(10, 10, 10))
     // the underline thresholds dark, exactly like the background, so it is flipped to the contrasting tone

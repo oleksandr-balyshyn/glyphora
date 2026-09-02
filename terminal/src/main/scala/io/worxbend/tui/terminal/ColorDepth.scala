@@ -98,23 +98,30 @@ object ColorDepth:
 
   /** Reduces `color` to something `depth` can represent (identity for capable terminals). [[NoColor]] is handled by the
     * SGR encoder dropping color codes, so this returns the color unchanged for it.
+    *
+    * [[Color.Reset]] survives every rung untouched, because it is not a colour at all: it is the instruction "use the
+    * terminal's own foreground/background", SGR 39/49. Under [[Monochrome]] it used to go through the luminance
+    * threshold like any other value — `Color.approximateRgb(Reset)` is a light grey — and an application that asked for
+    * the terminal's default background got an explicit white block painted instead.
     */
   def downsample(color: Color, depth: ColorDepth): Color =
-    depth match
-      case TrueColor  => color
-      case NoColor    => color
-      case Monochrome => if isLight(color) then Color.White else Color.Black
-      case Ansi256    =>
-        color match
-          case rgb: Color.Rgb => Color.Indexed(nearestIndexed(rgb))
-          case other          => other
-      case Ansi16     =>
-        color match
-          case Color.Rgb(r, g, b)                  => nearestNamed(r, g, b)
-          case Color.Indexed(index) if index >= 16 =>
-            val (r, g, b) = Color.approximateRgb(Color.Indexed(index))
-            nearestNamed(r, g, b)
-          case other                               => other
+    if color == Color.Reset then color
+    else
+      depth match
+        case TrueColor  => color
+        case NoColor    => color
+        case Monochrome => if isLight(color) then Color.White else Color.Black
+        case Ansi256    =>
+          color match
+            case rgb: Color.Rgb => Color.Indexed(nearestIndexed(rgb))
+            case other          => other
+        case Ansi16     =>
+          color match
+            case Color.Rgb(r, g, b)                  => nearestNamed(r, g, b)
+            case Color.Indexed(index) if index >= 16 =>
+              val (r, g, b) = Color.approximateRgb(Color.Indexed(index))
+              nearestNamed(r, g, b)
+            case other                               => other
 
   /** Rec.709 relative luminance of `color`, on the same 0-255 scale as its channels.
     *
@@ -155,17 +162,19 @@ object ColorDepth:
     if depth != Monochrome then style
     else
       style.bg match
-        // No background means the cell draws on whatever the terminal's own background is, which this code cannot
-        // know, so there is no collision to detect and nothing to correct.
-        case None     => style
-        case Some(bg) =>
+        // No background — and `Color.Reset`, which asks for the terminal's own background by name — means the cell
+        // draws on a colour this code cannot know, so there is no collision to detect and nothing to correct.
+        case None              => style
+        case Some(Color.Reset) => style
+        case Some(bg)          =>
           val contrast  = if isLight(bg) then Color.Black else Color.White
           // A style that sets *only* a background is the common selection highlight. Its text is drawn in the
           // terminal's default foreground, which may well threshold to the same tone as the background and vanish —
-          // so name a foreground that contrasts rather than leaving the row unreadable.
+          // so name a foreground that contrasts rather than leaving the row unreadable. A foreground of `Color.Reset`
+          // is that same unknowable default under another name, so it is corrected the same way.
           val fixedFg   = style.fg match
-            case Some(fg) if isLight(fg) != isLight(bg) => fg
-            case _                                      => contrast
+            case Some(fg) if fg != Color.Reset && isLight(fg) != isLight(bg) => fg
+            case _                                                           => contrast
           // The underline color thresholds independently of the two above, so a curly underline can land on the
           // background tone and disappear even once the text is legible.
           val recolored = style.withFg(fixedFg)
