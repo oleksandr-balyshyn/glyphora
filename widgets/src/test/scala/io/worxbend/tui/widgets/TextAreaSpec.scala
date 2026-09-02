@@ -147,7 +147,7 @@ final class TextAreaSpec extends AnyFunSuite:
     val state = TextAreaState("你好")
     state.moveLeft() // cursor at (0, 1), on the second cluster
     val buffer = rendered(area, state, 3, 1)
-    assert(state.scrollColumn == 1)
+    assert(state.scrollColumn == 2, "the offset counts columns, and the cluster scrolled past is two columns wide")
     assert(buffer.get(0, 0).symbol == "好")
     assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Reverse))
 
@@ -165,6 +165,17 @@ final class TextAreaSpec extends AnyFunSuite:
     val buffer = rendered(area, state, 1, 1)
     assert(state.scrollColumn == 0)
     assert(buffer.get(0, 0).symbol == " ")
+
+  test("lines of differing cluster widths scroll by the same number of columns"):
+    // The horizontal offset is shared by every line, so it has to be counted in columns. Counted in clusters, the
+    // seven-cluster offset the ASCII line needs scrolled the six-cluster wide line clean off the screen.
+    val state = TextAreaState("\u6f22\u5b57\u6f22\u5b57\u6f22\u5b57\nabcdefghijkl")
+    state.moveDown()
+    state.moveEnd()
+    val lines = trimmedLines(rendered(area, state, 6, 2))
+    assert(lines(1) == "hijkl")
+    assert(lines.head.nonEmpty, "the wide line still shows the part of itself in the visible columns")
+    assert("\u6f22\u5b57\u6f22\u5b57\u6f22\u5b57".contains(lines.head.trim))
 
   /** Controls and marks spelled by codepoint: a literal one in a source file is invisible. */
   private val Escape: String         = 0x1b.toChar.toString

@@ -83,6 +83,28 @@ private[widgets] object ClusterRow:
     while visibleWidth(clusters, scroll, cursor) + cursorWidth > width && scroll < cursor do scroll += 1
     scroll
 
+  /** Where a column offset falls in a row: the first cluster that starts at or after `column`, and the column it
+    * actually starts at.
+    *
+    * A row is a sequence of clusters of differing widths, so a column offset shared between rows — [[TextArea]] scrolls
+    * every line by one — does not land on a cluster boundary in all of them. A cluster straddling the offset is left
+    * whole and skipped: the returned column is then one past the requested one, and the caller starts drawing that far
+    * to the right so the columns of every row still line up.
+    *
+    * The returned column is never less than `column`, and the returned index is `clusters.size` when the row ends
+    * before the offset (that row is scrolled entirely off the left edge).
+    */
+  def clusterAtColumn(clusters: Vector[String], column: Int): (Int, Int) =
+    var index = 0
+    var used  = 0
+    while index < clusters.size && used < column do
+      used += renderedWidth(clusters(index))
+      index += 1
+    (index, used)
+
+  /** The column cluster `index` starts at — the inverse of [[clusterAtColumn]] on a cluster boundary. */
+  def columnOfCluster(clusters: Vector[String], index: Int): Int = visibleWidth(clusters, 0, index)
+
   /** Paints one row of clusters starting at `scroll`, left to right from `x` up to (but not including) `right`.
     *
     * A cluster that would straddle `right` is skipped rather than clipped, because half of a wide glyph is not a

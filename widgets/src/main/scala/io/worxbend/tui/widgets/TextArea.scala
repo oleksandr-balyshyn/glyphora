@@ -25,9 +25,11 @@ final class TextAreaState(initial: String = ""):
   private var line                          = lines.size - 1
   private var column                        = lines.last.size
   private[widgets] var scrollRow: Int       = 0
-  private[widgets] var scrollColumn: Int    = 0
-  private val undoStack                     = mutable.Stack[(Vector[Vector[String]], Int, Int)]()
-  private val redoStack                     = mutable.Stack[(Vector[Vector[String]], Int, Int)]()
+
+  /** Horizontal scroll offset in *columns*, shared by every line — see [[TextArea.scrolledHorizontally]]. */
+  private[widgets] var scrollColumn: Int = 0
+  private val undoStack                  = mutable.Stack[(Vector[Vector[String]], Int, Int)]()
+  private val redoStack                  = mutable.Stack[(Vector[Vector[String]], Int, Int)]()
 
   def value: String = lines.map(_.mkString).mkString("\n")
 
@@ -167,14 +169,19 @@ final case class TextArea(
       state: TextAreaState,
       isCursorLine: Boolean,
   ): Unit =
-    val (_, cursorColumn) = state.cursor
+    val (_, cursorColumn)    = state.cursor
+    // The offset is a column count shared by every line, and this line's clusters may not have a boundary there: a
+    // cluster straddling the offset is skipped and the row starts that much further right, so the columns of all the
+    // lines still line up. Counting the offset in clusters instead — which is what this used to pass — scrolled a line
+    // of wide characters roughly twice as far as the ASCII lines around it, and often clean off the screen.
+    val (firstCluster, from) = ClusterRow.clusterAtColumn(clusters, state.scrollColumn)
     ClusterRow.draw(
       buffer,
-      x0 = area.x,
+      x0 = area.x + (from - state.scrollColumn),
       y = y,
       right = area.right,
       clusters = clusters,
-      scroll = state.scrollColumn,
+      scroll = firstCluster,
       cursorAt = cursorColumn,
       showCursor = showCursor && isCursorLine,
       style = style,
@@ -186,7 +193,15 @@ final case class TextArea(
     * rule and the reason it reserves the cursor cluster's display width rather than a flat column both live in
     * [[ClusterRow.scrolledTo]]; every line is drawn at this one offset, so the cursor's line is the one that decides
     * it.
+    *
+    * The offset is carried between frames as a number of *columns*, because that is the only unit the lines have in
+    * common: a cluster index means a different distance on a line of wide characters than on a line of ASCII. The
+    * solver works in cluster indices on the cursor's own line, so the offset is converted into that line's clusters on
+    * the way in and back into columns on the way out.
     */
   private def scrolledHorizontally(state: TextAreaState, cursorColumn: Int, width: Int): Int =
     val (cursorLine, _) = state.cursor
-    ClusterRow.scrolledTo(state.clusterLines(cursorLine), state.scrollColumn, cursorColumn, width)
+    val clusters        = state.clusterLines(cursorLine)
+    val (scrollFrom, _) = ClusterRow.clusterAtColumn(clusters, state.scrollColumn)
+    val scrolledTo      = ClusterRow.scrolledTo(clusters, scrollFrom, cursorColumn, width)
+    ClusterRow.columnOfCluster(clusters, scrolledTo)
