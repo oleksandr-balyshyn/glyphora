@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Color, Line, Style, Text}
+import io.worxbend.tui.core.{Color, Line, Modifiers, Style, Text}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -71,6 +71,23 @@ final class ListViewMultiRowSpec extends AnyFunSuite:
 
   test("heightAt reports the summed item heights"):
     assert(mixed.heightAt(20).contains(4))
+
+  test("a Text item's own base style reaches its cells, exactly as a Line item's does"):
+    // Text.style is the outermost of the three text layers. `linesOf` used to hand the Text's lines back untouched, so
+    // that layer never reached a cell and a styled multi-line item drew plain — while the same base style on a Line
+    // item drew bold. The two spellings of "this item is bold" now agree.
+    val bold     = Style.Default.bold
+    val fromText = rendered(ListView(Seq(Text.raw("hi").withStyle(bold))), ListState(), 10, 3)
+    val fromLine = rendered(ListView(Seq(Line.raw("hi").withStyle(bold))), ListState(), 10, 3)
+    assert(fromText.get(2, 0).style == fromLine.get(2, 0).style)
+    assert(fromText.get(2, 0).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("a line inside a Text item overrules the Text's base style"):
+    val item   = Text(Seq(Line.raw("a").withStyle(Style.Default.withFg(Color.Blue)))).withStyle(
+      Style.Default.withFg(Color.Red)
+    )
+    val buffer = rendered(ListView(Seq(item)), ListState(), 10, 3)
+    assert(buffer.get(2, 0).style.fg.contains(Color.Blue))
 
 /** The row-counting scroll rule on its own. */
 final class ScrollWindowItemsSpec extends AnyFunSuite:

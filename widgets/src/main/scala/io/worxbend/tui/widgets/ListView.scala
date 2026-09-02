@@ -105,7 +105,12 @@ final case class ListView(
     item match
       case content: String => Seq(Line.raw(content))
       case line: Line      => Seq(line)
-      case text: Text      => if text.lines.isEmpty then Seq(Line.raw("")) else text.lines
+      // A `Text` carries a base style of its own, the outermost of the three text layers, and the renderer below only
+      // ever sees the lines. Folding that base under each line's own style here is what keeps a styled `Text` item
+      // drawing the same as a `Line` item with the same base style, the way `Paragraph` and `Buffer.withText` do.
+      case text: Text      =>
+        if text.lines.isEmpty then Seq(Line.raw("").withStyle(text.style))
+        else text.lines.map(line => line.withStyle(text.style.patch(line.style)))
 
   /** How many rows `item` occupies, without building any of them — the counterpart of [[linesOf]] used by the scroll
     * arithmetic, which needs every item's height and draws none of them.
