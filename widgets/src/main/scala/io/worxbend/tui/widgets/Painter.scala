@@ -147,44 +147,63 @@ final class Painter private[widgets] (
     *
     * The baseline is a world y like any other, and it does not have to be inside the bounds: it is pulled onto the
     * nearest edge, so a baseline below the visible range fills all the way to the bottom of the canvas rather than
-    * drawing nothing. The segment itself is clipped, exactly as [[paintSegment]] clips it.
+    * drawing nothing.
+    *
+    * The *segment* is clipped only sideways, and this is the difference from [[paintSegment]]. What is drawn here is
+    * the region between the segment and the baseline, and a region can be visible when the segment bounding it is not:
+    * an area plot whose values run off the top of the y range still covers the whole canvas underneath them. Clipping
+    * the segment against the top and bottom edges first threw the entire fill away in that case — a chart scaled to
+    * `0..10` with a value of `100` drew a blank plot instead of a full one. So each dot column takes the segment's own
+    * y where it crosses that column and pulls it onto the nearest bound, exactly as the baseline is pulled: a value
+    * above the range fills to the top of the canvas, one below it fills nothing above the baseline, and the part of the
+    * segment that *is* in range keeps its true slope.
     *
     * Nothing is drawn if any coordinate, the baseline included, is not a finite number.
     */
   def paintFilledSegment(x1: Double, y1: Double, x2: Double, y2: Double, baselineY: Double, style: Style): Unit =
     if x1.isFinite && y1.isFinite && x2.isFinite && y2.isFinite && baselineY.isFinite then
-      clipToBounds(x1, y1, x2, y2).foreach { (fromX, fromY, toX, toY) =>
-        val ends     = getPoint(fromX, fromY).zip(getPoint(toX, toY))
-        val baseline = nearestRow(baselineY)
-        ends.zip(baseline).foreach { case (((c0, r0), (c1, r1)), baselineRow) =>
+      clipToXBounds(x1, y1, x2, y2).foreach { (fromX, fromY, toX, toY) =>
+        val ends = dotColumn(fromX).zip(dotColumn(toX))
+        ends.zip(nearestRow(baselineY)).foreach { case ((c0, c1), baselineRow) =>
           val firstColumn = math.min(c0, c1)
           val lastColumn  = math.max(c0, c1)
           (firstColumn to lastColumn).foreach { column =>
-            val (segmentTop, segmentBottom) = rowsAtColumn(c0, r0, c1, r1, column)
-            val top                         = math.min(segmentTop, baselineRow)
-            val bottom                      = math.max(segmentBottom, baselineRow)
-            (top to bottom).foreach(row => paintDot(column, row, style))
+            val (leftY, rightY) = worldYsInColumn(fromX, fromY, toX, toY, column)
+            nearestRow(leftY).zip(nearestRow(rightY)).foreach { (leftRow, rightRow) =>
+              val top    = math.min(math.min(leftRow, rightRow), baselineRow)
+              val bottom = math.max(math.max(leftRow, rightRow), baselineRow)
+              (top to bottom).foreach(row => paintDot(column, row, style))
+            }
           }
         }
       }
 
-  /** The span of dot rows the segment occupies within one dot column, as `(top, bottom)` inclusive.
+  /** The world y the segment has at each edge of one dot column, as `(at the left edge, at the right edge)`.
     *
-    * A steep line covers several rows inside a single column. Taking only the row at the column's centre would leave
-    * the fill's upper edge as a dotted staircase with holes in it, so the span is measured from one edge of the column
-    * to the other — the same reason [[traceDots]] steps along the longer axis.
+    * A steep line covers several rows inside a single column. Taking only the y at the column's centre would leave the
+    * fill's upper edge as a dotted staircase with holes in it, so the span is measured from one edge of the column to
+    * the other — the same reason [[traceDots]] steps along the longer axis. Both edges are held inside the segment's
+    * own x range, so the column at either end of the segment does not extend it past its endpoint.
+    *
+    * A vertical segment, and a grid only one dot wide, have no slope to evaluate: both endpoints share the one column,
+    * so the answer is simply the segment's two ends.
     */
-  private def rowsAtColumn(c0: Int, r0: Int, c1: Int, r1: Int, column: Int): (Int, Int) =
-    if c0 == c1 then (math.min(r0, r1), math.max(r0, r1))
+  private def worldYsInColumn(ax: Double, ay: Double, bx: Double, by: Double, column: Int): (Double, Double) =
+    val columns = surface.dotWidth
+    if columns <= 1 || ax == bx then (ay, by)
     else
-      val slope   = (r1 - r0).toDouble / (c1 - c0).toDouble
-      val atLeft  = r0 + slope * (column - 0.5 - c0)
-      val atRight = r0 + slope * (column + 0.5 - c0)
-      val lowest  = math.min(r0, r1)
-      val highest = math.max(r0, r1)
-      val top     = math.max(lowest, math.min(atLeft, atRight).round.toInt)
-      val bottom  = math.min(highest, math.max(atLeft, atRight).round.toInt)
-      (top, math.max(top, bottom))
+      val worldPerColumn = (xMax - xMin) / (columns - 1)
+      val lowX           = math.min(ax, bx)
+      val highX          = math.max(ax, bx)
+      val leftX          = clampInto(xMin + (column - 0.5) * worldPerColumn, lowX, highX)
+      val rightX         = clampInto(xMin + (column + 0.5) * worldPerColumn, lowX, highX)
+      val slope          = (by - ay) / (bx - ax)
+      (ay + slope * (leftX - ax), ay + slope * (rightX - ax))
+
+  /** The dot column a world x falls in, ignoring y entirely. `None` when the canvas has no dots or the x is outside the
+    * horizontal bounds — the same rejection [[getPoint]] makes, which is why it is asked rather than repeated.
+    */
+  private def dotColumn(x: Double): Option[Int] = getPoint(x, yMin).map((column, _) => column)
 
   /** The dot row for a world y, with the y pulled onto the nearest bound rather than rejected for being outside.
     *
@@ -211,17 +230,7 @@ final class Painter private[widgets] (
       val dx    = x2 - x1
       val dy    = y2 - y1
       val edges = Seq((-dx, x1 - xMin), (dx, xMax - x1), (-dy, y1 - yMin), (dy, yMax - y1))
-      val span  = edges.foldLeft(Option((0.0, 1.0))) { (surviving, edge) =>
-        surviving.flatMap { (t0, t1) =>
-          val (p, q) = edge
-          if p == 0.0 then Option.when(q >= 0.0)((t0, t1))
-          else
-            val crossing = q / p
-            if p < 0.0 then Option.when(crossing <= t1)((math.max(t0, crossing), t1))
-            else Option.when(crossing >= t0)((t0, math.min(t1, crossing)))
-        }
-      }
-      span.map { (t0, t1) =>
+      visibleSpan(edges).map { (t0, t1) =>
         (
           clampInto(x1 + dx * t0, xMin, xMax),
           clampInto(y1 + dy * t0, yMin, yMax),
@@ -229,6 +238,38 @@ final class Painter private[widgets] (
           clampInto(y1 + dy * t1, yMin, yMax),
         )
       }
+
+  /** The part of the segment inside the *horizontal* bounds only, as `(x1, y1, x2, y2)`, or `None` when none of it is.
+    *
+    * The same Liang-Barsky narrowing as [[clipToBounds]] with the top and bottom edges left out, so the surviving `y`s
+    * are the segment's real values and may sit outside the world's y range. That is what [[paintFilledSegment]] needs:
+    * it clamps those `y`s per column rather than dropping the segment, because a fill under an off-the-top value is
+    * still visible.
+    */
+  private def clipToXBounds(x1: Double, y1: Double, x2: Double, y2: Double): Option[(Double, Double, Double, Double)] =
+    if !hasExtent then None
+    else
+      val dx = x2 - x1
+      val dy = y2 - y1
+      visibleSpan(Seq((-dx, x1 - xMin), (dx, xMax - x1))).map { (t0, t1) =>
+        (clampInto(x1 + dx * t0, xMin, xMax), y1 + dy * t0, clampInto(x1 + dx * t1, xMin, xMax), y1 + dy * t1)
+      }
+
+  /** Narrows `0..1` — the whole segment — against each `(p, q)` edge in turn, or `None` if nothing survives. See
+    * [[clipToBounds]] for what `p` and `q` mean; this is the fold itself, shared so that clipping against two edges and
+    * against four cannot drift apart.
+    */
+  private def visibleSpan(edges: Seq[(Double, Double)]): Option[(Double, Double)] =
+    edges.foldLeft(Option((0.0, 1.0))) { (surviving, edge) =>
+      surviving.flatMap { (t0, t1) =>
+        val (p, q) = edge
+        if p == 0.0 then Option.when(q >= 0.0)((t0, t1))
+        else
+          val crossing = q / p
+          if p < 0.0 then Option.when(crossing <= t1)((math.max(t0, crossing), t1))
+          else Option.when(crossing >= t0)((t0, math.min(t1, crossing)))
+      }
+    }
 
   private def clampInto(value: Double, low: Double, high: Double): Double = math.min(high, math.max(low, value))
 

@@ -103,3 +103,25 @@ final class CanvasFillSpec extends AnyFunSuite:
     val flat  = Canvas((1.0, 1.0), unit, Seq(shape), marker = "#")
     assert(trimmedLines(rendered(flat, 5, 5)).forall(_.isEmpty))
     assert(trimmedLines(rendered(Canvas(unit, unit, Seq(shape), marker = "#"), 1, 1)).count(_.nonEmpty) == 1)
+
+  test("a filled rectangle taller than the world still fills the visible part"):
+    val world    = Canvas((0.0, 5.0), (0.0, 3.0), Seq(Shape.FilledRectangle(1.0, 0.0, 3.0, 20.0)), marker = "#")
+    val inBounds = Canvas((0.0, 5.0), (0.0, 3.0), Seq(Shape.FilledRectangle(1.0, 0.0, 3.0, 3.0)), marker = "#")
+    assert(trimmedLines(rendered(world, 6, 4)) == trimmedLines(rendered(inBounds, 6, 4)))
+
+  test("a filled line entirely above the world still fills the whole canvas down to the baseline"):
+    val canvas = Canvas(unit, unit, Seq(Shape.FilledLine(0.0, 5.0, 1.0, 5.0, 0.0)), marker = "#")
+    assert(trimmedLines(rendered(canvas, 6, 3)) == Seq("######", "######", "######"))
+
+  test("a filled line entirely below the world fills nothing above its baseline"):
+    val canvas = Canvas(unit, unit, Seq(Shape.FilledLine(0.0, -5.0, 1.0, -5.0, 0.0)), marker = "#")
+    assert(trimmedLines(rendered(canvas, 6, 3)) == Seq("", "", "######"))
+
+  test("a filled line that leaves the top of the world keeps its sloped part sloped"):
+    val canvas      = Canvas(unit, unit, Seq(Shape.FilledLine(0.0, 0.0, 1.0, 2.0, 0.0)), marker = "#")
+    val lines       = trimmedLines(rendered(canvas, 10, 10))
+    // the right half of the line is above the world, so those columns are full height; the left half still climbs
+    val blankPrefix = lines(0).takeWhile(_ == ' ').length
+    assert(blankPrefix > 2, s"the top row is filled too far left: '${lines(0)}'")
+    assert(lines(0).drop(blankPrefix).forall(_ == '#'), s"the top row has a hole in it: '${lines(0)}'")
+    (0 until 10).foreach(column => assert(lines(9).lift(column).contains('#'), s"column $column misses the baseline"))
