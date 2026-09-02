@@ -101,3 +101,28 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
     assert(pilot.screenText.contains("solid content here"))
     pilot.pressKey(KeyCode.Char('q'))
     assert(pilot.awaitTermination())
+
+  /** A splash needs a clock, and an app that declared no `tickRate` gets one lent to it for the intro. The loan has to
+    * end with the intro: `onTick` is documented as requiring a `config.tickRate`, so an app that never asked for ticks
+    * must not keep receiving them for the rest of the process.
+    */
+  test("an app that configured no tickRate stops receiving ticks once the splash is over"):
+    val backend  = HeadlessBackend(Size(30, 5))
+    val ticks    = new java.util.concurrent.atomic.AtomicInteger(0)
+    val app      = new TuiApp:
+      override def splash: Option[SplashScreen]     = Some(
+        SplashScreen(text("INTRO"), Effect.fadeIn(20.millis), minimumDuration = 20.millis)
+      )
+      override def onTick(): Unit                   = { val _ = ticks.incrementAndGet() }
+      override def bindings: KeyBindings            = KeyBindings(binding("q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = text("main view")
+    val pilot    = Pilot.start(backend) { app.runWith(backend) }
+    pilot.waitForIdle()
+    val deadline = System.nanoTime() + 3.seconds.toNanos
+    while !pilot.screenText.contains("main view") && System.nanoTime() < deadline do Thread.sleep(20)
+    assert(pilot.screenText.contains("main view"))
+    val before   = ticks.get()
+    Thread.sleep(500)
+    assert(ticks.get() == before, s"ticks kept firing after the splash: $before -> ${ticks.get()}")
+    pilot.pressKey(KeyCode.Char('q'))
+    assert(pilot.awaitTermination())

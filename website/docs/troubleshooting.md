@@ -107,8 +107,8 @@ import scala.concurrent.duration.*
 override def config = RunnerConfig(tickRate = Some(100.millis))
 ```
 
-A splash supplies ticks automatically when the app has none; normal toasts and
-`runEffect` calls do not.
+A splash supplies ticks automatically to an app that configured none, but only for as
+long as the intro is on screen; normal toasts and `runEffect` calls do not.
 
 ## Text alignment breaks with emoji or CJK
 

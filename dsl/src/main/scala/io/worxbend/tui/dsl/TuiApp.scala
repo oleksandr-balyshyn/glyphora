@@ -552,15 +552,15 @@ trait TuiApp:
     * the loop, then [[onStop]] — in a `finally`, so a backend failure or a handler that threw does not skip it.
     */
   final def runWith(backend: Backend): Either[RunnerError, Unit] =
-    val intro           = splash
-    val run             = RunState(SplashPlayer(intro, () => System.nanoTime()))
-    val scope           = ReactiveScope.generational(() => run.invalidated = true)
-    val effectiveConfig =
-      if intro.nonEmpty && config.tickRate.isEmpty then config.copy(tickRate = Some(SplashPlayer.TickRate))
-      else config
-    run.runnerTicks = effectiveConfig.tickRate.isDefined
+    val intro     = splash
+    val run       = RunState(SplashPlayer(intro, () => System.nanoTime()))
+    val scope     = ReactiveScope.generational(() => run.invalidated = true)
+    // read once: `config` is an overridable def, and the runner, the tick decision and the resize path must all agree
+    // on one value for the whole run
+    val runConfig = config
+    run.runnerTicks = runConfig.tickRate.isDefined
     try
-      TerminalRunner(backend, effectiveConfig, redrawRequested = () => run.invalidated).run(
+      TerminalRunner(backend, runConfig, redrawRequested = () => run.invalidated).run(
         handle =>
           activeHandle.set(Some(handle))
           // published for the same reason and with the same lifetime as the handle: `focusTo`/`clearFocus` are called
@@ -635,7 +635,10 @@ trait TuiApp:
         drainPortals(frame)
       finally PortalQueue.end()
       effects.applyTo(frame)
-      retargetAmbientTicker(run)
+    // asked after either branch: an intro is an animation like any other, and it is what a run with no configured
+    // `tickRate` borrows ticks for. Borrowing through this negotiation rather than through the runner's tick rate is
+    // what lets the loan end when the intro does.
+    retargetAmbientTicker(run)
 
   /** Draws the portals the tree queued, then the portals *those* queued, and so on until nothing new arrives.
     *
@@ -695,11 +698,14 @@ trait TuiApp:
       // the toasts and the post-render effects age in wall-clock time and are not part of the tree, so they ask for
       // ticks separately; the ticker runs at whichever of the two demands is the shorter
       val ageing = if !effects.isEmpty || toasts.isLive then Some(AnimationClock.DefaultInterval) else None
-      val wanted = (AnimationClock.frameDemand.toList ++ ageing.toList).minOption
+      // the intro is not in the tree either, and it is the one thing here that an app with no `tickRate` of its own
+      // cannot animate without ticks; the demand goes away with the frame that ends it
+      val intro  = Option.when(run.splash.isActive)(SplashPlayer.TickRate)
+      val wanted = (AnimationClock.frameDemand.toList ++ ageing.toList ++ intro.toList).minOption
       if wanted != run.ambientInterval then
         run.ambientTicker.foreach(_.cancel())
         run.ambientInterval = wanted
-        run.ambientTicker = wanted.map(interval => Async.every(interval)(ambientTick()))
+        run.ambientTicker = wanted.map(interval => Async.every(interval)(ambientTick(run)))
 
   /** One ambient tick: advance the clock, age the toasts and the post-render effects, and ask for the frame that shows
     * the result.
@@ -709,10 +715,13 @@ trait TuiApp:
     * alone — and a `Signal` set to an equal value notifies nobody, so an "only if something changed" test would leave
     * that animation frozen between the two frames where its glyph happens to repeat.
     */
-  private def ambientTick(): Unit =
+  private def ambientTick(run: RunState): Unit =
     AnimationClock.advanceUnlessPinned()
     toasts.age()
     val _ = effects.prune()
+    // the intro is driven from here for a run that configured no `tickRate`; `advance` is what ends it, and the redraw
+    // below is the frame that shows the real view
+    val _ = run.splash.advance()
     requestRedraw()
 
   /** Moves focus into a layer that has just appeared, or back out of one that has gone, before the frame is reconciled.

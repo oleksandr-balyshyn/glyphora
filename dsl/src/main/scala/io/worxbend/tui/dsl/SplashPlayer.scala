@@ -55,7 +55,8 @@ private[dsl] final class SplashPlayer(intro: Option[SplashScreen], now: () => Lo
 
 private[dsl] object SplashPlayer:
 
-  /** The tick rate a splash screen forces on an app that declared none: the intro is animated frame by frame, so it
-    * needs a clock even when the app itself does not.
+  /** How often an intro asks to be advanced. The intro is animated frame by frame, so it needs a clock even when the
+    * app configured no `tickRate` of its own — `TuiApp` asks its ambient ticker for this interval while the intro is
+    * active, and the demand goes away with the frame that ends it.
     */
   val TickRate: FiniteDuration = 50.millis

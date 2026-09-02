@@ -811,8 +811,8 @@ runEffect(Effect.parallel(
 ))
 ```
 
-Both need ticks to animate; a splash supplies a 50 ms tick automatically when the
-app has none. See [Motion](./motion).
+Both need ticks to animate; while a splash is on screen it supplies a 50 ms tick
+automatically to an app that configured none, and the loan ends with the intro. See [Motion](./motion).
 
 ## Use terminal services safely
 
