@@ -142,3 +142,31 @@ final class ElementHostSpec extends AnyFunSuite:
     host.render(Rect(0, 0, 20, 3), buffer(20, 3), Theme.Dark, view)
     assert(!press(host, KeyCode.Enter), "a key was consumed with nothing focused")
     assert(pressed == 0)
+
+  /** "Nothing is focused" and "nothing is focusable" are two different states.
+    *
+    * The second one is why [[ElementHost.dispatchKey]] has a depth-first fallback at all: a tree of plain text has no
+    * focused element to start the bubble from, so the key is offered to every node instead. After `clearFocus` the tree
+    * still has focusables — the user simply took focus off them — and offering the key to every element's own
+    * `onKeyEvent` would fire handlers the person at the terminal is not pointing at.
+    */
+  test("clearFocus stops keys reaching element handlers, even ones on unfocused elements"):
+    var seen       = 0
+    val view: View = column(button("a")(()), text("plain").onKeyEvent(_ => { seen += 1; true }))
+    val host       = ElementHost()
+    host.render(Rect(0, 0, 20, 4), buffer(20, 4), Theme.Dark, view)
+
+    host.clearFocus()
+    host.render(Rect(0, 0, 20, 4), buffer(20, 4), Theme.Dark, view)
+    assert(!press(host, KeyCode.Char('x')), "a key was consumed with nothing focused")
+    assert(seen == 0, "an element handler ran with nothing focused")
+
+  /** The fallback itself still has to work: a view with nothing focusable in it is the case it exists for. */
+  test("a tree with no focusable at all still offers keys to every element handler"):
+    var seen       = 0
+    val view: View = column(text("plain").onKeyEvent(_ => { seen += 1; true }))
+    val host       = ElementHost()
+    host.render(Rect(0, 0, 20, 4), buffer(20, 4), Theme.Dark, view)
+
+    assert(press(host, KeyCode.Char('x')))
+    assert(seen == 1)

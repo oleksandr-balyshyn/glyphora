@@ -28,10 +28,28 @@ import io.worxbend.tui.core.{KeyEvent, MouseEvent, MouseEventKind, Rect}
   */
 private[dsl] object EventRouter:
 
+  /** Routes a key press.
+    *
+    * With a focused element the event starts there and bubbles to its ancestors. Without one there are two different
+    * states, and they are told apart deliberately:
+    *   - the tree contains no focusable at all — a dashboard of plain text, say. There is no chain to bubble along, so
+    *     the event is offered to every element depth-first; that is the only way a handler on a non-focusable element
+    *     can ever see a key.
+    *   - the tree *has* focusables and the app took focus off them (`clearFocus`). Then nothing is meant to receive the
+    *     key: the documented contract is that it comes straight back out unconsumed, on its way to the app's bindings.
+    *     Walking the tree here would fire the `onKeyEvent` of elements the person at the terminal is not pointing at.
+    */
   def dispatchKey(root: Element, event: KeyEvent): Boolean =
     pathToFocused(root) match
-      case Some(leafToRoot) => leafToRoot.exists(handlesKey(_, event))
-      case None             => dispatchKeyDepthFirst(root, event)
+      case Some(leafToRoot)           => leafToRoot.exists(handlesKey(_, event))
+      case None if hasFocusable(root) => false
+      case None                       => dispatchKeyDepthFirst(root, event)
+
+  /** Whether this tree offers anything to focus, ignoring subtrees a layer above has made inert — those are exactly the
+    * elements that are out of the tab order, so a modal's focusables are what counts while it is open.
+    */
+  private def hasFocusable(element: Element): Boolean =
+    !element.props.inert && (element.props.focusable || element.children.exists(hasFocusable))
 
   /** Routes a mouse event to the elements that rendered under the pointer, innermost first.
     *
