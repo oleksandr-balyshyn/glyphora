@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Color, Line, Modifiers, Span, Style, Text}
+import io.worxbend.tui.core.{CharWidth, Color, Line, Modifiers, Span, Style, Text}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -89,6 +89,38 @@ final class ParagraphSpec extends AnyFunSuite:
         Paragraph.wrappedRowCount(line, width) == Paragraph.wrapLine(line, width).size,
         s"'${line.spans.map(_.content).mkString}' at width $width",
       )
+
+  test("an indented line wraps within the width instead of overflowing its first row"):
+    // The indent is part of the first row, so it has to be counted against the width like any other column: with the
+    // indent ignored the row came out one column too wide and the renderer clipped the last cluster away entirely.
+    assert(Paragraph.wrapLine(Line.raw(" abcde"), 5).map(_.width) == Seq(5, 1))
+    assert(Paragraph(Text.raw(" abcde"), overflow = Overflow.Wrap).heightAt(5).contains(2))
+    val buffer = rendered(Paragraph(Text.raw(" abcde"), overflow = Overflow.Wrap), 5, 2)
+    assert(trimmedLines(buffer) == Seq(" abcd", "e"))
+
+  test("no wrapped row is ever wider than the width it was wrapped to"):
+    // Losing text is invisible at the call site: the renderer clips an over-wide row, so an off-by-one here reads as a
+    // missing character rather than as a broken wrap. This is the invariant that makes that impossible.
+    val zwsp  = "\u200b"
+    val lines = Seq(
+      Line.raw(" abcde"),
+      Line.raw("    deeply indented"),
+      Line.raw("  你好 mixed 宽度 text"),
+      Line.raw("        supercalifragilistic"),
+      Line.raw(s"  aaa${zwsp}bbbbbbbb"),
+    )
+    val modes = Seq(WrapBlanks.KeepIndent, WrapBlanks.DropAll, WrapBlanks.KeepAll)
+    for line <- lines; mode <- modes; width <- 1 to 12 do
+      Paragraph.wrapLine(line, width, mode).foreach { row =>
+        // The one documented exception: a single cluster wider than the whole width gets a row of its own and is
+        // clipped by the renderer, because dropping it would shift every following row up by one.
+        val clusters = CharWidth.graphemeClusters(row.spans.map(_.content).mkString).toVector
+        val clipped  = clusters.sizeIs == 1 && CharWidth.of(clusters.head) > width
+        assert(
+          row.width <= width || clipped,
+          s"'${line.spans.map(_.content).mkString}' at width $width in $mode: '$row'",
+        )
+      }
 
   test("widthAt reports the longest line, in columns rather than characters"):
     val paragraph = Paragraph(Text.raw("ab\n你好世界\nc"))

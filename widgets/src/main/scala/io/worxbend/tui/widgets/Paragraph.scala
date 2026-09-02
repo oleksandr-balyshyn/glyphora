@@ -193,6 +193,9 @@ object Paragraph:
     var rowWidth       = 0
     var gapWidth       = 0
     var wordWidth      = 0
+    // Columns of the word's first cluster: the narrowest a row holding any of this word can be, and so what decides
+    // whether an indent still leaves the word somewhere to go.
+    var wordFirstWidth = 0
     var rowHasContent  = false
     var wordHasContent = false
     // True until the first row ends: while it holds, the pending blanks are the caller's own indentation rather than
@@ -206,16 +209,36 @@ object Paragraph:
       rowHasContent = false
       atLineStart = false
 
+    /** Whether the pending blanks would survive onto a row with nothing on it yet.
+      *
+      * This is the one thing the three wrapping modes disagree about, so it is read off `blanks` rather than decided at
+      * each call site: keep only the line's own indentation, keep nothing, or keep everything.
+      *
+      * Both keeping modes stop short of a row wider than `width`, which is not a visible wrap bug — the renderer clips
+      * such a row, so it reads as a character that has gone missing — but they stop differently, because they promise
+      * different things. An indent is part of the line's content, so it is kept and the word beside it is broken to
+      * fit; it is dropped only when it would leave no room for even the word's first cluster, which is the case where
+      * that cluster gets a row of its own. Blanks carried onto a later row by `KeepAll` are a courtesy, so they are
+      * dropped as soon as the whole word no longer fits after them.
+      *
+      * @param firstCluster
+      *   columns taken by the first cluster of the word being placed — the smallest a broken word can be
+      * @param word
+      *   columns taken by the whole word being placed
+      */
+    def keepsGap(firstCluster: Int, word: Int): Boolean =
+      blanks match
+        case WrapBlanks.KeepIndent => atLineStart && !rowHasContent && gapWidth + firstCluster <= width
+        case WrapBlanks.DropAll    => false
+        case WrapBlanks.KeepAll    => gapWidth + word <= width
+
+    /** The columns the pending blanks would take on a fresh row — zero when they would be dropped there. */
+    def gapOnFreshRow(firstCluster: Int, word: Int): Int = if keepsGap(firstCluster, word) then gapWidth else 0
+
     def commitWord(): Unit =
       if wordHasContent then
         if !rowHasContent then
-          // A row that has nothing on it yet. Whether the pending blanks survive is the one thing the three wrapping
-          // modes disagree about, so it is read off `blanks` rather than decided here: keep only the line's own
-          // indentation, keep nothing, or keep everything that still leaves the word room on the row.
-          val keepGap = blanks match
-            case WrapBlanks.KeepIndent => atLineStart
-            case WrapBlanks.DropAll    => false
-            case WrapBlanks.KeepAll    => gapWidth + wordWidth <= width
+          val keepGap = keepsGap(wordFirstWidth, wordWidth)
           sink.takeWord(keepGap)
           rowWidth = wordWidth + (if keepGap then gapWidth else 0)
         else if rowWidth + gapWidth + wordWidth <= width then
@@ -225,12 +248,13 @@ object Paragraph:
           // The word does not fit after the pending blanks, so the row ends here. `KeepAll` carries those blanks onto
           // the new row — that is the whole of what it means — but only while they still leave the word its columns.
           endRow()
-          val keepGap = blanks == WrapBlanks.KeepAll && gapWidth + wordWidth <= width
+          val keepGap = keepsGap(wordFirstWidth, wordWidth)
           sink.takeWord(keepGap)
           rowWidth = wordWidth + (if keepGap then gapWidth else 0)
         rowHasContent = true
         wordHasContent = false
         wordWidth = 0
+        wordFirstWidth = 0
         // The blanks have now either been written into the row or dropped at a break; either way they are spent.
         // They are only cleared here, with a word: a run of blanks with no word after it yet is still growing.
         sink.clearGap()
@@ -250,11 +274,16 @@ object Paragraph:
           commitWord()
         else
           val clusterWidth = CharWidth.of(cluster)
-          if wordWidth + clusterWidth > width then
+          // The blanks that will be written in front of this word are part of the row it lands on, so they are counted
+          // against the width here too. Left out, a line whose first row is indented was broken one column too late
+          // and the renderer clipped that column away: " abcde" at width 5 came out as the single row " abcde".
+          val firstWidth   = if wordHasContent then wordFirstWidth else clusterWidth
+          if gapOnFreshRow(firstWidth, wordWidth + clusterWidth) + wordWidth + clusterWidth > width then
             // The word alone is wider than any row can be, so it has to be broken. Put what has been read onto a row
             // of its own and carry on reading the rest of the word into the next one.
             commitWord()
             if rowHasContent then endRow()
+          if !wordHasContent then wordFirstWidth = clusterWidth
           sink.addWord(cluster, span.style)
           wordWidth += clusterWidth
           wordHasContent = true

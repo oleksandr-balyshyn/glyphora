@@ -84,7 +84,8 @@ enum Overflow:
 private[widgets] enum WrapBlanks:
 
   /** Keep the blanks the caller wrote at the start of the source line, drop the ones a break landed on —
-    * [[Overflow.Wrap]].
+    * [[Overflow.Wrap]]. Kept blanks are counted against the row's width like any other column, so an indent too wide to
+    * leave the first word room on the row is dropped rather than pushing the row past the width.
     */
   case KeepIndent
 
