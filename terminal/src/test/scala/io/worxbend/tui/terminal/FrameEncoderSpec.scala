@@ -193,3 +193,19 @@ final class FrameEncoderSpec extends AnyFunSuite:
     val encoded = encoder.encodeRow(row, 0)
     assert(encoded.contains(AnsiSequences.linkOpen("https://example.invalid")))
     assert(encoded.contains(AnsiSequences.LinkClose))
+
+  // ---------------------------------------------------------------- cells the cursor does not advance past
+
+  test("the cell after a zero-width one is positioned explicitly"):
+    // A lone combining acute is a grapheme the terminal draws on top of the character to its left, so the terminal's
+    // own cursor does not move for it. Assuming that it did painted every later cell of the row one column too far
+    // left: "b" below used to be written straight after the mark, landing in column 1 instead of column 2.
+    val combiningAcute = "́"
+    val previous       = Buffer(Rect(0, 0, 5, 1))
+    val next           = Buffer(Rect(0, 0, 5, 1))
+    next.set(0, 0, Cell("a", Style.Default))
+    next.set(1, 0, Cell(combiningAcute, Style.Default))
+    next.set(2, 0, Cell("b", Style.Default))
+    val expected       =
+      AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + "a" + combiningAcute + AnsiSequences.moveTo(2, 0) + "b"
+    assert(encoder.encode(previous, next) == expected)

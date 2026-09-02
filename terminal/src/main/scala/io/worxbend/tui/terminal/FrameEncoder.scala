@@ -1,6 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.{Buffer, Cell, Style}
+import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Style}
 
 /** Turns the difference between two frames into the ANSI text that moves the terminal from one to the other.
   *
@@ -43,8 +43,6 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     // change on the frame is written as a delta against the style the encoder itself last emitted, which is a handful
     // of bytes instead of a full restatement of every colour and flag.
     var frameOpened                     = false
-    // one frame cannot be described as a difference from a frame of another shape — after a resize the terminal has
-    // thrown the old grid away — so that case repaints every cell instead of diffing
     val paint: (Int, Int, Cell) => Unit =
       (x, y, cell) => {
         if y != currentY || x != expectedX then body ++= AnsiSequences.moveTo(x, y)
@@ -62,7 +60,7 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
         currentLink = carryLink(body, currentLink, cell.style.link)
         body ++= cell.symbol
         currentY = y
-        expectedX = x + advanceOf(next, x, y)
+        expectedX = x + advanceOf(next, x, y, cell)
       }
     if previous.area == next.area then previous.diff(next, paint) else next.emitAll(paint)
     // a link left open would swallow everything drawn after this frame
@@ -122,10 +120,16 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     *
     * The answer comes from the buffer's own bookkeeping rather than from measuring the symbol again: a cell is two
     * columns wide exactly when the buffer reserved the column to its right as that grapheme's continuation, which
-    * [[io.worxbend.tui.core.Buffer.isContinuation]] reports. Everything else advances one column, including a
-    * zero-width symbol — something was written into the stream for it, and the terminal's own cursor moved by whatever
-    * that glyph turned out to be, so the next cell must be positioned with an explicit `moveTo` rather than assumed to
-    * be adjacent.
+    * [[io.worxbend.tui.core.Buffer.isContinuation]] reports.
+    *
+    * A zero-width symbol — a lone combining mark, say, which the terminal draws on top of the character to its left —
+    * advances the cursor by nothing at all, and answering `0` for it is what makes the *next* cell of the row differ
+    * from `expectedX` and so be positioned with an explicit `moveTo`. Answering `1` there, as this used to, painted a
+    * row of "a", a combining acute and "b" as three adjacent glyphs: the terminal's cursor was still in column 1 when
+    * "b" arrived, so "b" and every later changed cell of the row landed one column left of where the buffer says it is.
+    *
+    * The width question is asked of the symbol only to separate "no advance" from "some advance"; the size of a
+    * non-zero advance still comes from the buffer, never from re-measuring, for the reason below.
     *
     * This used to be `math.max(1, CharWidth.of(cell.symbol))`, and the difference matters. A `Cell`'s symbol is meant
     * to hold one grapheme cluster, and the buffer reserves columns for it with a per-cluster measurement that can only
@@ -137,8 +141,10 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     * 400-byte escape sequence in a cell; asking the buffer instead of re-measuring makes it unreachable by
     * construction.
     */
-  private def advanceOf(next: Buffer, x: Int, y: Int): Int =
-    if next.isContinuation(x + 1, y) then 2 else 1
+  private def advanceOf(next: Buffer, x: Int, y: Int, cell: Cell): Int =
+    if CharWidth.of(cell.symbol) == 0 then 0
+    else if next.isContinuation(x + 1, y) then 2
+    else 1
 
   /** Emits the OSC-8 transitions that carry the hyperlink state from `open` to `next`, and answers `next`.
     *
