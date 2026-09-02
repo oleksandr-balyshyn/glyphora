@@ -57,33 +57,36 @@ object LayoutSolver:
     * `Constraint` case must be given a demand here before the library compiles again.
     */
   private def demandOf(constraint: Constraint, available: Int): Demand =
+    val axis = math.max(0, available)
     constraint match
       case Constraint.Length(cells)   => Demand.fixedCells(cells)
-      case Constraint.Percentage(pct) =>
-        val wanted = math.max(0, pct)
-        Demand(
-          fixed = available * wanted / 100,
-          growthWeight = 0,
-          growthCap = 0,
-          proportional = Some(Demand.Proportional(wanted / 100.0, (available.toLong * wanted % 100) / 100.0)),
-        )
-      case Constraint.Ratio(num, den) =>
-        val wanted = math.max(0, num)
-        // a non-positive denominator is not a ratio anyone can honor; it claims nothing rather than dividing by zero
-        val share  =
-          if den <= 0 then Demand.Proportional(0.0, 0.0)
-          else Demand.Proportional(wanted.toDouble / den, (available.toLong * wanted % den).toDouble / den)
-        Demand(
-          fixed = if den <= 0 then 0 else available * wanted / den,
-          growthWeight = 0,
-          growthCap = 0,
-          proportional = Some(share),
-        )
+      case Constraint.Percentage(pct) => proportionalDemand(axis, math.max(0, pct), 100)
+      // a non-positive denominator is not a ratio anyone can honor; it claims nothing rather than dividing by zero
+      case Constraint.Ratio(num, den) => proportionalDemand(axis, math.max(0, num), den)
       // a floor that also competes for the leftover, so it keeps growing past its floor
       case Constraint.Min(cells)      => Demand(math.max(0, cells), 1, Int.MaxValue, None)
       // a cap takes only leftover, and only up to the cap
       case Constraint.Max(cells)      => Demand(0, 1, math.max(0, cells), None)
       case Constraint.Fill(weight)    => Demand(0, math.max(0, weight), Int.MaxValue, None)
+
+  /** The demand a `numerator / denominator` fraction of an `axis`-cell axis makes: whole cells now, plus the fraction
+    * of a cell the divide threw away so the leftover can be ranked by who lost the most.
+    *
+    * Two pieces of defensive arithmetic live here rather than at each call site. The whole-cell part goes through
+    * [[CellCount.fractionOf]], which multiplies in `Long`, so a `Percentage(25000000)` no longer overflows into a
+    * negative demand. And the result is capped at the axis, because no single fraction of the axis can claim more of it
+    * than all of it — a cap that matches what [[Constraint.sizeIn]] answers for the same constraint on its own.
+    */
+  private def proportionalDemand(axis: Int, numerator: Int, denominator: Int): Demand =
+    val lostFraction =
+      if denominator <= 0 then 0.0 else (axis.toLong * numerator % denominator).toDouble / denominator
+    val share        = if denominator <= 0 then 0.0 else numerator.toDouble / denominator
+    Demand(
+      fixed = math.min(axis, CellCount.fractionOf(axis, numerator, denominator)),
+      growthWeight = 0,
+      growthCap = 0,
+      proportional = Some(Demand.Proportional(share, lostFraction)),
+    )
 
   /** The solved size of each constraint, in the order given, for an axis of `available` cells (spacing already
     * deducted). Sizes may exceed `available` when the fixed demands do; [[Layout]] clamps at the far edge.
@@ -91,7 +94,9 @@ object LayoutSolver:
   def solve(constraints: Seq[Constraint], available: Int): IndexedSeq[Int] =
     val demands  = constraints.map(demandOf(_, available)).toIndexedSeq
     val fixed    = demands.map(_.fixed)
-    val leftover = available - fixed.sum
+    // summed as `Long`: two `Min(Int.MaxValue)` floors add up to more than an `Int` holds, and an `Int` sum there would
+    // wrap around to a negative total and report a huge leftover to share out
+    val leftover = CellCount.clamp(available.toLong - fixed.map(_.toLong).sum)
     if leftover <= 0 then fixed
     else
       val growthShares = shareLeftover(demands, leftover)

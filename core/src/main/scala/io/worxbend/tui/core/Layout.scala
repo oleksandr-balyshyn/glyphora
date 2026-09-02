@@ -41,7 +41,7 @@ final case class Layout(
       val total     = axisExtent(area)
       // a negative step is an overlap, which hands the solver *more* room than the axis has, because the segments will
       // be laid down sharing cells rather than each taking their own
-      val available = math.max(0, total - step * (constraints.size - 1))
+      val available = math.max(0, CellCount.clamp(total.toLong - step.toLong * (constraints.size - 1)))
       val sizes     = LayoutSolver.solve(constraints, available)
       layOutSegments(area, sizes, total)
 
@@ -149,14 +149,16 @@ final case class Layout(
   private def layOutSegments(area: Rect, sizes: IndexedSeq[Int], total: Int): Seq[Rect] =
     val (axisStart, axisEnd) = axisBounds(area)
     val (leading, gaps)      = flexOffsets(sizes, total)
-    var offset               = axisStart + leading
+    // the running cursor is a `Long`: a segment sized `Int.MaxValue` (which `Min(Int.MaxValue)` asks for) added to a
+    // start would wrap around in `Int` and place the *next* segment back at the near edge instead of past the far one
+    var offset: Long         = axisStart.toLong + leading
     sizes.indices.map { i =>
       val size        = sizes(i)
       // clamped at both ends: an overlap deeper than the previous segment must not walk the cursor back out of the area
-      val start       = math.max(axisStart, math.min(offset, axisEnd))
-      val clampedSize = math.max(0, math.min(size, axisEnd - start))
+      val start       = math.max(axisStart.toLong, math.min(offset, axisEnd.toLong)).toInt
+      val clampedSize = math.max(0, math.min(size.toLong, axisEnd.toLong - start)).toInt
       val gapAfter    = if i < sizes.size - 1 then gaps(i) else 0
-      offset = start + size + gapAfter
+      offset = start.toLong + size + gapAfter
       segmentRect(area, start, clampedSize)
     }
 
@@ -167,8 +169,10 @@ final case class Layout(
     */
   private def flexOffsets(sizes: IndexedSeq[Int], total: Int): (Int, IndexedSeq[Int]) =
     val segmentCount = sizes.size
-    val baseGaps     = step * math.max(0, segmentCount - 1)
-    val free         = math.max(0, total - sizes.sum - baseGaps)
+    val baseGaps     = step.toLong * math.max(0, segmentCount - 1)
+    // summed as `Long` for the same reason the solver does: oversized segments must report *no* free space, not a
+    // negative sum that wrapped back around into a positive one and invented room for `Flex` to spread out into
+    val free         = math.max(0, CellCount.clamp(total.toLong - sizes.map(_.toLong).sum - baseGaps))
     val betweens     = IndexedSeq.fill(math.max(0, segmentCount - 1))(step)
     if free == 0 then (0, betweens)
     else

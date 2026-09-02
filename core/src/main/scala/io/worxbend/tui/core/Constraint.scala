@@ -22,7 +22,11 @@ enum Constraint:
     *
     * `Length`, `Percentage`, `Ratio`, `Max` and `Fill` never answer more than `available`. `Min` is a floor, so it is
     * the one case that can: `Min(10).sizeIn(5)` is 10, and the caller decides whether to scroll, clip, or grow the
-    * container. A negative `available` is read as zero.
+    * container. A negative `available` is read as zero, and so is a negative `pct`, `num` or `cells`.
+    *
+    * The arithmetic runs in `Long` and is brought back into `Int` at the end, so a constraint whose numbers are far
+    * larger than any terminal — `Percentage(25000000)`, `Ratio(Int.MaxValue, 1)` — still answers a cell count inside
+    * the axis rather than one that wrapped around into the negatives.
     *
     * Two deliberate differences from ratatui, the Rust toolkit these constraints follow. Its `Fill(n)` reuses the
     * weight as a length; here `Fill.weight` is only a share of leftover space and means nothing on its own, so a lone
@@ -33,8 +37,8 @@ enum Constraint:
     val axis = math.max(0, available)
     this match
       case Length(cells)   => math.min(axis, math.max(0, cells))
-      case Percentage(pct) => math.min(axis, axis * math.max(0, pct) / 100)
-      case Ratio(num, den) => if den <= 0 then 0 else math.min(axis, axis * math.max(0, num) / den)
+      case Percentage(pct) => math.min(axis, CellCount.fractionOf(axis, pct, 100))
+      case Ratio(num, den) => math.min(axis, CellCount.fractionOf(axis, num, den))
       case Min(cells)      => math.max(axis, math.max(0, cells))
       case Max(cells)      => math.min(axis, math.max(0, cells))
       case Fill(_)         => axis
