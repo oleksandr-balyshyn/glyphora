@@ -49,6 +49,14 @@ glyph in `tui-widgets` is non-ASCII, and there is no ASCII fallback border set.
 This table records what was **actually verified**, not what is expected to work. Empty
 cells mean untested — contributions welcome.
 
+**Pending re-verification after the 0.14.0 JLine 3 → 4 bump.** JLine 4.1.3 changed what
+entering raw mode does to signal delivery (see `terminal/package.mill`'s dependency
+comment); the fix keeps this backend's *observable* behavior the same by pinning
+`org.jline.terminal.softwareSignals=false` explicitly, but that has only been checked
+by automated tests against `HeadlessBackend`, which does not construct a real JLine
+`Terminal` at all. The ✅ cells below for **Restore on Ctrl+C** were captured against
+JLine 3 and have not yet been re-run on a real PTY against JLine 4.
+
 | Environment | Renders | Alt screen | Restore on exit | Restore on Ctrl+C | Truecolor | UTF-8 |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Linux PTY, `TERM=xterm-256color` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

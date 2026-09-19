@@ -18,19 +18,19 @@ All published modules share one synchronized version under `io.worxbend`:
 
 ```scala
 // Mill
-def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.13.0")
+def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.14.0")
 ```
 
 ```scala
 // sbt
-libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.13.0"
+libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.14.0"
 ```
 
 Applications normally need only `tui-dsl`. Lower-tier artifacts are `tui-core`,
 `tui-terminal`, `tui-widgets`, `tui-runtime`, and `tui-macros`; `tui-test` carries the
 headless test harness and belongs in the test configuration only.
 
-**Nothing is on Maven Central yet.** `0.13.0` is not tagged or published yet, so the
+**Nothing is on Maven Central yet.** `0.14.0` is not tagged or published yet, so the
 coordinates above resolve only after `./mill __.publishLocal` has put the artifacts in
 your local Ivy cache — see [Getting started](./getting-started#1-add-glyphora). Once a
 release lands, check [Maven Central](https://search.maven.org/search?q=g:io.worxbend)
@@ -45,7 +45,12 @@ choosing a version.
 | additive widget or method | yes, when low risk | yes |
 | source-breaking rename/removal | no | possible, documented |
 | behavior change with migration work | no | possible, documented |
+| raised minimum JDK / toolchain requirement | no | possible, documented |
 | binary compatibility guarantee | not yet | not yet |
+
+`0.14.0` raises the minimum JDK from 21 to 25: every published artifact declares `-release:25`, so a class
+file built by this version will not load on JDK 21–24 (`UnsupportedClassVersionError`). Consumers pinned to
+an older JDK should stay on `0.13.0` until they can move.
 
 MiMa binary-compatibility gates are planned once a first published baseline is
 selected. Until then, recompile downstream code on upgrade even when moving between

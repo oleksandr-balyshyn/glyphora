@@ -35,7 +35,7 @@ object `package` extends build.TuiExampleModule {
 }
 ```
 
-The GraalVM pin (`jvmVersion = "graalvm-community:23.0.1"`) and `nativeImageOptions =
+The GraalVM pin (`jvmVersion = "graalvm-community:25.0.2"`) and `nativeImageOptions =
 Seq("--no-fallback")` are not repeated in each example: they live once in the shared
 `build.TuiExampleModule` trait in `build.mill`, so bumping the toolchain is a single edit
 that cannot be half-applied across ten files. `build.dsl` is the only dependency an example
@@ -51,10 +51,10 @@ module's `out/.../nativeImage.dest/` directory.
 import mill.*, scalalib.*, javalib.NativeImageModule
 
 object app extends ScalaModule with NativeImageModule:
-  def scalaVersion = "3.7.1"
-  def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.13.0")
+  def scalaVersion = "3.9.0"
+  def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.14.0")
   def mainClass = Some("example.Main")
-  def jvmVersion = "graalvm-community:23.0.1"
+  def jvmVersion = "graalvm-community:25.0.2"
   def nativeImageOptions = Seq(
     "--no-fallback",
     // Only if you hand the binary to other machines — see "Build a binary other people can run".
@@ -112,9 +112,12 @@ native-image -march=list
 
 ### `-Os`
 
-`-Os` optimizes for size rather than peak speed. Adding both flags takes the `hello-world`
-example from 19.54 MB to 18.11 MB — worth having when the artifact is something people
-download, and unimportant when it is not.
+`-Os` optimizes for size rather than peak speed. Adding both flags used to take the
+`hello-world` example from 19.54 MB to 18.11 MB; that comparison predates the 0.14.0
+toolchain bump (GraalVM 25.0.2, JLine 4) and has not been re-measured against it — the
+default build alone (neither flag) is 22.37 MB total / 21.11 MB on disk under the new
+toolchain, for scale. `-march=compatibility`/`-Os` are still worth having when the
+artifact is something people download, and unimportant when it is not.
 
 Neither flag is set on this repository's own examples. CI builds and runs them on the same
 runner, so the default `-march` is correct there and the size never leaves the machine.

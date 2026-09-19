@@ -8,14 +8,14 @@ description: Install glyphora, run a reactive counter, and understand each piece
 In this guide you will create a small reactive counter, run it in a real terminal,
 and make two changes that exercise state, layout, styling, and keyboard commands.
 
-> **You need:** JDK 21 or newer, Scala 3, and either Mill or sbt. Run the final app
+> **You need:** JDK 25 or newer, Scala 3, and either Mill or sbt. Run the final app
 > from a terminal—not an IDE output panel—because raw input needs a controlling TTY.
 
 ## 1. Add glyphora
 
 :::caution Not on Maven Central yet
 
-`0.13.0` is not tagged or published yet, so the coordinates below will not
+`0.14.0` is not tagged or published yet, so the coordinates below will not
 resolve from a public repository. Until the first release lands, build the artifacts
 locally:
 
@@ -26,7 +26,7 @@ cd glyphora
 ```
 
 That publishes `tui-core`, `tui-terminal`, `tui-widgets`, `tui-runtime`,
-`tui-macros`, `tui-dsl` and `tui-test` at version `0.13.0` into your local Ivy cache
+`tui-macros`, `tui-dsl` and `tui-test` at version `0.14.0` into your local Ivy cache
 (`~/.ivy2/local`). Mill reads that cache by default. **sbt does not**, so an sbt build
 also needs
 
@@ -47,8 +47,8 @@ package build
 import mill.*, scalalib.*
 
 object app extends ScalaModule:
-  def scalaVersion = "3.7.1"
-  def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.13.0")
+  def scalaVersion = "3.9.0"
+  def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.14.0")
 ```
 
 Put application sources under `app/src/`, then run them with `mill app.run` (or
@@ -57,9 +57,9 @@ Put application sources under `app/src/`, then run them with `mill app.run` (or
 ### sbt
 
 ```scala title="build.sbt"
-scalaVersion := "3.7.1"
+scalaVersion := "3.9.0"
 
-libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.13.0"
+libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.14.0"
 ```
 
 Put application sources under `src/main/scala/`, then use `sbt run`.

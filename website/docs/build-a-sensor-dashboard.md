@@ -15,7 +15,7 @@ The finished application ships in this repository as
 Every snippet below is that source, cut back to the state the tutorial has reached;
 the file there carries fuller comments than the fences here.
 
-> **You need:** a clone of glyphora, JDK 21 or newer, and a real terminal — not an
+> **You need:** a clone of glyphora, JDK 25 or newer, and a real terminal — not an
 > IDE output panel, because raw input needs a controlling TTY. You do not need a
 > sensor or a network: the default data source is a scripted fake.
 
@@ -47,7 +47,7 @@ object `package` extends build.TuiExampleModule {
 Why `build.dsl` is the only entry the module needs, and what `TuiExampleModule` supplies
 on top of it, is argued in
 [Build a process monitor](./build-a-process-monitor#1-create-the-module). Outside
-this repository the same app is one `mvn"io.worxbend::tui-dsl:0.13.0"` dependency;
+this repository the same app is one `mvn"io.worxbend::tui-dsl:0.14.0"` dependency;
 see [Getting started](./getting-started#1-add-glyphora).
 
 Every Scala source below lives in

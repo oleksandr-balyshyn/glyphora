@@ -21,6 +21,14 @@ write the pull request.
 
 ## Set up the repository
 
+Needs JDK 25 or newer — every published artifact declares `-release:25`. `./mill` pins
+its own build process to `temurin:25` via `.mill-jvm-version` regardless of what is on
+`PATH`, so a mismatched ambient JDK will not silently produce 21-compatible class files,
+but a real JDK 25+ install is still required to run the `./mill` launcher itself.
+Building an example's native image additionally needs GraalVM `graalvm-community:25.0.2`
+(Mill downloads it), which has no macOS x64 build past 25.0.1 — override
+`TuiExampleModule.jvmVersion` in `build.mill` locally on an Intel Mac.
+
 ```bash
 git clone git@github.com:oleksandr-balyshyn/glyphora.git
 cd glyphora

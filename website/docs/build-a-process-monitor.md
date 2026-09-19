@@ -13,7 +13,7 @@ Each step names a file, gives the complete code for it, gives the command to run
 and says what appears on screen. Every step compiles and runs, so you can stop
 anywhere and still have a working program.
 
-> **You need:** a clone of the glyphora repository and JDK 21 or newer. Run the app
+> **You need:** a clone of the glyphora repository and JDK 25 or newer. Run the app
 > from a real terminal, not an IDE output panel, because raw input needs a
 > controlling TTY.
 

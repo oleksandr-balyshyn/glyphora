@@ -15,7 +15,7 @@ sentence: a `Signal` may only be written from the render thread, and a load test
 a pool of threads producing results as fast as the network allows. Steps 4 and 5
 are where that is resolved; the rest is layout.
 
-> **You need:** JDK 21 or newer, a clone of the repository, and a real terminal.
+> **You need:** JDK 25 or newer, a clone of the repository, and a real terminal.
 > Run the app from a terminal window rather than an IDE output panel, because raw
 > input needs a controlling TTY.
 

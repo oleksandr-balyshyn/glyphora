@@ -17,8 +17,8 @@
 </p>
 
 <p>
-  <img alt="Scala" src="https://img.shields.io/badge/Scala-3.7-DC322F?logo=scala&logoColor=white"/>
-  <img alt="JDK" src="https://img.shields.io/badge/JDK-21-437291?logo=openjdk&logoColor=white"/>
+  <img alt="Scala" src="https://img.shields.io/badge/Scala-3.9-DC322F?logo=scala&logoColor=white"/>
+  <img alt="JDK" src="https://img.shields.io/badge/JDK-25%2B-437291?logo=openjdk&logoColor=white"/>
   <img alt="Mill" src="https://img.shields.io/badge/build-Mill-22D3EE"/>
   <img alt="native-image" src="https://img.shields.io/badge/native--image-ready-34D399?logo=oracle&logoColor=white"/>
   <img alt="Zero reflection" src="https://img.shields.io/badge/reflection-zero-A78BFA"/>
@@ -90,22 +90,21 @@
 ## 🚀 Your first app
 
 > [!NOTE]
-> **Not on Maven Central yet.** `0.13.0` is tagged and has a
-> [GitHub release](https://github.com/oleksandr-balyshyn/glyphora/releases/tag/v0.13.0), but no
-> artifacts have been published, so the coordinates below will not resolve. Until the first release
-> lands, clone the repo and run `./mill __.publishLocal`
+> **Not on Maven Central yet, and `0.14.0` is not tagged or released yet either.** No artifacts have
+> been published, so the coordinates below will not resolve. Until the first release lands, clone the
+> repo and run `./mill __.publishLocal`
 > — that puts `tui-core`, `tui-terminal`, `tui-widgets`, `tui-runtime`, `tui-macros`, `tui-dsl`
-> and `tui-test` at `0.13.0` into `~/.ivy2/local`. Mill reads that cache by default; sbt needs
+> and `tui-test` at `0.14.0` into `~/.ivy2/local`. Mill reads that cache by default; sbt needs
 > `resolvers += Resolver.defaultLocal`. See [Build from source](#-build-from-source).
 
 ```scala
 // build.mill
-def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.13.0")
+def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.14.0")
 ```
 
 ```scala
 // build.sbt
-libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.13.0"
+libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.14.0"
 ```
 
 Then return an ordinary Scala `Element` tree:
@@ -259,7 +258,7 @@ text. Buffer helpers skip wide-character continuation cells, so assertions match
 
 > [!TIP]
 > `Pilot`, `BufferAssertions` and `GoldenFrames` ship as `io.worxbend::tui-test`, so add it as a
-> test-only dependency (`mvn"io.worxbend::tui-test:0.13.0"`) rather than copying the harness.
+> test-only dependency (`mvn"io.worxbend::tui-test:0.14.0"`) rather than copying the harness.
 
 🧪 **[Testing guide →](website/docs/testing.md)**
 
@@ -277,13 +276,19 @@ adds a native-image build. Reflection and dynamic class loading are rejected in 
 
 ## 🧰 Build from source
 
+Needs JDK 25 or newer — the published artifacts declare `-release:25`, so class files built and run by an
+older JDK are rejected. `./mill` pins its own build process to `temurin:25` via `.mill-jvm-version`
+regardless of whatever JDK is on `PATH`, but a real JDK 25+ is still required to run the `./mill` launcher
+itself and, for the native-image examples, `graalvm-community:25.0.2` (`macOS x64` tops out at 25.0.1 on
+GraalVM CE — override `TuiExampleModule.jvmVersion` in `build.mill` locally on that platform).
+
 ```bash
 git clone https://github.com/oleksandr-balyshyn/glyphora.git
 cd glyphora
 
 ./mill __.compile        # build everything
 ./mill __.test           # run every suite
-./mill __.publishLocal   # install 0.13.0 into your local Ivy cache
+./mill __.publishLocal   # install 0.14.0 into your local Ivy cache
 ```
 
 Day-to-day development:
@@ -349,5 +354,5 @@ architecture rules.
 [MIT](LICENSE) — go build something glyphorious. ✦
 
 <div align="center">
-<sub>Built with Scala 3 · Mill · JLine 3 · GraalVM</sub>
+<sub>Built with Scala 3 · Mill · JLine · GraalVM</sub>
 </div>

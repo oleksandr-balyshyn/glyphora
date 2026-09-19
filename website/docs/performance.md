@@ -59,6 +59,8 @@ Taken on one developer machine so that the *shape* of the table is on record —
 x86-64 Linux box, JDK 23, glyphora 0.13.0, nothing else running. Your absolute numbers
 will differ; what should hold is the relationships (idle and one-cell frames cost about the
 same, a full frame costs several times more, encode dominates diff on a full frame).
+Predates the 0.14.0 toolchain bump (Scala 3.9, JDK 25, JLine 4); the relationships above
+are expected to hold, but the absolute numbers have not been re-captured against it yet.
 
 | Benchmark | ns/op |
 | --- | --- |
