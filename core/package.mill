@@ -11,6 +11,9 @@ object `package` extends build.TuiPublishModule {
     "Foundational types for the tui Scala 3 TUI library: Buffer, Rect, Style, Layout, Widget traits."
 
   object test extends TuiTests {
-    def extraTestDeps = Seq(mvn"org.scalatestplus::scalacheck-1-18:3.2.19.0")
+    // ScalaCheck 1.18 -> 1.19 alongside ScalaTest 3.2.20: org.scalatestplus:scalacheck-1-18 has no 3.2.20.0
+    // release (it stops at 3.2.19.0) — the ScalaTest-version-matched artifact is renamed for the ScalaCheck minor
+    // it wraps, not just re-tagged, so a version-only bump here would fail to resolve.
+    def extraTestDeps = Seq(mvn"org.scalatestplus::scalacheck-1-19:3.2.20.0")
   }
 }

@@ -756,6 +756,14 @@ object JLine3Backend:
     */
   def create(colorDepth: ColorDepth = ColorDepth.detect()): Either[BackendError, JLine3Backend] =
     try
+      // JLine 4.1.4 added a "software signals" layer, on by default, that raises the JLine-level Terminal.Signal
+      // *and* still passes the control byte through to whatever reads the stream — its own Javadoc says so, and
+      // warns the default may flip in a future release. glyphora already turns that control byte into a KeyEvent
+      // through InputDecoder, so leaving the default on would deliver Ctrl+C as both a KeyEvent and a Signal from
+      // one keypress. There is no per-builder override, only this global property, set here (not inherited from
+      // whatever the process happened to have) so a future JLine patch flipping the default cannot change this
+      // backend's behaviour out from under it.
+      System.setProperty(TerminalBuilder.PROP_SOFTWARE_SIGNALS, "false")
       val terminal = TerminalBuilder
         .builder()
         .system(true)

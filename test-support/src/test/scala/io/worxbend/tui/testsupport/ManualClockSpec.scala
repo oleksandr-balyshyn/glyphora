@@ -100,4 +100,4 @@ final class ManualClockSpec extends AnyFunSuite:
   test("a clock cannot be stood still or rewound"):
     val clock = ManualClock()
     assert(intercept[IllegalArgumentException](clock.advance(Duration.Zero)).getMessage.contains("positive"))
-    assert(intercept[IllegalArgumentException](clock.advance(-1.milli)).getMessage.contains("positive"))
+    assert(intercept[IllegalArgumentException](clock.advance((-1).milli)).getMessage.contains("positive"))

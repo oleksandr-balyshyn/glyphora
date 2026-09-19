@@ -7,25 +7,43 @@ object `package` extends build.TuiPublishModule {
 
   def artifactName = "tui-terminal"
 
-  def moduleDescription = "JLine 3 terminal backend for the tui library."
+  def moduleDescription = "JLine terminal backend for the tui library."
 
   def moduleDeps = Seq(build.core)
 
   def mvnDeps = super.mvnDeps() ++ Seq(
-    // stay on the JLine 3.x line; 4.x is too new to be a safe default dependency yet
-    //
-    // The two focused artifacts rather than the `org.jline:jline` bundle. That bundle is one shaded jar of 712
-    // entries and 1.45 MB — the line reader, a built-in SSH server, a telnet server, a bundled jansi, and every
-    // terminal provider — while this module uses exactly four types from it:
-    // `org.jline.terminal.{Attributes, Terminal, TerminalBuilder}` and `org.jline.utils.InfoCmp`. glyphora draws its
-    // own frames and reads raw bytes; it never asks JLine to read a line, so none of the rest is ever called.
+    // JLine 4.x, not the org.jline:jline bundle. That bundle is one shaded jar of 773 entries and 1.65 MB — the
+    // line reader, a built-in SSH server, a telnet server, a shell (new in 4.x), and every terminal provider —
+    // while this module imports exactly four types from it: `org.jline.terminal.{Attributes, Terminal,
+    // TerminalBuilder}` and `org.jline.utils.InfoCmp`. (A few more of the bundle's types are reached without being
+    // imported — `Terminal.Signal`, `Terminal.SignalHandler`, `InfoCmp.Capability`, the inferred `Terminal.Size`
+    // and `NonBlockingReader` — all of them still present and source-compatible across the 3.x -> 4.x jump.)
+    // glyphora draws its own frames and reads raw bytes; it never asks JLine to read a line, so none of the rest is
+    // ever called.
     //
     // `jline-terminal` is the API and its pure-Java parts; `jline-terminal-jni` is the provider that actually opens
-    // the TTY, and it pulls in `jline-native` transitively. Together that is 274 entries and 0.50 MB. Every consumer
-    // of tui-terminal inherits the smaller graph, and a native image stops having to reason about an SSH server:
-    // `examples.hello-world.nativeImage` went from 20.98 MB / 5,088 reachable types to 19.54 MB / 4,774.
-    mvn"org.jline:jline-terminal:3.30.13",
-    mvn"org.jline:jline-terminal-jni:3.30.13",
+    // the TTY, and both depend on `jline-native` (4.x split the JNI glue out of `jline-terminal-jni` itself).
+    // Together that is 332 entries and 0.66 MB. Every consumer of tui-terminal inherits the smaller graph, and a
+    // native image stops having to reason about an SSH server: `examples.hello-world.nativeImage` is 22.37 MB
+    // total image size / 21.11 MB on disk under this JLine version and GraalVM 25.0.2 together (re-measured after
+    // this bump; the reachable-type count from the pre-bump figure was not re-captured in the same pass).
+    //
+    // Signal handling changed underneath `JLine3Backend.enterRawMode`/`JLine3Backend.onStop` in this jump: JLine
+    // 4.1.3 clears ISIG when entering raw mode (so the kernel no longer turns Ctrl+C/Ctrl+Z into SIGINT/SIGTSTP on
+    // its own), and 4.1.4's compensating `org.jline.terminal.softwareSignals` layer raises the JLine-level signal
+    // *and* still passes the control byte through to the reader — its own upstream Scaladoc warns the default may
+    // flip in a future release. `JLine3Backend` pins it to `false` explicitly (see `create`) and keeps synthesizing
+    // the interrupt from the control byte the way `InputDecoder` already did before this bump, rather than
+    // inheriting a default JLine itself says is not stable.
+    //
+    // JEP 472 (JDK 24+): `jline-native`'s JNI loader now prints four `WARNING:` lines to stderr on every run —
+    // confirmed on the built `examples.hello-world.nativeImage` binary under GraalVM 25.0.2/JDK 25. The binary
+    // still exits 1 with the expected message (CI's check is a substring match, not exact), so nothing is broken,
+    // but every native-image app built with glyphora now prints that noise on startup. Silencing it needs
+    // `--enable-native-access=ALL-UNNAMED` wired into `nativeImageOptions`, which is a new build convention this
+    // repo has not needed before — left as a follow-up rather than added unreviewed.
+    mvn"org.jline:jline-terminal:4.4.5",
+    mvn"org.jline:jline-terminal-jni:4.4.5",
   )
 
   // `TuiPilotTests` rather than `TuiTests` for the `test-support` dependency alone: `FramePipelineBench` uses the

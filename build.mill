@@ -14,14 +14,21 @@ object `package` extends Module {
   /** Shared conventions for every Scala module in this repo: Scala version, strict compiler flags, ScalaTest wiring. */
   trait TuiModule extends SbtModule with ScalafixModule {
 
-    def scalaVersion = "3.7.1"
+    def scalaVersion = "3.9.0"
 
+    /** JDK 25 or newer, declared rather than left to whatever JDK happened to compile it. Coupled to
+      * `TuiExampleModule.jvmVersion` below: `-release:N` is only accepted when the JVM running scalac is itself
+      * feature `>= N` (Scala 3.9.0's `supportedReleaseVersions` is `17 to min(Runtime.version().feature, 26)`), and
+      * Mill compiles every example in a Zinc subprocess under that `jvmVersion` — so this and the GraalVM pin below
+      * move together or the `build` job fails at scalac option parsing on the older of the two.
+      */
     def scalacOptions = super.scalacOptions() ++ Seq(
       "-deprecation",
       "-feature",
       "-unchecked",
       "-Wunused:all",
       "-Werror",
+      "-release:25",
     )
 
     /** Test sources are held to the same Scalafix rules as main sources.
@@ -36,7 +43,7 @@ object `package` extends Module {
         */
       def extraTestDeps: Seq[Dep] = Seq.empty
 
-      def mvnDeps = super.mvnDeps() ++ Seq(mvn"org.scalatest::scalatest:3.2.19") ++ extraTestDeps
+      def mvnDeps = super.mvnDeps() ++ Seq(mvn"org.scalatest::scalatest:3.2.20") ++ extraTestDeps
 
       /** One forked JVM per test class, instead of Mill's default of one group work-stolen across N workers.
         *
@@ -70,8 +77,15 @@ object `package` extends Module {
     */
   trait TuiExampleModule extends TuiModule with NativeImageModule {
 
-    /** GraalVM distribution pinned for every example's native image; Mill downloads it automatically. */
-    def jvmVersion = "graalvm-community:23.0.1"
+    /** GraalVM distribution pinned for every example's native image; Mill downloads it automatically.
+      *
+      * Also the JDK every example compiles under (`JavaTests.jvmVersion` follows the outer module's), which is why
+      * this is JDK 25 — the floor `TuiModule.scalacOptions`' `-release:25` declares. macOS x64 has no GraalVM CE
+      * build past 25.0.1 (25.0.2 dropped it); ubuntu-latest, the only platform CI builds on, is unaffected, but a
+      * contributor on an Intel Mac needs 25.0.1 to build an example locally, and CONTRIBUTING.md says nothing about
+      * it today.
+      */
+    def jvmVersion = "graalvm-community:25.0.2"
 
     /** CI requires every example to build with no fallback image, which is what proves the no-reflection rule holds. */
     def nativeImageOptions = Seq("--no-fallback")
