@@ -1,5 +1,7 @@
 package io.worxbend.tui.testsupport
 
+import java.util.Locale
+
 /** A small warm-up-and-measure harness for the hand-run benchmarks that live under each module's `src/test`.
   *
   * These are not tests and nothing here is ever asserted on. Wall-clock numbers on a shared or loaded machine move by
@@ -79,7 +81,11 @@ object Bench:
     println(title)
     println(row("name".padTo(nameWidth, ' '), "ns/op", "ops/s"))
     results.foreach { result =>
-      println(row(result.name.padTo(nameWidth, ' '), f"${result.nanosPerOp}%.1f", f"${result.opsPerSecond}%.0f"))
+      // Locale.ROOT, not the `f` interpolator's default FORMAT locale: a comma-decimal machine would print
+      // "1234,5" and break the column alignment `row` exists to guarantee.
+      val nanos = String.format(Locale.ROOT, "%.1f", result.nanosPerOp)
+      val ops   = String.format(Locale.ROOT, "%.0f", result.opsPerSecond)
+      println(row(result.name.padTo(nameWidth, ' '), nanos, ops))
     }
 
   /** One table row: the name as given, then two right-aligned number columns, so digits line up between rows. */

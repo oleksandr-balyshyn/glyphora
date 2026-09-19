@@ -1,5 +1,7 @@
 package io.worxbend.tui.widgets
 
+import java.util.Locale
+
 import io.worxbend.tui.core.{
   Buffer,
   CharWidth,
@@ -269,8 +271,9 @@ final case class DataTable(
       val filtered =
         if state.filter.isEmpty then rows
         else
-          val needle = state.filter.toLowerCase
-          rows.filter(_.exists(_.toLowerCase.contains(needle)))
+          // ROOT, not the default locale: in a Turkish locale "ID".toLowerCase is "ıd", which matches nothing.
+          val needle = state.filter.toLowerCase(Locale.ROOT)
+          rows.filter(_.exists(_.toLowerCase(Locale.ROOT).contains(needle)))
       state.sort match
         case None                                => filtered
         case Some(ColumnSort(column, direction)) =>
@@ -323,7 +326,7 @@ final case class DataTable(
       val symbolWidth = math.min(CharWidth.of(highlightSymbol), area.width)
       val grid        = area.copy(x = area.x + symbolWidth, width = area.width - symbolWidth)
       // an empty `widths` means equal columns; a DataTable always names its columns, so the header settles the count
-      val constraints = TableColumns.resolve(widths, Iterator(columns.size))
+      val constraints = TableColumns.resolve(widths, Iterator(columns.size), grid.width)
       val segments    = Layout(Direction.Horizontal, constraints, columnSpacing, flex).split(grid)
       renderHeader(buffer, segments, state)
       val footerRows  = if footer.isDefined && area.height > 1 then 1 else 0

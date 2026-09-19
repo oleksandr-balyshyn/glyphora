@@ -209,3 +209,30 @@ final class FrameEncoderSpec extends AnyFunSuite:
     val expected       =
       AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + "a" + combiningAcute + AnsiSequences.moveTo(2, 0) + "b"
     assert(encoder.encode(previous, next) == expected)
+
+  // ---------------------------------------------------------------- a malformed cell cannot smuggle control bytes
+
+  test("a cell whose symbol carries a raw escape sequence is written as a blank, not verbatim"):
+    // `Cell.symbol` is meant to hold exactly one printable grapheme cluster, but nothing enforces that at
+    // construction — `Buffer.set` (unlike `Buffer.setString`) writes whatever string it is given. A widget's
+    // caller-supplied glyph parameter (a `Scrollbar` track symbol, a `LineGauge` glyph) reaches `Buffer.set`
+    // directly, so a control sequence there would otherwise reach the real terminal exactly as if the application
+    // had emitted it — indistinguishable from the escapes this encoder is meant to be the sole author of.
+    val escape   = "\u001b[2J" // clear-screen, smuggled in as if it were a one-column glyph
+    val previous = Buffer(Rect(0, 0, 3, 1))
+    val next     = Buffer(Rect(0, 0, 3, 1))
+    next.set(0, 0, Cell(escape, Style.Default))
+    val out      = encoder.encode(previous, next)
+    assert(!out.contains(escape))
+    assert(out == AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + " ")
+
+  test("a control byte inside encodeRow is likewise blanked, not printed to scrollback"):
+    val buffer = Buffer(Rect(0, 0, 3, 1))
+    buffer.set(0, 0, Cell("\u0007", Style.Default)) // BEL: would ring a bell or worse if ever printed raw
+    assert(!encoder.encodeRow(buffer, 0).contains("\u0007"))
+
+  test("an ordinary multi-column emoji glyph is unaffected by the control-byte guard"):
+    val previous = Buffer(Rect(0, 0, 3, 1))
+    val next     = Buffer(Rect(0, 0, 3, 1))
+    next.set(0, 0, Cell("🟦", Style.Default))
+    assert(encoder.encode(previous, next).contains("🟦"))

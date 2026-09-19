@@ -134,7 +134,12 @@ final case class Scrollbar(
     if trackLength == 0 then None
     else if contentLength <= visible then Option.when(thumbWhenFits)((0, trackLength))
     else
-      val size            = math.max(1, math.min(trackLength, trackLength * visible / contentLength))
+      // `trackLength * visible` in `Long`, then clamped: both factors are `Int`, and `trackLength` (a handful of
+      // terminal cells) times a `visible` in the tens of millions overflows `Int` and wraps negative, which
+      // `math.min(trackLength, ...)` then prefers over the correct, positive `trackLength` — collapsing the thumb to
+      // its 1-cell floor on content large enough to overflow instead of sizing it proportionally. Same fix as the
+      // `x + maxWidth` bound in `Buffer.setString`.
+      val size            = math.max(1, math.min(trackLength, (trackLength.toLong * visible / contentLength).toInt))
       val maxPosition     = contentLength - visible
       val clampedPosition = math.max(0, math.min(position, maxPosition))
       val start           = math.round(clampedPosition.toDouble / maxPosition * (trackLength - size)).toInt

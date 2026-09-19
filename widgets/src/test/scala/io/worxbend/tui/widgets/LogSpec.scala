@@ -47,3 +47,28 @@ final class LogSpec extends AnyFunSuite:
     val buffer = Buffer(Rect(0, 0, 5, 1))
     Log().render(buffer.area, buffer, state)
     assert(buffer.get(0, 0).style.modifiers.hasAny(Modifiers.Bold))
+
+  test("a chunk containing embedded newlines is split into separate lines, not one row with them dropped"):
+    // the ordinary way a Log gets content is a raw chunk from a process or a socket, which routinely spans several
+    // lines; `\n` is a zero-width control character (see CharWidth), so treating the whole chunk as one Line would
+    // silently drop every embedded newline rather than wrap or reject it.
+    val state  = LogState()
+    state.append("alpha\nbeta")
+    state.append("gamma\ndelta")
+    state.append("eps")
+    assert(state.size == 5)
+    val buffer = Buffer(Rect(0, 0, 10, 5))
+    Log().render(buffer.area, buffer, state)
+    assert(trimmedLines(buffer) == Seq("alpha", "beta", "gamma", "delta", "eps"))
+
+  test("a trailing newline appends a trailing blank line rather than being dropped"):
+    val state = LogState()
+    state.append("alpha\n")
+    assert(state.size == 2)
+
+  test("a CRLF chunk splits clean, with no trailing carriage return on either line"):
+    val state  = LogState()
+    state.append("alpha\r\nbeta")
+    val buffer = Buffer(Rect(0, 0, 10, 2))
+    Log().render(buffer.area, buffer, state)
+    assert(trimmedLines(buffer) == Seq("alpha", "beta"))

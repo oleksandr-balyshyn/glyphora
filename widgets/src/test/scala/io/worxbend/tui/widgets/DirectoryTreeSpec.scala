@@ -113,3 +113,13 @@ final class DirectoryTreeSpec extends AnyFunSuite:
     val state = DirectoryTreeState(Path.of("/nonexistent-glyphora-path"))
     assert(state.visiblePaths().isEmpty)
     assert(trimmedLines(rendered(tree, state, 25, 6)).forall(_.isEmpty))
+
+  test("a directory listing is not silently truncated at scale"):
+    // childrenOf/visiblePaths cache the raw listing with no size cap; this pins that the cache does not introduce
+    // one, at a scale too small to make the suite slow but large enough that a hidden truncation (an off-by-a-
+    // power-of-ten cap, say) would still show up.
+    val root  = Files.createTempDirectory("glyphora-dtree-scale")
+    root.toFile.deleteOnExit()
+    (0 until 500).foreach(i => Files.createFile(root.resolve(f"entry$i%04d")))
+    val state = DirectoryTreeState(root)
+    assert(state.visiblePaths().size == 500)

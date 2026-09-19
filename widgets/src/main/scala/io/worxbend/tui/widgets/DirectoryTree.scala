@@ -3,6 +3,7 @@ package io.worxbend.tui.widgets
 import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Style}
 
 import java.nio.file.{Files, Path}
+import java.util.Locale
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 import scala.util.control.NonFatal
@@ -21,6 +22,15 @@ import scala.util.control.NonFatal
   * so the render-thread call finds the entries already there.
   *
   * Unreadable directories degrade to empty rather than raising, so a permission-denied folder shows as a leaf.
+  *
+  * Symbolic links are followed, including ones that resolve outside [[root]] — `Files.list`/`Files.isDirectory`
+  * traverse them like any other directory entry, and nothing here checks a resolved target against `root`. That is the
+  * same containment gap `java.nio.file.Files.walk`/`list` themselves have (they are not sandboxes either), so a caller
+  * browsing a directory it does not fully trust — an upload folder, an extracted archive, anything not laid out by this
+  * application — is responsible for containment itself, for instance by resolving `path.toRealPath()` before rendering
+  * it and refusing to expand one that escapes `root`. A future `followSymlinks` toggle could make refusal the default
+  * instead of every caller's job; until then this is deliberately spelled out rather than left for a caller to discover
+  * from behaviour.
   *
   * Render-thread-only, and mutating it does not by itself schedule a frame. This is a plain mutable object, invisible
   * to the reactive layer: a background result written straight into it stays off screen until something unrelated
@@ -90,7 +100,9 @@ final class DirectoryTreeState(val root: Path):
           .asScala
           .map(path => (path, Files.isDirectory(path)))
           .toVector
-          .sortBy((path, isDir) => (!isDir, path.getFileName.toString.toLowerCase))
+          // ROOT, not the default locale: see core.KeyEvent.keyCodeFor for why matching/sorting a lowercased
+          // user-visible string must not depend on the platform's default locale.
+          .sortBy((path, isDir) => (!isDir, path.getFileName.toString.toLowerCase(Locale.ROOT)))
       finally entries.close()
     catch case NonFatal(_) => Vector.empty // unreadable directory: show as empty rather than crash the UI
 

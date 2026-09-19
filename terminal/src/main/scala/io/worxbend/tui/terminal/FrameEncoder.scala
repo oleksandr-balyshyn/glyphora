@@ -73,7 +73,7 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
           body ++= Sgr.sgrDelta(currentStyle, cell.style, colorDepth)
           currentStyle = cell.style
         currentLink = carryLink(body, currentLink, cell.style.link)
-        body ++= cell.symbol
+        body ++= guarded(cell.symbol)
         currentY = y
         expectedX = x + advanceOf(next, x, y, cell)
       }
@@ -115,7 +115,7 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
             body ++= sgr
             currentStyle = sgr
           currentLink = carryLink(body, currentLink, cell.style.link)
-          body ++= cell.symbol
+          body ++= guarded(cell.symbol)
         x += 1
       carryLink(body, currentLink, None)
       body ++= AnsiSequences.ResetStyle
@@ -162,6 +162,24 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     if CharWidth.of(cell.symbol) == 0 then 0
     else if next.isContinuation(x + 1, y) then 2
     else 1
+
+  /** `symbol`, or a single blank if it contains a C0 or C1 control code (`ESC` included).
+    *
+    * The paragraph above is the column-tracking half of what happens when a `Cell`'s symbol is not the one printable
+    * grapheme cluster it is meant to be; this is the byte half. `Buffer.writeString` already refuses to write a
+    * zero-width or control cluster reached through ordinary text — see the `width > 0` guard in its private
+    * `writeString` — but `Buffer.set` and a caller-supplied glyph parameter (a `Scrollbar` track symbol, a `LineGauge`
+    * glyph) go straight to a `Cell` with no such filter. Nothing downstream of this method checks `cell.symbol` either:
+    * it is concatenated straight into the ANSI stream this encoder builds. A control byte reaching that stream is
+    * written to the terminal exactly as if the application had emitted it itself — indistinguishable from the escape
+    * sequences this frame is otherwise the sole author of. Substituting a blank is the same answer `writeString` gives
+    * a control cluster reached honestly: the column is claimed and nothing recognizable is drawn in it, rather than
+    * smuggled control bytes reaching a real terminal.
+    */
+  private def guarded(symbol: String): String =
+    if CharWidth.isPrintableAscii(symbol) then symbol
+    else if symbol.codePoints().anyMatch(Character.isISOControl) then " "
+    else symbol
 
   /** Emits the OSC-8 transitions that carry the hyperlink state from `open` to `next`, and answers `next`.
     *

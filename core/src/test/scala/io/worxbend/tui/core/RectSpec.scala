@@ -39,6 +39,16 @@ final class RectSpec extends AnyFunSuite:
   test("inset collapses to empty when the margin exhausts the rect"):
     assert(Rect(0, 0, 2, 2).inset(1).isEmpty)
 
+  test("inset collapses to empty rather than overflow, for a margin near Int.MaxValue"):
+    // `2 * horizontal` overflows Int at this margin and used to wrap to a small negative number, which subtracting
+    // from width computed as *adding* — growing the rect instead of exhausting it.
+    val huge = Rect(0, 0, 10, 10).inset(Int.MaxValue, 1)
+    assert(huge.isEmpty)
+    assert(huge.width <= 10)
+
+  test("inset collapses to empty rather than overflow, for a margin whose double is exactly Int.MinValue"):
+    assert(Rect(0, 0, 10, 10).inset(1073741824, 1).isEmpty)
+
   test("a rect from a size sits at the origin"):
     assert(Rect(Size(80, 24)) == Rect(0, 0, 80, 24))
 

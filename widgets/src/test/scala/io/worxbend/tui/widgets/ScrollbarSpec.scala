@@ -159,3 +159,13 @@ final class ScrollbarSpec extends AnyFunSuite:
     val bar    = Scrollbar(100, 0, trackSymbol = "🟦", thumbSymbol = "🟦")
     val buffer = renderedInto(bar, Rect(0, 0, 3, 4), 6, 4)
     assert((0 until 4).forall(row => buffer.get(2, row).symbol == " " && buffer.get(3, row).symbol == " "))
+
+  test("a huge viewport does not overflow Int and collapse the thumb to its 1-cell floor"):
+    // trackLength (a handful of screen cells) times visible (tens of millions) overflows a 32-bit Int and wraps
+    // negative; regression for that wrap picking `math.min(trackLength, negative)` over the correct proportional
+    // size. Here content and viewport are nearly equal, so an un-overflowed thumb should fill nearly the whole
+    // 50-row strip rather than collapse to 1.
+    val bar        = Scrollbar(contentLength = 60000000, position = 0, viewportLength = Some(50000000))
+    val buffer     = rendered(bar, 1, 50)
+    val thumbCells = lines(buffer).count(_ == "█")
+    assert(thumbCells >= 40, s"expected a near-full thumb, got $thumbCells of 50 cells")

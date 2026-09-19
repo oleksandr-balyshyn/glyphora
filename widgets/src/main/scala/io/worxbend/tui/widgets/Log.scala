@@ -21,7 +21,15 @@ final class LogState(maxLines: Int = 1000):
   var offset: Int                              = 0
   private[widgets] var lastViewportHeight: Int = 1
 
-  def append(text: String): Unit = append(Line.raw(text))
+  /** Appends `text` as one or more lines, split on `\n` (a lone `\r` before it is trimmed, so CRLF input splits clean).
+    * A caller piping raw chunks from a process or a socket — the ordinary way a [[Log]] gets its content — routinely
+    * hands this a chunk spanning several lines; treating the whole chunk as one [[Line]] would not wrap it, it would
+    * render it as one row with every embedded `\n` silently gone, because `Character.isISOControl` (see
+    * [[io.worxbend.tui.core.CharWidth]]) gives a control character zero display width and [[Buffer.setString]] never
+    * writes a zero-width cluster at all. Splitting here is what makes `append` behave the way appending to a log looks
+    * like it should.
+    */
+  def append(text: String): Unit = text.split("\n", -1).foreach(raw => append(Line.raw(raw.stripSuffix("\r"))))
 
   def append(line: Line): Unit =
     ring.append(line)

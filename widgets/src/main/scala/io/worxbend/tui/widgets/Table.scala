@@ -62,7 +62,7 @@ final case class Table(
       val body        = TableRow.fitting(rows.iterator, math.max(0, area.height - headerRows - footerRows))
       // the fallback only walks the rows that are about to be drawn, which is why `body` is taken first
       val cellCounts  = (header.iterator ++ body.iterator.map(_.cells) ++ footer.iterator).map(TableCell.columnCount)
-      val constraints = TableColumns.resolve(widths, cellCounts)
+      val constraints = TableColumns.resolve(widths, cellCounts, area.width)
       val columns     = Layout(Direction.Horizontal, constraints, columnSpacing, flex).split(area)
       var y           = area.y
       header.foreach { cells =>

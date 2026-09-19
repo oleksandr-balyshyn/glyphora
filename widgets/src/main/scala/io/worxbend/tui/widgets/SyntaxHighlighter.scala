@@ -1,5 +1,7 @@
 package io.worxbend.tui.widgets
 
+import java.util.Locale
+
 import io.worxbend.tui.core.{Color, Line, Span, Style, Text}
 
 /** Styles for each token kind a [[SyntaxHighlighter]] emits; override entries to re-theme. */
@@ -23,7 +25,9 @@ enum Language:
 object Language:
   /** Resolves a fence info-string / name (case-insensitive) to a [[Language]]; unknown names map to [[Generic]]. */
   def of(name: String): Language =
-    name.trim.toLowerCase match
+    // ROOT, not the default locale: see core.KeyEvent.keyCodeFor for why matching against a lowercased user string
+    // must not depend on the platform's default locale.
+    name.trim.toLowerCase(Locale.ROOT) match
       case "scala" | "sc" | "sbt"                      => Scala
       case "json"                                      => Json
       case "bash" | "sh" | "shell" | "zsh" | "console" => Bash

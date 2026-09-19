@@ -41,7 +41,13 @@ object TableCell:
     * columns each derives four columns and not two.
     */
   private[widgets] def columnCount(cells: Seq[Source]): Int =
-    cells.foldLeft(0)((total, source) => total + math.max(1, of(source).columnSpan))
+    // summed in `Long`, then clamped to `Int.MaxValue`: a row of a few cells each carrying a large `columnSpan`
+    // overflows `Int` well before any of them is individually adversarial, and the wrapped, possibly-negative total
+    // would otherwise reach `TableColumns.resolve`'s `Seq.fill` unclamped.
+    cells
+      .foldLeft(0L)((total, source) => total + math.max(1, of(source).columnSpan).toLong)
+      .min(Int.MaxValue.toLong)
+      .toInt
 
   /** The rectangle covering `span` solved columns starting at `first`, gaps between them included.
     *

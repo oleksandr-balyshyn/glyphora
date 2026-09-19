@@ -131,3 +131,15 @@ final class CalendarSpec extends AnyFunSuite:
     val calendar = Calendar(Year.MIN_VALUE, 1, firstDayOfWeek = DayOfWeek.TUESDAY, showSurroundingDays = true)
     val lines    = trimmedLines(rendered(calendar, 20, 8))
     assert(lines(2) == "                   1")
+
+  test("day numbers render in the calendar's own locale, not the process default"):
+    // day-of-month formatting used to go through the `f"%2d"` interpolator, which reads the process's default
+    // FORMAT locale regardless of the `locale` constructor parameter — contradicting the class's own stated purpose
+    // ("a widget whose output depends on the machine it runs on cannot be tested by comparing frames"). A locale
+    // whose numbering system is not ASCII digits proves the day numbers actually route through `locale`, by
+    // matching exactly what String.format(locale, "%2d", n) produces for that locale — no digit shape hardcoded.
+    val arabicIndic = Locale.forLanguageTag("ar-SA-u-nu-arab")
+    val expectedOne = String.format(arabicIndic, "%2d", 1)
+    assert(expectedOne != " 1", "the test locale must actually use non-ASCII digits, or this proves nothing")
+    val lines       = trimmedLines(rendered(Calendar(2026, 7, locale = arabicIndic), 20, 8))
+    assert(lines.exists(_.contains(expectedOne)))

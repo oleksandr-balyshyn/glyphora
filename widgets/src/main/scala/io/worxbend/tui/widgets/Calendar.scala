@@ -97,7 +97,10 @@ final case class Calendar(
           val y = gridTop(area) + slot / 7
           // a grid cell is two columns wide: drop the ones the area cannot hold rather than write past its edges
           if x + 2 <= area.right && y < area.bottom then
-            buffer.setString(x, y, f"${date.getDayOfMonth}%2d", styleFor(date, inMonth))
+            // `String.format`, not the `f` interpolator: `f"%2d"` formats through the default FORMAT locale (its
+            // digits and padding, not just its number grouping), which is exactly what this widget's own `locale`
+            // parameter exists to avoid — see the class Scaladoc.
+            buffer.setString(x, y, String.format(locale, "%2d", date.getDayOfMonth), styleFor(date, inMonth))
         }
     }
 

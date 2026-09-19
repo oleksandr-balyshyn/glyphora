@@ -268,3 +268,16 @@ final class TableSpec extends AnyFunSuite:
       columnSpacing = 1,
     )
     assert(trimmedLines(rendered(table, 5, 1)) == Seq("選択"))
+
+  test("an enormous columnSpan in the equal-columns fallback does not try to allocate one column per span unit"):
+    // with no `widths`, the fallback derives a column count from TableCell.columnCount, which sums every row's
+    // spans — nothing clamps a single cell's columnSpan before that sum. Regression for `Seq.fill` in
+    // TableColumns.resolve receiving that huge count unclamped, which allocated (or OOM'd trying to) millions of
+    // one-cell-wide columns instead of the handful the area actually has room for.
+    val table  = Table(rows = Seq(Seq(TableCell(Line.raw("a"), 1000000))), widths = Seq.empty)
+    val buffer = rendered(table, 10, 2)
+    assert(trimmedLines(buffer).head.startsWith("a"))
+
+  test("a columnSpan of Int.MaxValue in the equal-columns fallback renders instead of exhausting memory"):
+    val table = Table(rows = Seq(Seq(TableCell(Line.raw("a"), Int.MaxValue))), widths = Seq.empty)
+    val _     = rendered(table, 10, 2) // must return rather than throw or attempt a multi-gigabyte allocation

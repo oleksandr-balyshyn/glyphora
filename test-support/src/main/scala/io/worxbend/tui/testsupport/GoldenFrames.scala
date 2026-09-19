@@ -36,7 +36,10 @@ object GoldenFrames:
     * `GLYPHORA_GOLDEN_UPDATE` names a test-resources directory — writes the frame there instead of comparing.
     */
   def assertMatches(name: String, buffer: Buffer): Unit =
-    sys.env.get(UpdateEnvVar) match
+    // a blank value is not a setting: `export GLYPHORA_GOLDEN_UPDATE=` (or a CI job that leaks the variable empty
+    // rather than unset) must not silently drop every golden assertion in the process to a no-op — see the same
+    // "empty is not a setting" rule for `LC_ALL` in `terminal.TerminalGlyphs`.
+    sys.env.get(UpdateEnvVar).filter(_.nonEmpty) match
       case Some(directory) =>
         // Recording asserts nothing. Say so on stderr, so a run that only rewrote fixtures (a CI job that leaked the
         // environment variable, say) is distinguishable from a run whose golden tests actually compared frames.

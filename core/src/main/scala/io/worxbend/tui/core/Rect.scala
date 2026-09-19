@@ -106,8 +106,12 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
     * subtracts a block's borders and padding from an area given to it — and the two used to be one keystroke apart.
     */
   def inset(horizontal: Int, vertical: Int): Rect =
-    val shrunkWidth  = math.max(0, width - 2 * horizontal)
-    val shrunkHeight = math.max(0, height - 2 * vertical)
+    // `2 * horizontal`/`2 * vertical` computed in Long, then clamped: in Int they overflow for a margin near
+    // Int.MaxValue (or Int.MinValue), and the wrapped, sign-flipped result made a margin that should exhaust the
+    // rect compute as *wider* than it started instead of collapsing to zero. Same fix as the `x + maxWidth` bound
+    // in `Buffer.setString`.
+    val shrunkWidth  = math.max(0L, width.toLong - 2L * horizontal).min(Int.MaxValue.toLong).toInt
+    val shrunkHeight = math.max(0L, height.toLong - 2L * vertical).min(Int.MaxValue.toLong).toInt
     if shrunkWidth == 0 || shrunkHeight == 0 then Rect(x + width / 2, y + height / 2, 0, 0)
     else Rect(x + horizontal, y + vertical, shrunkWidth, shrunkHeight)
 

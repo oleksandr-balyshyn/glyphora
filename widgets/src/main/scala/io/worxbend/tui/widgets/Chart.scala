@@ -1,5 +1,7 @@
 package io.worxbend.tui.widgets
 
+import java.util.Locale
+
 import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Constraint, Rect, Style, Widget}
 
 /** How a [[Dataset]]'s points are drawn.
@@ -272,7 +274,12 @@ final case class Chart(
     buffer.setString(labelAlignment.originAt(areaX, gutter, CharWidth.of(label)), y, label, axisStyle)
 
   private def formatBound(value: Double): String =
-    if value == value.floor && math.abs(value) < 1e9 then value.toLong.toString else f"$value%.1f"
+    // `String.format(Locale.ROOT, ...)`, not the `f` interpolator: an axis label formatted through the default
+    // FORMAT locale would draw "0" on one axis and "10,5" on the next under a comma-decimal locale, and
+    // `DataTable`'s own numeric-column probe (`cell.toDoubleOption`) only accepts a '.' separator — the same
+    // hazard `DataTable.filteredRows` had with `toLowerCase`, here for number formatting instead of case folding.
+    if value == value.floor && math.abs(value) < 1e9 then value.toLong.toString
+    else String.format(Locale.ROOT, "%.1f", value)
 
   /** Draws the two axis rules: the upright one down column `axisX` from row `top`, and the horizontal one along
     * `axisRow` out to `right`, meeting at the corner.
