@@ -142,7 +142,7 @@ final case class PanelElement(
 
   private[dsl] def withProps(props: ElementProps): PanelElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PanelElement = copy(children = children)
-  private[dsl] override def intrinsicHeight(width: Int): Option[Int] =
+  private[dsl] override def intrinsicHeight(width: Int): Option[Int]           =
     // Every drawn border side eats one cell across its own axis, and the padding eats whatever it was asked for on
     // top of that. Counting the sides that are actually drawn, rather than assuming all four, is what keeps a
     // `.borders(Borders.Top)` panel from reserving two rows it never paints.

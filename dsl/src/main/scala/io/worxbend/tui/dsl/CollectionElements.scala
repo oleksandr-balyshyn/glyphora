@@ -45,7 +45,7 @@ final case class ListElement(
     * `CharWidth`, so a two-column marker such as `"▶ "` reserves two columns and not two `Char`s.
     */
   def highlightSymbol(symbol: String): ListElement                       = copy(highlightSymbolOverride = Some(symbol))
-  def widget: Widget =
+  def widget: Widget                                                     =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
     val view = w.ListView(
       items,
@@ -81,7 +81,7 @@ final case class TreeElement(
   type Self = TreeElement
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some(wheelScrolls(() => state.selectPrevious(nodes), () => state.selectNext(nodes)))
-  def widget: Widget =
+  def widget: Widget                                                         =
     // no whole-body focus styling: the selection highlight is the focus cue for scrollable widgets
     val tree = w.Tree(nodes, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => tree.render(area, buffer, state)
@@ -107,7 +107,7 @@ final case class MenuElement(
     val menu = w.Menu(items, style = props.style, highlightStyle = props.focusStyle)
     (area, buffer) => menu.render(area, buffer, state)
   private[dsl] def withProps(props: ElementProps): MenuElement               = copy(props = props)
-  private[dsl] override def claim: SizeClaim =
+  private[dsl] override def claim: SizeClaim                                 =
     // the popup asks for exactly the box it paints; `Fill` is the honest fallback if it ever stops knowing that
     val menu = w.Menu(items)
     (menu.widthAt(0), menu.heightAt(0)) match

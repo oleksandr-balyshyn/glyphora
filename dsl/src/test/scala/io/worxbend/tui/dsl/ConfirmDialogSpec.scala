@@ -106,7 +106,7 @@ final class ConfirmDialogSpec extends AnyFunSuite:
     val backend = HeadlessBackend(Size(40, 10))
     var typed   = 0
     val app     = new TuiApp:
-      override def bindings: KeyBindings = KeyBindings(
+      override def bindings: KeyBindings            = KeyBindings(
         binding("ctrl+d", "ask")(pushScreen(Screen.confirm("Quit", "Sure?")(popScreen(), popScreen()))),
         binding("ctrl+q", "quit")(quit()),
       )
