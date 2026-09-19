@@ -45,8 +45,11 @@ object TerminalGlyphs:
 
   /** Whether the locale's character encoding is UTF-8.
     *
-    * `Locale.ROOT`, not the default locale: in a Turkish locale `"UTF-8".toLowerCase` turns the `I` into a dotless `ı`,
-    * so the comparison below would fail on exactly the value it is looking for.
+    * `Locale.ROOT`, not the default locale, for the same reason [[consoleFont]] below needs it: a lowercase compare
+    * against a fixed ASCII literal must not depend on the platform's default locale, or a Turkish one would fold an `I`
+    * in the literal being matched — such as the `"linux"` `consoleFont` compares `TERM` against — to a dotless `ı` that
+    * the input can never match. Neither literal this method compares against contains an `I`, but the rule is applied
+    * uniformly rather than re-litigated per call site; see `core.KeyEvent.keyCodeFor` for the case that does.
     */
   private def utf8Locale(env: Map[String, String]): Boolean =
     val charset = Seq("LC_ALL", "LC_CTYPE", "LANG").flatMap(env.get).find(_.nonEmpty).getOrElse("")

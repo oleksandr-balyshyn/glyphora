@@ -4,9 +4,18 @@ import io.worxbend.tui.core.GlyphSupport
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.util.Locale
+
 final class TerminalGlyphsSpec extends AnyFunSuite:
 
   private val Xterm = Map("TERM" -> "xterm-256color")
+
+  private def withDefaultLocale[A](locale: Locale)(body: => A): A =
+    val previous = Locale.getDefault
+    try
+      Locale.setDefault(locale)
+      body
+    finally Locale.setDefault(previous)
 
   test("a UTF-8 locale on a modern terminal allows every glyph"):
     assert(TerminalGlyphs.detect(Xterm + ("LANG" -> "en_US.UTF-8")) == GlyphSupport.Full)
@@ -30,12 +39,18 @@ final class TerminalGlyphsSpec extends AnyFunSuite:
   test("an empty locale variable is skipped rather than read as a non-UTF-8 one"):
     assert(TerminalGlyphs.detect(Xterm + ("LC_ALL" -> "") + ("LANG" -> "en_US.UTF-8")) == GlyphSupport.Full)
 
-  /** Under a Turkish default locale `"UTF-8".toLowerCase` produces a dotless `ı`, which matches nothing. Detection
-    * folds with `Locale.ROOT` so the answer does not depend on the user's language.
-    */
-  test("locale matching is case-insensitive in every locale"):
+  test("locale matching is case-insensitive regardless of what the LANG value itself names"):
     assert(TerminalGlyphs.detect(Xterm + ("LANG" -> "TR_TR.UTF-8")) == GlyphSupport.Full)
     assert(TerminalGlyphs.detect(Xterm + ("LANG" -> "en_US.Utf8")) == GlyphSupport.Full)
+
+  /** The real Turkish-locale hazard here is not in the value being matched (no literal this file compares against
+    * contains an `I`) but in `TERM` containing one: under the JVM's own *default* locale, `"LINUX".toLowerCase` folds
+    * to `"lınux"` (a dotless ı), which `startsWith("linux")` never matches. `consoleFont` folds with `Locale.ROOT`
+    * instead, so this must hold no matter what the process's default locale is set to.
+    */
+  test("an uppercase console-font TERM is still recognised under a Turkish default locale"):
+    withDefaultLocale(Locale.forLanguageTag("tr")):
+      assert(TerminalGlyphs.detect(Map("TERM" -> "LINUX", "LANG" -> "en_US.UTF-8")) == GlyphSupport.BoxDrawing)
 
   test("a console font gets box drawing but nothing above it"):
     assert(TerminalGlyphs.detect(Map("TERM" -> "linux", "LANG" -> "en_US.UTF-8")) == GlyphSupport.BoxDrawing)
