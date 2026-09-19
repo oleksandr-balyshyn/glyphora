@@ -19,7 +19,7 @@ jobs:
     # No JDK, no Mill, no cache. Seconds, and it fails before a runner has been spent
     # compiling something that was never going to be merged.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Both greps below scan the examples as well as the library. `*/src/main/scala` expands
       # only to the seven top-level module directories — it never reaches
@@ -67,7 +67,7 @@ jobs:
     outputs:
       examples: ${{ steps.list.outputs.examples }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: list
         # Derived, never hardcoded: adding examples/<name>/package.mill is the only step
         # needed to get that example compiled, tested, and built as a native binary.
@@ -87,7 +87,7 @@ jobs:
     # formatting fix, so this is the gate for pushes to main and for fork branches,
     # where a bot cannot write.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/mill
       - name: Formatting
         run: ./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources
@@ -110,7 +110,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref }}
           # the default token's pushes do not retrigger workflows, which is what stops
@@ -140,7 +140,7 @@ jobs:
     name: Compile library
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/mill
         with:
           # The one job that writes the dependency cache, so the others never race to save it.
@@ -161,20 +161,39 @@ jobs:
         # Keyed by SHA, so it is scoped to this run. Mill's metadata embeds absolute
         # workspace paths, which is safe only because every runner in this workflow is
         # ubuntu and checks out to the same path.
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: out
           key: mill-build-${{ runner.os }}-${{ github.sha }}
 
   test:
-    name: Test library
+    name: Test library (JDK ${{ matrix.jdk }})
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      # One JDK failing says nothing about the other, and the 26 leg is a "does next-JDK still work" signal
+      # that should not block a PR on the LTS leg's account (or the reverse).
+      fail-fast: false
+      matrix:
+        jdk: [25, 26] # 25: the -release floor and the one `build` compiled under. 26: latest, advisory.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      # `build` compiled under 25 (action.yml's default java-version, which is also what `.mill-jvm-version`
+      # pins Mill's own process to). The 26 leg overrides that pin before the composite action below computes
+      # its cache keys, so both the dependency cache and the choice to skip restoring `build`'s `out/` follow
+      # from the same file: a restore under a mismatched JDK would let Mill see the 25-compiled classes as
+      # up-to-date and skip compiling under 26 entirely, silently testing nothing new.
+      #
+      # `zulu:26`, not `temurin:26`: Mill resolves JDKs against its own pinned coursier JVM index, and as of
+      # this writing that index has no JDK 26 entry for Temurin at all (`coursier.jvm.JvmCache$JvmNotFoundInIndex:
+      # No temurin version matching '26' found` — verified locally). Zulu 26 is in the index and this repo's
+      # library sources compile and test clean under it; revisit once Mill's pinned index catches up.
+      - name: Compile under JDK 26 instead of the pinned .mill-jvm-version
+        if: matrix.jdk == 26
+        run: echo "zulu:26" > .mill-jvm-version
       - uses: ./.github/actions/mill
         with:
-          build-output: restore
+          build-output: ${{ matrix.jdk == 25 && 'restore' || 'skip' }}
       # One step per module: a single combined step reports only "still running", so a module that hangs cannot be
       # told from a slow one. Per-module steps name the culprit in the live job view, and each carries its own timeout
       # so a hang fails in minutes instead of occupying a runner until the six-hour job limit.
@@ -212,7 +231,7 @@ jobs:
       matrix:
         example: ${{ fromJSON(needs.discover.outputs.examples) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/mill
         with:
           build-output: restore
@@ -228,7 +247,7 @@ jobs:
     # first time, and the builds themselves are ~30s each. One job keeps that download
     # to once and still reports every failure, because the loop below does not stop early.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/mill
         with:
           build-output: restore
