@@ -14,6 +14,12 @@ import scala.concurrent.duration.*
   */
 final class ProgressSpec extends AnyFunSuite with ScalaCheckPropertyChecks:
 
+  // ScalaTest's default is ten cases. 200 is chosen rather than a round 300 because the nested `forAll` below runs the
+  // inner property once per outer case, so this number is squared there; 200 keeps that at forty thousand cheap
+  // integer comparisons.
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfiguration(minSuccessful = 200)
+
   // ---------------------------------------------------------------- normalized
 
   test("normalized reads a zero-length animation as finished rather than dividing by zero"):

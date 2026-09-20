@@ -12,6 +12,34 @@ import org.scalatest.funsuite.AnyFunSuite
   */
 private final case class Parcel(label: String, route: java.net.URI)
 
+/** A field whose type is itself a case class. A form is a flat list of controls, so there is no sensible thing for the
+  * derivation to do here: it can neither render a `Coordinate` nor invent a rule for flattening one into two fields.
+  * Refusing at compile time is the only answer that does not surprise somebody at runtime.
+  */
+private final case class Coordinate(lat: Double, lon: Double)
+
+private final case class Waypoint(name: String, at: Coordinate)
+
+/** A field whose type is a collection. No [[FieldInput]] edits a list, and a `List[String]` is not a `String` that
+  * happens to have commas in it, so this has to be refused rather than guessed at.
+  */
+private final case class Playlist(title: String, tracks: List[String])
+
+/** A sum type that is not an enum — the other shape somebody reaches `deriveForm` with by mistake. */
+private sealed trait Payment
+
+private object Payment:
+  final case class Card(digits: String) extends Payment
+
+  case object Cash extends Payment
+
+/** An enum whose cases do not all take zero parameters, which is what [[FormFieldType.ofEnum]] promises to refuse by
+  * name: a picklist offers one label per case, and there is no label that stands for `Ring(3)` rather than `Ring(4)`.
+  */
+private enum Marker:
+  case Pin
+  case Ring(radius: Int)
+
 /** A domain type of the application's own, with its own instance next to it — the extension point that keeps the set of
   * derivable types open. `deriveForm` has no branch for `Email`; it finds this given by implicit search.
   */
@@ -82,6 +110,20 @@ private final case class Booking(
     hold: Option[Duration],
 )
 
+/** An enum of exactly two cases, opting into a picklist from its own companion the way the documentation shows.
+  *
+  * Two is the arity that matters. `Tuple.toList` types its elements as the *union* of the tuple's element types, and a
+  * union of exactly two `ValueOf`s used to erase the type test inside `ofEnum` into a call to a compiler-internal cast
+  * method with no runtime counterpart — so forcing this given threw `NoSuchMethodError` before anything was rendered.
+  * One case, and three or more cases, both came out fine, which is why no existing suite noticed: the enums here and in
+  * `EnumFieldSpec` that go through `ofEnum` all have three.
+  */
+enum Visibility:
+  case Everyone, TeamOnly
+
+object Visibility:
+  given FormFieldType[Visibility] = FormFieldType.ofEnum[Visibility]
+
 final class DerivationSpec extends AnyFunSuite:
 
   private val sampleId: UUID = UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
@@ -91,6 +133,8 @@ final class DerivationSpec extends AnyFunSuite:
   private final case class Measurement(label: String, weight: Double, note: Option[String], count: Option[Int])
 
   private final case class Contact(email: Email)
+
+  private final case class Pair(name: String, age: Int)
 
   test("deriveForm reads field names and input kinds from the case class"):
     val spec = deriveForm[Signup]
@@ -119,7 +163,78 @@ final class DerivationSpec extends AnyFunSuite:
     val errors  = scala.compiletime.testing.typeCheckErrors("deriveForm[Parcel]")
     val message = errors.map(_.message).mkString("; ")
     assert(message.contains("URI"), message)
-    assert(message.contains("FormFieldType"), s"the message should say what to define: $message")
+    // The type names alone prove nothing: Scala's own "No given instance of type FormFieldType[URI] was found" prints
+    // both of them, so a test that checks only those stays green if the whole `@implicitNotFound` block is deleted.
+    // What the annotation exists for is the half of the message that tells the reader what to *do*, so that is what
+    // this pins — the sentence naming the given to declare, where to declare it, and the `ofEnum` shortcut for enums.
+    assert(message.contains("no form control is defined for a field of type"), message)
+    assert(message.contains("define a `given FormFieldType["), message)
+    assert(message.contains("next to your own type to teach the derivation about it"), message)
+    assert(message.contains("FormFieldType.ofEnum["), message)
+
+  test("deriveForm refuses a sum type — a form is a product of fields, not a choice between shapes"):
+    // `Visibility` has a `FormFieldType` of its own, so this is not "the enum is unsupported": deriving a *form* from
+    // it is what cannot work, because there is no set of fields to render. The diagnostic is the compiler's own — it
+    // names `Mirror.ProductOf` and says the type is not a case class, but never mentions `ofEnum` or this library.
+    val fromEnum  = scala.compiletime.testing.typeCheckErrors("deriveForm[Visibility]").map(_.message).mkString("; ")
+    assert(fromEnum.contains("Mirror.ProductOf"), fromEnum)
+    assert(fromEnum.contains("Visibility"), fromEnum)
+    assert(fromEnum.contains("not a case class"), fromEnum)
+    val fromTrait = scala.compiletime.testing.typeCheckErrors("deriveForm[Payment]").map(_.message).mkString("; ")
+    assert(fromTrait.contains("Mirror.ProductOf"), fromTrait)
+    assert(fromTrait.contains("Payment"), fromTrait)
+
+  test("a nested case-class field is refused by name, not flattened into the enclosing form"):
+    val errors  = scala.compiletime.testing.typeCheckErrors("deriveForm[Waypoint]")
+    val message = errors.map(_.message).mkString("; ")
+    assert(message.contains("Coordinate"), message)
+    assert(message.contains("next to your own type to teach the derivation about it"), message)
+
+  test("a collection field is refused by name — no control edits a list"):
+    val errors  = scala.compiletime.testing.typeCheckErrors("deriveForm[Playlist]")
+    val message = errors.map(_.message).mkString("; ")
+    assert(message.contains("List[String]"), message)
+    assert(message.contains("next to your own type to teach the derivation about it"), message)
+
+  test("ofEnum refuses an enum with a parameterised case, naming the case it cannot offer"):
+    val errors  = scala.compiletime.testing.typeCheckErrors("FormFieldType.ofEnum[Marker]")
+    val message = errors.map(_.message).mkString("; ")
+    assert(message.contains("Ring"), message)
+    assert(message.contains("ValueOf"), message)
+
+  test("ofEnum refuses a type that is not a sum at all"):
+    val errors  = scala.compiletime.testing.typeCheckErrors("FormFieldType.ofEnum[Parcel]")
+    val message = errors.map(_.message).mkString("; ")
+    assert(message.contains("Mirror.SumOf"), message)
+    assert(message.contains("Parcel"), message)
+
+  test("a two-case enum builds its picklist — the arity that used to die when the given was forced"):
+    // Forcing the given is the whole test: it used to throw NoSuchMethodError here, long before any rendering.
+    val two = summon[FormFieldType[Visibility]]
+    assert(two.input == FieldInput.SelectField(Seq("Everyone", "TeamOnly")))
+    assert(two.parse("TeamOnly") == Right(Visibility.TeamOnly))
+    assert(two.parse("everyone") == Right(Visibility.Everyone))
+
+  test("CHARACTERISATION, not the desired behaviour: an Option of an enum offers no blank option"):
+    // The optional field renders as the picklist the inner type renders as, and that picklist's options are the enum's
+    // cases and nothing else. So there is nothing a user can pick that means "not given": `parse` can still produce a
+    // `None`, but only from text the control never offers, and the field always submits a `Some`. `FormFieldType`'s
+    // Scaladoc calls this out for `Option[Boolean]` — a checkbox is always either ticked or not — and tells you to
+    // declare a plain `Boolean`; it says nothing about picklists, which have the identical hole. Fixing it means
+    // adding a blank entry, which is a decision about the rendered control and lives in the DSL's `Form`, not here.
+    // When that lands, this test is the one to flip.
+    val optional = summon[FormFieldType[Option[Visibility]]]
+    assert(optional.input == FieldInput.SelectField(Seq("Everyone", "TeamOnly")))
+    assert(optional.parse("") == Right(None))
+
+  test("a two-field case class derives — the arity where the tuple's element type becomes a two-way union"):
+    // `deriveForm` pulls its controls out of a tuple exactly the way `FormFieldType.ofEnum` pulls its case values,
+    // and at two elements that tuple's element type is a union of two different instantiations. That is the shape
+    // that broke `ofEnum` on this compiler; it does not break here, and no other case class in these suites has
+    // exactly two fields, so this is the pin that says so.
+    val spec = deriveForm[Pair]
+    assert(spec.fields == Seq(FieldSpec("name", FieldInput.TextField), FieldSpec("age", FieldInput.IntField)))
+    assert(spec.assemble(Seq("ada", 36)) == Pair("ada", 36))
 
   test("a wide case class derives — no inline-depth ceiling"):
     val spec = deriveForm[Wide]

@@ -9,6 +9,11 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
   */
 final class CharWidthFastPathSpec extends AnyFunSuite, ScalaCheckPropertyChecks:
 
+  // the fast path is an optimisation that has to agree with the general one on every string, and ScalaTest's default
+  // of ten cases is not enough draws from a 95-character alphabet to stand behind that "every"
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfiguration(minSuccessful = 300)
+
   /** The general path, with the fast path bypassed — what the fast path must reproduce. */
   private def generalWidth(text: String): Int =
     var total    = 0

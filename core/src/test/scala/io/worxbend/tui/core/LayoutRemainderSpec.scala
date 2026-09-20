@@ -9,6 +9,10 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
   */
 final class LayoutRemainderSpec extends AnyFunSuite, ScalaCheckPropertyChecks:
 
+  // ScalaTest's default of ten cases samples ten of the 301 widths the properties below claim to hold "at every width"
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfiguration(minSuccessful = 300)
+
   private def widths(constraints: Seq[Constraint], total: Int): Seq[Int] =
     Layout(Direction.Horizontal, constraints).split(Rect(0, 0, total, 1)).map(_.width)
 

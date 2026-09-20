@@ -7,6 +7,11 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 /** Property-based invariants for the constraint solver — the case space hand-picked examples cannot cover. */
 final class LayoutPropertySpec extends AnyFunSuite with ScalaCheckPropertyChecks:
 
+  // ScalaTest's default is ten cases. Six constraint kinds, up to eight of them at a time, an area of any width and a
+  // spacing: ten draws from that space are anecdotes, not a search.
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfiguration(minSuccessful = 300)
+
   private val genConstraint: Gen[Constraint] = Gen.oneOf(
     Gen.chooseNum(0, 30).map(Constraint.Length.apply),
     Gen.chooseNum(0, 100).map(Constraint.Percentage.apply),
