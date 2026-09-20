@@ -143,6 +143,12 @@ final case class PanelElement(
   private[dsl] def withProps(props: ElementProps): PanelElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): PanelElement = copy(children = children)
   private[dsl] override def intrinsicHeight(width: Int): Option[Int]           =
+    constrainedHeight(framedHeight(width))
+
+  /** The rows this panel's chrome and children need at `width` — what [[intrinsicHeight]] answers once
+    * [[constrainedHeight]] has found no explicit constraint of the caller's own to honour instead.
+    */
+  private def framedHeight(width: Int): Option[Int] =
     // Every drawn border side eats one cell across its own axis, and the padding eats whatever it was asked for on
     // top of that. Counting the sides that are actually drawn, rather than assuming all four, is what keeps a
     // `.borders(Borders.Top)` panel from reserving two rows it never paints.
@@ -204,7 +210,7 @@ final case class RowElement(
   private[dsl] def withProps(props: ElementProps): RowElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): RowElement = copy(children = children)
   private[dsl] override def intrinsicHeight(width: Int): Option[Int]         =
-    measuredHeights(children, width).flatMap(_.maxOption)
+    constrainedHeight(measuredHeights(children, width).flatMap(_.maxOption))
 
 /** Children stacked top to bottom. */
 final case class ColumnElement(
@@ -218,7 +224,7 @@ final case class ColumnElement(
   def withFlex(mode: Flex): ColumnElement    = copy(flex = mode)
   def withSpacing(cells: Int): ColumnElement = copy(spacing = math.max(0, cells))
   private[dsl] override def intrinsicHeight(width: Int): Option[Int]            =
-    measuredHeights(children, width).map(_.sum + spacing * math.max(0, children.size - 1))
+    constrainedHeight(measuredHeights(children, width).map(_.sum + spacing * math.max(0, children.size - 1)))
   private[dsl] def withProps(props: ElementProps): ColumnElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): ColumnElement = copy(children = children)
 
