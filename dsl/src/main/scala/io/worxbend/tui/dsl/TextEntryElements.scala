@@ -31,10 +31,10 @@ final case class InputElement(
 
   private def handleKey(event: KeyEvent): Boolean =
     event.code match
-      case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
+      case KeyCode.Char(c) if isPlainTyping(event) =>
         state.insert(Character.toString(c))
         true
-      case _ => cursorKeys(state)(event)
+      case _                                       => cursorKeys(state)(event)
 
 /** A text input with a live suggestion dropdown: typing filters `suggestions` (subsequence match), Up/Down move the
   * highlight, Enter accepts it into the input and fires `onAccept`.
@@ -79,21 +79,21 @@ final case class AutocompleteElement(
 
   private def handleKey(event: KeyEvent): Boolean =
     event.code match
-      case KeyCode.Char(c) if event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift =>
+      case KeyCode.Char(c) if isPlainTyping(event) =>
         state.input.insert(Character.toString(c))
         state.highlighted = 0
         true
-      case KeyCode.Backspace                                                                   =>
+      case KeyCode.Backspace                       =>
         state.input.backspace()
         state.highlighted = 0
         true
-      case KeyCode.Down                                                                        =>
+      case KeyCode.Down                            =>
         state.highlighted = math.min(state.highlighted + 1, math.max(0, matches.size - 1))
         true
-      case KeyCode.Up                                                                          =>
+      case KeyCode.Up                              =>
         state.highlighted = math.max(0, state.highlighted - 1)
         true
-      case KeyCode.Enter                                                                       =>
+      case KeyCode.Enter                           =>
         val visible = matches
         visible.lift(highlightedIndex(visible)) match
           case Some(choice) =>
@@ -101,13 +101,13 @@ final case class AutocompleteElement(
             onAccept(choice)
             true
           case None         => false
-      case KeyCode.Left                                                                        =>
+      case KeyCode.Left                            =>
         state.input.moveLeft()
         true
-      case KeyCode.Right                                                                       =>
+      case KeyCode.Right                           =>
         state.input.moveRight()
         true
-      case _                                                                                   => false
+      case _                                       => false
 
 /** A text input restricted to numbers: an optional single leading minus and, in [[NumberFormat.Decimal]], one dot. */
 final case class NumberInputElement(
@@ -184,10 +184,18 @@ final case class TemplateInputElement(
 
   private def currentLength: Int = CharWidth.clusterCount(state.value)
 
-  private def isSlot(slot: String): Boolean = slot == "#" || slot == "A"
+  /** The fillable slot markers and which typed character each accepts. */
+  private val DigitSlot                                = "#"
+  private val LetterSlot                               = "A"
+  private val slotKinds: Seq[(String, Int => Boolean)] = Seq(
+    DigitSlot  -> ((codePoint: Int) => Character.isDigit(codePoint)),
+    LetterSlot -> ((codePoint: Int) => Character.isLetter(codePoint)),
+  )
+
+  private def isSlot(slot: String): Boolean = slotKinds.exists((marker, _) => slot == marker)
 
   private def slotAccepts(slot: String, codePoint: Int): Boolean =
-    (slot == "#" && Character.isDigit(codePoint)) || (slot == "A" && Character.isLetter(codePoint))
+    slotKinds.exists((marker, accepts) => slot == marker && accepts(codePoint))
 
 /** Multi-line editor element. While focused it consumes printable characters, Enter (newline), Backspace, Delete,
   * arrows, Home/End, Ctrl+Z (undo) and Ctrl+Y (redo) — Tab stays free for focus traversal. A bracketed paste lands as
@@ -213,22 +221,22 @@ final case class TextAreaElement(
       keys {
         case KeyEvent(KeyCode.Char('z'), modifiers) if modifiers.hasAny(KeyModifiers.Ctrl) => state.undo()
         case KeyEvent(KeyCode.Char('y'), modifiers) if modifiers.hasAny(KeyModifiers.Ctrl) => state.redo()
-        case KeyEvent(KeyCode.Char(c), modifiers) if modifiers.isEmpty || modifiers == KeyModifiers.Shift =>
+        case event @ KeyEvent(KeyCode.Char(c), _) if isPlainTyping(event)                  =>
           state.insert(Character.toString(c))
-        case KeyEvent(KeyCode.Enter, _)                                                                   =>
+        case KeyEvent(KeyCode.Enter, _)                                                    =>
           state.newline()
-        case KeyEvent(KeyCode.Backspace, _)                                                               =>
+        case KeyEvent(KeyCode.Backspace, _)                                                =>
           state.backspace()
-        case KeyEvent(KeyCode.Delete, _) => state.delete()
-        case KeyEvent(KeyCode.Left, _)   =>
+        case KeyEvent(KeyCode.Delete, _)                                                   => state.delete()
+        case KeyEvent(KeyCode.Left, _)                                                     =>
           state.moveLeft()
-        case KeyEvent(KeyCode.Right, _)  =>
+        case KeyEvent(KeyCode.Right, _)                                                    =>
           state.moveRight()
-        case KeyEvent(KeyCode.Up, _)     => state.moveUp()
-        case KeyEvent(KeyCode.Down, _)   =>
+        case KeyEvent(KeyCode.Up, _)                                                       => state.moveUp()
+        case KeyEvent(KeyCode.Down, _)                                                     =>
           state.moveDown()
-        case KeyEvent(KeyCode.Home, _)   =>
+        case KeyEvent(KeyCode.Home, _)                                                     =>
           state.moveHome()
-        case KeyEvent(KeyCode.End, _)    => state.moveEnd()
+        case KeyEvent(KeyCode.End, _)                                                      => state.moveEnd()
       }
     )

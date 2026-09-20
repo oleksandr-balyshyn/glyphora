@@ -2,6 +2,8 @@ package io.worxbend.tui.examples.airsensor
 
 import io.worxbend.tui.dsl.*
 
+import java.util.Locale
+
 /** Where one reading sits against its metric's thresholds.
   *
   * The band is the whole point of an air-quality display: `812 ppm` means nothing to most people, `Moderate` means
@@ -36,15 +38,20 @@ enum Band:
 
 object Band:
 
-  /** The shape most pollutant thresholds take: four upper-inclusive cut-offs, anything above the last one is the worst
-    * band. Written once so the five metrics differ only in their numbers.
+  /** The shape most pollutant thresholds take: an ascending list of upper-inclusive cut-offs, each paired with the band
+    * a reading at or below it falls into, plus the band for anything above the last cut-off.
+    *
+    * Pairing each cut-off with its band is the point of the signature: the old four-positional-`Double` version let a
+    * call site transpose two same-typed arguments and band silently wrong, while a transposed pair here is caught by
+    * the ascending-order `require`. Written once so the five metrics differ only in their numbers.
     */
-  def cascade(good: Double, moderate: Double, elevated: Double, unhealthy: Double)(value: Double): Band =
-    if value <= good then Good
-    else if value <= moderate then Moderate
-    else if value <= elevated then Elevated
-    else if value <= unhealthy then Unhealthy
-    else VeryUnhealthy
+  def cascade(thresholds: Vector[(Double, Band)], aboveLast: Band = VeryUnhealthy): Double => Band =
+    require(thresholds.nonEmpty, "a cascade needs at least one threshold")
+    require(
+      thresholds.sliding(2).forall(pair => pair(0)._1 < pair(1)._1),
+      "cascade cut-offs must be strictly ascending",
+    )
+    value => thresholds.collectFirst { case (cutoff, band) if value <= cutoff => band }.getOrElse(aboveLast)
 
   /** The worst of several bands — the one the summary line reports. */
   def worst(bands: Seq[Band]): Band =
@@ -91,14 +98,19 @@ object Trend:
   *
   * Bundling those five together is what lets the view render every card with the same six lines of code. Adding a
   * metric is then one entry in [[Metric.All]] and nothing else.
+  *
+  * Deliberately a plain class rather than a case class: two of its fields are functions, so case-class equality would
+  * be reference equality wearing a value-equality costume, and `toString` would print function hashes. The metrics are
+  * named singletons in the companion, so identity comparison — which a plain class gives honestly — is all the app ever
+  * needs.
   */
-final case class Metric(
-    label: String,
-    unit: String,
-    decimals: Int,
-    gaugeMax: Double,
-    read: Reading => Double,
-    classify: Double => Band,
+final class Metric(
+    val label: String,
+    val unit: String,
+    val decimals: Int,
+    val gaugeMax: Double,
+    val read: Reading => Double,
+    val classify: Double => Band,
 ):
 
   def valueText(reading: Reading): String = format(read(reading))
@@ -110,24 +122,73 @@ final case class Metric(
 
   def bandOf(reading: Reading): Band = classify(read(reading))
 
-  private def format(value: Double): String = s"%.${decimals}f".format(value)
+  // Locale.ROOT rather than the ambient locale, the same reason procmon's `decimal` gives: `%.1f` through the default
+  // FORMAT locale writes "4,1" in much of Europe, and a locale whose digits are not ASCII writes them in its own
+  // script. The value is printed beside `scaleText` and against the printed band thresholds, so the two have to agree
+  // on one notation whatever machine the example is run on.
+  private def format(value: Double): String = String.format(Locale.ROOT, s"%.${decimals}f", value)
 
 object Metric:
+
+  /** The one construction site; [[Metric]] is a plain class on purpose (see its Scaladoc), so the `apply` keeps the
+    * metric definitions below reading as they did.
+    */
+  def apply(
+      label: String,
+      unit: String,
+      decimals: Int,
+      gaugeMax: Double,
+      read: Reading => Double,
+      classify: Double => Band,
+  ): Metric =
+    new Metric(label, unit, decimals, gaugeMax, read, classify)
 
   /** The bands below are the ones the AirGradient reference client uses; they in turn follow the US EPA and the SGP41
     * index scales. They are upper-inclusive: 800 ppm of CO2 is still `Good`.
     */
   val Aqi: Metric =
-    Metric("AQI", "", 0, 500.0, _.aqi, Band.cascade(50.0, 100.0, 150.0, 200.0))
+    Metric(
+      "AQI",
+      "",
+      0,
+      500.0,
+      _.aqi,
+      Band.cascade(Vector(50.0 -> Band.Good, 100.0 -> Band.Moderate, 150.0 -> Band.Elevated, 200.0 -> Band.Unhealthy)),
+    )
 
   val Co2: Metric =
-    Metric("CO2", "ppm", 0, 2000.0, _.co2Ppm, Band.cascade(800.0, 1000.0, 1500.0, 2000.0))
+    Metric(
+      "CO2",
+      "ppm",
+      0,
+      2000.0,
+      _.co2Ppm,
+      Band.cascade(
+        Vector(800.0 -> Band.Good, 1000.0 -> Band.Moderate, 1500.0 -> Band.Elevated, 2000.0 -> Band.Unhealthy)
+      ),
+    )
 
   val Pm25: Metric =
-    Metric("PM2.5", "ug/m3", 1, 125.4, _.pm25, Band.cascade(9.0, 35.4, 55.4, 125.4))
+    Metric(
+      "PM2.5",
+      "ug/m3",
+      1,
+      125.4,
+      _.pm25,
+      Band.cascade(Vector(9.0 -> Band.Good, 35.4 -> Band.Moderate, 55.4 -> Band.Elevated, 125.4 -> Band.Unhealthy)),
+    )
 
   val Tvoc: Metric =
-    Metric("TVOC", "index", 0, 400.0, _.tvocIndex, Band.cascade(100.0, 200.0, 300.0, 400.0))
+    Metric(
+      "TVOC",
+      "index",
+      0,
+      400.0,
+      _.tvocIndex,
+      Band.cascade(
+        Vector(100.0 -> Band.Good, 200.0 -> Band.Moderate, 300.0 -> Band.Elevated, 400.0 -> Band.Unhealthy)
+      ),
+    )
 
   /** Temperature is the odd one out: comfort is a *range*, not a ceiling, so it gets a banded classifier instead of a
     * cascade and tops out at `Elevated` — a cold room is uncomfortable, not unhealthy.
@@ -156,21 +217,29 @@ object Metric:
   */
 object AirQuality:
 
-  /** `(concentration low, concentration high, index low, index high)`, in micrograms per cubic metre. */
-  private val Breakpoints: Vector[(Double, Double, Double, Double)] = Vector(
-    (0.0, 9.0, 0.0, 50.0),
-    (9.1, 35.4, 51.0, 100.0),
-    (35.5, 55.4, 101.0, 150.0),
-    (55.5, 125.4, 151.0, 200.0),
-    (125.5, 225.4, 201.0, 300.0),
-    (225.5, 325.4, 301.0, 500.0),
+  /** One EPA breakpoint: a PM2.5 concentration range, in micrograms per cubic metre, and the index range it maps onto.
+    */
+  private final case class Breakpoint(
+      concentrationLow: Double,
+      concentrationHigh: Double,
+      indexLow: Double,
+      indexHigh: Double,
+  )
+
+  private val Breakpoints: Vector[Breakpoint] = Vector(
+    Breakpoint(0.0, 9.0, 0.0, 50.0),
+    Breakpoint(9.1, 35.4, 51.0, 100.0),
+    Breakpoint(35.5, 55.4, 101.0, 150.0),
+    Breakpoint(55.5, 125.4, 151.0, 200.0),
+    Breakpoint(125.5, 225.4, 201.0, 300.0),
+    Breakpoint(225.5, 325.4, 301.0, 500.0),
   )
 
   def aqiFromPm25(pm25: Double): Double =
     // the EPA truncates the reading to one decimal before interpolating, so two sensors reporting 9.04 and 9.09
     // report the same index rather than differing in the last digit of a number nobody reads that precisely
     val truncated = math.floor(math.max(0.0, pm25) * 10.0) / 10.0
-    Breakpoints.find((_, concentrationHigh, _, _) => truncated <= concentrationHigh) match
-      case Some((concentrationLow, concentrationHigh, indexLow, indexHigh)) =>
-        ((indexHigh - indexLow) / (concentrationHigh - concentrationLow)) * (truncated - concentrationLow) + indexLow
-      case None                                                             => 500.0
+    Breakpoints.find(bp => truncated <= bp.concentrationHigh) match
+      case Some(bp) =>
+        ((bp.indexHigh - bp.indexLow) / (bp.concentrationHigh - bp.concentrationLow)) * (truncated - bp.concentrationLow) + bp.indexLow
+      case None     => 500.0

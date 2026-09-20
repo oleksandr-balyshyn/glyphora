@@ -2,6 +2,7 @@ package io.worxbend.tui.examples.loadtest
 
 import io.worxbend.tui.dsl.*
 
+import java.util.Locale
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 
 /** Where the app sits in the start -> run -> summarise cycle. */
@@ -92,8 +93,12 @@ final class LoadTestApp(
 
   // ---- the run lifecycle, all of it on the render thread ----
 
+  /** Runs `action` only while no run is in flight; mid-run, plan edits and restarts are silently ignored. */
+  private def whenNotRunning(action: => Unit): Unit =
+    if phase.peek != Phase.Running then action
+
   private def start(): Unit =
-    if phase.peek != Phase.Running then
+    whenNotRunning {
       dismissSummary()
       clearCounters()
       startedNanos = System.nanoTime()
@@ -103,6 +108,7 @@ final class LoadTestApp(
       // Called from a key binding, so we are on the render thread — which is what makes the capture inside
       // `Async.runCatching` name this app's render loop. See LoadRunner.start.
       runner.start(plan.peek)(outcome => finish(thisRun, outcome))
+    }
 
   private def stop(): Unit =
     if phase.peek == Phase.Running then runner.stop()
@@ -141,8 +147,9 @@ final class LoadTestApp(
     elapsed.set(0.millis)
 
   private def adjustConcurrency(delta: Int): Unit =
-    if phase.peek != Phase.Running then
+    whenNotRunning {
       plan.update(current => current.copy(concurrency = LoadTestApp.clampConcurrency(current.concurrency + delta)))
+    }
 
   /** Rewrites the request count with `scale`, e.g. `_ * 2` for the `]` key and `_ / 2` for `[`.
     *
@@ -150,8 +157,9 @@ final class LoadTestApp(
     * do at the call site. Render thread only, like every other key handler: it writes a `Signal`.
     */
   private def scaleRequests(scale: Int => Int): Unit =
-    if phase.peek != Phase.Running then
+    whenNotRunning {
       plan.update(current => current.copy(requests = LoadTestApp.clampRequests(scale(current.requests))))
+    }
 
   // ---- view ----
 
@@ -190,20 +198,26 @@ final class LoadTestApp(
     val total   = plan.get.requests
     panel(phaseLabel)(progressBar(current.sent, total).labelled(s"${current.sent} / $total"))
 
+  /** Elapsed run time in seconds. The two readers guard the zero case differently — the live counter shows `0.0`, the
+    * summary clamps to a millisecond so its throughput can never divide by zero — so the guard stays at each call site
+    * and only the conversion is shared.
+    */
+  private def elapsedSeconds(using ReactiveScope): Double = elapsed.get.toMillis / 1000.0
+
   private def countersPanel(using ReactiveScope, Theme): Element =
-    val current = stats.get
-    val seconds = elapsed.get.toMillis / 1000.0
-    val rate    = if seconds <= 0.0 then 0.0 else current.sent / seconds
+    val current   = stats.get
+    val seconds   = elapsedSeconds
+    val rate      = if seconds <= 0.0 then 0.0 else current.sent / seconds
+    val failedRow = text(fixed("failed   %7d", current.failed))
     panel("Counters")(
-      text(f"sent     ${current.sent}%7d"),
-      text(f"ok       ${current.ok}%7d").fg(Color.Green),
-      if current.failed > 0 then text(f"failed   ${current.failed}%7d").fg(Color.Red)
-      else text(f"failed   ${current.failed}%7d").dim,
-      text(f"req/s    $rate%7.1f").fg(Color.Cyan),
-      text(f"elapsed  $seconds%6.1fs"),
+      text(fixed("sent     %7d", current.sent)),
+      text(fixed("ok       %7d", current.ok)).fg(Color.Green),
+      if current.failed > 0 then failedRow.fg(Color.Red) else failedRow.dim,
+      text(fixed("req/s    %7.1f", rate)).fg(Color.Cyan),
+      text(fixed("elapsed  %6.1fs", seconds)),
       // Not a signal, so this only refreshes because a tick redrew the frame anyway — which is exactly what it is
       // here to show: the pool filling up on start and emptying again on stop.
-      text(f"workers  ${runner.workersAlive}%7d").dim,
+      text(fixed("workers  %7d", runner.workersAlive)).dim,
     )
 
   private def throughputPanel(using ReactiveScope, Theme): Element =
@@ -230,15 +244,18 @@ final class LoadTestApp(
     */
   private def bucketRow(bucket: LatencyBucket, tallest: Int)(using Theme): Element =
     row(
-      text(f"${LoadTestApp.ms(bucket.lowMicros)}%6.2f-${LoadTestApp.ms(bucket.highMicros)}%6.2f").length(14).dim,
+      text(fixed("%6.2f-%6.2f", LoadTestApp.ms(bucket.lowMicros), LoadTestApp.ms(bucket.highMicros)))
+        .length(14)
+        .dim,
       progressBar(bucket.count, tallest).bare.fill,
-      text(f"${bucket.count}%5d").length(6),
+      text(fixed("%5d", bucket.count)).length(6),
     ).length(1)
 
   private def latencyPanel(using ReactiveScope, Theme): Element =
     val summary                                           = latency.get
-    // Neither `Table` nor `DataTable` can right-align a column, so the numbers are padded to a fixed width here.
-    def statRow(label: String, micros: Long): Seq[String] = Seq(label, f"${LoadTestApp.ms(micros)}%9.2f")
+    // `TableElement`'s rows are plain strings with no per-column alignment, so the numbers are padded to a fixed
+    // width here.
+    def statRow(label: String, micros: Long): Seq[String] = Seq(label, fixed("%9.2f", LoadTestApp.ms(micros)))
     panel("Latency (ms)")(
       TableElement(
         rows = Seq(
@@ -268,7 +285,7 @@ final class LoadTestApp(
   private def summaryView(using ReactiveScope, Theme): Element =
     val current      = stats.get
     val summary      = latency.get
-    val seconds      = math.max(0.001, elapsed.get.toMillis / 1000.0)
+    val seconds      = math.max(0.001, elapsedSeconds)
     val success      = if current.sent == 0 then 0.0 else current.ok * 100.0 / current.sent
     // oha's rule, and a good one: the success rate is the only number worth colouring by threshold.
     val successColor =
@@ -277,14 +294,18 @@ final class LoadTestApp(
     val body         =
       Seq(
         text(phaseLabel).bold,
-        text(f"requests    ${current.sent}%d in $seconds%.2f s"),
-        text(f"success     $success%.2f %%").fg(successColor),
-        text(f"throughput  ${current.sent / seconds}%.1f req/s"),
-        text(f"fastest     ${LoadTestApp.ms(summary.min)}%.2f ms").fg(Color.Green),
-        text(f"slowest     ${LoadTestApp.ms(summary.max)}%.2f ms").fg(Color.Yellow),
+        text(fixed("requests    %d in %.2f s", current.sent, seconds)),
+        text(fixed("success     %.2f %%", success)).fg(successColor),
+        text(fixed("throughput  %.1f req/s", current.sent / seconds)),
+        text(fixed("fastest     %.2f ms", LoadTestApp.ms(summary.min))).fg(Color.Green),
+        text(fixed("slowest     %.2f ms", LoadTestApp.ms(summary.max))).fg(Color.Yellow),
         text(
-          f"p50/p90/p99 ${LoadTestApp.ms(summary.p50)}%.2f / ${LoadTestApp.ms(summary.p90)}%.2f" +
-            f" / ${LoadTestApp.ms(summary.p99)}%.2f ms"
+          fixed(
+            "p50/p90/p99 %.2f / %.2f / %.2f ms",
+            LoadTestApp.ms(summary.p50),
+            LoadTestApp.ms(summary.p90),
+            LoadTestApp.ms(summary.p99),
+          )
         ).fg(Color.Cyan),
         spacer(1),
       ) ++ (
@@ -296,7 +317,24 @@ final class LoadTestApp(
       )
     // `Block` deliberately never paints its interior, and a modal `Screen` layers over the live view — so without a
     // fill of its own the histogram behind this dialog shows through the gaps between the words.
-    centered(56, 17)(FilledElement(panel("Run summary")(body*).rounded, summon[Theme].primary))
+    centered(LoadTestApp.SummaryWidth, LoadTestApp.SummaryHeight)(
+      FilledElement(panel("Run summary")(body*).rounded, summon[Theme].primary)
+    )
+
+  /** `String.format` pinned to [[Locale.ROOT]]: every number on this screen is formatted through here.
+    *
+    * The `f` interpolator this replaced formats through the *default* FORMAT locale, so on a comma-decimal machine the
+    * summary read "12,50 ms" where the histogram beside it read "12.50", and under a locale whose digits are not ASCII
+    * every counter came out in another script. procmon's `decimal`/`integer` state the same rule; this screen has too
+    * many call sites to repeat it at each one. The widths here are hand-padded (`%7d`, `%6.2f`) to line the columns up,
+    * which a locale-dependent separator would also undo.
+    *
+    * `args` is `Any*` and forwards to `String.format`'s Java `Object...` rather than being declared `AnyRef*`: a Scala
+    * `AnyRef*` parameter does not accept an `Int` or a `Double` at all ("implicit conversions were not tried because
+    * the result of an implicit conversion must be more specific than AnyRef"), while Java varargs of `Object` box
+    * primitives at the call site.
+    */
+  private def fixed(spec: String, args: Any*): String = String.format(Locale.ROOT, spec, args*)
 
 /** The one example that reads its command line, so it builds the app first and then hands over to the `main` `TuiApp`
   * supplies — which is also where the failure reporting lives.
@@ -318,6 +356,11 @@ object LoadTestApp:
   private val MinRequests    = 10
   private val MaxRequests    = 1000000
 
+  // The summary modal's fixed footprint: wide enough for the longest summary line, tall enough for the body plus
+  // the three worst errors.
+  private val SummaryWidth  = 56
+  private val SummaryHeight = 17
+
   private def clampConcurrency(value: Int): Int = math.max(MinConcurrency, math.min(MaxConcurrency, value))
 
   private def clampRequests(value: Int): Int = math.max(MinRequests, math.min(MaxRequests, value))
@@ -330,8 +373,14 @@ object LoadTestApp:
   def fromArgs(args: Array[String]): LoadTestApp =
     val flags  = args.sliding(2, 2).collect { case Array(flag, value) => flag -> value }.toMap
     val plan   = Plan(
-      requests = flags.get("--requests").flatMap(_.toIntOption).map(math.max(1, _)).getOrElse(500),
-      concurrency = flags.get("--concurrency").flatMap(_.toIntOption).map(math.max(1, _)).getOrElse(8),
+      requests = intFlag(flags, "--requests", 500),
+      concurrency = intFlag(flags, "--concurrency", 8),
     )
     val target = flags.get("--url").map(url => HttpTarget(url)).getOrElse(FakeTarget())
     LoadTestApp(target, plan)
+
+  /** An integer flag with a fallback: unparseable values are ignored, and anything that parses is clamped to at least 1
+    * — a one-shot floor for the command line, deliberately simpler than the key handlers' live clamps.
+    */
+  private def intFlag(flags: Map[String, String], name: String, default: Int): Int =
+    flags.get(name).flatMap(_.toIntOption).map(math.max(1, _)).getOrElse(default)

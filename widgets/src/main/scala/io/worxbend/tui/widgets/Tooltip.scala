@@ -21,12 +21,12 @@ final case class Tooltip(
   /** Natural width: the widest line plus a padding cell each side and the borders. Independent of the rows given. */
   override def widthAt(height: Int): Option[Int] =
     val _ = height
-    Some(lines.map(CharWidth.of).maxOption.getOrElse(0) + 4)
+    Some(lines.map(CharWidth.of).maxOption.getOrElse(0) + PopupChrome.ExtraWidth)
 
   /** Natural height: one row per line plus the top and bottom borders. Independent of the columns given. */
   override def heightAt(width: Int): Option[Int] =
     val _ = width
-    Some(lines.size + 2)
+    Some(lines.size + PopupChrome.ExtraHeight)
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then

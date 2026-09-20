@@ -9,7 +9,7 @@ import scala.concurrent.duration.{Duration, DurationLong, FiniteDuration}
   * start/stop/toggle controls and the tick guard come from [[TickDriven]].
   */
 final class Stopwatch(initial: FiniteDuration = Duration.Zero) extends TickDriven:
-  private var elapsedNanos: Long = math.max(0L, initial.toNanos)
+  private var elapsedNanos: Long = clampedNanos(initial.toNanos)
 
   protected def advance(deltaNanos: Long): Unit = elapsedNanos += deltaNanos
 

@@ -39,9 +39,7 @@ object BufferAssertions:
 
   /** Renders `widget` into a fresh `width` x `height` buffer and returns the buffer for assertions. */
   def rendered(widget: Widget, width: Int, height: Int): Buffer =
-    val buffer = Buffer(Rect(0, 0, width, height))
-    widget.render(buffer.area, buffer)
-    buffer
+    renderInto(width, height)(buffer => widget.render(buffer.area, buffer))
 
   /** Renders `widget` against caller-owned `state` into a fresh `width` x `height` buffer.
     *
@@ -53,9 +51,7 @@ object BufferAssertions:
     * `state` is mutated by the render, as it would be in an app, and stays the caller's to inspect afterwards.
     */
   def rendered[S](widget: StatefulWidget[S], state: S, width: Int, height: Int): Buffer =
-    val buffer = Buffer(Rect(0, 0, width, height))
-    widget.render(buffer.area, buffer, state)
-    buffer
+    renderInto(width, height)(buffer => widget.render(buffer.area, buffer, state))
 
   /** Renders `widget` into `area` of a fresh `width` x `height` buffer.
     *
@@ -64,8 +60,15 @@ object BufferAssertions:
     * including partly outside it — the buffer's own bounds checking is what is under test in that case.
     */
   def renderedInto(widget: Widget, area: Rect, width: Int, height: Int): Buffer =
-    val buffer = Buffer(Rect(0, 0, width, height))
-    widget.render(area, buffer)
+    renderInto(width, height)(widget.render(area, _))
+
+  /** A fresh `width` x `height` buffer at the origin — the canvas every `rendered*` overload starts from. */
+  private def freshBuffer(width: Int, height: Int): Buffer = Buffer(Rect(0, 0, width, height))
+
+  /** Runs `draw` against a [[freshBuffer]] of `width` x `height` and returns the buffer for assertions. */
+  private def renderInto(width: Int, height: Int)(draw: Buffer => Unit): Buffer =
+    val buffer = freshBuffer(width, height)
+    draw(buffer)
     buffer
 
   /** An expected frame written out as plain rows: `rows.length` high, and as wide as the widest row's *display* width.

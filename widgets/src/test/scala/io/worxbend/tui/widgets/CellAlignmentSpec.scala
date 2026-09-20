@@ -64,46 +64,44 @@ final class CellAlignmentSpec extends AnyFunSuite:
     assert(rendered_ == Seq.fill(3)(Seq("abcdef")))
 
   test("a DataTable column alignment places the body, the header and the footer alike"):
-    val table = DataTable(
+    val table = DataTable.fromStrings(
       columns = Seq("n"),
       rows = Seq(Seq("7"), Seq("100")),
       widths = oneColumn,
-      footer = Some(Seq("sum")),
-      alignments = Seq(Alignment.Right),
+      options = DataTableOptions(footer = Some(Seq("sum")), alignments = Seq(Alignment.Right)),
     )
     assert(lines(rendered(table, DataTableState(), 6, 4)) == Seq("     n", "     7", "   100", "   sum"))
 
   test("a DataTable alignment sequence shorter than the column list leaves the rest left-aligned"):
-    val table = DataTable(
+    val table = DataTable.fromStrings(
       columns = Seq("a", "b"),
       rows = Seq(Seq("1", "2")),
       widths = Seq(Constraint.Length(3), Constraint.Length(3)),
-      columnSpacing = 0,
-      alignments = Seq(Alignment.Right),
+      options = DataTableOptions(columnSpacing = 0, alignments = Seq(Alignment.Right)),
     )
     assert(lines(rendered(table, DataTableState(), 6, 2)) == Seq("  ab  ", "  12  "))
 
   test("DataTable alignment entries past the last column are ignored rather than throwing"):
-    val table = DataTable(
+    val table = DataTable.fromStrings(
       columns = Seq("a"),
       rows = Seq(Seq("1")),
       widths = oneColumn,
-      alignments = Seq(Alignment.Right, Alignment.Center, Alignment.Left),
+      options = DataTableOptions(alignments = Seq(Alignment.Right, Alignment.Center, Alignment.Left)),
     )
     assert(lines(rendered(table, DataTableState(), 6, 2)) == Seq("     a", "     1"))
 
   test("a right-aligned DataTable header keeps its sort indicator against the right edge"):
     val state = DataTableState()
     state.sortBy(0)
-    val table = DataTable(
+    val table = DataTable.fromStrings(
       columns = Seq("n"),
       rows = Seq(Seq("1")),
       widths = oneColumn,
-      alignments = Seq(Alignment.Right),
+      options = DataTableOptions(alignments = Seq(Alignment.Right)),
     )
     assert(lines(rendered(table, state, 6, 1)) == Seq("   n ▲"))
 
   test("with no alignments a DataTable renders exactly as it did before the parameter existed"):
-    val plain   = DataTable(columns = Seq("a"), rows = Seq(Seq("1")), widths = oneColumn)
-    val spelled = plain.copy(alignments = Seq(Alignment.Left))
+    val plain   = DataTable.fromStrings(columns = Seq("a"), rows = Seq(Seq("1")), widths = oneColumn)
+    val spelled = plain.copy(options = plain.options.copy(alignments = Seq(Alignment.Left)))
     assert(lines(rendered(plain, DataTableState(), 6, 2)) == lines(rendered(spelled, DataTableState(), 6, 2)))

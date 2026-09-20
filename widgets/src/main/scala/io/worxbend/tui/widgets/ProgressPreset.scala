@@ -65,6 +65,17 @@ final case class ProgressPreset(
       val full  = if isSubCell then math.floor(exact).toInt else math.round(exact).toInt
       math.max(0, math.min(width, full))
 
+  /** [[filledCells]] with the boundary cell counted as filled whenever this preset can draw a partial glyph in it.
+    *
+    * The one statement of the styling rule every gauge follows: the cell the boundary falls inside is part of the bar,
+    * not part of the track, exactly when the preset is sub-cell — the partial block *is* the bar. A whole-cell preset
+    * draws the track glyph there, so the cell counts as track. This is the number a widget compares a cell index
+    * against (`index < filledCellsInclusiveOfBoundary`) to pick the fill style.
+    */
+  private[widgets] def filledCellsInclusiveOfBoundary(fraction: Double, width: Int): Int =
+    val whole = filledCells(fraction, width)
+    if isSubCell then math.min(width, whole + 1) else whole
+
   /** Where the bar's boundary falls, in cells, before any rounding — `2.75` means two whole cells and three quarters of
     * a third.
     *

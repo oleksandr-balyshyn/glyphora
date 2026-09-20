@@ -50,8 +50,10 @@ object Modifiers:
     */
   val All: Modifiers = Named.foldLeft(Modifiers.None) { case (accumulated, (flag, _)) => accumulated | flag }
 
+  // the extension bodies are one-line forwarders to [[FlagBits]], the bitset kernel shared with [[KeyModifiers]];
+  // the docs stay here because they are the published API's contract
   extension (m: Modifiers)
-    def |(other: Modifiers): Modifiers = (m: Int) | (other: Int)
+    def |(other: Modifiers): Modifiers = FlagBits.union(m, other)
 
     /** The flags set in *both* bitsets — set intersection. `(Bold | Italic) & (Italic | Dim)` is `Italic`, and anything
       * intersected with [[None]] is `None`. This is the plain name for "what do these two styles agree on", which
@@ -60,29 +62,29 @@ object Modifiers:
       * Scala binds `&` tighter than `|`, so `a & b | c` groups as `(a & b) | c`, the way flag arithmetic groups in
       * every other language.
       */
-    def &(other: Modifiers): Modifiers = (m: Int) & (other: Int)
+    def &(other: Modifiers): Modifiers = FlagBits.intersect(m, other)
 
     /** Whether *any* flag of `flag` is set. With a single flag — the overwhelmingly common call — that reads exactly as
       * it looks; with several ORed together it is an any-of test, so `(Bold | Italic).hasAny(Bold | Underline)` is
       * true. Use [[hasAll]] when every flag must be present.
       */
-    def hasAny(flag: Modifiers): Boolean = ((m: Int) & (flag: Int)) != 0
+    def hasAny(flag: Modifiers): Boolean = FlagBits.hasAny(m, flag)
 
     /** Whether *every* flag of `flags` is set. `hasAll(Modifiers.None)` is true — no flag is required. */
-    def hasAll(flags: Modifiers): Boolean = ((m: Int) & (flags: Int)) == (flags: Int)
+    def hasAll(flags: Modifiers): Boolean = FlagBits.hasAll(m, flags)
 
-    def isEmpty: Boolean = (m: Int) == 0
+    def isEmpty: Boolean = FlagBits.isEmpty(m)
 
     /** This bitset with every flag in `flags` cleared (ratatui's `sub_modifier`). */
-    def without(flags: Modifiers): Modifiers = (m: Int) & ~(flags: Int)
+    def without(flags: Modifiers): Modifiers = FlagBits.without(m, flags)
 
     /** The names of the set flags, in declaration order; empty when nothing is set. */
-    def names: Seq[String] = Named.collect { case (flag, name) if m.hasAny(flag) => name }
+    def names: Seq[String] = FlagBits.names(m, Named)
 
     /** The set flags as `"Bold|Italic"`, or `"None"` when nothing is set — what every `toString` that holds a
       * `Modifiers` should print instead of the raw `Int` the opaque type erases to.
       */
-    def show: String = if m.isEmpty then "None" else names.mkString("|")
+    def show: String = FlagBits.show(m, Named)
 
     /** The set flags spelled as the [[Style]] builder calls that turn them on — `Seq("bold", "italic")`.
       *

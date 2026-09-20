@@ -165,70 +165,92 @@ final class TerminalRunner(
       render: Frame => Unit,
       loop: RenderThread.RenderLoop,
   ): Option[LoopFailure] =
-    val state = LoopState()
-    val ticks = TickSchedule(config.tickRate, nanoTime)
+    LoopBody(backend, config, nanoTime, redrawRequested, onStart, handleEvent, render, loop).run()
 
-    val handle   = BackendHandle(backend, state)
-    val composer = FrameComposer(backend, render, config.onFrame, config.viewport)
+/** The event loop of one [[TerminalRunner.run]]: the per-iteration phases (redraw, guarded callback, dispatch,
+  * frame-owed check) and the loop itself, gathered out of `runLoop` so each phase is one named method on the state it
+  * closes over rather than one of four nested closures sharing locals.
+  *
+  * Everything here runs on the render thread, like the [[LoopState]] it owns.
+  */
+private final class LoopBody(
+    backend: Backend,
+    config: RunnerConfig,
+    nanoTime: () => Long,
+    redrawRequested: () => Boolean,
+    onStart: RunnerHandle => Unit,
+    handleEvent: (Event, RunnerHandle) => EventOutcome,
+    render: Frame => Unit,
+    loop: RenderThread.RenderLoop,
+):
 
-    /** Composes and flushes one frame.
-      *
-      * The render function is the app's code too — in the DSL it is the user's `view` — so a throwable out of it is
-      * caught here rather than being allowed to unwind past the terminal restore. `compose` returns
-      * `Either[BackendError, Unit]`, which has no room for a handler failure, hence the guard at the call site: a
-      * backend failure still arrives as a `Left` and is recorded unchanged.
-      */
-    def redraw(): Unit =
-      try state.record(composer.compose())
-      catch case NonFatal(error) => state.failHandler(error)
+  private val state    = LoopState()
+  private val ticks    = TickSchedule(config.tickRate, nanoTime)
+  private val handle   = BackendHandle(backend, state)
+  private val composer = FrameComposer(backend, render, config.onFrame, config.viewport)
 
-    /** Runs `body` on the app's behalf, recording a throwable as the loop's failure instead of letting it unwind.
-      *
-      * Unwinding would leave `run`'s callers with the throwable and the user with a terminal still in raw mode on the
-      * alternate screen: the restore lives further down this call stack, not above it.
-      */
-    def guarded(body: => EventOutcome): EventOutcome =
-      try body
-      catch
-        case NonFatal(error) =>
-          state.failHandler(error)
-          EventOutcome.Ignored
+  /** Composes and flushes one frame.
+    *
+    * The render function is the app's code too — in the DSL it is the user's `view` — so a throwable out of it is
+    * caught here rather than being allowed to unwind past the terminal restore. `compose` returns
+    * `Either[BackendError, Unit]`, which has no room for a handler failure, hence the guard at the call site: a backend
+    * failure still arrives as a `Left` and is recorded unchanged.
+    */
+  private def redraw(): Unit =
+    try state.record(composer.compose())
+    catch case NonFatal(error) => state.failHandler(error)
 
-    /** Dispatches one event; `true` when the frame should be repainted afterward. */
-    def dispatch(event: Event): Boolean =
-      event match
-        case Event.Interrupt  =>
-          // an app that does not consume Ctrl+C quits cleanly, so teardown runs on the normal path
-          if guarded(handleEvent(event, handle)) == EventOutcome.Redraw then true
-          else
-            handle.quit()
-            false
-        case Event.EndOfInput =>
-          // Not a request the app may decline, unlike the interrupt above: the stream is gone, so there is nothing
-          // left to read and a loop that kept polling it would spin at 100% CPU. The handler still runs, and runs
-          // first, so an app can save its work; whatever it answers, the loop quits. No repaint either — the frame
-          // that would be drawn is one nobody will look at, and drawing it only delays the terminal restore.
-          val _ = guarded(handleEvent(event, handle))
+  /** Runs `body` on the app's behalf, recording a throwable as the loop's failure instead of letting it unwind.
+    *
+    * Unwinding would leave `run`'s callers with the throwable and the user with a terminal still in raw mode on the
+    * alternate screen: the restore lives further down this call stack, not above it.
+    */
+  private def guarded(body: => EventOutcome): EventOutcome =
+    try body
+    catch
+      case NonFatal(error) =>
+        state.failHandler(error)
+        EventOutcome.Ignored
+
+  /** Dispatches one event; answers whether the frame should be repainted afterward. */
+  private def dispatch(event: Event): DispatchOutcome =
+    event match
+      case Event.Interrupt  =>
+        // an app that does not consume Ctrl+C quits cleanly, so teardown runs on the normal path
+        if guarded(handleEvent(event, handle)) == EventOutcome.Redraw then DispatchOutcome.Repaint
+        else
           handle.quit()
-          false
-        case _: Event.Resize  =>
-          // a resize always repaints, whatever the handler answers, because the composed frame no longer fits the
-          // terminal. The handler still runs, and runs first, so an app that tracks its own dimensions sees the event.
-          val _ = guarded(handleEvent(event, handle))
-          true
-        case _                => guarded(handleEvent(event, handle)) == EventOutcome.Redraw
+          DispatchOutcome.NoRepaint
+      case Event.EndOfInput =>
+        // Not a request the app may decline, unlike the interrupt above: the stream is gone, so there is nothing
+        // left to read and a loop that kept polling it would spin at 100% CPU. The handler still runs, and runs
+        // first, so an app can save its work; whatever it answers, the loop quits. No repaint either — the frame
+        // that would be drawn is one nobody will look at, and drawing it only delays the terminal restore.
+        val _ = guarded(handleEvent(event, handle))
+        handle.quit()
+        DispatchOutcome.NoRepaint
+      case _: Event.Resize  =>
+        // a resize always repaints, whatever the handler answers, because the composed frame no longer fits the
+        // terminal. The handler still runs, and runs first, so an app that tracks its own dimensions sees the event.
+        val _ = guarded(handleEvent(event, handle))
+        DispatchOutcome.Repaint
+      case _                =>
+        if guarded(handleEvent(event, handle)) == EventOutcome.Redraw then DispatchOutcome.Repaint
+        else DispatchOutcome.NoRepaint
 
-    /** Whether a frame is owed for a reason no event asked for: caller-owned state mutated through
-      * [[RunnerHandle.requestRedraw]], or whatever the host's own `redrawRequested` tracks (a DSL app's signals).
-      *
-      * Both are read every iteration — neither short-circuits the other — because the handle's request is consumed by
-      * reading it and dropping it would owe a frame nobody ever pays.
-      */
-    def frameOwed(): Boolean =
-      val byHandle = state.takeRedrawRequest()
-      val byHost   = redrawRequested()
-      byHandle || byHost
+  /** Whether a frame is owed for a reason no event asked for: caller-owned state mutated through
+    * [[RunnerHandle.requestRedraw]], or whatever the host's own `redrawRequested` tracks (a DSL app's signals).
+    *
+    * Both are read every iteration — neither short-circuits the other — because the handle's request is consumed by
+    * reading it and dropping it would owe a frame nobody ever pays.
+    */
+  private def frameOwed(): Boolean =
+    val byHandle = state.takeRedrawRequest()
+    val byHost   = redrawRequested()
+    byHandle || byHost
 
+  /** Runs the loop until the app quits or something fails; what to report, or `None` on a clean exit. */
+  def run(): Option[LoopFailure] =
     // Before the first frame and after the terminal is dressed: the earliest point at which this is certainly the
     // render thread, so background work armed here captures this loop. A `quit()` from it exits without rendering.
     val _ = guarded { onStart(handle); EventOutcome.Ignored }
@@ -244,11 +266,24 @@ final class TerminalRunner(
           // rendering, so folding several key events into one frame would dispatch the later ones against a stale
           // tree — Tab would move focus and the next keystroke would still go to the previous element. Floods are
           // bounded anyway: a paste arrives as a single `Event.Paste`, and resizes coalesce inside the backend.
-          if dispatch(event) && state.isLive then redraw()
+          if dispatch(event) == DispatchOutcome.Repaint && state.isLive then redraw()
         case Right(None)        => ()
-      // the `&&` chain keeps the original nesting: when no tick is due the handler is not invoked at all
-      if ticks.due() && guarded(handleEvent(Event.Tick, handle)) == EventOutcome.Redraw && state.isLive then redraw()
+      // when no tick is due the handler is not invoked at all
+      val tickDue     = ticks.takeDue()
+      val tickOutcome = if tickDue then guarded(handleEvent(Event.Tick, handle)) else EventOutcome.Ignored
+      if tickDue && tickOutcome == EventOutcome.Redraw && state.isLive then redraw()
     state.outcome
+
+/** What [[LoopBody.dispatch]] settled about the frame that follows the event it handled — named so the loop reads
+  * "repaint" rather than `true`.
+  */
+private enum DispatchOutcome:
+
+  /** Draw a fresh frame: the handler asked for it, or the event (a resize) invalidated the current one. */
+  case Repaint
+
+  /** Keep the current frame: the handler ignored the event, or the loop is exiting and nobody will see another. */
+  case NoRepaint
 
 /** When the next tick is due, and how long the loop may block on input before then.
   *
@@ -269,10 +304,10 @@ private final class TickSchedule(rate: Option[FiniteDuration], nanoTime: () => L
 
   private var lastTick: Long = nanoTime()
 
-  /** Whether a tick is owed now. Re-stamps the schedule as a side effect, so one iteration of the loop must ask exactly
-    * once — asking twice would swallow the second tick.
+  /** Answers whether a tick is owed now, consuming it when one is: the schedule is re-stamped, so one iteration of the
+    * loop must ask exactly once — asking twice would swallow the second tick.
     */
-  def due(): Boolean =
+  def takeDue(): Boolean =
     rate.exists { r =>
       if nanoTime() - lastTick >= r.toNanos then
         lastTick = nanoTime()

@@ -161,7 +161,7 @@ object Paragraph:
     else if line.width <= width && blanks != WrapBlanks.DropAll then Seq(line)
     else
       val sink = LineSink(line.alignment, line.style)
-      walkWrapped(line, width, blanks, sink)
+      WrapWalker(width, blanks, sink).walk(line)
       sink.rows
 
   /** How many rows [[wrapLine]] would return for `line` at `width`, without building any of them.
@@ -177,32 +177,68 @@ object Paragraph:
     else if line.width <= width then 1
     else
       val sink = CountingSink()
-      walkWrapped(line, width, blanks, sink)
+      WrapWalker(width, blanks, sink).walk(line)
       sink.rows
 
-  /** Reads `line` cluster by cluster and tells `sink` where each row of at most `width` columns ends.
+  /** Reads a line cluster by cluster and tells `sink` where each row of at most `width` columns ends.
     *
     * The wrapping decisions all live here, so the rows `render` draws and the rows `heightAt` counts can never come
     * from two different algorithms; the sink only decides whether the text of a row is kept or discarded. The rules are
     * the ones documented on [[wrapLine]].
     */
-  private def walkWrapped(line: Line, width: Int, blanks: WrapBlanks, sink: RowSink): Unit =
-    var rows           = 0
+  private final class WrapWalker(width: Int, blanks: WrapBlanks, sink: RowSink):
+    private var rows           = 0
     // Widths of the row being filled, the run of blanks seen since the last word, and the word being read. A word is
     // only moved onto the row once the whole of it is known to fit, which is what makes the break land between words.
-    var rowWidth       = 0
-    var gapWidth       = 0
-    var wordWidth      = 0
+    private var rowWidth       = 0
+    private var gapWidth       = 0
+    private var wordWidth      = 0
     // Columns of the word's first cluster: the narrowest a row holding any of this word can be, and so what decides
     // whether an indent still leaves the word somewhere to go.
-    var wordFirstWidth = 0
-    var rowHasContent  = false
-    var wordHasContent = false
+    private var wordFirstWidth = 0
+    private var rowHasContent  = false
+    private var wordHasContent = false
     // True until the first row ends: while it holds, the pending blanks are the caller's own indentation rather than
     // a break point, and are kept.
-    var atLineStart    = true
+    private var atLineStart    = true
 
-    def endRow(): Unit =
+    /** The whole walk: read every cluster of `line`, then flush the pending word and the row it lands on. */
+    def walk(line: Line): Unit =
+      line.spans.foreach { span =>
+        val clusters = CharWidth.graphemeClusters(span.content)
+        while clusters.hasNext do
+          val cluster = clusters.next()
+          if LineBreaks.isBreakingSpace(cluster) then
+            commitWord()
+            sink.addGap(cluster, span.style)
+            gapWidth += CharWidth.of(cluster)
+          else if LineBreaks.isZeroWidthBreak(cluster) then
+            // A break opportunity with no glyph, standing on its own at the very start of the text: end the word here
+            // and drop the character, which draws nothing whether the break is taken or not.
+            commitWord()
+          else
+            val clusterWidth = CharWidth.of(cluster)
+            // The blanks that will be written in front of this word are part of the row it lands on, so they are counted
+            // against the width here too. Left out, a line whose first row is indented was broken one column too late
+            // and the renderer clipped that column away: " abcde" at width 5 came out as the single row " abcde".
+            val firstWidth   = if wordHasContent then wordFirstWidth else clusterWidth
+            if gapOnFreshRow(firstWidth, wordWidth + clusterWidth) + wordWidth + clusterWidth > width then
+              // The word alone is wider than any row can be, so it has to be broken. Put what has been read onto a row
+              // of its own and carry on reading the rest of the word into the next one.
+              commitWord()
+              if rowHasContent then endRow()
+            if !wordHasContent then wordFirstWidth = clusterWidth
+            sink.addWord(cluster, span.style)
+            wordWidth += clusterWidth
+            wordHasContent = true
+            // A zero width space rides along inside the cluster before it, and says a break is allowed after that
+            // cluster: end the word here so the next one may start on a new row.
+            if LineBreaks.endsWithZeroWidthBreak(cluster) then commitWord()
+      }
+      commitWord()
+      if rowHasContent || rows == 0 then endRow()
+
+    private def endRow(): Unit =
       sink.endRow()
       rows += 1
       rowWidth = 0
@@ -226,16 +262,16 @@ object Paragraph:
       * @param word
       *   columns taken by the whole word being placed
       */
-    def keepsGap(firstCluster: Int, word: Int): Boolean =
+    private def keepsGap(firstCluster: Int, word: Int): Boolean =
       blanks match
         case WrapBlanks.KeepIndent => atLineStart && !rowHasContent && gapWidth + firstCluster <= width
         case WrapBlanks.DropAll    => false
         case WrapBlanks.KeepAll    => gapWidth + word <= width
 
     /** The columns the pending blanks would take on a fresh row — zero when they would be dropped there. */
-    def gapOnFreshRow(firstCluster: Int, word: Int): Int = if keepsGap(firstCluster, word) then gapWidth else 0
+    private def gapOnFreshRow(firstCluster: Int, word: Int): Int = if keepsGap(firstCluster, word) then gapWidth else 0
 
-    def commitWord(): Unit =
+    private def commitWord(): Unit =
       if wordHasContent then
         if !rowHasContent then
           val keepGap = keepsGap(wordFirstWidth, wordWidth)
@@ -260,41 +296,7 @@ object Paragraph:
         sink.clearGap()
         gapWidth = 0
 
-    line.spans.foreach { span =>
-      val clusters = CharWidth.graphemeClusters(span.content)
-      while clusters.hasNext do
-        val cluster = clusters.next()
-        if LineBreaks.isBreakingSpace(cluster) then
-          commitWord()
-          sink.addGap(cluster, span.style)
-          gapWidth += CharWidth.of(cluster)
-        else if LineBreaks.isZeroWidthBreak(cluster) then
-          // A break opportunity with no glyph, standing on its own at the very start of the text: end the word here
-          // and drop the character, which draws nothing whether the break is taken or not.
-          commitWord()
-        else
-          val clusterWidth = CharWidth.of(cluster)
-          // The blanks that will be written in front of this word are part of the row it lands on, so they are counted
-          // against the width here too. Left out, a line whose first row is indented was broken one column too late
-          // and the renderer clipped that column away: " abcde" at width 5 came out as the single row " abcde".
-          val firstWidth   = if wordHasContent then wordFirstWidth else clusterWidth
-          if gapOnFreshRow(firstWidth, wordWidth + clusterWidth) + wordWidth + clusterWidth > width then
-            // The word alone is wider than any row can be, so it has to be broken. Put what has been read onto a row
-            // of its own and carry on reading the rest of the word into the next one.
-            commitWord()
-            if rowHasContent then endRow()
-          if !wordHasContent then wordFirstWidth = clusterWidth
-          sink.addWord(cluster, span.style)
-          wordWidth += clusterWidth
-          wordHasContent = true
-          // A zero width space rides along inside the cluster before it, and says a break is allowed after that
-          // cluster: end the word here so the next one may start on a new row.
-          if LineBreaks.endsWithZeroWidthBreak(cluster) then commitWord()
-    }
-    commitWord()
-    if rowHasContent || rows == 0 then endRow()
-
-  /** Where [[walkWrapped]] puts the text it reads. `LineSink` keeps it and hands back rows; `CountingSink` throws it
+  /** Where [[WrapWalker]] puts the text it reads. `LineSink` keeps it and hands back rows; `CountingSink` throws it
     * away and only counts them. The walker owns every decision about *where* a row ends, so the two cannot disagree.
     */
   private sealed trait RowSink:

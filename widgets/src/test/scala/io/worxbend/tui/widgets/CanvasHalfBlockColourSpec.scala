@@ -12,7 +12,7 @@ import org.scalatest.funsuite.AnyFunSuite
   */
 final class CanvasHalfBlockColourSpec extends AnyFunSuite:
 
-  private val unit = (0.0, 1.0)
+  private val unit = Bounds(0.0, 1.0)
 
   /** Renders one cell, drawing each `(y, style)` in turn so the last writer of a half is the last in the list. */
   private def cellFor(points: (Double, Style)*): Cell =

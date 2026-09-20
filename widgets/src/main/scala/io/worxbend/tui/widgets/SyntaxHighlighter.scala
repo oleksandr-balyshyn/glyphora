@@ -60,6 +60,13 @@ object SyntaxHighlighter:
 
     var i = 0
     val n = line.length
+
+    /** Emits `line.slice(i, end)` with `style` and advances the scan past it — the shape every multi-char token takes.
+      */
+    def consume(end: Int, style: Style): Unit =
+      emit(line.slice(i, end), style)
+      i = end
+
     while i < n do
       val c  = line.charAt(i)
       // bound the scan index to a local: a lambda capturing `i` directly would box it into a
@@ -68,18 +75,11 @@ object SyntaxHighlighter:
       if spec.lineComment.exists(marker => line.startsWith(marker, at)) then
         emit(line.drop(i), theme.comment)
         i = n
-      else if spec.stringDelims.contains(c) then
-        val end = scanString(line, i, c)
-        emit(line.slice(i, end), theme.string)
-        i = end
+      else if spec.stringDelims.contains(c) then consume(scanString(line, i, c), theme.string)
       else if c == '$' && spec.shellVariables && i + 1 < n && isIdentChar(line.charAt(i + 1)) then
-        val end = scanWhile(line, i + 1, isIdentChar)
-        emit(line.slice(i, end), theme.variable)
-        i = end
+        consume(scanWhile(line, i + 1, isIdentChar), theme.variable)
       else if c.isDigit && !isIdentChar(prevChar(line, i)) then
-        val end = scanWhile(line, i, ch => ch.isDigit || ch == '.' || ch == 'x' || ch == 'e' || ch == '_')
-        emit(line.slice(i, end), theme.number)
-        i = end
+        consume(scanWhile(line, i, ch => ch.isDigit || ch == '.' || ch == 'x' || ch == 'e' || ch == '_'), theme.number)
       else if isIdentStart(c) then
         val end    = scanWhile(line, i, isIdentChar)
         val word   = line.slice(i, end)

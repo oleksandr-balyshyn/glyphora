@@ -12,12 +12,9 @@ final case class Field[A](spec: FieldSpec, parse: String => Either[String, A]):
 
   /** Runs `f` on every successfully parsed value, leaving parse failures untouched.
     *
-    * Use `map` to normalise a value — trim it, lower-case it — not to change what it is. Building a validator from the
-    * wrong factory for the field's declared type (a `Field.text` for an `Int` field) is now caught where the form is
-    * declared, because [[FieldSpec.input]] records which factory made it. One case survives that check: `map` keeps the
-    * spec it was called on, so `Field.int("age").map(_.toString)` still claims to be an `IntField` while producing a
-    * `String`. The assembled values reach the case class's constructor with no type check, so that one fails on submit
-    * with a `ClassCastException` pointing at the constructor rather than at this call.
+    * Use `map` to normalise a value — trim it, lower-case it — not to change what it is. `map` keeps the spec it was
+    * called on, so changing the type here falls under the residual `ClassCastException` caveat documented on the
+    * [[Field$ companion object]].
     */
   def map[B](f: A => B): Field[B] =
     mapValidated(value => Right(f(value)))
@@ -25,8 +22,9 @@ final case class Field[A](spec: FieldSpec, parse: String => Either[String, A]):
   /** Chains a validation step onto the parser: `f` may reject a parsed value by returning `Left(message)`, and that
     * message is what the form shows next to the field.
     *
-    * The same residual caveat as [[map]] applies — when this field validates a derived [[FormSpec]], `B` must remain
-    * the case class's declared field type. `mapValidated` is for rejecting values, not for changing their type.
+    * `mapValidated` is for rejecting values, not for changing their type — when this field validates a derived
+    * [[FormSpec]], `B` must remain the case class's declared field type, or the residual `ClassCastException` caveat
+    * documented on the [[Field$ companion object]] applies.
     */
   def mapValidated[B](f: A => Either[String, B]): Field[B] =
     Field(spec, raw => parse(raw).flatMap(f))
@@ -43,8 +41,13 @@ final case class Field[A](spec: FieldSpec, parse: String => Either[String, A]):
   * control: `int` and `long` are both the whole-number field, `double` and `bigDecimal` are both the decimal one, and
   * `text`, `uuid`, `localDate`, `localTime`, `localDateTime` and `duration` are all the plain text field. So attaching
   * a `Field.int("count")` validator to a field the case class declares as `Long` passes that check and instead fails on
-  * submit with a `ClassCastException` from the case class's constructor — the same residual case [[Field.map]]
-  * describes. Pick the factory named after the field's declared type, not after the control it happens to render as.
+  * submit with a `ClassCastException` from the case class's constructor. Pick the factory named after the field's
+  * declared type, not after the control it happens to render as.
+  *
+  * The same residual case can also be reached through [[Field.map]] and [[Field.mapValidated]]: both keep the spec they
+  * were called on, so `Field.int("age").map(_.toString)` still claims to be an `IntField` while producing a `String`.
+  * The assembled values reach the case class's constructor with no type check, so that one fails on submit with a
+  * `ClassCastException` pointing at the constructor rather than at the offending call.
   */
 object Field:
 
@@ -52,7 +55,7 @@ object Field:
 
   def int(name: String): Field[Int] = FormFieldType.int.field(name)
 
-  def double(name: String): Field[Double] = FormFieldType.decimal.field(name)
+  def double(name: String): Field[Double] = FormFieldType.double.field(name)
 
   def bool(name: String): Field[Boolean] = FormFieldType.bool.field(name)
 

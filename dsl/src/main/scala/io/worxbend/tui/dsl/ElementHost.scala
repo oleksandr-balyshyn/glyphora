@@ -38,13 +38,17 @@ final class ElementHost:
     * this before dispatching anything: with no frame rendered yet there is no tree, and every dispatch answers `false`.
     */
   def render(area: Rect, buffer: Buffer, theme: Theme, view: View)(using scope: ReactiveScope): Unit =
-    val raw = ResponsivePass.resolve(view(using scope, theme), Size(area.width, area.height))
+    val raw = resolveView(view, Size(area.width, area.height), theme)
     renderTree(raw, theme.focus, tree => tree.widget.render(area, buffer))
 
   /** [[render]] against a runner's `Frame`, for a host inside a `TerminalRunner`. */
   def render(frame: Frame, theme: Theme, view: View)(using scope: ReactiveScope): Unit =
-    val raw = ResponsivePass.resolve(view(using scope, theme), Size(frame.area.width, frame.area.height))
+    val raw = resolveView(view, Size(frame.area.width, frame.area.height), theme)
     renderTree(raw, theme.focus, tree => frame.renderWidget(tree.widget, frame.area))
+
+  /** The view resolved against the size actually being painted. */
+  private def resolveView(view: View, size: Size, theme: Theme)(using scope: ReactiveScope): Element =
+    ResponsivePass.resolve(view(using scope, theme), size)
 
   /** The half of [[render]] after the view has been resolved: reconcile, decorate, remember, paint.
     *

@@ -26,6 +26,43 @@ final class DropdownState(var open: Boolean = false, val menu: MenuState = MenuS
 
   def close(): Unit = open = false
 
+  /** The option the highlight is parked on while the list is open, or `None`.
+    *
+    * Read-only here on purpose: the highlight is not the committed value, so it changes through the navigation methods
+    * below, and committing it — the caller's `onSelect` — is the caller's own move.
+    */
+  def highlighted: Option[Int] = menu.selected
+
+  /** Moves the highlight to the next option, wrapping past the last one; a no-op when `options` is empty.
+    *
+    * `options` is the label list the popup shows — the same list the [[Dropdown]] widget was built with. Navigation
+    * lives here rather than in the caller because only the state knows where the highlight and the scroll offset are; a
+    * caller reaching into `menu` and rebuilding the popup's entries by hand is the same arithmetic with two extra
+    * places to get it wrong.
+    */
+  def selectNext(options: Seq[String]): Unit = menu.selectNext(items(options))
+
+  /** Moves the highlight to the previous option, wrapping past the first one — the mirror of [[selectNext]]. */
+  def selectPrevious(options: Seq[String]): Unit = menu.selectPrevious(items(options))
+
+  /** Highlights the option showing at popup row `visibleRow` — 0 is the first visible option — and answers its index
+    * into the option list, or `None` when the row names no option.
+    *
+    * `visibleRow` is relative to what is on screen, so the list's scroll offset is added here: the caller knows which
+    * painted row was clicked, and which option that row holds is the state's own arithmetic.
+    */
+  def highlightAt(visibleRow: Int, optionCount: Int): Option[Int] =
+    val index = visibleRow + menu.offset
+    Option.when(index >= 0 && index < optionCount) {
+      menu.selected = Some(index)
+      index
+    }
+
+  /** The popup's entries for `options`, rebuilt per call: the option list can change between frames, and a stored copy
+    * would go stale silently.
+    */
+  private def items(options: Seq[String]): Seq[MenuEntry] = options.map(label => MenuEntry.Item(label))
+
 /** A collapsed option chooser: one row showing the option in force, and, while [[DropdownState.open]], the whole option
   * list drawn directly beneath that row as a bordered popup.
   *
@@ -56,7 +93,7 @@ final case class Dropdown(
     * to show, so an empty dropdown never draws an empty box.
     */
   def popupHeight: Int =
-    if options.isEmpty then 0 else math.min(math.max(1, maxVisibleRows), options.size) + 2
+    if options.isEmpty then 0 else math.min(math.max(1, maxVisibleRows), options.size) + PopupChrome.ExtraHeight
 
   /** The rows this widget needs while its list is showing: the closed row plus the popup. */
   def openHeight: Int = 1 + popupHeight
@@ -68,7 +105,7 @@ final case class Dropdown(
     val _      = height
     val glyph  = math.max(CharWidth.of(closedGlyph), CharWidth.of(openGlyph))
     val widest = options.map(CharWidth.of).maxOption.getOrElse(0)
-    Some(math.max(glyph + 1 + widest, widest + 4))
+    Some(math.max(glyph + 1 + widest, widest + PopupChrome.ExtraWidth))
 
   /** Natural height: one row.
     *

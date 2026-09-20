@@ -35,9 +35,16 @@ final class ShowcaseAppSpec extends AnyFunSuite:
     val screen     = pilot.screenText
     assert(screen.contains("spinners"))
     assert(screen.contains("line"), "the spinner gallery should name its presets")
-    // the gallery is taller than the terminal, so it scrolls; the tail is reachable rather than lost below the fold
+    // The gallery is taller than the terminal, so it scrolls and its tail is reachable rather than lost below the
+    // fold. Asserted on the *first* section leaving the screen, not on `screenText` having changed at all: every
+    // widget on this page animates, so two consecutive frames differ whether or not anything scrolled — which is how
+    // this assertion went on passing while the page had silently stopped scrolling altogether.
+    pilot.pressKey(KeyCode.Tab).waitForIdle() // past the tab bar, onto the scroll view itself
     pilot.pressKey(KeyCode.PageDown).waitForIdle()
-    assert(pilot.screenText != screen, "the gallery should scroll to reach the presets below the fold")
+    assert(
+      !pilot.screenText.contains("── spinners"),
+      "the gallery should scroll past its first section to reach the presets below the fold",
+    )
     pilot.pressKey(KeyCode.Escape)
     assert(pilot.awaitTermination())
 

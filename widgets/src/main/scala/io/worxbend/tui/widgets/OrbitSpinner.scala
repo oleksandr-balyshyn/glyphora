@@ -109,6 +109,51 @@ private[widgets] object OrbitArc:
         case OrbitTrail.Solid    => 1.0
         case OrbitTrail.Comet(_) => 1.0 - behind.toDouble / lit.toDouble
 
+/** Everything about an [[OrbitSpinner]] that is not the time: the figure, the trail, and how both are drawn.
+  *
+  * Bundled rather than listed on [[OrbitSpinner]] itself because the list had grown to eleven optional knobs. Every
+  * field keeps the default it had as an `OrbitSpinner` constructor parameter, so `OrbitSpinnerOptions()` is the figure
+  * 0.14.0 drew by default.
+  *
+  * @param style
+  *   the style of the resting path — the dots no part of the arc is currently on
+  * @param arcStyle
+  *   the style of the lit arc; under [[OrbitTrail.Comet]] without a ramp it is dimmed toward the tail
+  * @param path
+  *   the closed loop the arc travels
+  * @param trail
+  *   how the arc is shaded along its length
+  * @param sweep
+  *   the fraction of the lap that is lit, in `[0, 1]`; `1.0` lights everything and stops the motion — the family's
+  *   static "queued" state
+  * @param radius
+  *   the figure's radius in DOTS, not cells, because that is the resolution the shape is drawn at. `None` — the default
+  *   — fits the figure to its area, staying round
+  * @param thickness
+  *   how many concentric bands the figure is drawn with, inset a dot at a time
+  * @param resolution
+  *   the sub-cell resolution the figure is drawn at; [[CanvasResolution.Cell]] with an ASCII `marker` is the floor
+  * @param marker
+  *   read at [[CanvasResolution.Cell]] only — the glyph each hit cell is drawn with there
+  * @param direction
+  *   which way round the orbit travels
+  * @param period
+  *   how long one lap takes
+  */
+final case class OrbitSpinnerOptions(
+    style: Style = Style.Default.dim,
+    arcStyle: Style = Style.Default,
+    path: OrbitPath = OrbitPath.Circle,
+    trail: OrbitTrail = OrbitTrail.Comet(),
+    sweep: Double = 0.25,
+    radius: Option[Int] = None,
+    thickness: Int = 1,
+    resolution: CanvasResolution = CanvasResolution.Braille,
+    marker: String = Marker.Circle,
+    direction: SpinDirection = SpinDirection.Clockwise,
+    period: FiniteDuration = 1600.millis,
+)
+
 /** A figure drawn at sub-cell resolution with a bright arc chasing round it, from how long the animation has been
   * running.
   *
@@ -117,17 +162,17 @@ private[widgets] object OrbitArc:
   * Like every animation here the frame is a pure function of `elapsed` — no state between renders, no clock read inside
   * `render`, so a test renders any moment directly and an app with no `tickRate` shows a legible first frame.
   *
-  * `radius` is in DOTS, not cells, because that is the resolution the shape is drawn at — a radius in cells could not
-  * express the difference between the two smallest legible rings. Left unset the figure fills its area, staying round:
-  * an extreme aspect ratio yields a small centred ring rather than a squashed one, because a squashed circle reads as a
-  * wobble rather than as a rotation.
+  * `options.radius` is in DOTS, not cells, because that is the resolution the shape is drawn at — a radius in cells
+  * could not express the difference between the two smallest legible rings. Left unset the figure fills its area,
+  * staying round: an extreme aspect ratio yields a small centred ring rather than a squashed one, because a squashed
+  * circle reads as a wobble rather than as a rotation.
   *
-  * `sweep` is the fraction of the lap that is lit, not a dot count. A dot count makes the arc's apparent angle change
-  * with radius, which keeps `radius` and arc length from being independent knobs.
+  * `options.sweep` is the fraction of the lap that is lit, not a dot count. A dot count makes the arc's apparent angle
+  * change with radius, which keeps `radius` and arc length from being independent knobs.
   *
-  * `resolution` and `marker` are the pair [[Canvas]] already ships, and reusing them is what gives this widget an ASCII
-  * floor: `CanvasResolution.Cell` with `marker = "*"` draws the same figure at a quarter of the vertical resolution on
-  * a terminal with no braille block. `marker` is read at that resolution only.
+  * `options.resolution` and `options.marker` are the pair [[Canvas]] already ships, and reusing them is what gives this
+  * widget an ASCII floor: `CanvasResolution.Cell` with `marker = "*"` draws the same figure at a quarter of the
+  * vertical resolution on a terminal with no braille block. `options.marker` is read at that resolution only.
   *
   * ONE STYLE PER CELL — the constraint this widget is shaped around. A braille cell packs eight dots and carries one
   * [[Style]], so dot resolution is 2x4 per cell while *colour* resolution is 1 per cell. Two rules follow, both chosen
@@ -145,18 +190,10 @@ private[widgets] object OrbitArc:
   */
 final case class OrbitSpinner(
     elapsed: FiniteDuration,
-    style: Style = Style.Default.dim,
-    arcStyle: Style = Style.Default,
-    path: OrbitPath = OrbitPath.Circle,
-    trail: OrbitTrail = OrbitTrail.Comet(),
-    sweep: Double = 0.25,
-    radius: Option[Int] = None,
-    thickness: Int = 1,
-    resolution: CanvasResolution = CanvasResolution.Braille,
-    marker: String = Marker.Circle,
-    direction: SpinDirection = SpinDirection.Clockwise,
-    period: FiniteDuration = 1600.millis,
+    options: OrbitSpinnerOptions = OrbitSpinnerOptions(),
 ) extends Widget:
+
+  import options.*
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
@@ -235,6 +272,45 @@ final case class OrbitSpinner(
         case OrbitTrail.Comet(None)       => if intensity >= 0.5 then arcStyle else arcStyle.dim
 
 object OrbitSpinner:
+
+  /** The pre-0.15.0 signature: twelve parameters laid out positionally.
+    *
+    * Kept so call sites written against 0.14.0 keep compiling; new code should bundle everything past `elapsed` in an
+    * [[OrbitSpinnerOptions]]. Because an overloaded `apply` may not repeat the default arguments the primary
+    * constructor carries, this delegate spells out every parameter — a call that relied on omitting trailing arguments
+    * moves to the primary constructor.
+    */
+  @deprecated("bundle everything past elapsed in an OrbitSpinnerOptions", "0.15.0")
+  def apply(
+      elapsed: FiniteDuration,
+      style: Style,
+      arcStyle: Style,
+      path: OrbitPath,
+      trail: OrbitTrail,
+      sweep: Double,
+      radius: Option[Int],
+      thickness: Int,
+      resolution: CanvasResolution,
+      marker: String,
+      direction: SpinDirection,
+      period: FiniteDuration,
+  ): OrbitSpinner =
+    OrbitSpinner(
+      elapsed,
+      OrbitSpinnerOptions(
+        style = style,
+        arcStyle = arcStyle,
+        path = path,
+        trail = trail,
+        sweep = sweep,
+        radius = radius,
+        thickness = thickness,
+        resolution = resolution,
+        marker = marker,
+        direction = direction,
+        period = period,
+      ),
+    )
 
   /** The cells a figure of `radius` dot rows occupies at `resolution`.
     *

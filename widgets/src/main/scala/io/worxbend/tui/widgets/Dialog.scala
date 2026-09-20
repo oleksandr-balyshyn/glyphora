@@ -20,7 +20,8 @@ final case class Dialog(
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    val box = area.centered(math.min(area.width, math.max(message.width + 4, 20)), message.height + 4)
+    val box =
+      area.centered(math.min(area.width, math.max(message.width + PopupChrome.ExtraWidth, 20)), message.height + 4)
     if box.width >= 4 && box.height >= 4 then
       Clear(style).render(box, buffer)
       Block(Seq(BlockTitle.top(Line.styled(title, style))), borderStyle = style, borderType = borderType)

@@ -106,12 +106,14 @@ private[widgets] object MarkdownParser:
   /** A styled run starting exactly at `index`, with how many chars it consumed, or `None`. */
   private def styledRun(text: String, index: Int, theme: MarkdownTheme): Option[(Span, Int)] =
     linkRun(text, index, theme)
-      .orElse(
-        delimited(text, index, "**")
-          .map((content, consumed) => (Span(content, theme.strong), consumed))
-          .orElse(delimited(text, index, "*").map((content, consumed) => (Span(content, theme.emphasis), consumed)))
-          .orElse(delimited(text, index, "`").map((content, consumed) => (Span(content, theme.code), consumed)))
-      )
+      .orElse(styled(text, index, "**", theme.strong))
+      .orElse(styled(text, index, "*", theme.emphasis))
+      .orElse(styled(text, index, "`", theme.code))
+
+  /** `delimiter`-wrapped text at `index` as one span in `style` — the shared shape of the strong/emphasis/code runs.
+    */
+  private def styled(text: String, index: Int, delimiter: String, style: Style): Option[(Span, Int)] =
+    delimited(text, index, delimiter).map((content, consumed) => (Span(content, style), consumed))
 
   /** `[label](url)`: the label renders link-styled with the OSC 8 target attached. */
   private def linkRun(text: String, index: Int, theme: MarkdownTheme): Option[(Span, Int)] =

@@ -166,19 +166,14 @@ def place(
     backdrop: Option[Style] = None,
 )(content: Element): Element =
   // a `spacer` before the block pushes it off the near edge, one after it off the far edge, and both together centre it
-  def bracketAcross(align: Alignment, block: Element): Seq[Element]       =
+  def bracket(align: Alignment | VerticalAlignment, block: Element): Seq[Element] =
     align match
-      case Alignment.Left   => Seq(block, Element.spacer)
-      case Alignment.Center => Seq(Element.spacer, block, Element.spacer)
-      case Alignment.Right  => Seq(Element.spacer, block)
-  def bracketDown(align: VerticalAlignment, block: Element): Seq[Element] =
-    align match
-      case VerticalAlignment.Top    => Seq(block, Element.spacer)
-      case VerticalAlignment.Middle => Seq(Element.spacer, block, Element.spacer)
-      case VerticalAlignment.Bottom => Seq(Element.spacer, block)
+      case Alignment.Left | VerticalAlignment.Top      => Seq(block, Element.spacer)
+      case Alignment.Center | VerticalAlignment.Middle => Seq(Element.spacer, block, Element.spacer)
+      case Alignment.Right | VerticalAlignment.Bottom  => Seq(Element.spacer, block)
   val sized = content.withProps(content.props.copy(constraint = Some(Constraint.Length(width))))
-  val row    = Element.row(bracketAcross(horizontal, sized)*).length(height)
-  val placed = Element.column(bracketDown(vertical, row)*)
+  val row    = Element.row(bracket(horizontal, sized)*).length(height)
+  val placed = Element.column(bracket(vertical, row)*)
   backdrop match
     case Some(style) => FilledElement(placed, style)
     case None        => placed

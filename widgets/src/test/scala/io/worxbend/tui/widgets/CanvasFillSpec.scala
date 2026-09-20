@@ -7,7 +7,7 @@ import org.scalatest.funsuite.AnyFunSuite
 /** The filled shapes: a segment carrying the area between it and a baseline, and the solid rectangle built on it. */
 final class CanvasFillSpec extends AnyFunSuite:
 
-  private val unit = (0.0, 1.0)
+  private val unit = Bounds(0.0, 1.0)
 
   test("a horizontal filled line fills every column from the line down to the baseline"):
     val canvas = Canvas(unit, unit, Seq(Shape.FilledLine(0.0, 0.5, 1.0, 0.5, 0.0)), marker = "#")
@@ -73,20 +73,20 @@ final class CanvasFillSpec extends AnyFunSuite:
     assert(trimmedLines(rendered(canvas, 6, 5)).forall(_.isEmpty))
 
   test("a filled rectangle paints its interior, unlike the outline shape"):
-    val bounds  = (0.0, 4.0)
+    val bounds  = Bounds(0.0, 4.0)
     val filled  = Canvas(bounds, bounds, Seq(Shape.FilledRectangle(1.0, 1.0, 2.0, 2.0)), marker = "#")
     assert(trimmedLines(rendered(filled, 5, 5)) == Seq("", " ###", " ###", " ###", ""))
     val outline = Canvas(bounds, bounds, Seq(Shape.RectangleShape(1.0, 1.0, 2.0, 2.0)), marker = "#")
     assert(trimmedLines(rendered(outline, 5, 5)) == Seq("", " ###", " # #", " ###", ""))
 
   test("a filled rectangle read from the opposite corner covers the same area"):
-    val bounds                             = (0.0, 4.0)
+    val bounds                             = Bounds(0.0, 4.0)
     def linesOf(shape: Shape): Seq[String] =
       trimmedLines(rendered(Canvas(bounds, bounds, Seq(shape), marker = "#"), 5, 5))
     assert(linesOf(Shape.FilledRectangle(3.0, 3.0, -2.0, -2.0)) == linesOf(Shape.FilledRectangle(1.0, 1.0, 2.0, 2.0)))
 
   test("a filled rectangle with no extent still marks its line"):
-    val bounds = (0.0, 4.0)
+    val bounds = Bounds(0.0, 4.0)
     val canvas = Canvas(bounds, bounds, Seq(Shape.FilledRectangle(1.0, 2.0, 2.0, 0.0)), marker = "#")
     assert(trimmedLines(rendered(canvas, 5, 5)) == Seq("", "", " ###", "", ""))
 
@@ -100,13 +100,15 @@ final class CanvasFillSpec extends AnyFunSuite:
   test("degenerate canvases render without throwing"):
     val shape = Shape.FilledLine(0.0, 0.5, 1.0, 0.5, 0.0)
     assert(trimmedLines(rendered(Canvas(unit, unit, Seq(shape), marker = "#"), 0, 0)).forall(_.isEmpty))
-    val flat  = Canvas((1.0, 1.0), unit, Seq(shape), marker = "#")
+    val flat  = Canvas(Bounds(1.0, 1.0), unit, Seq(shape), marker = "#")
     assert(trimmedLines(rendered(flat, 5, 5)).forall(_.isEmpty))
     assert(trimmedLines(rendered(Canvas(unit, unit, Seq(shape), marker = "#"), 1, 1)).count(_.nonEmpty) == 1)
 
   test("a filled rectangle taller than the world still fills the visible part"):
-    val world    = Canvas((0.0, 5.0), (0.0, 3.0), Seq(Shape.FilledRectangle(1.0, 0.0, 3.0, 20.0)), marker = "#")
-    val inBounds = Canvas((0.0, 5.0), (0.0, 3.0), Seq(Shape.FilledRectangle(1.0, 0.0, 3.0, 3.0)), marker = "#")
+    val world    =
+      Canvas(Bounds(0.0, 5.0), Bounds(0.0, 3.0), Seq(Shape.FilledRectangle(1.0, 0.0, 3.0, 20.0)), marker = "#")
+    val inBounds =
+      Canvas(Bounds(0.0, 5.0), Bounds(0.0, 3.0), Seq(Shape.FilledRectangle(1.0, 0.0, 3.0, 3.0)), marker = "#")
     assert(trimmedLines(rendered(world, 6, 4)) == trimmedLines(rendered(inBounds, 6, 4)))
 
   test("a filled line entirely above the world still fills the whole canvas down to the baseline"):

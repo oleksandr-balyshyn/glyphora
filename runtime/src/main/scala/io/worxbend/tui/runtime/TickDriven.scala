@@ -19,6 +19,11 @@ private[runtime] trait TickDriven:
   /** Moves the clock by `deltaNanos` (always positive). Called only while running. */
   protected def advance(deltaNanos: Long): Unit
 
+  /** Clamps a nanosecond count at zero: a clock never reads negative, neither from a negative initial value nor from
+    * [[Timer]] counting down past the bottom.
+    */
+  protected def clampedNanos(nanos: Long): Long = math.max(0L, nanos)
+
   /** Whether starting is meaningful right now. [[Timer]] says no once it has counted down to zero; a stopwatch always
     * has somewhere to go, so the default is `true`.
     */

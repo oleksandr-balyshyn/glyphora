@@ -6,6 +6,12 @@ import io.worxbend.tui.testsupport.Pilot
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.net.{Authenticator, CookieHandler, ProxySelector}
+import java.net.http.{HttpClient, HttpRequest, HttpResponse, WebSocket}
+import java.time.Duration as JDuration
+import java.util.{Locale, Optional}
+import java.util.concurrent.{CompletableFuture, Executor}
+import javax.net.ssl.{SSLContext, SSLParameters}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 final class AirSensorAppSpec extends AnyFunSuite:
@@ -114,6 +120,43 @@ final class AirSensorAppSpec extends AnyFunSuite:
     pilot.press("q")
     assert(pilot.awaitTermination())
 
+  /** An `HttpClient` whose `send` always throws `InterruptedException`, so the interrupt contract of
+    * `AirGradientClient.fetch` is testable without a socket. Every other method is a stub; the client under test never
+    * calls them.
+    */
+  private val interruptingHttpClient: HttpClient = new HttpClient:
+    override def send[T](request: HttpRequest, responseBodyHandler: HttpResponse.BodyHandler[T]): HttpResponse[T] =
+      throw InterruptedException("stop requested")
+    override def sendAsync[T](
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler[T],
+    ): CompletableFuture[HttpResponse[T]]                 = unsupported
+    override def sendAsync[T](
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler[T],
+        pushPromiseHandler: HttpResponse.PushPromiseHandler[T],
+    ): CompletableFuture[HttpResponse[T]]                 = unsupported
+    override def newWebSocketBuilder(): WebSocket.Builder = unsupported
+    override def cookieHandler(): Optional[CookieHandler] = unsupported
+    override def connectTimeout(): Optional[JDuration]    = unsupported
+    override def followRedirects(): HttpClient.Redirect   = unsupported
+    override def proxy(): Optional[ProxySelector]         = unsupported
+    override def sslContext(): SSLContext                 = unsupported
+    override def sslParameters(): SSLParameters           = unsupported
+    override def authenticator(): Optional[Authenticator] = unsupported
+    override def version(): HttpClient.Version            = unsupported
+    override def executor(): Optional[Executor]           = unsupported
+
+  private def unsupported: Nothing = throw UnsupportedOperationException("test stub")
+
+  test("an interrupted read reports the failure and restores the thread's interrupt status"):
+    val client = AirGradientClient(httpClient = interruptingHttpClient)
+    assert(client.read() == Left("stop requested"))
+    // `Thread.interrupted()` also clears the flag, so the restored interrupt cannot leak into the rest of the suite —
+    // `waitFor` sleeps, and a lingering interrupt would turn every later sleep into a thrown exception
+    assert(Thread.currentThread().isInterrupted)
+    assert(Thread.interrupted())
+
   test("an AirGradient /measures/current payload parses into a reading"):
     val body =
       """{"wifi":-52,"serialno":"ecda3b1eaaaa","rco2":812,"pm01":3.1,"pm02":6.8,"pm10":7.4,
@@ -130,3 +173,29 @@ final class AirSensorAppSpec extends AnyFunSuite:
     // banding is upper-inclusive, so 9.0 ug/m3 is still the top of Good
     assert(Metric.Pm25.classify(9.0) == Band.Good)
     assert(Metric.Pm25.classify(9.1) == Band.Moderate)
+
+  // Every other assertion in this file that names a decimal — "4.1 ug/m3", "21.2 C" — passes in CI only because CI
+  // runs under en_US. `Metric.format` used to be `s"%.${decimals}f".format(value)`, which formats through the
+  // *default* FORMAT locale: on a European developer's machine the same reading drew "4,1 ug/m3" and this suite
+  // failed with no code change. It now pins Locale.ROOT, the way procmon's `decimal` always did.
+  //
+  // Setting the process-wide default is safe here: `TuiTests` forks one JVM per test class, and the `finally`
+  // restores it for the rest of this one.
+  test("rendered readings keep ASCII decimal points under a comma-decimal default locale"):
+    val previous = Locale.getDefault
+    try
+      Locale.setDefault(Locale.GERMANY)
+      val (_, pilot, _) = startedApp(Vector(Right(clean)))
+      waitFor()(pilot.screenText.contains("640 ppm"))
+
+      val screen = pilot.screenText
+      assert(screen.contains("4.1 ug/m3"))
+      assert(screen.contains("21.2 C"))
+      // the negatives are the half that fails against the old implementation: it still *contained* a number, just
+      // not one any of this file's other assertions would recognise
+      assert(!screen.contains("4,1"))
+      assert(!screen.contains("21,2"))
+
+      pilot.press("q")
+      assert(pilot.awaitTermination())
+    finally Locale.setDefault(previous)

@@ -16,18 +16,18 @@ final class MarkerSpec extends AnyFunSuite:
     every.foreach(marker => assert(SubCell.safeMarker(marker) == marker, s"'$marker'"))
 
   test("the canvas default is the named dot, not a private literal"):
-    val canvas = Canvas((0.0, 1.0), (0.0, 1.0), Seq(Shape.Points(Seq((0.0, 0.0)))))
+    val canvas = Canvas(Bounds(0.0, 1.0), Bounds(0.0, 1.0), Seq(Shape.Points(Seq((0.0, 0.0)))))
     assert(canvas.marker == Marker.Dot)
     assert(trimmedLines(rendered(canvas, 3, 3)) == Seq("", "", Marker.Dot))
 
   test("the fallback for an over-wide marker is the same named dot"):
     assert(SubCell.FallbackMarker == Marker.Dot)
-    val canvas = Canvas((0.0, 1.0), (0.0, 1.0), Seq(Shape.Points(Seq((0.0, 0.0)))), marker = "🙂")
+    val canvas = Canvas(Bounds(0.0, 1.0), Bounds(0.0, 1.0), Seq(Shape.Points(Seq((0.0, 0.0)))), marker = "🙂")
     assert(trimmedLines(rendered(canvas, 3, 3)) == Seq("", "", Marker.Dot))
 
   test("a named marker can be handed to a canvas and comes out as itself"):
     every.foreach { marker =>
-      val canvas = Canvas((0.0, 1.0), (0.0, 1.0), Seq(Shape.Points(Seq((0.0, 0.0)))), marker = marker)
+      val canvas = Canvas(Bounds(0.0, 1.0), Bounds(0.0, 1.0), Seq(Shape.Points(Seq((0.0, 0.0)))), marker = marker)
       assert(trimmedLines(rendered(canvas, 3, 3)).last == marker, s"'$marker'")
     }
 

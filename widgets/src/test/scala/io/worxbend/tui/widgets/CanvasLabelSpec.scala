@@ -12,7 +12,7 @@ import org.scalatest.funsuite.AnyFunSuite
   */
 final class CanvasLabelSpec extends AnyFunSuite:
 
-  private val bounds = (0.0, 4.0)
+  private val bounds = Bounds(0.0, 4.0)
 
   private def labelled(labels: CanvasLabel*): Seq[String] =
     trimmedLines(rendered(Canvas(bounds, bounds, Seq.empty, labels = labels), 5, 5))
@@ -24,7 +24,8 @@ final class CanvasLabelSpec extends AnyFunSuite:
   test("a label moves with its point when the bounds change"):
     // The point of world coordinates: the same label follows the data instead of staying at a fixed cell.
     def rowOf(scale: Double): Int =
-      val canvas = Canvas((0.0, scale), (0.0, scale), Seq.empty, labels = Seq(CanvasLabel(0.0, scale, Line("x"))))
+      val canvas =
+        Canvas(Bounds(0.0, scale), Bounds(0.0, scale), Seq.empty, labels = Seq(CanvasLabel(0.0, scale, Line("x"))))
       trimmedLines(rendered(canvas, 5, 5)).indexWhere(_.nonEmpty)
     assert(rowOf(4.0) == 0)
     assert(rowOf(1000.0) == 0)

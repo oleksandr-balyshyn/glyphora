@@ -2,6 +2,7 @@ package io.worxbend.tui.examples.loadtest
 
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 
@@ -37,7 +38,10 @@ final class FakeTarget(
 
   private val issued = AtomicLong(0L)
 
-  def describe: String = f"fake://in-memory (${failureRate * 100}%.0f%% fail)"
+  // `String.format(Locale.ROOT, …)` rather than the `f` interpolator, for the reason procmon's `decimal` writes out:
+  // the interpolator formats through the default FORMAT locale, and this string names the target in the panel title
+  // the tests match on.
+  def describe: String = String.format(Locale.ROOT, "fake://in-memory (%.0f%% fail)", failureRate * 100)
 
   def fire(): Either[String, FiniteDuration] =
     val ticket = issued.getAndIncrement()

@@ -76,14 +76,13 @@ final case class Sparkline(
       // about: with `RightToLeft` the visible window starts part-way into the series, so the screen column and the
       // data index are not the same number.
       val indexed  = data.zipWithIndex
-      val visible  = direction match
-        case SparkDirection.LeftToRight => indexed.take(area.width)
-        case SparkDirection.RightToLeft => indexed.takeRight(area.width)
       // A series shorter than the area still hugs the edge it is anchored to: LeftToRight starts at column 0,
       // RightToLeft is pushed right so its last point lands in the last column.
-      val offset   = direction match
-        case SparkDirection.LeftToRight => 0
-        case SparkDirection.RightToLeft => area.width - visible.size
+      val (visible, offset) = direction match
+        case SparkDirection.LeftToRight => (indexed.take(area.width), 0)
+        case SparkDirection.RightToLeft =>
+          val newest = indexed.takeRight(area.width)
+          (newest, area.width - newest.size)
       visible.zipWithIndex.foreach { case ((value, index), column) =>
         val x = area.x + offset + column
         if absentColumns.contains(index) then drawAbsent(buffer, x, area)

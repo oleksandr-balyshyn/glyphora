@@ -97,25 +97,32 @@ final case class Layout(
     * nothing, so a mismatch degrades to a missing pane rather than an exception.
     */
   def split2(area: Rect): (Rect, Rect) =
-    val parts = padded(area, 2)
+    val parts = splitInto(area, 2)
     (parts(0), parts(1))
 
   def split3(area: Rect): (Rect, Rect, Rect) =
-    val parts = padded(area, 3)
+    val parts = splitInto(area, 3)
     (parts(0), parts(1), parts(2))
 
   def split4(area: Rect): (Rect, Rect, Rect, Rect) =
-    val parts = padded(area, 4)
+    val parts = splitInto(area, 4)
     (parts(0), parts(1), parts(2), parts(3))
 
   def split5(area: Rect): (Rect, Rect, Rect, Rect, Rect) =
-    val parts = padded(area, 5)
+    val parts = splitInto(area, 5)
     (parts(0), parts(1), parts(2), parts(3), parts(4))
 
-  /** [[split]]'s result grown to at least `count` rectangles with empty ones, so the tuple helpers can index safely. */
-  private def padded(area: Rect, count: Int): IndexedSeq[Rect] =
-    val parts = split(area).toIndexedSeq
-    parts ++ IndexedSeq.fill(math.max(0, count - parts.size))(Rect(0, 0, 0, 0))
+  /** [[split]]'s result as exactly `count` rectangles — grown with empty ones when short — so the tuple helpers index
+    * safely.
+    */
+  private def splitInto(area: Rect, count: Int): Array[Rect] =
+    val result = Array.fill(count)(Rect(0, 0, 0, 0))
+    val parts  = split(area).iterator
+    var index  = 0
+    while index < count && parts.hasNext do
+      result(index) = parts.next()
+      index += 1
+    result
 
   /** How many cells `area` offers along [[direction]] — its width when horizontal, its height when vertical. The four
     * axis helpers are the only place in this file that knows which `Rect` fields the direction selects.

@@ -163,5 +163,5 @@ final class BufferDiffDirectiveSpec extends AnyFunSuite:
     next.setString(0, 0, "⚠️", Style.Default)
     next.setDiffDirective(Rect(0, 0, 2, 1), DiffDirective.Skip)
     val out      = Seq.newBuilder[Position]
-    previous.diff(next, (x, y, _) => out += Position(x, y), clearEmojiTrailingCell = true)
+    previous.diff(next, (x, y, _) => out += Position(x, y), TrailingCellPolicy.Clear)
     assert(out.result().forall(_.x >= 2))

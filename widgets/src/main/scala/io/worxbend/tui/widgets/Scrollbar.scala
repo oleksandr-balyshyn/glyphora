@@ -2,29 +2,28 @@ package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Direction, Rect, Style, Widget}
 
-/** A scrollbar strip: a vertical bar down one of the area's side edges, or a horizontal bar along its top or bottom
-  * edge. Which of the two `side` picks; by default it is the conventional right edge or bottom edge.
+/** Everything about a [[Scrollbar]] that is not the scroll position itself: orientation, look, and the sizing hints.
   *
-  * The thumb's size is proportional to how much of the content the viewport covers. When the content fits entirely
-  * there is nothing to scroll, and by default only the bare track is drawn; `thumbWhenFits` asks for a full-length
-  * thumb instead.
+  * Bundled rather than listed on [[Scrollbar]] itself because the list had grown to eleven optional knobs. Every field
+  * keeps the default it had as a `Scrollbar` constructor parameter, so `ScrollbarOptions()` is the bar 0.14.0 drew by
+  * default.
   *
-  * Stateless on purpose. In this toolkit a `StatefulWidget` is a widget whose *render* adjusts caller-owned state — a
-  * list scrolling itself to keep its selection visible, for instance. A scrollbar adjusts nothing: where the thumb goes
-  * is a pure function of `contentLength`, `position` and the area it is given, so both numbers are passed in as
-  * ordinary parameters and the caller keeps whatever state it already had.
-  *
-  * @param contentLength
-  *   the full extent of the content being scrolled, in rows (vertical) or columns (horizontal)
-  * @param position
-  *   how far into the content the viewport starts, in the same units; clamped, so an out-of-range value pins the thumb
-  *   to an end rather than drawing it off the track
+  * @param orientation
+  *   vertical down a side edge, or horizontal along the top or bottom edge
+  * @param style
+  *   the style of the track cells
+  * @param thumbStyle
+  *   the style of the thumb cells
+  * @param trackSymbol
+  *   the glyph drawn for each track cell
+  * @param thumbSymbol
+  *   the glyph drawn for each thumb cell
   * @param viewportLength
-  *   how much of the content the reader can actually see, in the same units. `None` — the default — means "as much as
-  *   the bar itself is long", which is right whenever the strip runs the full height (or width) of the content it
-  *   describes. Pass a value when it does not: a bar drawn beside a bordered pane covers two rows more than the pane
-  *   shows, and a bar sharing its column with a header covers one row more. Getting this wrong makes the thumb the
-  *   wrong length and stops it reaching the end of the track.
+  *   how much of the content the reader can actually see, in the same units as the content length. `None` — the default
+  *   — means "as much as the bar itself is long", which is right whenever the strip runs the full height (or width) of
+  *   the content it describes. Pass a value when it does not: a bar drawn beside a bordered pane covers two rows more
+  *   than the pane shows, and a bar sharing its column with a header covers one row more. Getting this wrong makes the
+  *   thumb the wrong length and stops it reaching the end of the track.
   * @param side
   *   which edge of the area the strip lands on, read along its own axis: `Far` — the default — is the right edge of a
   *   vertical bar and the bottom edge of a horizontal one, `Near` the left edge and the top edge
@@ -42,9 +41,7 @@ import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Direction, Rect, Style, Wi
   * @param endSymbol
   *   an arrow cap drawn in the strip's last cell, or `None`
   */
-final case class Scrollbar(
-    contentLength: Int,
-    position: Int = 0,
+final case class ScrollbarOptions(
     orientation: Direction = Direction.Vertical,
     style: Style = Style.Default,
     thumbStyle: Style = Style.Default,
@@ -56,7 +53,33 @@ final case class Scrollbar(
     capStyle: Style = Style.Default,
     beginSymbol: Option[String] = None,
     endSymbol: Option[String] = None,
+)
+
+/** A scrollbar strip: a vertical bar down one of the area's side edges, or a horizontal bar along its top or bottom
+  * edge. Which of the two `options.side` picks; by default it is the conventional right edge or bottom edge.
+  *
+  * The thumb's size is proportional to how much of the content the viewport covers. When the content fits entirely
+  * there is nothing to scroll, and by default only the bare track is drawn; `options.thumbWhenFits` asks for a
+  * full-length thumb instead.
+  *
+  * Stateless on purpose. In this toolkit a `StatefulWidget` is a widget whose *render* adjusts caller-owned state — a
+  * list scrolling itself to keep its selection visible, for instance. A scrollbar adjusts nothing: where the thumb goes
+  * is a pure function of `contentLength`, `position` and the area it is given, so both numbers are passed in as
+  * ordinary parameters and the caller keeps whatever state it already had.
+  *
+  * @param contentLength
+  *   the full extent of the content being scrolled, in rows (vertical) or columns (horizontal)
+  * @param position
+  *   how far into the content the viewport starts, in the same units; clamped, so an out-of-range value pins the thumb
+  *   to an end rather than drawing it off the track
+  */
+final case class Scrollbar(
+    contentLength: Int,
+    position: Int = 0,
+    options: ScrollbarOptions = ScrollbarOptions(),
 ) extends Widget:
+
+  import options.*
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
@@ -168,15 +191,58 @@ object Scrollbar:
     Scrollbar(
       contentLength = contentLength,
       position = position,
-      orientation = orientation,
-      style = style,
-      thumbStyle = thumbStyle,
-      trackSymbol = symbols.track,
-      thumbSymbol = symbols.thumb,
-      viewportLength = viewportLength,
-      side = side,
-      thumbWhenFits = thumbWhenFits,
-      capStyle = capStyle,
-      beginSymbol = symbols.begin,
-      endSymbol = symbols.end,
+      options = ScrollbarOptions(
+        orientation = orientation,
+        style = style,
+        thumbStyle = thumbStyle,
+        trackSymbol = symbols.track,
+        thumbSymbol = symbols.thumb,
+        viewportLength = viewportLength,
+        side = side,
+        thumbWhenFits = thumbWhenFits,
+        capStyle = capStyle,
+        beginSymbol = symbols.begin,
+        endSymbol = symbols.end,
+      ),
+    )
+
+  /** The pre-0.15.0 signature: thirteen parameters laid out positionally.
+    *
+    * Kept so call sites written against 0.14.0 keep compiling; new code should bundle everything past `position` in a
+    * [[ScrollbarOptions]]. Because an overloaded `apply` may not repeat the default arguments the primary constructor
+    * carries, this delegate spells out every parameter — a call that relied on omitting trailing arguments moves to the
+    * primary constructor.
+    */
+  @deprecated("bundle everything past position in a ScrollbarOptions", "0.15.0")
+  def apply(
+      contentLength: Int,
+      position: Int,
+      orientation: Direction,
+      style: Style,
+      thumbStyle: Style,
+      trackSymbol: String,
+      thumbSymbol: String,
+      viewportLength: Option[Int],
+      side: ScrollbarSide,
+      thumbWhenFits: Boolean,
+      capStyle: Style,
+      beginSymbol: Option[String],
+      endSymbol: Option[String],
+  ): Scrollbar =
+    Scrollbar(
+      contentLength,
+      position,
+      ScrollbarOptions(
+        orientation = orientation,
+        style = style,
+        thumbStyle = thumbStyle,
+        trackSymbol = trackSymbol,
+        thumbSymbol = thumbSymbol,
+        viewportLength = viewportLength,
+        side = side,
+        thumbWhenFits = thumbWhenFits,
+        capStyle = capStyle,
+        beginSymbol = beginSymbol,
+        endSymbol = endSymbol,
+      ),
     )

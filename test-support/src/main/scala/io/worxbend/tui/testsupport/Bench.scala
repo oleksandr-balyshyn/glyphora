@@ -75,9 +75,18 @@ object Bench:
     val nanosPerOp = median.toDouble / iterations
     Result(name, if nanosPerOp > 0 then 1e9 / nanosPerOp else Double.PositiveInfinity, nanosPerOp)
 
+  /** The width of the `name` header itself — a result name shorter than it still leaves the header readable. */
+  private val NameHeaderWidth: Int = 4
+
+  /** The width of the right-aligned `ns/op` column. */
+  private val NanosColumnWidth: Int = 12
+
+  /** The width of the right-aligned `ops/s` column. */
+  private val OpsColumnWidth: Int = 14
+
   /** Prints `results` as a fixed-width table, so two runs of the same benchmark diff cleanly in a terminal. */
   def report(title: String, results: Seq[Result]): Unit =
-    val nameWidth = (results.map(_.name.length) :+ 4).max
+    val nameWidth = (results.map(_.name.length) :+ NameHeaderWidth).max
     println(title)
     println(row("name".padTo(nameWidth, ' '), "ns/op", "ops/s"))
     results.foreach { result =>
@@ -90,7 +99,7 @@ object Bench:
 
   /** One table row: the name as given, then two right-aligned number columns, so digits line up between rows. */
   private def row(name: String, nanos: String, ops: String): String =
-    s"$name  ${rightAligned(nanos, 12)}  ${rightAligned(ops, 14)}"
+    s"$name  ${rightAligned(nanos, NanosColumnWidth)}  ${rightAligned(ops, OpsColumnWidth)}"
 
   private def rightAligned(text: String, width: Int): String =
     if text.length >= width then text else " " * (width - text.length) + text

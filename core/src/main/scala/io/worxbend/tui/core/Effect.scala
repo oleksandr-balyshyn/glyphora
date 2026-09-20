@@ -94,14 +94,17 @@ object Effect:
       def duration: Duration = effects.foldLeft(Duration.Zero: Duration)((acc, e) => acc + e.duration)
       def process(elapsed: FiniteDuration, buffer: Buffer, area: Rect): Unit =
         var remaining = elapsed
-        val active    = effects.iterator.dropWhile { effect =>
-          effect.duration match
+        var index     = 0
+        // walk past every effect `elapsed` has already outlived, subtracting each whole duration as we go; the walk
+        // stops at the first effect whose duration is not fully consumed, which is the one still playing
+        var seeking   = true
+        while seeking && index < effects.length do
+          effects(index).duration match
             case finite: FiniteDuration if remaining >= finite =>
               remaining -= finite
-              true
-            case _                                             => false
-        }
-        if active.hasNext then active.next().process(remaining, buffer, area)
+              index += 1
+            case _                                             => seeking = false
+        if index < effects.length then effects(index).process(remaining, buffer, area)
 
   /** Runs `effects` simultaneously; done when the longest finishes. */
   def parallel(effects: Effect*): Effect =
@@ -166,42 +169,34 @@ object Effect:
         val cutoff = threshold(progress)
         eraseWhere(buffer, area)((x, y) => cellNoise(x, y, seed) >= cutoff)
 
+  // the mixing constants of the integer hash `cellNoise` applies per cell — arbitrary large odd constants, chosen so
+  // neighbouring coordinates and neighbouring seeds avalanche apart in the product
+  private val NoiseMixX: Int     = 374761393
+  private val NoiseMixY: Int     = 668265263
+  private val NoiseMixSeed: Int  = 987654323
+  private val NoiseFinalMix: Int = 1274126177
+
   /** Deterministic per-cell noise in `[0, 1)` — a small integer hash, stable across frames. */
   private def cellNoise(x: Int, y: Int, seed: Int): Double =
-    var h = x * 374761393 + y * 668265263 + seed * 987654323
-    h = (h ^ (h >>> 13)) * 1274126177
+    var h = x * NoiseMixX + y * NoiseMixY + seed * NoiseMixSeed
+    h = (h ^ (h >>> 13)) * NoiseFinalMix
     ((h ^ (h >>> 16)) & 0x7fffffff).toDouble / Int.MaxValue
 
   private def eraseWhere(buffer: Buffer, area: Rect)(hide: (Int, Int) => Boolean): Unit =
-    var y = area.y
-    while y < area.bottom do
-      var x = area.x
-      while x < area.right do
-        if hide(x, y) then buffer.set(x, y, Cell.Empty)
-        x += 1
-      y += 1
+    area.foreachPosition: (x, y) =>
+      if hide(x, y) then buffer.set(x, y, Cell.Empty)
 
   /** Replaces every non-blank cell's style in `area` with `transform` of it.
     *
-    * `transform` must be a pure function of the style: consecutive cells almost always share one, so the last input and
-    * its result are remembered and re-derived only when the style actually changes. Without that, a whole-frame fade
-    * built a fresh `Color` and `Style` for each of a frame's ten thousand cells to arrive at the same answer.
+    * `transform` must be a pure function of the style: the walk runs through a [[MemoizedStyleTransform]], which
+    * re-derives the result only when the style actually changes. Without that, a whole-frame fade built a fresh `Color`
+    * and `Style` for each of a frame's ten thousand cells to arrive at the same answer.
     */
   private def mapCells(buffer: Buffer, area: Rect)(transform: Style => Style): Unit =
-    var lastIn: Style  = Style.Default
-    var lastOut: Style = transform(Style.Default)
-    var y              = area.y
-    while y < area.bottom do
-      var x = area.x
-      while x < area.right do
-        val cell = buffer.get(x, y)
-        if !cell.isBlank then
-          if !((cell.style eq lastIn) || cell.style == lastIn) then
-            lastIn = cell.style
-            lastOut = transform(cell.style)
-          buffer.set(x, y, cell.copy(style = lastOut))
-        x += 1
-      y += 1
+    val memoized = MemoizedStyleTransform(transform)
+    area.foreachPosition: (x, y) =>
+      val cell = buffer.get(x, y)
+      if !cell.isBlank then buffer.set(x, y, cell.copy(style = memoized(cell.style)))
 
   /** Scales a style's foreground by `level`.
     *

@@ -29,6 +29,16 @@ object GoldenFrames:
 
   private val UpdateEnvVar = "GLYPHORA_GOLDEN_UPDATE"
 
+  /** The subdirectory of a module's test resources that fixtures live in. Shared with [[GoldenFixtures]], which checks
+    * the same directory for orphans.
+    */
+  private[testsupport] val FixtureDirectory: String = "golden"
+
+  /** The file extension fixtures are written with, including the dot. Shared with [[GoldenFixtures]] for the same
+    * reason as [[FixtureDirectory]].
+    */
+  private[testsupport] val FixtureExtension: String = ".txt"
+
   /** Line terminators at the end of a frame, compiled once rather than per comparison. */
   private val TrailingNewlines: Pattern = Pattern.compile("\\R+$")
 
@@ -46,17 +56,18 @@ object GoldenFrames:
         System.err.println(s"golden: recorded $name (no comparison — $UpdateEnvVar is set)")
         writeFixture(Path.of(directory), name, buffer)
       case None            =>
-        val stream = getClass.getResourceAsStream(s"/golden/$name.txt")
+        val stream = getClass.getResourceAsStream(s"/$FixtureDirectory/$name$FixtureExtension")
         if stream == null then // scalafix:ok DisableSyntax; getResourceAsStream returns null when the fixture is absent
           CallSite.fail(
-            s"missing golden fixture golden/$name.txt — run once with GLYPHORA_GOLDEN_UPDATE=<test-resources-dir>"
+            s"missing golden fixture $FixtureDirectory/$name$FixtureExtension" +
+              s" — run once with GLYPHORA_GOLDEN_UPDATE=<test-resources-dir>"
           )
         val expected = Using.resource(Source.fromInputStream(stream, "UTF-8"))(_.mkString)
         assertMatchesText(name, buffer, expected)
 
   /** The on-disk location of `name`'s fixture under a test-resources `directory`. */
   private[testsupport] def fixtureFile(directory: Path, name: String): Path =
-    directory.resolve("golden").resolve(s"$name.txt")
+    directory.resolve(FixtureDirectory).resolve(s"$name$FixtureExtension")
 
   /** Writes `buffer`'s frame text to `name`'s fixture under `directory`, creating parent directories. The bytes are the
     * frame text verbatim — no terminator is appended, so previously recorded fixtures stay byte-identical.
@@ -73,7 +84,9 @@ object GoldenFrames:
     val actual   = normalise(BufferAssertions.text(buffer))
     val recorded = normalise(expected)
     if actual != recorded then
-      CallSite.fail(s"frame differs from golden/$name.txt\n--- expected ---\n$recorded\n--- actual ---\n$actual")
+      CallSite.fail(
+        s"frame differs from $FixtureDirectory/$name$FixtureExtension\n--- expected ---\n$recorded\n--- actual ---\n$actual"
+      )
 
   /** Drops trailing line terminators, which is what makes trailing blank rows insignificant while interior blank rows
     * still count. This is the frame-level half of the normalisation; the row-level half — stripping trailing spaces

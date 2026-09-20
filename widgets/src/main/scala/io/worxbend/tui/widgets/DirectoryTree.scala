@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Style}
+import io.worxbend.tui.core.{Buffer, Rect, StatefulWidget, Style}
 
 import java.nio.file.{Files, Path}
 import java.util.Locale
@@ -118,13 +118,17 @@ final case class DirectoryTree(
     if !area.isEmpty then
       val visible       = state.visibleEntries()
       val selectedIndex = state.selected.map(path => visible.indexWhere(_._1 == path)).filter(_ >= 0)
-      state.offset = ScrollWindow.offsetFor(state.offset, selectedIndex, visible.size, area.height)
-      val rows          = visible.slice(state.offset, state.offset + area.height)
-      rows.zipWithIndex.foreach { case ((path, isDir), row) =>
-        val rowStyle = if state.selected.contains(path) then style.patch(highlightStyle) else style
-        val text     = CharWidth.substringByWidth(rowText(path, isDir, state), area.width)
-        buffer.setString(area.x, area.y + row, text, rowStyle)
-      }
+      state.offset = TreeRows.render(
+        area,
+        buffer,
+        visible,
+        state.offset,
+        selectedIndex,
+        (path, _) => state.selected.contains(path),
+        (path, isDir) => rowText(path, isDir, state),
+        style,
+        highlightStyle,
+      )
 
   private def rowText(path: Path, isDirectory: Boolean, state: DirectoryTreeState): String =
     val depth  = path.getNameCount - state.root.getNameCount - 1

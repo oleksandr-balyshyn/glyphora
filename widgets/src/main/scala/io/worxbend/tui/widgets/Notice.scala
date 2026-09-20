@@ -32,8 +32,8 @@ final case class Notice(
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
       val cursor = RowCursor(buffer, area.y, area.x, area.right)
-      timestamp.foreach(at => cursor.write(s"[${Notice.Clock.format(at)}] ", timestampStyle))
-      cursor.write(s"${icon.getOrElse(level.icon)} ", accentStyle)
+      if stampText.nonEmpty then cursor.write(stampText, timestampStyle)
+      cursor.write(iconText, accentStyle)
       if overflow.wraps then
         // the body gets whatever the prefix left; an empty rect renders nothing, which is the "no room" case
         body.render(Rect(cursor.at, area.y, cursor.remaining, area.height), buffer)
@@ -56,9 +56,15 @@ final case class Notice(
   /** Everything drawn before the message — the timestamp and the icon — so a caller can measure the room the body has
     * left.
     */
-  def prefixText: String =
-    val stamp = timestamp.fold("")(at => s"[${Notice.Clock.format(at)}] ")
-    s"$stamp${icon.getOrElse(level.icon)} "
+  def prefixText: String = stampText + iconText
+
+  /** The timestamp half of the prefix, or `""` when there is none. One of the two pieces [[prefixText]] is built from,
+    * and what [[render]] writes in `timestampStyle`.
+    */
+  private def stampText: String = timestamp.fold("")(at => s"[${Notice.Clock.format(at)}] ")
+
+  /** The icon half of the prefix — what [[render]] writes in `accentStyle`. */
+  private def iconText: String = s"${icon.getOrElse(level.icon)} "
 
 object Notice:
 

@@ -88,12 +88,12 @@ final case class Menu(
       }
       .maxOption
       .getOrElse(0)
-    Some(content + 4) // 1 border + 1 pad each side
+    Some(content + PopupChrome.ExtraWidth)
 
   /** Natural height: one row per entry plus the top and bottom borders. Independent of the columns given. */
   override def heightAt(width: Int): Option[Int] =
     val _ = width
-    Some(items.size + 2)
+    Some(items.size + PopupChrome.ExtraHeight)
 
   def render(area: Rect, buffer: Buffer, state: MenuState): Unit =
     if !area.isEmpty then

@@ -141,16 +141,26 @@ private[dsl] object EventRouter:
         true
       case _ => false
 
-  private def pathToTracked(element: Element, index: Int): Option[List[Element]] =
+  /** The path to the nearest element satisfying `matches` in this subtree, innermost first and including every ancestor
+    * up to `element` — the shared walk behind the tracked-element and focused-element lookups, inert guard included.
+    */
+  private def pathWhere(element: Element, matches: Element => Boolean): Option[List[Element]] =
     if element.props.inert then None
+    else if matches(element) then Some(List(element))
     else
-      element match
-        case tracked: TrackedElement if tracked.index == index => Some(List(tracked))
-        case _                                                 =>
-          element.children
-            .to(LazyList)
-            .map(pathToTracked(_, index))
-            .collectFirst { case Some(path) => path :+ element }
+      element.children
+        .to(LazyList)
+        .map(pathWhere(_, matches))
+        .collectFirst { case Some(path) => path :+ element }
+
+  private def pathToTracked(element: Element, index: Int): Option[List[Element]] =
+    pathWhere(
+      element,
+      {
+        case tracked: TrackedElement => tracked.index == index
+        case _                       => false
+      },
+    )
 
   /** Routes a key *release* to the focused element and its ancestors, innermost first.
     *
@@ -192,10 +202,4 @@ private[dsl] object EventRouter:
 
   /** The focused element and its ancestors, innermost first. */
   private def pathToFocused(element: Element): Option[List[Element]] =
-    if element.props.inert then None
-    else if element.props.focused && element.props.focusable then Some(List(element))
-    else
-      element.children
-        .to(LazyList)
-        .map(pathToFocused)
-        .collectFirst { case Some(path) => path :+ element }
+    pathWhere(element, node => node.props.focused && node.props.focusable)

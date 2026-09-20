@@ -402,6 +402,15 @@ private[terminal] object Backend:
   def requirePositiveTimeout(timeout: Duration): Unit =
     require(timeout > Duration.Zero, s"readEvent timeout must be positive or infinite, got $timeout")
 
+  /** Enforces the strictly-positive size that [[Backend.requestSize]] documents.
+    *
+    * Lives here so every implementation raises the identical failure, for the same reason as
+    * [[requirePositiveTimeout]]: a zero or negative size is a defect in the caller, and it must read the same way
+    * whichever backend rejects it.
+    */
+  def requirePositiveSize(size: Size): Unit =
+    require(size.width > 0 && size.height > 0, s"requestSize needs a positive size, got $size")
+
   /** The block [[Backend.insertBefore]] inserts: `widget` rendered into `Rect(0, 0, width, height)`.
     *
     * One owner for the geometry, because all three implementations of `insertBefore` differ only in what they do with
@@ -433,9 +442,13 @@ private[terminal] object Backend:
       while x < buffer.area.right do
         if !buffer.isContinuation(x, y) then row ++= buffer.get(x, y).symbol
         x += 1
-      rows += row.result().reverse.dropWhile(_ == ' ').reverse
+      rows += trimRightBlanks(row.result())
       y += 1
     rows.result()
+
+  /** `text` without its trailing blanks. */
+  private def trimRightBlanks(text: String): String =
+    text.reverse.dropWhile(_ == ' ').reverse
 
   /** The answer both scroll-region defaults give: this backend has no scroll region to offer.
     *

@@ -57,7 +57,9 @@ final class ShapeSpinnerSpec extends AnyFunSuite:
     AnimationClockLock.frozenAt(0.millis):
       val pilot  = renderWith(Theme.Dark)(row(orbitSpinner().radius(2), orbitSpinner()))
       val expect =
-        w.OrbitSpinner(0.millis, radius = Some(2)).preferredSize.getOrElse(fail("a radius must claim a size"))
+        w.OrbitSpinner(0.millis, w.OrbitSpinnerOptions(radius = Some(2)))
+          .preferredSize
+          .getOrElse(fail("a radius must claim a size"))
       assert(expect.width > 0 && expect.height > 0)
       assert(pilot.screenText.trim.nonEmpty)
       close(pilot)

@@ -38,10 +38,11 @@ sealed trait Reactive[A]:
 /** A mutable reactive variable.
   *
   * `set`/`update` mark dependents stale and (via the root scope) schedule a redraw; nothing recomputes eagerly. Setting
-  * an equal value notifies nobody — equality is `==`, except that floating-point values compare by IEEE-754 total order
-  * (see `unchanged`). A value mutated *in place* is equal to itself, so `set(sameInstance)` never notifies: hold
-  * immutable values in a signal, or set a new instance. Must only be called from the render thread once one is
-  * registered — enforced by `RenderThread.checkRenderThread()`, which is a no-op in tests with no running runtime.
+  * an equal value notifies nobody — change detection is delegated to the [[SignalEquality]] given in scope at creation
+  * (by default `==`, with `Double`/`Float` comparing by IEEE-754 total order). A value mutated *in place* is equal to
+  * itself, so `set(sameInstance)` never notifies: hold immutable values in a signal, or set a new instance. Must only
+  * be called from the render thread once one is registered — enforced by `RenderThread.checkRenderThread()`, which is a
+  * no-op in tests with no running runtime.
   *
   * Writing is render-thread-only, but [[peek]] may be called from any thread: the value is `@volatile`, so a reader
   * outside the render thread is guaranteed to see the most recently set value rather than an arbitrarily stale one.
@@ -50,7 +51,7 @@ sealed trait Reactive[A]:
   * happens-before edge to the write. The subscriber set is deliberately *not* published that way; it is touched only on
   * the render thread.
   */
-final class Signal[A] private (initial: A) extends Reactive[A], SubscriberRegistry:
+final class Signal[A] private (initial: A, equality: SignalEquality[A]) extends Reactive[A], SubscriberRegistry:
 
   // @volatile for cross-thread readers of `peek` only — see the class Scaladoc. The cost is a plain load on the read
   // side of every architecture glyphora targets; the fence is on `set`, which is orders of magnitude rarer than the
@@ -65,26 +66,21 @@ final class Signal[A] private (initial: A) extends Reactive[A], SubscriberRegist
 
   def set(value: A): Unit =
     RenderThread.checkRenderThread()
-    if !unchanged(value, currentValue) then
+    if !equality.unchanged(value, currentValue) then
       currentValue = value
       notifySubscribers()
 
   def update(f: A => A): Unit = set(f(currentValue))
 
-  /** Change detection: `==`, except that `Double`/`Float` compare by total order.
-    *
-    * `==` gets both floating-point edges wrong for a change flag: `-0.0 == 0.0` is true, so a sign flip that carries
-    * direction (a scroll or velocity delta) would be silently dropped, and `NaN == NaN` is false, so re-setting `NaN`
-    * would notify on every write and repaint forever. `compare` distinguishes the zeros and treats `NaN` as itself.
-    */
-  private def unchanged(value: A, current: A): Boolean =
-    (value, current) match
-      case (next: Double, previous: Double) => java.lang.Double.compare(next, previous) == 0
-      case (next: Float, previous: Float)   => java.lang.Float.compare(next, previous) == 0
-      case _                                => value == current
-
 object Signal:
-  def apply[A](initial: A): Signal[A] = new Signal(initial)
+
+  /** A signal holding `initial`, whose change detection is delegated to the [[SignalEquality]] in scope.
+    *
+    * With no local given, the defaults from the [[SignalEquality]] companion apply: `==` for most types, IEEE-754 total
+    * order for `Double` and `Float`. A `given SignalEquality[A]` in lexical or imported scope overrides them for the
+    * signals created under it.
+    */
+  def apply[A](initial: A)(using equality: SignalEquality[A]): Signal[A] = new Signal(initial, equality)
 
 /** A value derived from other reactive values.
   *

@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, StatefulWidget, Style}
+import io.worxbend.tui.core.{Buffer, Rect, StatefulWidget, Style}
 
 import scala.collection.mutable
 
@@ -51,19 +51,26 @@ final case class Tree(
     if !area.isEmpty && nodes.nonEmpty then
       val visible       = Tree.visiblePaths(nodes, state.expanded.toSet)
       val selectedIndex = state.selected.map(visible.indexOf).filter(_ >= 0)
-      state.offset = ScrollWindow.offsetFor(state.offset, selectedIndex, visible.size, area.height)
-      visible.slice(state.offset, state.offset + area.height).zipWithIndex.foreach { (path, row) =>
-        val node       = Tree.nodeAt(nodes, path).getOrElse(TreeNode(""))
-        val isSelected = state.selected.contains(path)
-        val rowStyle   = if isSelected then style.patch(highlightStyle) else style
-        val marker     =
-          if node.children.isEmpty then "  "
-          else if state.expanded.contains(path) then "▾ "
-          else "▸ "
-        val indent     = "  ".repeat(path.size - 1)
-        val text       = CharWidth.substringByWidth(indent + marker + node.label, area.width)
-        buffer.setString(area.x, area.y + row, text, rowStyle)
-      }
+      state.offset = TreeRows.render(
+        area,
+        buffer,
+        visible,
+        state.offset,
+        selectedIndex,
+        path => state.selected.contains(path),
+        rowText(_, state),
+        style,
+        highlightStyle,
+      )
+
+  private def rowText(path: Seq[Int], state: TreeState): String =
+    val node   = Tree.nodeAt(nodes, path).getOrElse(TreeNode(""))
+    val marker =
+      if node.children.isEmpty then "  "
+      else if state.expanded.contains(path) then "▾ "
+      else "▸ "
+    val indent = "  ".repeat(path.size - 1)
+    indent + marker + node.label
 
 object Tree:
 

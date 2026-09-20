@@ -121,6 +121,9 @@ final case class MenuElement(
     )
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] = Some(handleMouse)
 
+  /** Rows a bordered menu draws above its first item — just the top border, so a press on it resolves to no item. */
+  private val MenuBorderRows = 1
+
   private def handleMouse(event: MouseEvent, area: Rect): Boolean =
     event.kind match
       case MouseEventKind.ScrollUp   =>
@@ -130,7 +133,7 @@ final case class MenuElement(
         state.selectNext(items)
         true
       case MouseEventKind.Down       =>
-        val row = event.position.y - (area.y + 1) + state.offset // +1 skips the top border
+        val row = event.position.y - (area.y + MenuBorderRows) + state.offset
         if row >= 0 && row < items.size && items(row).selectable then
           state.selected = Some(row)
           onSelect(row)
@@ -238,15 +241,15 @@ final case class DirectoryTreeElement(
   * either answer is wrong for half the tables; the page keys say which one the app meant. Bind `onMouseEvent` if this
   * table wants one of the two.
   */
-final case class DataTableElement(
-    table: w.DataTable,
-    state: w.DataTableState,
+final case class DataTableElement[K](
+    table: w.DataTable[K],
+    state: w.DataTableState[K],
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
-  type Self = DataTableElement
-  def widget: Widget                                                =
+  type Self = DataTableElement[K]
+  def widget: Widget                                                   =
     (area, buffer) => table.render(area, buffer, state)
-  private[dsl] def withProps(props: ElementProps): DataTableElement = copy(props = props)
+  private[dsl] def withProps(props: ElementProps): DataTableElement[K] = copy(props = props)
 
   // the visible page is filtered and paginated on each call; name it once so a key press computes it once.
   // it stays a `def`: the thunks below run after `state` may already have moved, so the count is read at call time

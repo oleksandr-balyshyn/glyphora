@@ -211,19 +211,25 @@ export io.worxbend.tui.runtime.{
 // package exposes, and the code that constructs one (a `main` wiring a custom terminal, a test wiring `Pilot`) is
 // already reaching into `tui-terminal` or `tui-test` on purpose.
 export io.worxbend.tui.terminal.{Backend, BackendError, ColorDepth, TerminalGlyphs}
-// The widget-level vocabulary an application names directly, in two groups:
-//   * the enums and presets a call site passes by name (severities, animation presets, badge variants), and
+// The widget-level vocabulary an application names directly, in three groups:
+//   * the enums and presets a call site passes by name (severities, animation presets, badge variants),
 //   * every caller-owned `*State` and content value a DSL factory *requires* — `list(items, state)` cannot be called
-//     without naming `ListState`, so omitting it from here would break the one-import promise above outright.
+//     without naming `ListState`, so omitting it from here would break the one-import promise above outright, and
+//   * the parameter bundles and named pairs the factories forward to their widgets — `chart` cannot be spelled without
+//     `Bounds`, a keyed table without `KeyedRow`, and an element's `options` field is named the moment a view copies
+//     one field of it.
 export io.worxbend.tui.widgets.{
   Alignment,
   BadgeVariant,
   BlockTitle,
   BorderType,
+  Bounds,
   CanvasResolution,
+  ChartOptions,
   ColorRamp,
   ColumnSort,
   DataTable,
+  DataTableOptions,
   DataTableState,
   Dataset,
   DirectoryTreeState,
@@ -233,6 +239,7 @@ export io.worxbend.tui.widgets.{
   HighlightSpacing,
   Image,
   IndeterminateMotion,
+  KeyedRow,
   LinearAxis,
   LinearFlow,
   LinearPath,
@@ -249,6 +256,7 @@ export io.worxbend.tui.widgets.{
   MergeStrategy,
   NoticeLevel,
   OrbitPath,
+  OrbitSpinnerOptions,
   OrbitTrail,
   Overflow,
   Padding,
@@ -256,6 +264,7 @@ export io.worxbend.tui.widgets.{
   Painter,
   ProgressLabel,
   ProgressPreset,
+  ScrollbarOptions,
   ScrollViewState,
   Shape,
   SliderRange,
@@ -423,8 +432,7 @@ extension [E <: Element](element: E)
     * builder catching up with it.
     */
   def onKeyEvent(handler: KeyEvent => Boolean): element.Self =
-    val previous = element.props.onKey
-    element.withProps(element.props.copy(onKey = Some(event => handler(event) || previous.exists(_(event)))))
+    element.withProps(element.props.copy(onKey = Some(composeHandler(element.props.onKey, handler))))
 
   /** A handler for a key coming back *up*, composing with any already on the element exactly as [[onKeyEvent]] does.
     *
@@ -437,13 +445,11 @@ extension [E <: Element](element: E)
     * and it does not reach `TuiApp.bindings`.
     */
   def onKeyRelease(handler: KeyEvent => Boolean): element.Self =
-    val previous = element.props.onKeyUp
-    element.withProps(element.props.copy(onKeyUp = Some(event => handler(event) || previous.exists(_(event)))))
+    element.withProps(element.props.copy(onKeyUp = Some(composeHandler(element.props.onKeyUp, handler))))
 
   /** A mouse handler, composing with any already on the element exactly as [[onKeyEvent]] does. */
   def onMouseEvent(handler: MouseEvent => Boolean): element.Self =
-    val previous = element.props.onMouse
-    element.withProps(element.props.copy(onMouse = Some(event => handler(event) || previous.exists(_(event)))))
+    element.withProps(element.props.copy(onMouse = Some(composeHandler(element.props.onMouse, handler))))
 
   /** Opts a non-interactive element into the tab order (interactive elements are focusable by default). */
   def focusable: element.Self =
@@ -492,3 +498,9 @@ extension [E <: Element](element: E)
 
 private def constrained(element: Element, constraint: Constraint): element.Self =
   element.withProps(element.props.copy(constraint = Some(constraint)))
+
+/** `handler` first, then whatever handler was already attached: handlers compose rather than replace, so the most
+  * recently added runs first and its `false` falls through to the previous one.
+  */
+private def composeHandler[E](previous: Option[E => Boolean], handler: E => Boolean): E => Boolean =
+  event => handler(event) || previous.exists(_(event))

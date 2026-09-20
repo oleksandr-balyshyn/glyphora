@@ -11,18 +11,23 @@ import io.worxbend.tui.widgets.TextInputState
 private[dsl] sealed trait FieldBinding:
   def spec: FieldSpec
 
+  /** The current raw value run through the field's parser — what `submit` validates. */
+  private[dsl] def parsed: Either[String, Any]
+
 private[dsl] object FieldBinding:
   final case class TextLike(
       spec: FieldSpec,
       state: TextInputState,
       parse: String => Either[String, Any],
-  ) extends FieldBinding
+  ) extends FieldBinding:
+    private[dsl] def parsed: Either[String, Any] = parse(state.value)
 
   final case class BoolLike(
       spec: FieldSpec,
       value: Signal[Boolean],
       parse: Boolean => Either[String, Any],
-  ) extends FieldBinding
+  ) extends FieldBinding:
+    private[dsl] def parsed: Either[String, Any] = parse(value.peek)
 
   /** A choice between a closed set of labels. `selected` is an index into `options` rather than the label itself,
     * because that is what the one-row cycler the form renders takes; the label is looked up on submit and handed to the
@@ -33,7 +38,14 @@ private[dsl] object FieldBinding:
       options: Seq[String],
       selected: Signal[Int],
       parse: String => Either[String, Any],
-  ) extends FieldBinding
+  ) extends FieldBinding:
+    private[dsl] def parsed: Either[String, Any] =
+      // the only way to reach the `Left` is a picklist with no options at all, and it must not throw here: `submit`
+      // runs on the render thread, where an exception takes the whole app down rather than showing a field error
+      options
+        .lift(selected.peek)
+        .map(parse)
+        .getOrElse(Left(s"no option to choose for '${spec.name}'"))
 
 /** Live state for a compile-time-derived form: boolean fields become checkboxes, everything else an input; [[submit]]
   * runs each field's parser/validators — errors land in [[errors]] per field, a fully valid form lands in [[result]].
@@ -48,17 +60,7 @@ final class FormState[A] private (private[dsl] val bindings: Seq[FieldBinding], 
 
   /** Validates every field; either publishes per-field errors or the assembled value. */
   def submit(): Unit =
-    val parsed: Seq[(String, Either[String, Any])] = bindings.map {
-      case FieldBinding.TextLike(spec, state, parse)               => spec.name -> parse(state.value)
-      case FieldBinding.BoolLike(spec, value, parse)               => spec.name -> parse(value.peek)
-      case FieldBinding.SelectLike(spec, options, selected, parse) =>
-        // the only way to reach the `Left` is a picklist with no options at all, and it must not throw here: `submit`
-        // runs on the render thread, where an exception takes the whole app down rather than showing a field error
-        spec.name -> options
-          .lift(selected.peek)
-          .map(parse)
-          .getOrElse(Left(s"no option to choose for '${spec.name}'"))
-    }
+    val parsed: Seq[(String, Either[String, Any])] = bindings.map(binding => binding.spec.name -> binding.parsed)
     val failed                                     = parsed.collect { case (name, Left(message)) => name -> message }
     if failed.nonEmpty then
       errors.set(failed.toMap)
@@ -77,6 +79,37 @@ object FormState:
     case FieldInput.BoolField      => "Field.bool"
     case FieldInput.SelectField(_) => "Field.enumeration"
 
+  /** Rejects a validator naming a field the spec does not declare. */
+  private def checkUnknown(spec: FormSpec[?], validators: Seq[Field[?]]): Unit =
+    val declared = spec.fields.map(_.name).toSet
+    val unknown  = validators.map(_.spec.name).distinct.filterNot(declared.contains)
+    if unknown.nonEmpty then
+      throw IllegalArgumentException(
+        s"validator(s) for field(s) ${unknown.mkString(", ")} that the form does not declare; " +
+          s"it declares ${spec.fields.map(_.name).mkString(", ")}"
+      )
+
+  /** Rejects two validators naming the same field. */
+  private def checkRepeated(validators: Seq[Field[?]]): Unit =
+    val repeated =
+      validators.groupBy(_.spec.name).collect { case (name, declaredTwice) if declaredTwice.sizeIs > 1 => name }
+    if repeated.nonEmpty then
+      throw IllegalArgumentException(s"more than one validator for field(s) ${repeated.mkString(", ")}")
+
+  /** Rejects a validator built from the wrong `Field` factory for the field's declared type. */
+  private def checkMismatched(spec: FormSpec[?], validators: Seq[Field[?]]): Unit =
+    val declaredInput = spec.fields.map(field => field.name -> field.input).toMap
+    val mismatched    = validators.flatMap { validator =>
+      declaredInput
+        .get(validator.spec.name)
+        .filterNot(_ == validator.spec.input)
+        .map(declared =>
+          s"field '${validator.spec.name}' is declared as $declared but its validator produces " +
+            s"${validator.spec.input}; use ${factoryFor(declared)}(\"${validator.spec.name}\")"
+        )
+    }
+    if mismatched.nonEmpty then throw IllegalArgumentException(mismatched.mkString("; "))
+
   /** Builds live state from a derived [[FormSpec]]; `validators` override the default per-type parsers by field name
     * (only the name and the input kind are taken from their own `FieldSpec` — position comes from the derived spec).
     *
@@ -92,29 +125,9 @@ object FormState:
     * still says `IntField` — so [[Field.map]] keeps its own warning about that one residual case.
     */
   def of[A](spec: FormSpec[A], validators: Field[?]*): FormState[A] =
-    val declared = spec.fields.map(_.name).toSet
-    val unknown  = validators.map(_.spec.name).distinct.filterNot(declared.contains)
-    if unknown.nonEmpty then
-      throw IllegalArgumentException(
-        s"validator(s) for field(s) ${unknown.mkString(", ")} that the form does not declare; " +
-          s"it declares ${spec.fields.map(_.name).mkString(", ")}"
-      )
-    val repeated =
-      validators.groupBy(_.spec.name).collect { case (name, declaredTwice) if declaredTwice.sizeIs > 1 => name }
-    if repeated.nonEmpty then
-      throw IllegalArgumentException(s"more than one validator for field(s) ${repeated.mkString(", ")}")
-
-    val declaredInput = spec.fields.map(field => field.name -> field.input).toMap
-    val mismatched    = validators.flatMap { validator =>
-      declaredInput
-        .get(validator.spec.name)
-        .filterNot(_ == validator.spec.input)
-        .map(declared =>
-          s"field '${validator.spec.name}' is declared as $declared but its validator produces " +
-            s"${validator.spec.input}; use ${factoryFor(declared)}(\"${validator.spec.name}\")"
-        )
-    }
-    if mismatched.nonEmpty then throw IllegalArgumentException(mismatched.mkString("; "))
+    checkUnknown(spec, validators)
+    checkRepeated(validators)
+    checkMismatched(spec, validators)
 
     val byName = validators.map(field => field.spec.name -> field).toMap
 

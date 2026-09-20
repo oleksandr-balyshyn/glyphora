@@ -21,7 +21,7 @@ final class CanvasShapeImportSpec extends AnyFunSuite:
       painter.paintDot(0, 0, style)
 
   test("a user-written Shape needs nothing beyond the dsl import"):
-    val element = canvas((0.0, 1.0), (0.0, 1.0))(CornerDot(Style.Default))
+    val element = canvas(Bounds(0.0, 1.0), Bounds(0.0, 1.0))(CornerDot(Style.Default))
     element.widget match
       case built: io.worxbend.tui.widgets.Canvas => assert(built.shapes == Seq(CornerDot(Style.Default)))
       case other                                 => fail(s"expected a Canvas widget, got $other")

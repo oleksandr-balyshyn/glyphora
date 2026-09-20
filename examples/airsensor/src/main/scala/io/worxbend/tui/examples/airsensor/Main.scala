@@ -61,18 +61,16 @@ class AirSensorApp(
   private val showHistory: Signal[Boolean]     = Signal(true)
   private val showHelp: Signal[Boolean]        = Signal(false)
 
-  // Plain vars, not signals: these are read and written only on the render thread and nothing renders from them
-  // directly, so making them reactive would buy an extra repaint and nothing else.
-  private var poller: Option[Cancelable]     = None
-  private var inFlight                       = false
-  private var lastUpdatedNanos: Option[Long] = None
+  /** The polling half of the app; the view below stays a pure function of the signals it writes. */
+  private val sensorPoller: SensorPoller =
+    SensorPoller(client, interval, history, status, ageSeconds, describe, (message, level) => notify(message, level))
 
   // ---- keys ------------------------------------------------------------------------------------
 
   override def bindings: KeyBindings = KeyBindings(
-    binding("r", "refresh")(refresh()),
-    binding("+", "slower")(rescale(_ * 2L)),
-    binding("-", "faster")(rescale(_ / 2L)),
+    binding("r", "refresh")(sensorPoller.refresh()),
+    binding("+", "slower")(sensorPoller.rescale(_ * 2L)),
+    binding("-", "faster")(sensorPoller.rescale(_ / 2L)),
     binding("h", "history")(showHistory.update(!_)),
     binding("?", "help")(showHelp.update(!_)),
     binding("q", "quit")(quit()),
@@ -89,70 +87,20 @@ class AirSensorApp(
     * discarded forever.
     */
   override def onStart(): Unit =
-    refresh()
-    startPolling()
+    sensorPoller.refresh()
+    sensorPoller.start()
 
   /** Runs on every exit path — `q`, `Esc`, Ctrl+C, a backend failure.
     *
     * Nothing cancels a repeating task for you. Its thread is a daemon so the JVM still exits, but under a headless test
     * the runner ends while the poller keeps firing into a loop nobody drains.
     */
-  override def onStop(): Unit = stopPolling()
+  override def onStop(): Unit = sensorPoller.stop()
 
   override def onTick(): Unit =
     // Setting an equal value notifies nobody, so this repaints the header once a second even though it runs four
     // times a second. Recomputing the age here rather than in `view` is what keeps "12s ago" honest between polls.
-    ageSeconds.set(lastUpdatedNanos.map(at => (System.nanoTime() - at) / 1_000_000_000L))
-
-  private def startPolling(): Unit =
-    poller = Some(Async.every(interval.peek)(refresh()))
-
-  private def stopPolling(): Unit =
-    poller.foreach(_.cancel())
-    poller = None
-
-  private def rescale(adjust: FiniteDuration => FiniteDuration): Unit =
-    val next = clamp(adjust(interval.peek))
-    if next != interval.peek then
-      interval.set(next)
-      // `Async.every` has no "change the interval" operation, so a new cadence means cancel and re-arm.
-      if poller.nonEmpty then
-        stopPolling()
-        startPolling()
-      notify(s"polling every ${describe(next)}", NoticeLevel.Info)
-
-  private def clamp(duration: FiniteDuration): FiniteDuration =
-    if duration < AirSensorApp.MinInterval then AirSensorApp.MinInterval
-    else if duration > AirSensorApp.MaxInterval then AirSensorApp.MaxInterval
-    else duration
-
-  // ---- reading the sensor ----------------------------------------------------------------------
-
-  /** Starts one read. Runs on the render thread; the read itself does not.
-    *
-    * `inFlight` is what stops a sensor slower than the poll interval from queueing reads behind each other — there is
-    * no cancellation handle for `Async.runCatching`, so the only defence is not starting the next one.
-    */
-  private def refresh(): Unit =
-    if !inFlight then
-      inFlight = true
-      if history.peek.isEmpty then status.set(Status.Loading)
-      // `runCatching` runs the read on a worker thread and marshals this callback back onto the render thread that
-      // started it — so the signal writes below are legal, and no `RenderThread` plumbing appears at the call site.
-      Async.runCatching(client.read()) { outcome =>
-        inFlight = false
-        // two failure shapes collapse into one: an `Either` the client returned, and a throwable it did not expect
-        val result = outcome.fold(error => Left(AirGradientClient.describeThrowable(error)), identity)
-        result match
-          case Right(reading) => accept(reading)
-          case Left(problem)  => status.set(Status.Failed(problem))
-      }
-
-  private def accept(reading: Reading): Unit =
-    history.update(readings => (readings :+ reading).takeRight(AirSensorApp.HistoryLength))
-    lastUpdatedNanos = Some(System.nanoTime())
-    ageSeconds.set(Some(0L))
-    status.set(Status.Ready)
+    ageSeconds.set(sensorPoller.lastUpdatedAt.map(at => (System.nanoTime() - at) / 1_000_000_000L))
 
   // ---- view ------------------------------------------------------------------------------------
 
@@ -243,23 +191,96 @@ class AirSensorApp(
 
   private def sparkRow(metric: Metric, readings: Vector[Reading], latest: Reading)(using Theme): Element =
     // Sparkline takes whole numbers, and it autoscales to its own maximum unless given one — which would make a calm
-    // series look exactly as dramatic as a spike. Scaling by ten keeps PM2.5's one decimal; pinning `max` to the
+    // series look exactly as dramatic as a spike. `SparkScale` keeps PM2.5's one decimal; pinning `max` to the
     // metric's own ceiling is what makes two frames comparable.
-    val samples = readings.map(entry => math.round(metric.read(entry) * 10.0))
+    val samples = readings.map(entry => math.round(metric.read(entry) * AirSensorApp.SparkScale))
     row(
       text(metric.label).dim.length(8),
       sparkline(samples)
-        .max(math.round(metric.gaugeMax * 10.0))
+        .max(math.round(metric.gaugeMax * AirSensorApp.SparkScale))
         .styled(_.patch(metric.bandOf(latest).style))
         .fill,
       text(metric.valueText(latest)).length(8),
     ).length(1)
 
   private def trendOf(metric: Metric)(using ReactiveScope): Trend =
-    Trend.between(history.get.map(metric.read), deadband = metric.gaugeMax * 0.01)
+    Trend.between(history.get.map(metric.read), deadband = metric.gaugeMax * AirSensorApp.DeadbandFraction)
 
   private def describe(duration: FiniteDuration): String =
     if duration < 1.second then s"${duration.toMillis}ms" else s"${duration.toSeconds}s"
+
+/** The polling half of [[AirSensorApp]]: arming and re-arming the timer, keeping slower-than-the-interval sensors from
+  * queueing reads behind each other, and folding each finished read into the signals the view renders from.
+  *
+  * Everything it touches arrives as a constructor signal, so the class never builds an `Element` and the app never
+  * touches a `Cancelable`.
+  */
+private class SensorPoller(
+    client: SensorClient,
+    interval: Signal[FiniteDuration],
+    history: Signal[Vector[Reading]],
+    status: Signal[Status],
+    ageSeconds: Signal[Option[Long]],
+    describe: FiniteDuration => String,
+    notifyUser: (String, NoticeLevel) => Unit,
+):
+
+  // Plain vars, not signals: these are read and written only on the render thread and nothing renders from them
+  // directly, so making them reactive would buy an extra repaint and nothing else.
+  private var poller: Option[Cancelable]     = None
+  private var inFlight                       = false
+  private var lastUpdatedNanos: Option[Long] = None
+
+  /** When the last accepted reading landed, so the app's tick can age the "updated Ns ago" line between polls. */
+  def lastUpdatedAt: Option[Long] = lastUpdatedNanos
+
+  def start(): Unit =
+    poller = Some(Async.every(interval.peek)(refresh()))
+
+  def stop(): Unit =
+    poller.foreach(_.cancel())
+    poller = None
+
+  def rescale(adjust: FiniteDuration => FiniteDuration): Unit =
+    val next = clamp(adjust(interval.peek))
+    if next != interval.peek then
+      interval.set(next)
+      // `Async.every` has no "change the interval" operation, so a new cadence means cancel and re-arm.
+      if poller.nonEmpty then
+        stop()
+        start()
+      notifyUser(s"polling every ${describe(next)}", NoticeLevel.Info)
+
+  private def clamp(duration: FiniteDuration): FiniteDuration =
+    if duration < AirSensorApp.MinInterval then AirSensorApp.MinInterval
+    else if duration > AirSensorApp.MaxInterval then AirSensorApp.MaxInterval
+    else duration
+
+  /** Starts one read. Runs on the render thread; the read itself does not.
+    *
+    * `inFlight` is what stops a sensor slower than the poll interval from queueing reads behind each other — there is
+    * no cancellation handle for `Async.runCatching`, so the only defence is not starting the next one.
+    */
+  def refresh(): Unit =
+    if !inFlight then
+      inFlight = true
+      if history.peek.isEmpty then status.set(Status.Loading)
+      // `runCatching` runs the read on a worker thread and marshals this callback back onto the render thread that
+      // started it — so the signal writes below are legal, and no `RenderThread` plumbing appears at the call site.
+      Async.runCatching(client.read()) { outcome =>
+        inFlight = false
+        // two failure shapes collapse into one: an `Either` the client returned, and a throwable it did not expect
+        val result = outcome.fold(error => Left(AirGradientClient.describeThrowable(error)), identity)
+        result match
+          case Right(reading) => accept(reading)
+          case Left(problem)  => status.set(Status.Failed(problem))
+      }
+
+  private def accept(reading: Reading): Unit =
+    history.update(readings => (readings :+ reading).takeRight(AirSensorApp.HistoryLength))
+    lastUpdatedNanos = Some(System.nanoTime())
+    ageSeconds.set(Some(0L))
+    status.set(Status.Ready)
 
 object AirSensorApp:
 
@@ -271,5 +292,11 @@ object AirSensorApp:
 
   val MinInterval: FiniteDuration = 100.millis
   val MaxInterval: FiniteDuration = 60.seconds
+
+  /** Sparkline takes whole numbers; scaling readings by ten keeps PM2.5's one decimal place visible. */
+  private val SparkScale: Double = 10.0
+
+  /** How far a metric may drift, as a fraction of its gauge ceiling, before the trend arrow reports a move. */
+  private val DeadbandFraction: Double = 0.01
 
 object Main extends AirSensorApp()

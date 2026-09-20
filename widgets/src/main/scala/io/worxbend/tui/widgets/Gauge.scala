@@ -97,15 +97,12 @@ final case class Gauge(
     *
     * Without a preset that is the boundary rounded to the nearest cell, which is what this widget has always drawn.
     * With one, the arithmetic is [[ProgressPreset]]'s so the block gauge and the line gauge cannot disagree about where
-    * a ratio falls, and the boundary cell counts as part of the bar whenever the preset can draw a partial glyph in it
-    * — the partial block is the bar, not the track.
+    * a ratio falls — the boundary-cell rule included.
     */
   private def filledColumns(clamped: Double, width: Int): Int =
     preset match
       case None         => math.max(0, math.min(width, math.round(clamped * width).toInt))
-      case Some(preset) =>
-        val whole = preset.filledCells(clamped, width)
-        if preset.isSubCell then math.min(width, whole + 1) else whole
+      case Some(preset) => preset.filledCellsInclusiveOfBoundary(clamped, width)
 
 object Gauge:
   /** Convenience for out-of-`[0,1]` progress values: `Gauge.of(3, 10)` is a 30% gauge. */

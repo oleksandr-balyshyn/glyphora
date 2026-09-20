@@ -9,20 +9,26 @@ import scala.concurrent.duration.{DurationLong, FiniteDuration}
   * what this class adds is the direction of travel, the clamp at zero and the one-shot expiry latch.
   */
 final class Timer(val duration: FiniteDuration) extends TickDriven:
-  private var remainingNanos: Long = math.max(0L, duration.toNanos)
-  private var firedExpiry: Boolean = remainingNanos <= 0
+  private var remainingNanos: Long = 0L
+  private var firedExpiry: Boolean = false
+
+  rearm()
 
   /** An expired timer has nowhere left to count, so `start`/`toggle` on one do nothing until it is [[reset]]. */
   override protected def canRun: Boolean = remainingNanos > 0
 
   /** Counts `delta` down, clamping at zero and stopping the clock on expiry. */
   protected def advance(deltaNanos: Long): Unit =
-    remainingNanos = math.max(0L, remainingNanos - deltaNanos)
+    remainingNanos = clampedNanos(remainingNanos - deltaNanos)
     if remainingNanos == 0 then halt()
 
   def reset(): Unit =
-    remainingNanos = math.max(0L, duration.toNanos)
+    rearm()
     stop()
+
+  /** Restores the full duration and clears the expiry latch — the initial state the constructor and [[reset]] share. */
+  private def rearm(): Unit =
+    remainingNanos = clampedNanos(duration.toNanos)
     firedExpiry = remainingNanos <= 0
 
   def isExpired: Boolean = remainingNanos <= 0

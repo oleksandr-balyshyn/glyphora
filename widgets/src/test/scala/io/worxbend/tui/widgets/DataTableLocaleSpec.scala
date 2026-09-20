@@ -20,7 +20,7 @@ final class DataTableLocaleSpec extends AnyFunSuite:
     finally Locale.setDefault(previous)
 
   private val table =
-    DataTable(
+    DataTable.fromStrings(
       columns = Seq("ID", "Name"),
       rows = Seq(Seq("ID", "widget"), Seq("42", "other")),
       widths = Seq(Constraint.Length(4), Constraint.Length(8)),

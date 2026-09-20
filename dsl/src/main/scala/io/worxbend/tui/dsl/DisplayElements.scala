@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Alignment, CharWidth, Color, Constraint, Flex, Line, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{Alignment, CharWidth, Constraint, Flex, Line, Span, Style, Text, Widget}
 import io.worxbend.tui.widgets.{TableCell, TableRow}
 import io.worxbend.tui.widgets as w
 
@@ -107,10 +107,10 @@ final case class LineElement(spans: Seq[Span], align: Option[Alignment] = None, 
 
 /** A one-row filled bar with a caption over it; the caption defaults to the percentage.
   *
-  * `.label`/`.labelled`/`.bare` are the same trio [[ProgressBarElement]] carries, so the two progress meters are
-  * captioned the same way whichever one a view reaches for. `trackStyle` and `fillStyle` come from the same
-  * [[LoadingTheme]] the whole progress-and-spinner family draws from, so a gauge and a `progressBar` side by side are
-  * the same two colours.
+  * The caption trio and the two fill ramps come from [[ProgressMeterBuilders]], shared with [[ProgressBarElement]], so
+  * the two progress meters are captioned and colored the same way whichever one a view reaches for. `trackStyle` and
+  * `fillStyle` come from the same [[LoadingTheme]] the whole progress-and-spinner family draws from, so a gauge and a
+  * `progressBar` side by side are the same two colours.
   */
 final case class GaugeElement(
     ratio: Double,
@@ -119,29 +119,15 @@ final case class GaugeElement(
     fillStyle: Style,
     fillRamp: Option[w.ColorRamp],
     props: ElementProps = ElementProps(),
-) extends Element:
+) extends Element,
+      ProgressMeterBuilders[GaugeElement]:
   type Self = GaugeElement
   def widget: Widget = w.Gauge(ratio, label, trackStyle.patch(props.style), fillStyle.patch(props.style), fillRamp)
 
-  /** Replaces the percentage caption with fixed text. */
-  def label(text: String): GaugeElement = copy(label = w.ProgressLabel.Text(text))
-
-  /** Shows fixed text followed by the percentage, as in `syncing 42%`. */
-  def labelled(text: String): GaugeElement = copy(label = w.ProgressLabel.TextAndPercentage(text))
-
-  /** Drops the caption entirely, leaving the bar uninterrupted. */
-  def bare: GaugeElement = copy(label = w.ProgressLabel.Hidden)
-
-  /** Colors the fill by how far along it is: `ColorRamp.Traffic` walks green through amber to red, which is what an
-    * "how bad is it" meter (disk usage, an air-quality index) wants and a download bar does not.
-    *
-    * The same builder [[ProgressBarElement.ramp]] carries, so the two meters are colored the same way whichever one a
-    * view reaches for — this used to be the one knob that forced a call site down to `widget(w.Gauge(...))`.
-    */
-  def ramp(chosen: w.ColorRamp): GaugeElement = copy(fillRamp = Some(chosen))
-
-  /** A two-color ramp built inline, for the many cases with no named preset. */
-  def ramp(from: Color, to: Color): GaugeElement = copy(fillRamp = Some(w.ColorRamp(from, to)))
+  protected def progressLabel: w.ProgressLabel                                                = label
+  protected def progressRamp: Option[w.ColorRamp]                                             = fillRamp
+  protected def withProgress(label: w.ProgressLabel, ramp: Option[w.ColorRamp]): GaugeElement =
+    copy(label = label, fillRamp = ramp)
 
   private[dsl] def withProps(props: ElementProps): GaugeElement = copy(props = props)
   private[dsl] override def claim: SizeClaim                    = SizeClaim.OneRow
@@ -412,8 +398,8 @@ final case class WidgetElement(
   * sets — so setting one does not silently switch resolution back.
   */
 final case class CanvasElement(
-    xBounds: (Double, Double),
-    yBounds: (Double, Double),
+    xBounds: w.Bounds,
+    yBounds: w.Bounds,
     shapes: Seq[w.Shape],
     marker: String = "•",
     resolution: w.CanvasResolution = w.CanvasResolution.Cell,

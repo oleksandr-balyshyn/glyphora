@@ -130,10 +130,8 @@ final class TextAreaState(initial: String = ""):
   private def pushUndo(): Unit =
     redoStack.clear()
     undoStack.push((lines, line, column))
-    if undoStack.size > TextAreaState.UndoLimit then
-      val kept = undoStack.take(TextAreaState.UndoLimit)
-      undoStack.clear()
-      undoStack.pushAll(kept.reverse)
+    // the stack's bottom holds the oldest snapshots; drop from there so the newest `UndoLimit` survive
+    while undoStack.size > TextAreaState.UndoLimit do undoStack.remove(undoStack.size - 1)
 
 object TextAreaState:
   private val UndoLimit = 100

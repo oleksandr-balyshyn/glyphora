@@ -68,13 +68,17 @@ object FormFieldType:
   given text: FormFieldType[String] = apply(FieldInput.TextField)(raw => Right(raw))
 
   given int: FormFieldType[Int] =
-    apply(FieldInput.IntField)(raw => raw.trim.toIntOption.toRight(s"'$raw' is not a whole number"))
+    optional(FieldInput.IntField)(_.toIntOption)(raw => s"'$raw' is not a whole number")
 
-  given decimal: FormFieldType[Double] =
-    apply(FieldInput.DecimalField)(raw => raw.trim.toDoubleOption.toRight(s"'$raw' is not a number"))
+  /** A floating-point number, edited through the decimal control it shares with [[bigDecimal]]. Named `double` after
+    * its type — the instance was `decimal` before 0.15.0, renamed so the given and its [[Field.double]] factory carry
+    * the same name.
+    */
+  given double: FormFieldType[Double] =
+    optional(FieldInput.DecimalField)(_.toDoubleOption)(raw => s"'$raw' is not a number")
 
   given bool: FormFieldType[Boolean] =
-    apply(FieldInput.BoolField)(raw => raw.trim.toBooleanOption.toRight(s"'$raw' is not true/false"))
+    optional(FieldInput.BoolField)(_.toBooleanOption)(raw => s"'$raw' is not true/false")
 
   /** Builds an instance around a parser that reports a bad value by *throwing* — which is how every parser in the JDK's
     * `java.time` and `java.util.UUID` reports one.
@@ -95,11 +99,26 @@ object FormFieldType:
   private def catching[A](control: FieldInput)(parser: String => A)(message: String => String): FormFieldType[A] =
     apply(control)(raw => Try(parser(raw.trim)).toOption.toRight(message(raw)))
 
+  /** The `Option`-returning counterpart to [[catching]], for parsers like `String.toIntOption` that already report a
+    * bad value by returning `None`.
+    *
+    * @param control
+    *   the control the field is edited with
+    * @param parser
+    *   turns already-trimmed text into a value, or `None`
+    * @param message
+    *   builds the message for the *untrimmed* text the user actually typed
+    */
+  private def optional[A](control: FieldInput)(parser: String => Option[A])(
+      message: String => String
+  ): FormFieldType[A] =
+    apply(control)(raw => parser(raw.trim).toRight(message(raw)))
+
   /** A whole number too large for `Int`. It shares the whole-number control with `Int`, because the two are the same
     * *kind* of entry to the person filling the form; only the range differs.
     */
   given long: FormFieldType[Long] =
-    apply(FieldInput.IntField)(raw => raw.trim.toLongOption.toRight(s"'$raw' is not a whole number"))
+    optional(FieldInput.IntField)(_.toLongOption)(raw => s"'$raw' is not a whole number")
 
   /** An exact decimal — money, quantities — where `Double`'s binary rounding would be wrong. Same decimal control as
     * `Double`.
@@ -131,14 +150,6 @@ object FormFieldType:
   given duration: FormFieldType[Duration] =
     catching(FieldInput.TextField)(Duration.parse)(raw => s"'$raw' is not a duration (ISO-8601, e.g. PT5M30S)")
 
-  /** An optional field renders with the same control as the type inside it, and treats blank input as "not given"
-    * rather than as a parse failure. Anything else is handed to the inner instance, so `Option[Int]` still rejects
-    * `"abc"` with the message `Int` would have given.
-    *
-    * One combination is optional in name only: an `Option[Boolean]` renders as a checkbox, and a checkbox is always
-    * either ticked or not, so the field always submits a `Some`. Declare a plain `Boolean` unless the `Option` means
-    * something to the rest of your program.
-    */
   /** A picklist over an enum whose cases all take no parameters: every case's name becomes one option, and the label
     * the user chose is matched back to the case value.
     *
@@ -166,14 +177,22 @@ object FormFieldType:
   inline def ofEnum[A](using mirror: Mirror.SumOf[A]): FormFieldType[A] =
     val labels = constValueTuple[mirror.MirroredElemLabels].toList.map(_.toString)
     // every element is a `ValueOf[C]` for one of the enum's own case types, so each `.value` is already an `A`; the
-    // cast is what carries that fact past `ValueOf`'s wildcard element type, which the compiler cannot track through
-    // the tuple
-    val values = summonAll[Tuple.Map[mirror.MirroredElemTypes, ValueOf]].toList.map { case singleton: ValueOf[?] =>
-      // `summonAll` erases the tuple's element types to `ValueOf[?]`, so the fact that each element is a `ValueOf[C]`
-      // for one of A's own case types — and its `.value` therefore already an `A` — cannot be stated to the compiler
-      // here. Pattern matching cannot recover it either: the type argument is gone at runtime, so there is nothing
-      // left to match on.
-      singleton.value.asInstanceOf[A] // scalafix:ok DisableSyntax; the erased case type cannot be recovered
+    // cast below is what carries that fact past `ValueOf`'s wildcard element type, which the compiler cannot track
+    // through the tuple.
+    //
+    // `productIterator`, not the `Tuple.toList` that reads more naturally here. `toList` types its elements as the
+    // *union* of the tuple's element types, and on this compiler a union of exactly two `ValueOf`s — an enum with
+    // exactly two cases — erases the type test below into a call to a cast method that exists only inside the
+    // compiler, so the given built fine and threw `NoSuchMethodError` the first time anything forced it. One case and
+    // three or more cases were unaffected, which is what kept it hidden. Iterating the tuple as `Any` leaves the test
+    // an ordinary class check at every arity.
+    val values = summonAll[Tuple.Map[mirror.MirroredElemTypes, ValueOf]].productIterator.toList.map {
+      case singleton: ValueOf[?] =>
+        // `summonAll` erases the tuple's element types to `ValueOf[?]`, so the fact that each element is a
+        // `ValueOf[C]` for one of A's own case types — and its `.value` therefore already an `A` — cannot be stated
+        // to the compiler here. Pattern matching cannot recover it either: the type argument is gone at runtime, so
+        // there is nothing left to match on.
+        singleton.value.asInstanceOf[A] // scalafix:ok DisableSyntax; the erased case type cannot be recovered
     }
     ofLabels(labels.zip(values))
 
@@ -195,5 +214,13 @@ object FormFieldType:
         .toRight(s"'$raw' is not one of ${options.map(_._1).mkString(", ")}")
     }
 
+  /** An optional field renders with the same control as the type inside it, and treats blank input as "not given"
+    * rather than as a parse failure. Anything else is handed to the inner instance, so `Option[Int]` still rejects
+    * `"abc"` with the message `Int` would have given.
+    *
+    * One combination is optional in name only: an `Option[Boolean]` renders as a checkbox, and a checkbox is always
+    * either ticked or not, so the field always submits a `Some`. Declare a plain `Boolean` unless the `Option` means
+    * something to the rest of your program.
+    */
   given option[A](using inner: FormFieldType[A]): FormFieldType[Option[A]] =
     apply(inner.input)(raw => if raw.trim.isEmpty then Right(None) else inner.parse(raw).map(Some(_)))

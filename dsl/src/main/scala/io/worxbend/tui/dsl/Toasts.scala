@@ -69,12 +69,7 @@ private[dsl] final class ToastStack:
       Some(Element.layers(overlays.head, overlays.tail*))
 
   private def styleOf(level: NoticeLevel)(using theme: Theme): Style =
-    val base = level match
-      case NoticeLevel.Info    => theme.accent
-      case NoticeLevel.Success => theme.success
-      case NoticeLevel.Warning => theme.warning
-      case NoticeLevel.Error   => theme.error
-    base.reverse
+    noticeLevelStyle(level).reverse
 
 /** How many toasts are drawn at once — older ones stay queued and appear as the visible ones age out. */
 private val MaxVisibleToasts = 5

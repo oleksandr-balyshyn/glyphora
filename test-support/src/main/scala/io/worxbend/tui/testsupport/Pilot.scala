@@ -102,18 +102,26 @@ final class Pilot private (
     *
     * As with every posting method, the caller is responsible for calling [[waitForIdle]] before asserting on the frame.
     */
-  def click(x: Int, y: Int): Pilot =
-    mouseDown(x, y)
-    mouseUp(x, y)
+  def click(x: Int, y: Int): Pilot = click(Position(x, y))
+
+  /** [[click]] with the target as a [[Position]] — for a test that already holds the coordinate as a value, such as one
+    * read back from [[cursorPosition]] or computed from a widget's bounds, rather than written as two literals.
+    */
+  def click(position: Position): Pilot =
+    mouseDown(position)
+    mouseUp(position)
 
   /** [[click]] with a button other than the left one — a right-click for a context menu, a middle-click for a paste.
     *
     * A separate method rather than a defaulted parameter on [[click]], because [[click]] takes no modifiers either and
     * growing it two optional arguments would make the common two-argument call harder to read, not easier.
     */
-  def clickWith(x: Int, y: Int, button: MouseButton): Pilot =
-    postMouse(x, y, MouseEventKind.Down, KeyModifiers.None, button)
-    postMouse(x, y, MouseEventKind.Up, KeyModifiers.None, button)
+  def clickWith(x: Int, y: Int, button: MouseButton): Pilot = clickWith(Position(x, y), button)
+
+  /** [[clickWith]] with the target as a [[Position]]. */
+  def clickWith(position: Position, button: MouseButton): Pilot =
+    postMouse(position, MouseEventKind.Down, KeyModifiers.None, button)
+    postMouse(position, MouseEventKind.Up, KeyModifiers.None, button)
 
   /** Posts a button press at `(x, y)` and nothing else, leaving the button held as far as the app is concerned. */
   def mouseDown(
@@ -122,7 +130,19 @@ final class Pilot private (
       modifiers: KeyModifiers = KeyModifiers.None,
       button: MouseButton = MouseButton.Left,
   ): Pilot =
-    postMouse(x, y, MouseEventKind.Down, modifiers, button)
+    mouseDown(Position(x, y), modifiers, button)
+
+  /** [[mouseDown]] with the target as a [[Position]] — a left-button press without modifiers.
+    *
+    * A separate overload rather than a defaulted parameter, because Scala does not allow default arguments on more than
+    * one overload of the same method, and the defaults stay on the published `(x, y)` form.
+    */
+  def mouseDown(position: Position): Pilot =
+    mouseDown(position, KeyModifiers.None, MouseButton.Left)
+
+  /** [[mouseDown]] with the target as a [[Position]], naming the modifiers and the button. */
+  def mouseDown(position: Position, modifiers: KeyModifiers, button: MouseButton): Pilot =
+    postMouse(position, MouseEventKind.Down, modifiers, button)
 
   /** Posts a button release at `(x, y)`. */
   def mouseUp(
@@ -131,11 +151,24 @@ final class Pilot private (
       modifiers: KeyModifiers = KeyModifiers.None,
       button: MouseButton = MouseButton.Left,
   ): Pilot =
-    postMouse(x, y, MouseEventKind.Up, modifiers, button)
+    mouseUp(Position(x, y), modifiers, button)
+
+  /** [[mouseUp]] with the target as a [[Position]] — a left-button release without modifiers, split out for the same
+    * reason as [[mouseDown(position:io\.worxbend\.tui\.core\.Position)*]].
+    */
+  def mouseUp(position: Position): Pilot =
+    mouseUp(position, KeyModifiers.None, MouseButton.Left)
+
+  /** [[mouseUp]] with the target as a [[Position]], naming the modifiers and the button. */
+  def mouseUp(position: Position, modifiers: KeyModifiers, button: MouseButton): Pilot =
+    postMouse(position, MouseEventKind.Up, modifiers, button)
 
   /** Posts a pointer move to `(x, y)` with no button held — what a terminal reports under mouse-motion tracking. */
-  def mouseMove(x: Int, y: Int): Pilot =
-    postMouse(x, y, MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown)
+  def mouseMove(x: Int, y: Int): Pilot = mouseMove(Position(x, y))
+
+  /** [[mouseMove]] with the target as a [[Position]]. */
+  def mouseMove(position: Position): Pilot =
+    postMouse(position, MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown)
 
   /** Posts a whole drag gesture: `Down` at the start point, one `Drag` at the end point, then `Up` there.
     *
@@ -151,32 +184,82 @@ final class Pilot private (
       modifiers: KeyModifiers = KeyModifiers.None,
       button: MouseButton = MouseButton.Left,
   ): Pilot =
-    postMouse(fromX, fromY, MouseEventKind.Down, modifiers, button)
-    postMouse(toX, toY, MouseEventKind.Drag, modifiers, button)
-    postMouse(toX, toY, MouseEventKind.Up, modifiers, button)
+    drag(Position(fromX, fromY), Position(toX, toY), modifiers, button)
+
+  /** [[drag]] with the endpoints as [[Position]]s — a left-button drag without modifiers, split out for the same reason
+    * as [[mouseDown(position:io\.worxbend\.tui\.core\.Position)*]].
+    */
+  def drag(from: Position, to: Position): Pilot =
+    drag(from, to, KeyModifiers.None, MouseButton.Left)
+
+  /** [[drag]] with the endpoints as [[Position]]s, naming the modifiers and the button. */
+  def drag(from: Position, to: Position, modifiers: KeyModifiers, button: MouseButton): Pilot =
+    postMouse(from, MouseEventKind.Down, modifiers, button)
+    postMouse(to, MouseEventKind.Drag, modifiers, button)
+    postMouse(to, MouseEventKind.Up, modifiers, button)
 
   /** Posts `times` scroll-up notches at `(x, y)`. */
   def scrollUp(x: Int, y: Int, times: Int = 1, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
-    scroll(x, y, MouseEventKind.ScrollUp, times, modifiers)
+    scrollUp(Position(x, y), times, modifiers)
+
+  /** [[scrollUp]] with the target as a [[Position]] — one notch without modifiers, split out for the same reason as
+    * [[mouseDown(position:io\.worxbend\.tui\.core\.Position)*]].
+    */
+  def scrollUp(position: Position): Pilot =
+    scrollUp(position, 1, KeyModifiers.None)
+
+  /** [[scrollUp]] with the target as a [[Position]], naming the notch count and the modifiers. */
+  def scrollUp(position: Position, times: Int, modifiers: KeyModifiers): Pilot =
+    scroll(position, MouseEventKind.ScrollUp, times, modifiers)
 
   /** Posts `times` scroll-down notches at `(x, y)`. */
   def scrollDown(x: Int, y: Int, times: Int = 1, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
-    scroll(x, y, MouseEventKind.ScrollDown, times, modifiers)
+    scrollDown(Position(x, y), times, modifiers)
+
+  /** [[scrollDown]] with the target as a [[Position]] — one notch without modifiers, split out for the same reason as
+    * [[mouseDown(position:io\.worxbend\.tui\.core\.Position)*]].
+    */
+  def scrollDown(position: Position): Pilot =
+    scrollDown(position, 1, KeyModifiers.None)
+
+  /** [[scrollDown]] with the target as a [[Position]], naming the notch count and the modifiers. */
+  def scrollDown(position: Position, times: Int, modifiers: KeyModifiers): Pilot =
+    scroll(position, MouseEventKind.ScrollDown, times, modifiers)
 
   /** Posts `times` horizontal wheel notches to the left at `(x, y)` — what a sideways trackpad swipe sends.
     *
     * No built-in element consumes these, so a test uses them to drive an application's own `onMouseEvent`.
     */
   def scrollLeft(x: Int, y: Int, times: Int = 1, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
-    scroll(x, y, MouseEventKind.ScrollLeft, times, modifiers)
+    scrollLeft(Position(x, y), times, modifiers)
+
+  /** [[scrollLeft]] with the target as a [[Position]] — one notch without modifiers, split out for the same reason as
+    * [[mouseDown(position:io\.worxbend\.tui\.core\.Position)*]].
+    */
+  def scrollLeft(position: Position): Pilot =
+    scrollLeft(position, 1, KeyModifiers.None)
+
+  /** [[scrollLeft]] with the target as a [[Position]], naming the notch count and the modifiers. */
+  def scrollLeft(position: Position, times: Int, modifiers: KeyModifiers): Pilot =
+    scroll(position, MouseEventKind.ScrollLeft, times, modifiers)
 
   /** Posts `times` horizontal wheel notches to the right at `(x, y)`. */
   def scrollRight(x: Int, y: Int, times: Int = 1, modifiers: KeyModifiers = KeyModifiers.None): Pilot =
-    scroll(x, y, MouseEventKind.ScrollRight, times, modifiers)
+    scrollRight(Position(x, y), times, modifiers)
 
-  private def scroll(x: Int, y: Int, kind: MouseEventKind, times: Int, modifiers: KeyModifiers): Pilot =
+  /** [[scrollRight]] with the target as a [[Position]] — one notch without modifiers, split out for the same reason as
+    * [[mouseDown(position:io\.worxbend\.tui\.core\.Position)*]].
+    */
+  def scrollRight(position: Position): Pilot =
+    scrollRight(position, 1, KeyModifiers.None)
+
+  /** [[scrollRight]] with the target as a [[Position]], naming the notch count and the modifiers. */
+  def scrollRight(position: Position, times: Int, modifiers: KeyModifiers): Pilot =
+    scroll(position, MouseEventKind.ScrollRight, times, modifiers)
+
+  private def scroll(position: Position, kind: MouseEventKind, times: Int, modifiers: KeyModifiers): Pilot =
     // a wheel notch presses nothing, so it names no button — the same thing a real terminal reports
-    repeat(times)(postMouse(x, y, kind, modifiers, MouseButton.Unknown))
+    repeat(times)(postMouse(position, kind, modifiers, MouseButton.Unknown))
 
   /** Runs `post` `times` over, then returns this pilot for chaining.
     *
@@ -191,8 +274,8 @@ final class Pilot private (
       remaining -= 1
     this
 
-  private def postMouse(x: Int, y: Int, kind: MouseEventKind, modifiers: KeyModifiers, button: MouseButton): Pilot =
-    backend.postEvent(Event.Mouse(MouseEvent(Position(x, y), kind, modifiers, button)))
+  private def postMouse(position: Position, kind: MouseEventKind, modifiers: KeyModifiers, button: MouseButton): Pilot =
+    backend.postEvent(Event.Mouse(MouseEvent(position, kind, modifiers, button)))
     this
 
   def resize(width: Int, height: Int): Pilot =
@@ -223,7 +306,7 @@ final class Pilot private (
     * arrow. Only the `ESC` is supplied; every character of `body` is sent as its own code unit.
     */
   def sendEscape(body: String): Pilot =
-    sendBytes(0x1b +: body.map(_.toInt)*)
+    sendBytes(Pilot.Esc +: body.map(_.toInt)*)
 
   /** Posts one bracketed paste carrying `text` as a single event.
     *
@@ -294,9 +377,8 @@ final class Pilot private (
     val idleReadsBefore  = backend.idleReads
     def settled: Boolean =
       !thread.isAlive || (backend.pendingEvents == 0 && backend.idleReads > idleReadsBefore)
-    while !settled && deadline.hasTimeLeft() do Thread.sleep(Pilot.PollSleep.toMillis)
+    pollUntil(deadline, s"app did not go idle within $timeout")(settled)(())
     rethrowAppFailure()
-    if !settled then CallSite.fail(s"app did not go idle within $timeout")
     this
 
   /** Waits until `condition` holds, and fails the test naming `description` if it never does.
@@ -317,12 +399,19 @@ final class Pilot private (
     */
   def waitUntil(description: String, timeout: FiniteDuration = Pilot.DefaultTimeout)(condition: => Boolean): Pilot =
     val deadline = Deadline.now + timeout
-    rethrowAppFailure()
-    while !condition && deadline.hasTimeLeft() do
-      Thread.sleep(Pilot.PollSleep.toMillis)
-      rethrowAppFailure()
-    if !condition then CallSite.fail(s"timed out after $timeout waiting for $description")
+    pollUntil(deadline, s"timed out after $timeout waiting for $description")(condition)(rethrowAppFailure())
     this
+
+  /** Polls `settled` every [[Pilot.PollSleep]] until it holds or `deadline` runs out, failing with `timeoutMessage` on
+    * the overrun. `onWake` runs once before the first check and again after every sleep — the hook each caller hangs
+    * its app-failure check on (or leaves empty).
+    */
+  private def pollUntil(deadline: Deadline, timeoutMessage: => String)(settled: => Boolean)(onWake: => Unit): Unit =
+    onWake
+    while !settled && deadline.hasTimeLeft() do
+      Thread.sleep(Pilot.PollSleep.toMillis)
+      onWake
+    if !settled then CallSite.fail(timeoutMessage)
 
   /** Waits until the app has drawn at least `count` frames in total since it started.
     *
@@ -451,13 +540,16 @@ final class Pilot private (
 
 object Pilot:
 
+  /** The ESC control code that opens every escape sequence sent through [[Pilot.sendEscape]]. */
+  private val Esc: Int = 0x1b
+
   /** How long the test thread sleeps between checks while waiting for the app to go idle. Small enough that a settled
     * app is noticed almost at once, large enough not to spin a core.
     */
   private val PollSleep: FiniteDuration = 5.millis
 
-  /** The pilot's patience, shared by [[Pilot.waitForIdle]] and [[Pilot.awaitTermination]] so that one value sets how
-    * long a test waits before reporting a hung app.
+  /** The pilot's patience, shared by [[Pilot.waitForIdle]], [[Pilot.waitUntil]], [[Pilot.waitForDraws]] and
+    * [[Pilot.awaitTermination]] so that one value sets how long a test waits before reporting a hung app.
     */
   private[testsupport] val DefaultTimeout: FiniteDuration = 2.seconds
 

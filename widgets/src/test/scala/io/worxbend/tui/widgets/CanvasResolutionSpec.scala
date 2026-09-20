@@ -18,7 +18,7 @@ final class CanvasResolutionSpec extends AnyFunSuite:
   private def cellWith(resolution: CanvasResolution, dots: (Int, Int)*): String =
     final case class LitDots() extends Shape:
       def draw(painter: Painter): Unit = dots.foreach((column, row) => painter.paintDot(column, row, Style.Default))
-    val canvas = Canvas((0.0, 1.0), (0.0, 1.0), Seq(LitDots()), resolution = resolution)
+    val canvas = Canvas(Bounds(0.0, 1.0), Bounds(0.0, 1.0), Seq(LitDots()), resolution = resolution)
     rendered(canvas, 1, 1).get(0, 0).symbol
 
   test("every resolution reports the dot packing its glyphs actually encode"):
@@ -87,8 +87,8 @@ final class CanvasResolutionSpec extends AnyFunSuite:
   test("a line drawn at each resolution fills the cells it crosses"):
     everyResolution.foreach { resolution =>
       val canvas = Canvas(
-        (0.0, 1.0),
-        (0.0, 1.0),
+        Bounds(0.0, 1.0),
+        Bounds(0.0, 1.0),
         Seq(Shape.SegmentShape(0.0, 0.5, 1.0, 0.5)),
         marker = "*",
         resolution = resolution,
@@ -108,6 +108,6 @@ final class CanvasResolutionSpec extends AnyFunSuite:
   test("an empty area draws nothing at any resolution"):
     everyResolution.foreach { resolution =>
       val canvas =
-        Canvas((0.0, 1.0), (0.0, 1.0), Seq(Shape.Points(Seq((0.5, 0.5)))), resolution = resolution)
+        Canvas(Bounds(0.0, 1.0), Bounds(0.0, 1.0), Seq(Shape.Points(Seq((0.5, 0.5)))), resolution = resolution)
       assert(trimmedLines(rendered(canvas, 0, 0)).forall(_.isEmpty), s"$resolution")
     }

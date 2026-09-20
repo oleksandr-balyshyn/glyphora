@@ -24,7 +24,7 @@ final class ScrollbarSpec extends AnyFunSuite:
     assert(lines(buffer) == Seq("│", "│", "█", "█"))
 
   test("a horizontal scrollbar renders along the bottom edge"):
-    val buffer = rendered(Scrollbar(8, 0, orientation = Direction.Horizontal), 4, 1)
+    val buffer = rendered(Scrollbar(8, 0, ScrollbarOptions(orientation = Direction.Horizontal)), 4, 1)
     assert(lines(buffer) == Seq("██││"))
 
   test("the vertical scrollbar draws on the rightmost column of a wider area"):
@@ -34,53 +34,70 @@ final class ScrollbarSpec extends AnyFunSuite:
   test("a declared viewport shorter than the track shortens the thumb"):
     // the bar is 8 rows tall but the pane it describes only shows 4 of the 16 content rows, so the thumb covers a
     // quarter of the track (2 of 8 cells) rather than the half it would if the track spoke for the viewport
-    val buffer = rendered(Scrollbar(contentLength = 16, viewportLength = Some(4)), 1, 8)
+    val buffer = rendered(Scrollbar(contentLength = 16, options = ScrollbarOptions(viewportLength = Some(4))), 1, 8)
     assert(lines(buffer) == Seq("█", "█", "│", "│", "│", "│", "│", "│"))
 
   test("a declared viewport makes the thumb reach the end at the real last offset"):
     // 16 rows of content seen 4 at a time scrolls to offset 12, not to 16 - 8
-    val buffer = rendered(Scrollbar(contentLength = 16, position = 12, viewportLength = Some(4)), 1, 8)
+    val buffer =
+      rendered(Scrollbar(contentLength = 16, position = 12, options = ScrollbarOptions(viewportLength = Some(4))), 1, 8)
     assert(lines(buffer) == Seq("│", "│", "│", "│", "│", "│", "█", "█"))
 
   test("a declared viewport at least as large as the content draws only the track"):
-    val buffer = rendered(Scrollbar(contentLength = 6, viewportLength = Some(6)), 1, 3)
+    val buffer = rendered(Scrollbar(contentLength = 6, options = ScrollbarOptions(viewportLength = Some(6))), 1, 3)
     assert(lines(buffer) == Seq("│", "│", "│"))
 
   test("a viewport larger than the track never asks for a thumb longer than the bar"):
-    val buffer = rendered(Scrollbar(contentLength = 12, position = 0, viewportLength = Some(11)), 1, 3)
+    val buffer =
+      rendered(Scrollbar(contentLength = 12, position = 0, options = ScrollbarOptions(viewportLength = Some(11))), 1, 3)
     assert(lines(buffer) == Seq("█", "█", "│"))
 
   test("a nonsensical viewport of zero is treated as one visible row"):
-    val buffer = rendered(Scrollbar(contentLength = 4, position = 0, viewportLength = Some(0)), 1, 4)
+    val buffer =
+      rendered(Scrollbar(contentLength = 4, position = 0, options = ScrollbarOptions(viewportLength = Some(0))), 1, 4)
     assert(lines(buffer) == Seq("█", "│", "│", "│"))
 
   test("a horizontal scrollbar honours its declared viewport width"):
-    val buffer = rendered(Scrollbar(16, 0, Direction.Horizontal, viewportLength = Some(4)), 8, 1)
+    val buffer =
+      rendered(Scrollbar(16, 0, ScrollbarOptions(orientation = Direction.Horizontal, viewportLength = Some(4))), 8, 1)
     assert(lines(buffer) == Seq("██││││││"))
 
   test("arrow caps take the first and last cell and shorten the track"):
     // 6 rows: one cap at each end leaves a 4-row track, and 8 rows of content halve it into a 2-row thumb
-    val buffer = rendered(Scrollbar(contentLength = 8, beginSymbol = Some("↑"), endSymbol = Some("↓")), 1, 6)
+    val buffer = rendered(
+      Scrollbar(contentLength = 8, options = ScrollbarOptions(beginSymbol = Some("↑"), endSymbol = Some("↓"))),
+      1,
+      6,
+    )
     assert(lines(buffer) == Seq("↑", "█", "█", "│", "│", "↓"))
 
   test("the thumb reaches the far end of a capped track without covering the cap"):
-    val buffer = rendered(Scrollbar(8, 99, beginSymbol = Some("↑"), endSymbol = Some("↓")), 1, 6)
+    val buffer =
+      rendered(Scrollbar(8, 99, ScrollbarOptions(beginSymbol = Some("↑"), endSymbol = Some("↓"))), 1, 6)
     assert(lines(buffer) == Seq("↑", "│", "│", "█", "█", "↓"))
 
   test("a single cap only shortens the track at its own end"):
-    val buffer = rendered(Scrollbar(contentLength = 6, beginSymbol = Some("↑")), 1, 4)
+    val buffer = rendered(Scrollbar(contentLength = 6, options = ScrollbarOptions(beginSymbol = Some("↑"))), 1, 4)
     assert(lines(buffer) == Seq("↑", "█", "│", "│"))
 
   test("a two-cell strip with both caps is all caps and no track"):
-    val buffer = rendered(Scrollbar(8, 0, beginSymbol = Some("↑"), endSymbol = Some("↓")), 1, 2)
+    val buffer = rendered(Scrollbar(8, 0, ScrollbarOptions(beginSymbol = Some("↑"), endSymbol = Some("↓"))), 1, 2)
     assert(lines(buffer) == Seq("↑", "↓"))
 
   test("a one-cell strip with both caps keeps the begin cap rather than drawing the end one over it"):
-    val buffer = rendered(Scrollbar(8, 0, beginSymbol = Some("↑"), endSymbol = Some("↓")), 1, 1)
+    val buffer = rendered(Scrollbar(8, 0, ScrollbarOptions(beginSymbol = Some("↑"), endSymbol = Some("↓"))), 1, 1)
     assert(lines(buffer) == Seq("↑"))
 
   test("a horizontal bar draws its caps at the two ends of the bottom row"):
-    val buffer = rendered(Scrollbar(8, 0, Direction.Horizontal, beginSymbol = Some("←"), endSymbol = Some("→")), 6, 1)
+    val buffer = rendered(
+      Scrollbar(
+        8,
+        0,
+        ScrollbarOptions(orientation = Direction.Horizontal, beginSymbol = Some("←"), endSymbol = Some("→")),
+      ),
+      6,
+      1,
+    )
     assert(lines(buffer) == Seq("←██││→"))
 
   test("withSymbols draws the whole named set"):
@@ -98,55 +115,74 @@ final class ScrollbarSpec extends AnyFunSuite:
 
   test("a wide cap glyph claims both of its cells and the track starts after it"):
     // a caller may pass a double-width glyph; it is measured rather than counted, so the track begins two cells in
-    val buffer = rendered(Scrollbar(8, 0, Direction.Horizontal, beginSymbol = Some("⏪")), 6, 1)
+    val buffer =
+      rendered(Scrollbar(8, 0, ScrollbarOptions(orientation = Direction.Horizontal, beginSymbol = Some("⏪"))), 6, 1)
     assert(lines(buffer) == Seq("⏪██││"))
 
   test("a wide end cap is placed so that its right half is the last cell"):
-    val buffer = rendered(Scrollbar(8, 0, Direction.Horizontal, endSymbol = Some("⏩")), 6, 1)
+    val buffer =
+      rendered(Scrollbar(8, 0, ScrollbarOptions(orientation = Direction.Horizontal, endSymbol = Some("⏩"))), 6, 1)
     assert(lines(buffer) == Seq("██││⏩"))
 
   test("a near-side vertical scrollbar draws in the leftmost column"):
-    val buffer = rendered(Scrollbar(2, 0, side = ScrollbarSide.Near), 3, 2)
+    val buffer = rendered(Scrollbar(2, 0, ScrollbarOptions(side = ScrollbarSide.Near)), 3, 2)
     assert(lines(buffer) == Seq("│  ", "│  "))
 
   test("a near-side horizontal scrollbar draws along the top row"):
-    val buffer = rendered(Scrollbar(8, 0, Direction.Horizontal, side = ScrollbarSide.Near), 4, 2)
+    val buffer =
+      rendered(Scrollbar(8, 0, ScrollbarOptions(orientation = Direction.Horizontal, side = ScrollbarSide.Near)), 4, 2)
     assert(lines(buffer) == Seq("██││", "    "))
 
   test("the side moves the strip without moving the thumb along it"):
     val far  = rendered(Scrollbar(8, 4), 1, 4)
-    val near = rendered(Scrollbar(8, 4, side = ScrollbarSide.Near), 1, 4)
+    val near = rendered(Scrollbar(8, 4, ScrollbarOptions(side = ScrollbarSide.Near)), 1, 4)
     assert(lines(far) == lines(near))
 
   test("a near-side bar keeps its caps at the two ends of the strip"):
     val buffer =
-      rendered(Scrollbar(8, 0, side = ScrollbarSide.Near, beginSymbol = Some("↑"), endSymbol = Some("↓")), 2, 4)
+      rendered(
+        Scrollbar(
+          8,
+          0,
+          ScrollbarOptions(side = ScrollbarSide.Near, beginSymbol = Some("↑"), endSymbol = Some("↓")),
+        ),
+        2,
+        4,
+      )
     assert(lines(buffer) == Seq("↑ ", "█ ", "│ ", "↓ "))
 
   test("content that fits fills the whole track when a thumb is asked for"):
-    val buffer = rendered(Scrollbar(contentLength = 3, thumbWhenFits = true), 1, 4)
+    val buffer = rendered(Scrollbar(contentLength = 3, options = ScrollbarOptions(thumbWhenFits = true)), 1, 4)
     assert(lines(buffer) == Seq("█", "█", "█", "█"))
 
   test("thumbWhenFits leaves a scrolling thumb alone"):
-    val buffer = rendered(Scrollbar(contentLength = 8, position = 0, thumbWhenFits = true), 1, 4)
+    val buffer =
+      rendered(Scrollbar(contentLength = 8, position = 0, options = ScrollbarOptions(thumbWhenFits = true)), 1, 4)
     assert(lines(buffer) == Seq("█", "█", "│", "│"))
 
   test("a horizontal fitting scrollbar fills its bottom row"):
-    val buffer = rendered(Scrollbar(2, 0, Direction.Horizontal, thumbWhenFits = true), 4, 1)
+    val buffer =
+      rendered(Scrollbar(2, 0, ScrollbarOptions(orientation = Direction.Horizontal, thumbWhenFits = true)), 4, 1)
     assert(lines(buffer) == Seq("████"))
 
   test("a full-track thumb stops at the arrow caps rather than covering them"):
-    val buffer = rendered(Scrollbar(2, 0, thumbWhenFits = true, beginSymbol = Some("↑"), endSymbol = Some("↓")), 1, 4)
+    val buffer = rendered(
+      Scrollbar(2, 0, ScrollbarOptions(thumbWhenFits = true, beginSymbol = Some("↑"), endSymbol = Some("↓"))),
+      1,
+      4,
+    )
     assert(lines(buffer) == Seq("↑", "█", "█", "↓"))
 
   test("a declared viewport that swallows the content still fills the track"):
-    val buffer = rendered(Scrollbar(6, 0, viewportLength = Some(9), thumbWhenFits = true), 1, 3)
+    val buffer =
+      rendered(Scrollbar(6, 0, ScrollbarOptions(viewportLength = Some(9), thumbWhenFits = true)), 1, 3)
     assert(lines(buffer) == Seq("█", "█", "█"))
 
   test("a wide cap on a vertical bar takes one row, not two"):
     // a glyph's *column* width says nothing about how many rows of a vertical strip it takes: the strip's cells are
     // rows, so an emoji arrow must still leave every row between the two caps to the track
-    val bar    = Scrollbar(100, 0, side = ScrollbarSide.Near, beginSymbol = Some("⬆️"), endSymbol = Some("⬇️"))
+    val bar    =
+      Scrollbar(100, 0, ScrollbarOptions(side = ScrollbarSide.Near, beginSymbol = Some("⬆️"), endSymbol = Some("⬇️")))
     val buffer = rendered(bar, 2, 10)
     val strip  = (0 until 10).map(row => buffer.get(0, row).symbol)
     assert(strip.head == "⬆️")
@@ -156,7 +192,7 @@ final class ScrollbarSpec extends AnyFunSuite:
   test("a wide symbol with no column left inside the area is blanked rather than drawn past its edge"):
     // the bar owns columns 0..2 of a 6-column buffer; a two-column glyph in column 2 would claim column 3, which
     // belongs to whatever is drawn beside the bar
-    val bar    = Scrollbar(100, 0, trackSymbol = "🟦", thumbSymbol = "🟦")
+    val bar    = Scrollbar(100, 0, ScrollbarOptions(trackSymbol = "🟦", thumbSymbol = "🟦"))
     val buffer = renderedInto(bar, Rect(0, 0, 3, 4), 6, 4)
     assert((0 until 4).forall(row => buffer.get(2, row).symbol == " " && buffer.get(3, row).symbol == " "))
 
@@ -165,7 +201,8 @@ final class ScrollbarSpec extends AnyFunSuite:
     // negative; regression for that wrap picking `math.min(trackLength, negative)` over the correct proportional
     // size. Here content and viewport are nearly equal, so an un-overflowed thumb should fill nearly the whole
     // 50-row strip rather than collapse to 1.
-    val bar        = Scrollbar(contentLength = 60000000, position = 0, viewportLength = Some(50000000))
+    val bar        =
+      Scrollbar(contentLength = 60000000, position = 0, options = ScrollbarOptions(viewportLength = Some(50000000)))
     val buffer     = rendered(bar, 1, 50)
     val thumbCells = lines(buffer).count(_ == "█")
     assert(thumbCells >= 40, s"expected a near-full thumb, got $thumbCells of 50 cells")

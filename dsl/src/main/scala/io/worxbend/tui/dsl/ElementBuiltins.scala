@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{KeyCode, KeyEvent, MouseButton, MouseEventKind, Style}
+import io.worxbend.tui.core.{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind, Style}
 import io.worxbend.tui.widgets as w
 
 // ---- the shared built-in vocabulary ----
@@ -39,6 +39,16 @@ extension (handler: BuiltinKeyHandler)
   */
 private def focusStyled(props: ElementProps): Style =
   if props.focused then props.style.patch(props.focusStyle) else props.style
+
+/** The theme colour a severity draws in — the mapping shared by the `notice`/`badge` factories and the toast stack,
+  * which reverses it into a padded badge at its own call site.
+  */
+private[dsl] def noticeLevelStyle(level: w.NoticeLevel)(using theme: Theme): Style =
+  level match
+    case w.NoticeLevel.Success => theme.success
+    case w.NoticeLevel.Info    => theme.accent
+    case w.NoticeLevel.Warning => theme.warning
+    case w.NoticeLevel.Error   => theme.error
 
 /** A left-button press activates the control (focus already moved on the press).
   *
@@ -164,6 +174,13 @@ private def cursorKeys(state: w.TextInputState): BuiltinKeyHandler =
         state.moveEnd()
         true
       case _                 => false
+
+/** Whether the event is a plain printable keystroke: no modifiers, or Shift alone, which is how capital letters and
+  * shifted symbols arrive. The guard every text field applies before inserting a typed character, so a modified chord
+  * keeps bubbling to whatever bound it.
+  */
+private def isPlainTyping(event: KeyEvent): Boolean =
+  event.modifiers.isEmpty || event.modifiers == KeyModifiers.Shift
 
 /** Left/Right step from `index` through `size` positions, wrapping at both ends, reporting each move to `moveTo`.
   * `size` is by-name because it is derived from the element's current contents, and nothing is consumed when there is

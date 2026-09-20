@@ -1,6 +1,6 @@
 package io.worxbend.tui.dsl
 
-import io.worxbend.tui.core.{Alignment, Constraint, Direction, Line, Size, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{Constraint, Direction, Line, Size, Span, Style, Text, Widget}
 import io.worxbend.tui.runtime.{ReactiveScope, Signal}
 import io.worxbend.tui.widgets.TableRow
 import io.worxbend.tui.widgets as w
@@ -295,54 +295,23 @@ private[dsl] trait ElementFactories:
 
   /** An x/y plot of one or more [[w.Dataset]]s with axes, over an explicit world window.
     *
-    * `xBounds` and `yBounds` are `(min, max)` in the data's own units — they are *not* derived from the points, so a
-    * series outside the window is simply not drawn. A `GraphType.Line` dataset joins its points in the order they are
-    * listed rather than sorting by x, so an unsorted series draws as a zig-zag.
+    * `xBounds` and `yBounds` are the `(min, max)` of each axis in the data's own units — they are *not* derived from
+    * the points, so a series outside the window is simply not drawn. A `GraphType.Line` dataset joins its points in the
+    * order they are listed rather than sorting by x, so an unsorted series draws as a zig-zag.
     *
-    * `showLabels = true` prints the two y bounds in a gutter reserved left of the vertical axis, so the numbers never
-    * overwrite the data; `labelAlignment` places each number inside that gutter (`Right`, the default, presses it
-    * against the axis line). A pane too narrow to spare the gutter drops the labels and keeps the plot.
-    *
-    * `showLegend = true` draws a key in the top-right of the plot listing every dataset whose `name` is non-empty, each
-    * entry in that dataset's own style.
-    *
-    * `xTitle` and `yTitle` name what the axes measure. Each takes one row from the plot — the y title above it, the x
-    * title below the axis — rather than being written over the data, so a title never hides a point.
-    *
-    * `xLabels` and `yLabels` name positions *along* an axis — timestamps, dates, categories — rather than the axis
-    * itself. They are spread across the axis rather than placed at data coordinates: the first sits at the axis origin,
-    * the last at the far end, and any in between fall on their own even share of the extent, so three labels read as
-    * start, middle and end of the range. The x labels take a row from the plot, under the axis; the y labels are
-    * right-aligned in the same gutter `showLabels` uses and replace its two bound numbers, because an axis labelled
-    * twice is an axis labelled neither way. A label with no room is left out rather than cut down into a
-    * different-looking number.
+    * Everything past the data and the window — axis styling, bound labels and their alignment, the legend, axis titles
+    * and axis labels — rides in the `options` bundle rather than a parameter list: `chart(series, Bounds(0, 24),
+    * Bounds(0, 100), ChartOptions(showLegend = true, xTitle = Some("hour")))`. The defaults draw no labels and no
+    * legend, exactly the chart a call that passes nothing has always drawn; see [[w.ChartOptions]] for what each knob
+    * does and [[w.Chart]] for how labels, titles and the legend take rows from the plot rather than covering it.
     */
   def chart(
       datasets: Seq[w.Dataset],
-      xBounds: (Double, Double),
-      yBounds: (Double, Double),
-      showLabels: Boolean = false,
-      labelAlignment: Alignment = Alignment.Right,
-      showLegend: Boolean = false,
-      xTitle: Option[String] = None,
-      yTitle: Option[String] = None,
-      xLabels: Seq[String] = Seq.empty,
-      yLabels: Seq[String] = Seq.empty,
+      xBounds: w.Bounds,
+      yBounds: w.Bounds,
+      options: w.ChartOptions = w.ChartOptions(),
   ): WidgetElement =
-    WidgetElement(
-      w.Chart(
-        datasets,
-        xBounds,
-        yBounds,
-        showLabels = showLabels,
-        labelAlignment = labelAlignment,
-        showLegend = showLegend,
-        xTitle = xTitle,
-        yTitle = yTitle,
-        xLabels = xLabels,
-        yLabels = yLabels,
-      )
-    )
+    WidgetElement(w.Chart(datasets, xBounds, yBounds, options))
 
   /** A free-form drawing surface: shapes describe themselves in world coordinates (`xBounds` increasing rightward,
     * `yBounds` increasing *upward*, unlike buffer coordinates) and the canvas maps them onto the cell grid.
@@ -351,7 +320,7 @@ private[dsl] trait ElementFactories:
     * sub-pixels into each cell respectively, which is how a canvas draws a smooth line rather than a dotted one; see
     * [[CanvasElement]].
     */
-  def canvas(xBounds: (Double, Double), yBounds: (Double, Double))(shapes: w.Shape*): CanvasElement =
+  def canvas(xBounds: w.Bounds, yBounds: w.Bounds)(shapes: w.Shape*): CanvasElement =
     CanvasElement(xBounds, yBounds, shapes)
 
   /** A scrollbar strip showing how far through `contentLength` units of content the viewport at `position` sits.
@@ -369,11 +338,12 @@ private[dsl] trait ElementFactories:
     ScrollbarElement(
       contentLength,
       position,
-      Direction.Vertical,
-      theme.border,
-      theme.primary,
-      w.ScrollbarSymbols.Plain.track,
-      w.ScrollbarSymbols.Plain.thumb,
+      w.ScrollbarOptions(
+        style = theme.border,
+        thumbStyle = theme.primary,
+        trackSymbol = w.ScrollbarSymbols.Plain.track,
+        thumbSymbol = w.ScrollbarSymbols.Plain.thumb,
+      ),
     )
 
   /** A month grid for `month` (1–12) of `year`, weeks starting Monday, with `selected` (a day of the month)
@@ -446,7 +416,7 @@ private[dsl] trait ElementFactories:
 
   /** One styled message line: an icon, an optional timestamp, and the message. Colors follow the level. */
   def notice(message: String, level: w.NoticeLevel = w.NoticeLevel.Info)(using theme: Theme): NoticeElement =
-    NoticeElement(message, level, None, theme.primary, noticeStyle(level), theme.muted)
+    NoticeElement(message, level, None, theme.primary, noticeLevelStyle(level), theme.muted)
 
   /** A short inline label. Defaults to a solid badge in the theme's accent; `.outline` and `.dot` are quieter. */
   def badge(label: String)(using theme: Theme): BadgeElement =
@@ -454,14 +424,7 @@ private[dsl] trait ElementFactories:
 
   /** A badge carrying a severity's own tag and color — `badge(NoticeLevel.Error)` reads `FAIL`. */
   def badge(level: w.NoticeLevel)(using theme: Theme): BadgeElement =
-    BadgeElement(level.tag, w.BadgeVariant.Solid, noticeStyle(level))
-
-  private def noticeStyle(level: w.NoticeLevel)(using theme: Theme): Style =
-    level match
-      case w.NoticeLevel.Success => theme.success
-      case w.NoticeLevel.Info    => theme.accent
-      case w.NoticeLevel.Warning => theme.warning
-      case w.NoticeLevel.Error   => theme.error
+    BadgeElement(level.tag, w.BadgeVariant.Solid, noticeLevelStyle(level))
 
   /** Blanks its area so a popup drawn over it starts from a clean background.
     *
@@ -545,7 +508,10 @@ private[dsl] trait ElementFactories:
 
   /** An orbit spinner on a clock the caller drives. */
   def orbitSpinnerAt(elapsed: FiniteDuration)(using theme: Theme): OrbitSpinnerElement =
-    OrbitSpinnerElement(elapsed, theme.loading.track, theme.loading.spinner)
+    OrbitSpinnerElement(
+      elapsed,
+      w.OrbitSpinnerOptions(style = theme.loading.track, arcStyle = theme.loading.spinner),
+    )
 
   /** A head travelling a one-cell track, on the ambient [[AnimationClock]] — the row-or-column-shaped member of the
     * family, for a status line under a log pane or a column beside one.
@@ -717,15 +683,20 @@ private[dsl] trait ElementFactories:
     * and filtering have no built-in keys on purpose — drive `state.sortBy` / `state.setFilter` from the app's own
     * bindings, so the keys appear in the status bar and the palette.
     *
+    * Each row is a [[w.KeyedRow]], so the selection follows the record across re-sorts and data refreshes rather than
+    * the screen position it happened to occupy; `table.selectedKey(state)` reads back which record that is without
+    * parsing its own formatted cells. [[w.DataTable.fromStrings]] builds the table from plain text rows when the
+    * records have no identity of their own.
+    *
     * This is the one selection element whose highlight the theme does not reach: `table` is a widget value the caller
     * built, so its `highlightStyle` is the caller's to set and overriding it here would silently discard an explicit
-    * choice. Pass `highlightStyle = theme.focus` when building the [[w.DataTable]] to line it up with `list` and the
-    * rest.
+    * choice. Pass `options = DataTableOptions(highlightStyle = theme.focus)` when building the [[w.DataTable]] to line
+    * it up with `list` and the rest.
     */
-  def dataTable(
-      table: w.DataTable,
-      state: w.DataTableState,
-  ): DataTableElement =
+  def dataTable[K](
+      table: w.DataTable[K],
+      state: w.DataTableState[K],
+  ): DataTableElement[K] =
     DataTableElement(table, state)
 
   /** A filesystem browser rooted at the state's path, expanding branches on demand.

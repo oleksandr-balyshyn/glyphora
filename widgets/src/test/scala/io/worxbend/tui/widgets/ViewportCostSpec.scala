@@ -73,7 +73,7 @@ final class ViewportCostSpec extends AnyFunSuite:
 
   test("DataTable does not re-sort while only the scroll offset moves"):
     val data   = Vector.tabulate(500)(i => Seq(i.toString, s"item ${(i * 37) % 500}"))
-    val table  = DataTable(Seq("id", "name"), data, widths)
+    val table  = DataTable.fromStrings(Seq("id", "name"), data, widths)
     val state  = DataTableState()
     state.sort = Some(ColumnSort(1, SortDirection.Ascending))
     val first  = table.filteredRows(state)
@@ -83,19 +83,19 @@ final class ViewportCostSpec extends AnyFunSuite:
 
   test("DataTable recomputes when the sort, direction or filter changes"):
     val data   = Vector.tabulate(50)(i => Seq(i.toString, s"item ${(i * 7) % 50}"))
-    val table  = DataTable(Seq("id", "name"), data, widths)
+    val table  = DataTable.fromStrings(Seq("id", "name"), data, widths)
     val state  = DataTableState()
     val plain  = table.filteredRows(state)
     state.sortBy(1)
     val sorted = table.filteredRows(state)
     assert(sorted ne plain)
-    assert(sorted.map(_(1)) == sorted.map(_(1)).sorted)
+    assert(sorted.map(_.cells(1)) == sorted.map(_.cells(1)).sorted)
     state.sortBy(1) // same column again flips direction
     val reversed = table.filteredRows(state)
-    assert(reversed.map(_(1)) == sorted.map(_(1)).reverse)
+    assert(reversed.map(_.cells(1)) == sorted.map(_.cells(1)).reverse)
     state.setFilter("item 1")
     val filtered = table.filteredRows(state)
-    assert(filtered.forall(_.exists(_.contains("item 1"))))
+    assert(filtered.forall(_.cells.exists(_.contains("item 1"))))
     assert(filtered.size < data.size)
 
   test("invalidate is what a caller uses after swapping same-length data"):
@@ -103,7 +103,9 @@ final class ViewportCostSpec extends AnyFunSuite:
     val second = Vector(Seq("1", "z"), Seq("2", "y"))
     val state  = DataTableState()
     state.sort = Some(ColumnSort(1, SortDirection.Ascending))
-    assert(DataTable(Seq("id", "name"), first, widths).filteredRows(state).map(_(1)) == Seq("a", "b"))
+    assert(DataTable.fromStrings(Seq("id", "name"), first, widths).filteredRows(state).map(_.cells(1)) == Seq("a", "b"))
     // the cache key cannot see through a Seq to its contents, so the caller must say the data moved
     state.invalidate()
-    assert(DataTable(Seq("id", "name"), second, widths).filteredRows(state).map(_(1)) == Seq("y", "z"))
+    assert(
+      DataTable.fromStrings(Seq("id", "name"), second, widths).filteredRows(state).map(_.cells(1)) == Seq("y", "z")
+    )

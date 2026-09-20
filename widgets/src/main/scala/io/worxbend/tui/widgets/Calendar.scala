@@ -67,10 +67,18 @@ final case class Calendar(
     val startX = Alignment.Center.originAt(area.x, math.min(area.width, GridWidth), CharWidth.of(fitted))
     buffer.setString(startX, area.y, fitted, headerStyle)
 
+  /** The `Mo Tu We …` strip, on the row under the title when there is one.
+    *
+    * The row is checked against the area's bottom for the same reason [[drawDays]] checks it: with `showTitle` on, this
+    * row is `area.y + 1`, which is outside a one-row rect — and `Buffer.setString` clips to the *buffer*, not to the
+    * rectangle this widget was handed, so an unguarded write landed on whatever the neighbouring widget had drawn
+    * there. A one-row calendar is not exotic: it is what a `Constraint` solver hands out when the pane it lives in is
+    * squeezed.
+    */
   private def drawWeekdayHeader(area: Rect, buffer: Buffer): Unit =
     val header = weekDays.map(weekdayLabel).mkString(" ")
     val y      = if showTitle then area.y + 1 else area.y
-    buffer.setString(area.x, y, CharWidth.substringByWidth(header, area.width), headerStyle)
+    if y < area.bottom then buffer.setString(area.x, y, CharWidth.substringByWidth(header, area.width), headerStyle)
 
   /** One weekday abbreviation, cut and padded to exactly the two columns a day slot is wide.
     *
@@ -88,13 +96,14 @@ final case class Calendar(
     val monthSlots  = firstColumn + yearMonth.lengthOfMonth
     // with surrounding days the grid is filled out to the end of the last week the month touches, so no week row is
     // left half-drawn; without them it stops at the last day of the month, as it always has
-    val slots       = if showSurroundingDays then math.ceil(monthSlots / 7.0).toInt * 7 else monthSlots
+    val slots       =
+      if showSurroundingDays then math.ceil(monthSlots / DaysPerWeek.toDouble).toInt * DaysPerWeek else monthSlots
     (0 until slots).foreach { slot =>
       val inMonth = slot >= firstColumn && slot < monthSlots
       if inMonth || showSurroundingDays then
         dateAt(first, slot - firstColumn).foreach { date =>
-          val x = area.x + (slot % 7) * 3
-          val y = gridTop(area) + slot / 7
+          val x = area.x + (slot % DaysPerWeek) * SlotStride
+          val y = gridTop(area) + slot / DaysPerWeek
           // a grid cell is two columns wide: drop the ones the area cannot hold rather than write past its edges
           if x + 2 <= area.right && y < area.bottom then
             // `String.format`, not the `f` interpolator: `f"%2d"` formats through the default FORMAT locale (its
@@ -138,10 +147,20 @@ final case class Calendar(
     * subtraction is negative for every weekday that falls before the configured start of the week.
     */
   private def columnOf(date: LocalDate): Int =
-    math.floorMod(date.getDayOfWeek.getValue - firstDayOfWeek.getValue, 7)
+    math.floorMod(date.getDayOfWeek.getValue - firstDayOfWeek.getValue, DaysPerWeek)
 
   /** The seven weekdays in the order this calendar's columns run. */
-  private def weekDays: Seq[DayOfWeek] = (0 until 7).map(offset => firstDayOfWeek.plus(offset.toLong))
+  private def weekDays: Seq[DayOfWeek] = (0 until DaysPerWeek).map(offset => firstDayOfWeek.plus(offset.toLong))
 
   private val DayColumnWidth = 2
-  private val GridWidth      = 20
+  private val DaysPerWeek    = 7
+
+  /** Columns from one day slot's left edge to the next: the day's own columns plus the single blank that separates two
+    * days.
+    */
+  private val SlotStride = DayColumnWidth + 1
+
+  /** Columns the whole grid needs: seven slots at [[SlotStride]], less the trailing separator the last slot does not
+    * have.
+    */
+  private val GridWidth = DaysPerWeek * SlotStride - 1

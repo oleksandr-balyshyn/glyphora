@@ -75,39 +75,45 @@ object Json:
         case c                     => Left(s"unexpected character '$c' at offset $p")
 
   private def parseObject(s: String, open: Int): Either[String, (Json, Int)] =
-    def loop(pos: Int, acc: Map[String, Json]): Either[String, (Json, Int)] =
-      val p = skipWhitespace(s, pos)
-      if p < s.length && s.charAt(p) == '}' then Right((JObject(acc), p + 1))
-      else
-        for
-          (key, afterKey) <- parseString(s, p)
-          colon = skipWhitespace(s, afterKey)
-          _                 <- expect(s, colon, ':')
-          (value, afterVal) <- parseValue(s, colon + 1)
-          sep  = skipWhitespace(s, afterVal)
-          next = acc + (key -> value)
-          result <-
-            if sep < s.length && s.charAt(sep) == ',' then loop(sep + 1, next)
-            else if sep < s.length && s.charAt(sep) == '}' then Right((JObject(next), sep + 1))
-            else Left(s"expected ',' or '}' at offset $sep")
-        yield result
-    loop(open + 1, Map.empty)
+    def entry(acc: Map[String, Json], p: Int): Either[String, (Map[String, Json], Int)] =
+      for
+        (key, afterKey) <- parseString(s, p)
+        colon = skipWhitespace(s, afterKey)
+        _                 <- expect(s, colon, ':')
+        (value, afterVal) <- parseValue(s, colon + 1)
+      yield (acc + (key -> value), afterVal)
+    parseDelimited(s, open, '}', Map.empty, entry, JObject(_))
 
   private def parseArray(s: String, open: Int): Either[String, (Json, Int)] =
-    def loop(pos: Int, acc: Vector[Json]): Either[String, (Json, Int)] =
+    def element(acc: Vector[Json], p: Int): Either[String, (Vector[Json], Int)] =
+      parseValue(s, p).map { case (value, next) => (acc :+ value, next) }
+    parseDelimited(s, open, ']', Vector.empty, element, JArray(_))
+
+  /** The shared skeleton of `parseObject` and `parseArray`: skip whitespace, parse one element, skip whitespace, then
+    * either recurse past a ',' or finish on the closing delimiter. Only the delimiters, the accumulator, and the
+    * per-element parse differ.
+    */
+  private def parseDelimited[A](
+      s: String,
+      open: Int,
+      close: Char,
+      empty: A,
+      element: (A, Int) => Either[String, (A, Int)],
+      finish: A => Json,
+  ): Either[String, (Json, Int)] =
+    def loop(pos: Int, acc: A): Either[String, (Json, Int)] =
       val p = skipWhitespace(s, pos)
-      if p < s.length && s.charAt(p) == ']' then Right((JArray(acc), p + 1))
+      if p < s.length && s.charAt(p) == close then Right((finish(acc), p + 1))
       else
         for
-          (value, afterVal) <- parseValue(s, p)
-          sep  = skipWhitespace(s, afterVal)
-          next = acc :+ value
+          (next, afterElement) <- element(acc, p)
+          sep = skipWhitespace(s, afterElement)
           result <-
             if sep < s.length && s.charAt(sep) == ',' then loop(sep + 1, next)
-            else if sep < s.length && s.charAt(sep) == ']' then Right((JArray(next), sep + 1))
-            else Left(s"expected ',' or ']' at offset $sep")
+            else if sep < s.length && s.charAt(sep) == close then Right((finish(next), sep + 1))
+            else Left(s"expected ',' or '$close' at offset $sep")
         yield result
-    loop(open + 1, Vector.empty)
+    loop(open + 1, empty)
 
   private def parseString(s: String, quote: Int): Either[String, (String, Int)] =
     if quote >= s.length || s.charAt(quote) != '"' then Left(s"expected string at offset $quote")

@@ -45,49 +45,41 @@ final case class Dataset(
     marker: Option[String] = None,
 )
 
-/** An x/y chart with drawn axes; the plot region is a [[Canvas]] over the datasets' shapes.
+/** Everything about a [[Chart]] that is not its data or its world bounds: how the axes, labels, legend and titles are
+  * drawn.
   *
-  * With `showLabels` the two y bounds are printed in a gutter reserved to the *left* of the vertical axis, and the axis
-  * moves right by the width of the widest of them. Before that gutter existed the labels were written at the first plot
-  * column, so a four-digit bound painted over the leftmost points of every series; now the numbers and the data never
-  * share a cell. `labelAlignment` places a label inside that gutter: `Right` (the default) presses it against the axis
-  * line, `Left` against the frame, `Center` between the two.
+  * Bundled rather than listed on [[Chart]] itself because the list had grown to thirteen optional knobs — past the
+  * point where a positional call site says what it means. Every field keeps the default it had as a `Chart` constructor
+  * parameter, so `ChartOptions()` is the chart 0.14.0 drew by default.
   *
-  * With `showLegend` the plot's top-right corner carries a key: one entry per dataset with a non-empty `name`, each
-  * drawn in that dataset's own style, so several series in one plot can be told apart by more than colour alone. The
-  * key is drawn over the plot, so it costs the data no space — but only while it stays small: `hiddenLegendConstraints`
-  * is `(horizontal, vertical)` and the whole key is dropped unless it satisfies both. The default allows it a quarter
-  * of the plot in either direction, so a chart that shrinks loses its key and keeps its data.
-  *
-  * `xTitle` and `yTitle` name what the axes measure — the units a plotted series otherwise leaves the reader to guess.
-  * Each takes a row of its own: the y title on the row above the plot, starting at the axis column, and the x title on
-  * the row below the axis, right-aligned at the axis's far end. The rows are *taken from* the plot rather than written
-  * over it, so a title can never cover a point.
-  *
-  * `xLabels` names positions along the horizontal axis — timestamps, dates, category names — on a row taken from the
-  * plot just under the axis, above the x title if there is one. They are spread across the plot's columns rather than
-  * placed at data coordinates: the first sits at the left end of the axis, the last at the right end, and any in
-  * between are centred on their own even share of the width. Three labels therefore read as start, middle and end of
-  * the range, which is what the two y bounds already do for the vertical axis. A label that does not fit, or that would
-  * touch the label before it, is left out rather than truncated into a different-looking number.
-  *
-  * `yLabels` does the same for the vertical axis, and where it is non-empty it replaces the pair of numbers
-  * `showLabels` prints rather than adding to them: an axis with two descriptions of itself has none. The labels are
-  * spread bottom-to-top — the first sits on the axis's own row, the last on the top row of the plot, and any in between
-  * fall on their own even share of the rows — and each is right-aligned against the vertical rule inside the same
-  * gutter `showLabels` uses, which grows to the widest of them. A label that would not leave at least two columns of
-  * plot is dropped along with the gutter, so a chart in a narrow pane stays a chart rather than becoming a column of
-  * numbers.
-  *
+  * @param axisStyle
+  *   the style of the two axis rules, the bound labels, the axis titles and the x-label row
+  * @param marker
+  *   the marker datasets are plotted with at [[CanvasResolution.Cell]]; a dataset may override it — see [[Dataset]]
+  * @param resolution
+  *   the drawing resolution datasets are plotted at; a dataset may override it — see [[Dataset]]
+  * @param showLabels
+  *   whether the two y bounds are printed in a gutter reserved to the *left* of the vertical axis
   * @param labelAlignment
-  *   by the widget parameter-order convention this is placement and would belong before `axisStyle`; it sits last
-  *   because `Chart` is a published 0.12.0 signature and inserting a parameter in the middle would silently repoint
-  *   every positional call site.
+  *   where a label sits inside that gutter: `Right` (the default) presses it against the axis line, `Left` against the
+  *   frame, `Center` between the two
+  * @param showLegend
+  *   whether the plot's top-right corner carries a key with one entry per named dataset
+  * @param hiddenLegendConstraints
+  *   `(horizontal, vertical)` limits the legend must satisfy or the whole key is dropped. The default allows it a
+  *   quarter of the plot in either direction, so a chart that shrinks loses its key and keeps its data
+  * @param legendMarker
+  *   the glyph each legend entry starts with
+  * @param xTitle
+  *   names what the horizontal axis measures, right-aligned on a row taken from below the axis
+  * @param yTitle
+  *   names what the vertical axis measures, on a row taken from above the plot
+  * @param xLabels
+  *   labels spread across the horizontal axis — timestamps, dates, category names — on a row under it; see [[Chart]]
+  * @param yLabels
+  *   labels spread bottom-to-top along the vertical axis, replacing the two numbers `showLabels` prints; see [[Chart]]
   */
-final case class Chart(
-    datasets: Seq[Dataset],
-    xBounds: (Double, Double),
-    yBounds: (Double, Double),
+final case class ChartOptions(
     axisStyle: Style = Style.Default,
     marker: String = Marker.Dot,
     resolution: CanvasResolution = CanvasResolution.Cell,
@@ -98,29 +90,69 @@ final case class Chart(
     legendMarker: String = "■",
     xTitle: Option[String] = None,
     yTitle: Option[String] = None,
-    // Appended for the same reason `xTitle` and `yTitle` are: inserting a parameter mid-list would silently change
-    // what every positional caller written against 0.12.0 means.
     xLabels: Seq[String] = Seq.empty,
     yLabels: Seq[String] = Seq.empty,
+)
+
+/** An x/y chart with drawn axes; the plot region is a [[Canvas]] over the datasets' shapes.
+  *
+  * With `options.showLabels` the two y bounds are printed in a gutter reserved to the *left* of the vertical axis, and
+  * the axis moves right by the width of the widest of them. Before that gutter existed the labels were written at the
+  * first plot column, so a four-digit bound painted over the leftmost points of every series; now the numbers and the
+  * data never share a cell. `options.labelAlignment` places a label inside that gutter: `Right` (the default) presses
+  * it against the axis line, `Left` against the frame, `Center` between the two.
+  *
+  * With `options.showLegend` the plot's top-right corner carries a key: one entry per dataset with a non-empty `name`,
+  * each drawn in that dataset's own style, so several series in one plot can be told apart by more than colour alone.
+  * The key is drawn over the plot, so it costs the data no space — but only while it stays small:
+  * `options.hiddenLegendConstraints` is `(horizontal, vertical)` and the whole key is dropped unless it satisfies both.
+  * The default allows it a quarter of the plot in either direction, so a chart that shrinks loses its key and keeps its
+  * data.
+  *
+  * `options.xTitle` and `options.yTitle` name what the axes measure — the units a plotted series otherwise leaves the
+  * reader to guess. Each takes a row of its own: the y title on the row above the plot, starting at the axis column,
+  * and the x title on the row below the axis, right-aligned at the axis's far end. The rows are *taken from* the plot
+  * rather than written over it, so a title can never cover a point.
+  *
+  * `options.xLabels` names positions along the horizontal axis — timestamps, dates, category names — on a row taken
+  * from the plot just under the axis, above the x title if there is one. They are spread across the plot's columns
+  * rather than placed at data coordinates: the first sits at the left end of the axis, the last at the right end, and
+  * any in between are centred on their own even share of the width. Three labels therefore read as start, middle and
+  * end of the range, which is what the two y bounds already do for the vertical axis. A label that does not fit, or
+  * that would touch the label before it, is left out rather than truncated into a different-looking number.
+  *
+  * `options.yLabels` does the same for the vertical axis, and where it is non-empty it replaces the pair of numbers
+  * `options.showLabels` prints rather than adding to them: an axis with two descriptions of itself has none. The labels
+  * are spread bottom-to-top — the first sits on the axis's own row, the last on the top row of the plot, and any in
+  * between fall on their own even share of the rows — and each is right-aligned against the vertical rule inside the
+  * same gutter `showLabels` uses, which grows to the widest of them. A label that would not leave at least two columns
+  * of plot is dropped along with the gutter, so a chart in a narrow pane stays a chart rather than becoming a column of
+  * numbers.
+  */
+final case class Chart(
+    datasets: Seq[Dataset],
+    xBounds: Bounds,
+    yBounds: Bounds,
+    options: ChartOptions = ChartOptions(),
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     // one row for the axis, plus one for each title present and one more for the x labels when there are any: below
     // that there is no plot left to draw
-    val labelRows = if xLabels.isEmpty then 0 else 1
-    val titleRows = xTitle.size + yTitle.size + labelRows
+    val labelRows = if options.xLabels.isEmpty then 0 else 1
+    val titleRows = options.xTitle.size + options.yTitle.size + labelRows
     if area.width >= 3 && area.height >= 3 + titleRows then
       // Explicit labels win over the two auto-formatted bounds: `showLabels` is the shorthand for "label the axis
       // with its own range", and a caller who has said what the rows mean has answered that already.
-      val (yLow, yHigh) = yBounds
+      val (yLow, yHigh) = (yBounds.min, yBounds.max)
       val labels        =
-        if yLabels.nonEmpty then yLabels
-        else if showLabels then Seq(formatBound(yHigh), formatBound(yLow))
+        if options.yLabels.nonEmpty then options.yLabels
+        else if options.showLabels then Seq(formatBound(yHigh), formatBound(yLow))
         else Seq.empty
       val gutter        = labelGutter(area, labels)
       val axisX         = area.x + gutter
-      val plotTop       = area.y + yTitle.size
-      val axisRow       = area.bottom - 1 - xTitle.size - labelRows
+      val plotTop       = area.y + options.yTitle.size
+      val axisRow       = area.bottom - 1 - options.xTitle.size - labelRows
       drawAxes(axisX, plotTop, axisRow, area.right, buffer)
       val plotArea      = Rect(axisX + 1, plotTop, area.width - gutter - 1, axisRow - plotTop)
       // One canvas pass per distinct (resolution, marker) pair, in the order those pairs first appear, so a chart
@@ -129,18 +161,18 @@ final case class Chart(
         Canvas(xBounds, yBounds, group.map(shapeOf), groupMarker, groupResolution).render(plotArea, buffer)
       }
       if gutter > 0 then
-        if yLabels.nonEmpty then drawYLabels(buffer, area.x, gutter, plotTop, axisRow)
+        if options.yLabels.nonEmpty then drawYLabels(buffer, area.x, gutter, plotTop, axisRow)
         else
           drawLabel(buffer, area.x, gutter, plotTop, labels.head)
           drawLabel(buffer, area.x, gutter, axisRow - 1, labels.last)
-      if showLegend then drawLegend(plotArea, buffer)
+      if options.showLegend then drawLegend(plotArea, buffer)
       if labelRows > 0 then drawXLabels(buffer, axisX + 1, area.right, axisRow + 1)
       drawTitles(buffer, area, axisX)
 
   /** The drawing surface `dataset` ends up on: its own overrides where it has them, the chart's pair where it does not.
     */
   private def surfaceOf(dataset: Dataset): (CanvasResolution, String) =
-    (dataset.resolution.getOrElse(resolution), dataset.marker.getOrElse(marker))
+    (dataset.resolution.getOrElse(options.resolution), dataset.marker.getOrElse(options.marker))
 
   /** The shape that draws `dataset` the way its `graphType` asks. */
   private def shapeOf(dataset: Dataset): Shape =
@@ -185,7 +217,7 @@ final case class Chart(
     if width > 0 then
       // the first column no label has claimed yet, so a label starting before it would overlap its neighbour
       var takenTo = plotLeft
-      xLabels.zipWithIndex.foreach { (label, index) =>
+      options.xLabels.zipWithIndex.foreach { (label, index) =>
         val span = CharWidth.of(label)
         // Whole or not at all. This used to cut the label down to the plot's width and draw what was left, which is
         // exactly the failure the widget documents it does not cause: "2026-09-01T12:00" drawn as "2026-09-01T12" is
@@ -193,13 +225,13 @@ final case class Chart(
         if span > 0 && span <= width then
           val start =
             if index == 0 then plotLeft
-            else if index == xLabels.size - 1 then plotRight - span
+            else if index == options.xLabels.size - 1 then plotRight - span
             else
               // this label's own share of the columns, with the label centred inside that share
-              val share = width.toDouble / xLabels.size
+              val share = width.toDouble / options.xLabels.size
               plotLeft + math.round(share * index + (share - span) / 2).toInt
           if start >= takenTo && start + span <= plotRight then
-            buffer.setString(start, row, label, axisStyle)
+            buffer.setString(start, row, label, options.axisStyle)
             // plus one, so two labels always have a blank column between them
             takenTo = start + span + 1
       }
@@ -219,10 +251,11 @@ final case class Chart(
   private def drawYLabels(buffer: Buffer, areaX: Int, gutter: Int, plotTop: Int, axisRow: Int): Unit =
     val rows = axisRow - plotTop + 1
     if rows > 0 then
-      yLabels.zipWithIndex.foreach { (label, index) =>
+      options.yLabels.zipWithIndex.foreach { (label, index) =>
         // the fraction of the axis this label sits at, measured from the origin row upward
         val fromBottom =
-          if yLabels.sizeIs <= 1 then 0 else math.round(index.toDouble * (rows - 1) / (yLabels.size - 1)).toInt
+          if options.yLabels.sizeIs <= 1 then 0
+          else math.round(index.toDouble * (rows - 1) / (options.yLabels.size - 1)).toInt
         val row        = axisRow - math.min(fromBottom, rows - 1)
         drawLabel(buffer, areaX, gutter, row, CharWidth.substringByWidth(label, gutter))
       }
@@ -232,10 +265,17 @@ final case class Chart(
     */
   private def drawTitles(buffer: Buffer, area: Rect, axisX: Int): Unit =
     val room = area.right - axisX
-    yTitle.foreach(title => buffer.setString(axisX, area.y, CharWidth.substringByWidth(title, room), axisStyle))
-    xTitle.foreach { title =>
+    options.yTitle.foreach(title =>
+      buffer.setString(axisX, area.y, CharWidth.substringByWidth(title, room), options.axisStyle)
+    )
+    options.xTitle.foreach { title =>
       val fitted = CharWidth.substringByWidth(title, room)
-      buffer.setString(Alignment.Right.originAt(axisX, room, CharWidth.of(fitted)), area.bottom - 1, fitted, axisStyle)
+      buffer.setString(
+        Alignment.Right.originAt(axisX, room, CharWidth.of(fitted)),
+        area.bottom - 1,
+        fitted,
+        options.axisStyle,
+      )
     }
 
   /** Draws one right-aligned entry per named dataset, top-down in the plot area, each in that dataset's own style.
@@ -244,15 +284,15 @@ final case class Chart(
     * indistinguishable colours. A dataset with an empty name gets no entry — that is how a caller keeps a series out of
     * the key.
     *
-    * The whole key is dropped when it would be larger than `hiddenLegendConstraints` allows, so a chart in a pane too
-    * small for both shows the data rather than the names. Dropping the key is deliberately all-or-nothing: half a key
-    * says less than none, because a reader cannot tell which series the missing entries belonged to.
+    * The whole key is dropped when it would be larger than `options.hiddenLegendConstraints` allows, so a chart in a
+    * pane too small for both shows the data rather than the names. Dropping the key is deliberately all-or-nothing:
+    * half a key says less than none, because a reader cannot tell which series the missing entries belonged to.
     */
   private def drawLegend(plotArea: Rect, buffer: Buffer): Unit =
     val named  = datasets.filter(_.name.nonEmpty)
-    val labels = named.map(dataset => s"$legendMarker ${dataset.name}")
+    val labels = named.map(dataset => s"${options.legendMarker} ${dataset.name}")
     val width  = LegendFit.width(labels, padding = 0)
-    if LegendFit.fits(plotArea, width, named.size, hiddenLegendConstraints) then
+    if LegendFit.fits(plotArea, width, named.size, options.hiddenLegendConstraints) then
       val x = plotArea.right - width
       named.zip(labels).zipWithIndex.foreach { case ((dataset, label), index) =>
         buffer.setString(x, plotArea.y + index, label, dataset.style)
@@ -271,7 +311,7 @@ final case class Chart(
       if area.width - widest - 1 >= 2 then widest else 0
 
   private def drawLabel(buffer: Buffer, areaX: Int, gutter: Int, y: Int, label: String): Unit =
-    buffer.setString(labelAlignment.originAt(areaX, gutter, CharWidth.of(label)), y, label, axisStyle)
+    buffer.setString(options.labelAlignment.originAt(areaX, gutter, CharWidth.of(label)), y, label, options.axisStyle)
 
   private def formatBound(value: Double): String =
     // `String.format(Locale.ROOT, ...)`, not the `f` interpolator: an axis label formatted through the default
@@ -287,10 +327,57 @@ final case class Chart(
   private def drawAxes(axisX: Int, top: Int, axisRow: Int, right: Int, buffer: Buffer): Unit =
     var y = top
     while y < axisRow do
-      buffer.set(axisX, y, Cell("│", axisStyle))
+      buffer.set(axisX, y, Cell("│", options.axisStyle))
       y += 1
     var x = axisX + 1
     while x < right do
-      buffer.set(x, axisRow, Cell("─", axisStyle))
+      buffer.set(x, axisRow, Cell("─", options.axisStyle))
       x += 1
-    buffer.set(axisX, axisRow, Cell("└", axisStyle))
+    buffer.set(axisX, axisRow, Cell("└", options.axisStyle))
+
+object Chart:
+
+  /** The pre-0.15.0 signature: sixteen parameters, the two world ranges as bare `(min, max)` tuples.
+    *
+    * Kept so positional call sites written against 0.14.0 keep compiling; new code should pass [[Bounds]] and a
+    * [[ChartOptions]] instead. Because an overloaded `apply` may not repeat the default arguments the primary
+    * constructor carries, this delegate spells out every parameter — a call that relied on omitting trailing arguments
+    * moves to the primary constructor.
+    */
+  @deprecated("pass Bounds for the two ranges and bundle the rest in a ChartOptions", "0.15.0")
+  def apply(
+      datasets: Seq[Dataset],
+      xBounds: (Double, Double),
+      yBounds: (Double, Double),
+      axisStyle: Style,
+      marker: String,
+      resolution: CanvasResolution,
+      showLabels: Boolean,
+      labelAlignment: Alignment,
+      showLegend: Boolean,
+      hiddenLegendConstraints: (Constraint, Constraint),
+      legendMarker: String,
+      xTitle: Option[String],
+      yTitle: Option[String],
+      xLabels: Seq[String],
+      yLabels: Seq[String],
+  ): Chart =
+    Chart(
+      datasets,
+      Bounds.of(xBounds),
+      Bounds.of(yBounds),
+      ChartOptions(
+        axisStyle = axisStyle,
+        marker = marker,
+        resolution = resolution,
+        showLabels = showLabels,
+        labelAlignment = labelAlignment,
+        showLegend = showLegend,
+        hiddenLegendConstraints = hiddenLegendConstraints,
+        legendMarker = legendMarker,
+        xTitle = xTitle,
+        yTitle = yTitle,
+        xLabels = xLabels,
+        yLabels = yLabels,
+      ),
+    )

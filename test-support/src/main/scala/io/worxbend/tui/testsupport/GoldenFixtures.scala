@@ -24,12 +24,6 @@ import scala.util.Using
   */
 object GoldenFixtures:
 
-  /** The file extension [[GoldenFrames]] writes fixtures with. */
-  private val FixtureExtension: String = ".txt"
-
-  /** The subdirectory of a module's test resources that fixtures live in. */
-  private val FixtureDirectory: String = "golden"
-
   /** A call that names a fixture: the assertion's name, an opening parenthesis, and a string literal. Fixture names are
     * file names, so the literal is matched conservatively — letters, digits, dot, dash and underscore — and a call
     * whose name is computed rather than written out is not seen at all. That is deliberate: a false "orphan" report on
@@ -44,15 +38,15 @@ object GoldenFixtures:
     */
   def fixtureNames(resourcesDirectory: Path): Set[String] =
     assertDirectory(resourcesDirectory, "test-resources directory")
-    val golden = resourcesDirectory.resolve(FixtureDirectory)
+    val golden = resourcesDirectory.resolve(GoldenFrames.FixtureDirectory)
     if !Files.isDirectory(golden) then Set.empty
     else
       Using.resource(Files.list(golden)) { entries =>
         entries.iterator.asScala
           .filter(Files.isRegularFile(_))
           .map(_.getFileName.toString)
-          .filter(_.endsWith(FixtureExtension))
-          .map(_.stripSuffix(FixtureExtension))
+          .filter(_.endsWith(GoldenFrames.FixtureExtension))
+          .map(_.stripSuffix(GoldenFrames.FixtureExtension))
           .toSet
       }
 
@@ -82,7 +76,7 @@ object GoldenFixtures:
     val stale = orphans(resourcesDirectory, sourcesDirectory)
     if stale.nonEmpty then
       CallSite.fail(
-        s"golden fixtures under $resourcesDirectory/$FixtureDirectory that no test names: ${stale.mkString(", ")}" +
+        s"golden fixtures under $resourcesDirectory/${GoldenFrames.FixtureDirectory} that no test names: ${stale.mkString(", ")}" +
           " — delete each file, or restore the test that recorded it"
       )
 

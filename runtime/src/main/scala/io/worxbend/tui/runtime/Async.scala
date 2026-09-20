@@ -88,11 +88,14 @@ object Async:
       )
     )
 
+  /** The floor for a repeating interval: `scheduleAtFixedRate` rejects a non-positive period. */
+  private val MinIntervalMillis: Long = 1L
+
   /** Runs `body` on the render thread every `interval` (first tick after one `interval`). Returns a handle to stop it.
     * The place to drive animation or polling without a global `config.tickRate`.
     */
   def every(interval: FiniteDuration)(body: => Unit): Cancelable =
-    val millis = math.max(1L, interval.toMillis)
+    val millis = math.max(MinIntervalMillis, interval.toMillis)
     cancelling(
       scheduler.scheduleAtFixedRate(
         resumeOnRenderThread(body),
@@ -111,6 +114,12 @@ object Async:
     val task: Runnable = () => body
     val _              = worker.submit(task)
 
+  /** The render loop of the calling thread, resolved *now* — the one capture every entry point here must do on the
+    * caller's thread, before any work is handed to an executor. [[deliverToRenderThread]] explains why resolving it
+    * later, from the worker, delivers the continuation to the wrong runner.
+    */
+  private[runtime] def captureTarget(): RenderThread.RenderLoop = RenderThread.capture()
+
   /** Wraps `onValue` so that it is invoked on the render thread rather than on whichever thread produced the value.
     *
     * **Must be called on the caller's thread, before any work is handed to an executor.** That is the load-bearing part
@@ -120,7 +129,7 @@ object Async:
     * happens to see, so the continuation is delivered to the wrong runner as soon as two runners coexist in one JVM.
     */
   private def deliverToRenderThread[A](onValue: A => Unit): A => Unit =
-    val target = RenderThread.capture()
+    val target = captureTarget()
     value => target.enqueue(() => onValue(value))
 
   /** The scheduler-side counterpart of [[deliverToRenderThread]]: a `Runnable` the timer thread can run that does
@@ -130,8 +139,8 @@ object Async:
     * is captured before the work goes async.
     */
   private def resumeOnRenderThread(body: => Unit): Runnable =
-    val target = RenderThread.capture()
-    () => target.enqueue(() => body)
+    val deliver = deliverToRenderThread[Unit](_ => body)
+    () => deliver(())
 
   /** Adapts a scheduled `future` to the [[Cancelable]] the timer entry points return. Never interrupts a body that has
     * already started running on the render thread; it only prevents runs that have not begun.
@@ -184,7 +193,7 @@ object AsyncErrorHandler:
     * `given` should be [[onRenderThread]] instead, which resolves per failure.
     */
   def toRenderThread(): AsyncErrorHandler =
-    val target = RenderThread.capture()
+    val target = Async.captureTarget()
     error => target.enqueue(() => throw error)
 
   /** Reports the error by running `report` on the render thread. */

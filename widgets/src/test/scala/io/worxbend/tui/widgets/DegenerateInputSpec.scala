@@ -151,17 +151,17 @@ final class DegenerateInputSpec extends AnyFunSuite:
   test("sorting a column that mixes numbers and text is a total order"):
     val cells  = Vector("9", "10", "11", "12", "3", "41", "7", "55", "2", "88", "30", "5x", "2018-01-01", "NaN")
     val rows   = (0 until 8).flatMap(_ => cells).map(Seq(_))
-    val table  = DataTable(Seq("value"), rows, Seq(Constraint.Fill(1)))
+    val table  = DataTable.fromStrings(Seq("value"), rows, Seq(Constraint.Fill(1)))
     val state  = DataTableState()
     state.sort = Some(ColumnSort(0, SortDirection.Ascending))
     val sorted = table.filteredRows(state)
     assert(sorted.size == rows.size)
 
   test("an all-numeric column still sorts numerically"):
-    val table = DataTable(Seq("value"), Seq(Seq("9"), Seq("10"), Seq("2")), Seq(Constraint.Fill(1)))
+    val table = DataTable.fromStrings(Seq("value"), Seq(Seq("9"), Seq("10"), Seq("2")), Seq(Constraint.Fill(1)))
     val state = DataTableState()
     state.sort = Some(ColumnSort(0, SortDirection.Ascending))
-    assert(table.filteredRows(state).map(_.head) == Seq("2", "9", "10"))
+    assert(table.filteredRows(state).map(_.cells.head) == Seq("2", "9", "10"))
 
   // ---------------------------------------------------------------- measurement that disagrees with rendering
 
@@ -206,7 +206,7 @@ final class DegenerateInputSpec extends AnyFunSuite:
     * zero showed no rows at all, on every page, forever.
     */
   test("a page size of zero still shows rows"):
-    val table = DataTable(Seq("value"), (1 to 5).map(n => Seq(n.toString)), Seq(Constraint.Fill(1)))
+    val table = DataTable.fromStrings(Seq("value"), (1 to 5).map(n => Seq(n.toString)), Seq(Constraint.Fill(1)))
     val state = DataTableState()
     state.paging = Some(Paging(size = 0, page = 0))
     assert(table.visibleRows(state).nonEmpty)

@@ -7,7 +7,7 @@ import org.scalatest.funsuite.AnyFunSuite
 /** Circles on a [[Canvas]]: how many samples one gets is a question about the dot grid, not about the world scale. */
 final class CanvasCircleSpec extends AnyFunSuite:
 
-  private val unit = (0.0, 1.0)
+  private val unit = Bounds(0.0, 1.0)
 
   test("a circle on normalized bounds is closed, not an octagon"):
     // radius 0.4 of a unit world used to get max(8, (0.4 * 32).toInt) = 12 samples across roughly 100 dots of arc.
@@ -22,14 +22,14 @@ final class CanvasCircleSpec extends AnyFunSuite:
 
   test("the same circle is drawn identically whatever the world scale"):
     def linesFor(scale: Double): Seq[String] =
-      val bounds = (0.0, scale)
+      val bounds = Bounds(0.0, scale)
       val canvas = Canvas(bounds, bounds, Seq(Shape.CircleShape(scale / 2, scale / 2, scale * 0.4)), marker = "o")
       trimmedLines(rendered(canvas, 21, 21))
     assert(linesFor(1.0) == linesFor(1000.0))
     assert(linesFor(1.0) == linesFor(0.002))
 
   test("a circle still stays within its radius and leaves the centre alone"):
-    val canvas = Canvas((0.0, 10.0), (0.0, 10.0), Seq(Shape.CircleShape(5.0, 5.0, 3.0)), marker = "o")
+    val canvas = Canvas(Bounds(0.0, 10.0), Bounds(0.0, 10.0), Seq(Shape.CircleShape(5.0, 5.0, 3.0)), marker = "o")
     val buffer = rendered(canvas, 11, 11)
     assert(buffer.get(5, 2).symbol == "o") // top of the circle: world (5, 8) maps to row 2
     assert(buffer.get(5, 5).symbol == " ") // centre untouched

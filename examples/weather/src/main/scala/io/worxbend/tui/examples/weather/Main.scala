@@ -2,6 +2,7 @@ package io.worxbend.tui.examples.weather
 
 import io.worxbend.tui.dsl.*
 
+import java.util.Locale
 import scala.concurrent.duration.DurationInt
 
 private enum Status:
@@ -23,6 +24,7 @@ class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
   private val cityInput                       = TextInputState()
   private val status: Signal[Status]          = Signal(Status.Idle)
   private val history: Signal[Vector[String]] = Signal(Vector.empty)
+  private val HistoryLimit: Int               = 5
 
   def view(using ReactiveScope, Theme): Element =
     column(
@@ -54,9 +56,17 @@ class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
         column(
           text(s"${report.city}${if report.country.isEmpty then "" else s", ${report.country}"}").bold,
           text(report.condition + (if report.isDay then "" else " (night)")),
+          // `String.format(Locale.ROOT, …)`, not the `f` interpolator: see procmon's `decimal` for the reasoning.
+          // The interpolator formats through the default FORMAT locale, so a German machine would draw "22,5°C"
+          // for the same response that reads "22.5°C" in CI — a difference the API never made.
           text(
-            f"${report.temperatureC}%.1f°C  ·  humidity ${report.humidityPercent}%.0f%%  " +
-              f"·  wind ${report.windKph}%.0f km/h"
+            String.format(
+              Locale.ROOT,
+              "%.1f°C  ·  humidity %.0f%%  ·  wind %.0f km/h",
+              report.temperatureC,
+              report.humidityPercent,
+              report.windKph,
+            )
           ),
         )
 
@@ -69,7 +79,7 @@ class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
     if city.nonEmpty then
       cityInput.clear()
       status.set(Status.Loading(city))
-      history.update(existing => (city +: existing.filterNot(_.equalsIgnoreCase(city))).take(5))
+      history.update(existing => (city +: existing.filterNot(_.equalsIgnoreCase(city))).take(HistoryLimit))
       // `Async.runCatching` does the two things this needs and `Future(...).foreach` did neither of: it runs the
       // blocking HTTP call on a worker thread and *resumes on the render thread*, so the `status.set` below is an
       // ordinary signal write with no `RenderThread.runOnRenderThread` hop; and it delivers a thrown exception as a

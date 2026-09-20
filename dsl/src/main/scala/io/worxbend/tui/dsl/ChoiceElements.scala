@@ -103,27 +103,22 @@ final case class DropdownElement(
   private[dsl] override def builtinKeyHandler: Option[BuiltinKeyHandler]     = Some(handleKey)
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] = Some(handleMouse)
 
-  /** The entries the popup's own navigation helpers work over. Rebuilt per event rather than stored, because the node
-    * is an immutable value rebuilt every frame and the option list can change between frames.
-    */
-  private def entries: Seq[w.MenuEntry] = options.map(label => w.MenuEntry.Item(label))
-
   private def handleKey(event: KeyEvent): Boolean =
     if !state.open then openingKey(event)
     else
       event match
         case KeyEvent(KeyCode.Enter | KeyCode.Char(' '), _) =>
-          state.menu.selected.filter(options.indices.contains).foreach(onSelect)
+          state.highlighted.filter(options.indices.contains).foreach(onSelect)
           state.close()
           true
         case KeyEvent(KeyCode.Escape, _)                    =>
           state.close()
           true
         case KeyEvent(KeyCode.Down, _)                      =>
-          state.menu.selectNext(entries)
+          state.selectNext(options)
           true
         case KeyEvent(KeyCode.Up, _)                        =>
-          state.menu.selectPrevious(entries)
+          state.selectPrevious(options)
           true
         case _                                              => false
 
@@ -140,27 +135,30 @@ final case class DropdownElement(
   private def handleMouse(event: MouseEvent, area: Rect): Boolean =
     event.kind match
       case MouseEventKind.ScrollUp if state.open   =>
-        state.menu.selectPrevious(entries)
+        state.selectPrevious(options)
         true
       case MouseEventKind.ScrollDown if state.open =>
-        state.menu.selectNext(entries)
+        state.selectNext(options)
         true
       case MouseEventKind.Down                     => handlePress(event.position.y - area.y)
       case _                                       => false
 
+  /** Rows of an open dropdown above the first option: the closed row and the popup's top border. */
+  private val PopupHeaderRows = 2
+
   /** `offsetY` is how many rows below the node's own top the press landed. Row 0 is the closed row; the popup starts at
-    * row 1, and its first option is at row 2 because row 1 is the popup's top border.
+    * row 1, and its first option is at row 2 because row 1 is the popup's top border. Which option a painted row holds
+    * is the state's own arithmetic — `highlightAt` adds the popup's scroll offset.
     */
   private def handlePress(offsetY: Int): Boolean =
     if offsetY == 0 then
       if state.open then state.close() else if options.nonEmpty then state.openAt(selected)
       true
     else if state.open then
-      val row = offsetY - 2 + state.menu.offset
-      if options.indices.contains(row) then
-        state.menu.selected = Some(row)
+      state.highlightAt(offsetY - PopupHeaderRows, options.size).foreach { row =>
         onSelect(row)
         state.close()
+      }
       true
     else false
 
@@ -198,12 +196,22 @@ final case class SliderElement(
     props: ElementProps = ElementProps(focusable = true),
 ) extends Element:
   type Self = SliderElement
+
+  /** Columns the slider's chrome takes off the draggable track: the two end caps and the knob itself. An area no wider
+    * than this has no room for a movable knob, so a drag there changes nothing.
+    */
+  private val SliderChromeWidth = 3
+
+  /** How far in from the area's left edge the draggable track starts — one column, past the `├` end cap. */
+  private val SliderTrackInset = 1
+
   private[dsl] override def builtinMouseHandler: Option[BuiltinMouseHandler] =
     Some { (event, area) =>
       event.kind match
         case MouseEventKind.Down | MouseEventKind.Drag =>
-          if area.width > 3 then
-            val fraction = (event.position.x - area.x - 1).toDouble / (area.width - 3)
+          if area.width > SliderChromeWidth then
+            val fraction =
+              (event.position.x - area.x - SliderTrackInset).toDouble / (area.width - SliderChromeWidth)
             onChange(range.min + math.round(math.max(0.0, math.min(1.0, fraction)) * (range.max - range.min)).toInt)
           true
         case _                                         => false

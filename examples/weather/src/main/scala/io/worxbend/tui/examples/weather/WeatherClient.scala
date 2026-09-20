@@ -57,18 +57,9 @@ final class OpenMeteoClient(
         .flatMap(_.asArray)
         .flatMap(_.headOption)
         .toRight(WeatherError.CityNotFound(city))
-      name   <- result
-        .field("name")
-        .flatMap(_.asString)
-        .toRight(WeatherError.UnexpectedResponse("missing name"))
-      lat    <- result
-        .field("latitude")
-        .flatMap(_.asDouble)
-        .toRight(WeatherError.UnexpectedResponse("missing latitude"))
-      lon    <- result
-        .field("longitude")
-        .flatMap(_.asDouble)
-        .toRight(WeatherError.UnexpectedResponse("missing longitude"))
+      name   <- required(result, "name")(_.asString, "missing name")
+      lat    <- required(result, "latitude")(_.asDouble, "missing latitude")
+      lon    <- required(result, "longitude")(_.asDouble, "missing longitude")
       country = result.field("country").flatMap(_.asString).getOrElse("")
     yield Location(name, country, lat, lon)
 
@@ -80,22 +71,10 @@ final class OpenMeteoClient(
       body        <- get(url)
       json        <- Json.parse(body).left.map(WeatherError.UnexpectedResponse.apply)
       current     <- json.field("current").toRight(WeatherError.UnexpectedResponse("missing current conditions"))
-      temperature <- current
-        .field("temperature_2m")
-        .flatMap(_.asDouble)
-        .toRight(WeatherError.UnexpectedResponse("missing temperature"))
-      humidity    <- current
-        .field("relative_humidity_2m")
-        .flatMap(_.asDouble)
-        .toRight(WeatherError.UnexpectedResponse("missing humidity"))
-      wind        <- current
-        .field("wind_speed_10m")
-        .flatMap(_.asDouble)
-        .toRight(WeatherError.UnexpectedResponse("missing wind speed"))
-      code        <- current
-        .field("weather_code")
-        .flatMap(_.asInt)
-        .toRight(WeatherError.UnexpectedResponse("missing weather code"))
+      temperature <- required(current, "temperature_2m")(_.asDouble, "missing temperature")
+      humidity    <- required(current, "relative_humidity_2m")(_.asDouble, "missing humidity")
+      wind        <- required(current, "wind_speed_10m")(_.asDouble, "missing wind speed")
+      code        <- required(current, "weather_code")(_.asInt, "missing weather code")
       isDay = current.field("is_day").flatMap(_.asInt).forall(_ != 0)
     yield WeatherReport(location.name, location.country, temperature, humidity, wind, isDay, code)
 
@@ -114,6 +93,9 @@ final class OpenMeteoClient(
       case e: InterruptedException => Left(WeatherError.NetworkFailure(describeException(e)))
 
   private def encode(value: String): String = java.net.URLEncoder.encode(value, "UTF-8")
+
+  private def required[A](json: Json, name: String)(pick: Json => Option[A], missing: String): Either[WeatherError, A] =
+    json.field(name).flatMap(pick).toRight(WeatherError.UnexpectedResponse(missing))
 
   private def describeException(e: Throwable): String = Option(e.getMessage).getOrElse(e.getClass.getSimpleName)
 

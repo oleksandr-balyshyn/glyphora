@@ -6,7 +6,7 @@ import org.scalatest.funsuite.AnyFunSuite
 
 final class CanvasSpec extends AnyFunSuite:
 
-  private val bounds = (0.0, 4.0)
+  private val bounds = Bounds(0.0, 4.0)
 
   test("points map into the cell grid with y pointing up"):
     val canvas = Canvas(bounds, bounds, Seq(Shape.Points(Seq((0.0, 0.0), (4.0, 4.0)))), marker = "x")
@@ -40,19 +40,24 @@ final class CanvasSpec extends AnyFunSuite:
     assert(trimmedLines(buffer)(2) == "#   #")
 
   test("a circle stays within its radius"):
-    val canvas = Canvas((0.0, 10.0), (0.0, 10.0), Seq(Shape.CircleShape(5.0, 5.0, 3.0)), marker = "o")
+    val canvas = Canvas(Bounds(0.0, 10.0), Bounds(0.0, 10.0), Seq(Shape.CircleShape(5.0, 5.0, 3.0)), marker = "o")
     val buffer = rendered(canvas, 11, 11)
     assert(buffer.get(5, 2).symbol == "o") // top of the circle: world (5, 8) maps to row 2
     assert(buffer.get(5, 5).symbol == " ") // center untouched
 
   test("braille resolution packs sub-pixels into braille glyphs"):
     val canvas =
-      Canvas((0.0, 1.0), (0.0, 3.0), Seq(Shape.Points(Seq((0.0, 3.0)))), resolution = CanvasResolution.Braille)
+      Canvas(
+        Bounds(0.0, 1.0),
+        Bounds(0.0, 3.0),
+        Seq(Shape.Points(Seq((0.0, 3.0)))),
+        resolution = CanvasResolution.Braille,
+      )
     assert(rendered(canvas, 1, 1).get(0, 0).symbol == "⠁") // top-left dot only
 
   test("braille accumulates multiple dots in one cell"):
     val points = Shape.Points(Seq((0.0, 3.0), (0.0, 2.0), (1.0, 0.0)))
-    val canvas = Canvas((0.0, 1.0), (0.0, 3.0), Seq(points), resolution = CanvasResolution.Braille)
+    val canvas = Canvas(Bounds(0.0, 1.0), Bounds(0.0, 3.0), Seq(points), resolution = CanvasResolution.Braille)
     // dots 1 (0,0), 2 (0,1) and 8 (1,3): 0x01 | 0x02 | 0x80 = 0x83
     assert(rendered(canvas, 1, 1).get(0, 0).symbol == (0x2800 + 0x83).toChar.toString)
 
@@ -60,8 +65,8 @@ final class CanvasSpec extends AnyFunSuite:
     def cellFor(ys: Seq[Double]): String =
       val canvas =
         Canvas(
-          (0.0, 1.0),
-          (0.0, 1.0),
+          Bounds(0.0, 1.0),
+          Bounds(0.0, 1.0),
           Seq(Shape.Points(ys.map(y => (0.0, y)))),
           resolution = CanvasResolution.HalfBlock,
         )

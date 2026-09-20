@@ -134,6 +134,18 @@ final case class Style(
       clearedModifiers = (clearedModifiers | other.clearedModifiers).without(other.modifiers),
     )
 
+  /** Whether this style still paints its column when the glyph in it is a blank space.
+    *
+    * A background colour is drawn across the whole cell rather than behind the glyph's ink, and so are reverse video,
+    * underline, blink and crossed-out (all four draw something — a filled block, a rule, a strike — that a space does
+    * not hide). A foreground colour or bold, by contrast, is invisible on a space. This is the test for "the terminal
+    * would still be showing something here", which is what makes a vacated continuation column worth repainting — the
+    * frame-diff engine ([[FrameDiff]]) is its one caller.
+    */
+  private[core] def visibleOnBlank: Boolean =
+    bg.exists(_ != Color.Reset) ||
+      modifiers.hasAny(Modifiers.Reverse | Modifiers.Underline | Modifiers.Blink | Modifiers.CrossedOut)
+
   /** The derived `toString` renders both bitsets as the integers they are, which is unreadable in exactly the place it
     * is read most: a failed assertion on a cell's style. Fields left at their default are elided so the common style
     * prints as a short line.

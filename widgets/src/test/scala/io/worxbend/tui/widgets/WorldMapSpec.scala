@@ -9,7 +9,11 @@ import org.scalatest.funsuite.AnyFunSuite
 final class WorldMapSpec extends AnyFunSuite:
 
   private def globe(shape: Shape, width: Int, height: Int): Buffer =
-    rendered(Canvas((-180.0, 180.0), (-90.0, 90.0), Seq(shape), resolution = CanvasResolution.Braille), width, height)
+    rendered(
+      Canvas(Bounds(-180.0, 180.0), Bounds(-90.0, 90.0), Seq(shape), resolution = CanvasResolution.Braille),
+      width,
+      height,
+    )
 
   private def painted(buffer: Buffer, area: Rect): Int =
     val cells = for
@@ -68,8 +72,8 @@ final class WorldMapSpec extends AnyFunSuite:
     assert(styled.forall(_.contains(Color.Green)))
 
   test("narrowed bounds clip to the window rather than squeezing the whole world into it"):
-    val europe = Canvas((-11.0, 32.0), (35.0, 72.0), Seq(Shape.WorldMap(MapResolution.High)))
-    val world  = Canvas((-180.0, 180.0), (-90.0, 90.0), Seq(Shape.WorldMap(MapResolution.High)))
+    val europe = Canvas(Bounds(-11.0, 32.0), Bounds(35.0, 72.0), Seq(Shape.WorldMap(MapResolution.High)))
+    val world  = Canvas(Bounds(-180.0, 180.0), Bounds(-90.0, 90.0), Seq(Shape.WorldMap(MapResolution.High)))
     val area   = Rect(0, 0, 40, 12)
     assert(painted(rendered(europe, 40, 12), area) < painted(rendered(world, 40, 12), area))
 

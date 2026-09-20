@@ -57,8 +57,7 @@ private[widgets] object BlockLadder:
       set: BarSet = BarSet.Eighths,
   ): Unit =
     val height  = bottom - top + 1
-    val clamped = math.max(0L, math.min(value, ceiling))
-    var eighths = math.round(clamped.toDouble / ceiling * height * 8).toInt
+    var eighths = eighthsOf(value, ceiling, height)
     var y       = bottom
     while y >= top && eighths > 0 do
       val levelIndex = math.min(eighths, 8)
@@ -80,8 +79,7 @@ private[widgets] object BlockLadder:
     * stops the label and the bar disagreeing about where the boundary is.
     */
   def filledCells(value: Long, ceiling: Long, extent: Int): Int =
-    val clamped = math.max(0L, math.min(value, ceiling))
-    val eighths = math.round(clamped.toDouble / ceiling * extent * 8).toInt
+    val eighths = eighthsOf(value, ceiling, extent)
     math.min(extent, (eighths + 7) / 8)
 
   /** Paints one horizontal bar: `value` measured against `ceiling`, filling rightwards from column `left` and stopping
@@ -114,9 +112,8 @@ private[widgets] object BlockLadder:
       set: BarSet = BarSet.Eighths,
   ): Unit =
     val width   = right - left + 1
-    val clamped = math.max(0L, math.min(value, ceiling))
     val ladder  = sideways(set.eighths)
-    var eighths = math.round(clamped.toDouble / ceiling * width * 8).toInt
+    var eighths = eighthsOf(value, ceiling, width)
     var x       = left
     while x <= right && eighths > 0 do
       val levelIndex = math.min(eighths, 8)
@@ -129,6 +126,17 @@ private[widgets] object BlockLadder:
         paintColumn(buffer, x, rows, y, glyph, style)
         x += 1
     }
+
+  /** The fill of an `extent`-cell track, in eighths of a cell: `value` clamped onto `0..ceiling`, scaled, and rounded
+    * to the nearest eighth.
+    *
+    * The one place the scaling formula lives, so a column, a row and the [[filledCells]] count of the same value cannot
+    * disagree about how tall it is. `ceiling` is the caller's responsibility to keep positive — every chart in the
+    * module derives it as `math.max(1L, …)`.
+    */
+  private def eighthsOf(value: Long, ceiling: Long, extent: Int): Int =
+    val clamped = math.max(0L, math.min(value, ceiling))
+    math.round(clamped.toDouble / ceiling * extent * 8).toInt
 
   /** The same ladder drawn sideways: each upward-growing block element swapped for the rightward-growing one that fills
     * the same fraction of a cell, and every other glyph left exactly as it is.

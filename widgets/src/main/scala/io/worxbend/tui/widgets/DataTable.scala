@@ -45,16 +45,46 @@ final case class Paging(size: Int, page: Int)
   * Selection indexes into the *view* (the filtered, sorted rows) — use [[DataTable.visibleRows]] to map it back to
   * data.
   *
+  * Every render also records the selected row's key, and the *next* render re-anchors the selection to wherever that
+  * key landed after a re-sort or a data refresh — the highlight follows the record rather than the row number. Every
+  * selection mutator here, and every direct `selected = …` assignment, clears the recorded key; [[DataTable.selectKey]]
+  * sets both at once.
+  *
+  * The state is typed on the table's key type so the recorded key and the memoized view never leave it: one state
+  * instance belongs to one [[DataTable]] shape, which is how it was already used — sharing a state between tables with
+  * different row data never meant anything.
+  *
   * Render-thread-only, and mutating it does not by itself schedule a frame. This is a plain mutable object, invisible
   * to the reactive layer: a background result written straight into it stays off screen until something unrelated
   * happens to repaint. Pair the mutation with a `Signal` write, or call `TuiApp.requestRedraw()` from the same
   * render-thread callback that made it.
+  *
+  * @tparam K
+  *   the key type of the table's [[KeyedRow]]s; `Int` — the row's original position, which is what
+  *   [[DataTable.fromStrings]] keys by — for a table built from plain text rows, whose state is still spelled
+  *   `DataTableState()` (see the companion).
   */
-final class DataTableState:
+final class DataTableState[K]:
   var sort: Option[ColumnSort] = None
-  var selected: Option[Int]    = None
   var offset: Int              = 0
   var paging: Option[Paging]   = None
+
+  /** The selected view row, or `None` for no selection.
+    *
+    * A custom setter rather than a bare `var` so that moving the selection — here or by direct assignment — drops the
+    * recorded row key: the key answers "which record was selected", and a selection the caller just moved must not be
+    * snapped back to the old record on the next frame.
+    */
+  def selected: Option[Int] = selectedValue
+
+  def selected_=(index: Option[Int]): Unit =
+    selectedValue = index
+    selectedRowKey = None
+
+  private var selectedValue: Option[Int] = None
+
+  /** The key of the record the selection is anchored to, written by [[DataTable.render]] on every frame. */
+  private[widgets] var selectedRowKey: Option[K] = None
 
   /** The selected column, or `None` for no column cursor — the horizontal half of a spreadsheet-style cursor.
     *
@@ -99,15 +129,14 @@ final class DataTableState:
   /** Drops the memoized filtered/sorted view.
     *
     * Only needed when the row data changes without changing its length — the cache key cannot see through a `Seq` to
-    * its contents, so `DataTable(columns, updatedRows, widths)` with the same row count would otherwise keep showing
-    * the previous ordering.
+    * its contents, so rebuilding the table with the same row count would otherwise keep showing the previous ordering.
     */
   def invalidate(): Unit = view = None
 
-  private var view: Option[(DataTableState.ViewKey, Seq[Seq[String]])] = None
+  private var view: Option[(DataTableState.ViewKey, Seq[KeyedRow[K]])] = None
 
   /** Returns the cached view when `key` still matches, otherwise recomputes and stores it. */
-  private[widgets] def cachedView(key: DataTableState.ViewKey)(compute: => Seq[Seq[String]]): Seq[Seq[String]] =
+  private[widgets] def cachedView(key: DataTableState.ViewKey)(compute: => Seq[KeyedRow[K]]): Seq[KeyedRow[K]] =
     view match
       case Some((cached, rows)) if cached == key => rows
       case _                                     =>
@@ -173,6 +202,13 @@ final class DataTableState:
     if visibleCount > 0 then selected = Selection.by(selected, visibleCount, delta)
 
 object DataTableState:
+
+  /** The state of a plain-text table, keyed by original row position — the spelling `DataTableState()` keeps for the
+    * tables [[DataTable.fromStrings]] builds. A table with its own key type writes the type out:
+    * `DataTableState[String]()`.
+    */
+  def apply(): DataTableState[Int] = new DataTableState[Int]
+
   /** Everything that can change the filtered/sorted view, used as the memoization key. */
   private[widgets] final case class ViewKey(
       sort: Option[ColumnSort],
@@ -180,11 +216,58 @@ object DataTableState:
       rowCount: Int,
   )
 
-/** A sortable, filterable table with a selectable, scrollable body — [[Table]] plus the interaction a data grid needs.
+/** One [[DataTable]] row: a stable identity plus the text cells the table sorts, filters and draws.
   *
-  * The header shows a `▲`/`▼` indicator on the sorted column; the filter keeps rows where *any* cell contains the text
-  * (case-insensitive); sorting compares numerically when both cells parse as numbers, else as text.
+  * The key is what lets a selection survive everything the widget does to the row order: [[DataTable.render]] records
+  * the selected row's key on every frame and re-anchors the highlight to the same key after a re-sort or a data
+  * refresh, so a table of processes keeps its highlight on the same PID instead of on whatever row number it happened
+  * to occupy. Keys are compared with `==`; give each row a key that is unique within the table — when two rows share
+  * one, the first in view order is the one the selection anchors to.
   *
+  * `cells` is a projection of the record into display text: the table sorts and filters on these strings exactly as it
+  * always has, and the record itself never has to be parsed back out of its own formatting.
+  */
+final case class KeyedRow[K](key: K, cells: Seq[String])
+
+/** Everything about a [[DataTable]] that is not its columns, rows or widths: layout, looks, and the per-cell styling
+  * hook.
+  *
+  * Bundled rather than listed on [[DataTable]] itself because the list had grown to twelve optional knobs. Every field
+  * keeps the default it had as a `DataTable` constructor parameter, so `DataTableOptions()` is the table 0.14.0 drew by
+  * default.
+  *
+  * @param footer
+  *   an optional summary row — totals, a record count — pinned to the *bottom* of the area rather than following the
+  *   last data row, and laid out on the same solved columns as the body. It costs one row of the scrollable body. A
+  *   `DataTable` always draws its header, so the footer is dropped on an area only one row tall, where the header has
+  *   already taken the only row there is.
+  * @param columnSpacing
+  *   columns of padding between two solved column widths
+  * @param flex
+  *   where the columns sit when they do not fill the area — see [[Table]] for the full explanation. The reserved
+  *   `highlightSymbol` gutter is taken off the left first, so the flex distributes only what is left over after it.
+  * @param alignments
+  *   where each column's text sits inside its own column, by position: `alignments(0)` places column 0, `alignments(1)`
+  *   column 1, and so on. This is how a numeric column lines up on its last digit instead of on its first. It applies
+  *   to the header caption, the body cells and the footer alike, so a right-aligned column's title stays over its
+  *   figures.
+  *
+  * The sequence may be shorter than the column list, or empty — the default — and every column it does not reach is
+  * left-aligned, which is what every column did before this parameter existed. A short sequence is allowed on purpose:
+  * a table gains a column far more often than it changes an alignment, and a length check that threw from inside the
+  * render loop would be the worst way to find that out. Entries past the last column are ignored.
+  *
+  * A [[Table]] takes no such parameter because its cells are [[io.worxbend.tui.core.Line]]s, which carry their own
+  * alignment (`Line.raw("42").rightAligned`). A `DataTable` cell is a bare `String` — it has to be, because the widget
+  * sorts and filters on the text — so the placement has nowhere to live except here.
+  * @param style
+  *   the style of the whole table
+  * @param headerStyle
+  *   the style of the header row, bold by default
+  * @param footerStyle
+  *   the style the footer row is drawn in, bold by default, matching the header
+  * @param highlightStyle
+  *   layered over the selected row's style
   * @param columnHighlightStyle
   *   layered over the row's style for every body cell in the selected column, or `None` — the default — to draw no
   *   column cursor at all. Together with `cellHighlightStyle` this is what turns a row-selecting table into a
@@ -213,38 +296,8 @@ object DataTableState:
   *   of its own that the reversal blends into. A symbol survives both. The default is `""` — an empty symbol reserves a
   *   zero-width gutter, so a table written before this parameter existed draws exactly the same cells in exactly the
   *   same columns as before. [[ListView]] defaults to `"> "` instead, because a list has no column grid to keep still.
-  * @param footer
-  *   an optional summary row — totals, a record count — pinned to the *bottom* of the area rather than following the
-  *   last data row, and laid out on the same solved columns as the body. It costs one row of the scrollable body. A
-  *   `DataTable` always draws its header, so the footer is dropped on an area only one row tall, where the header has
-  *   already taken the only row there is.
-  * @param footerStyle
-  *   the style the footer row is drawn in, bold by default, matching the header.
-  * @param widths
-  *   one [[Constraint]] per column. An empty sequence means "equal columns": each of the `columns` titles gets an equal
-  *   share of the area. Before that fallback existed an empty sequence drew a blank rectangle instead.
-  * @param flex
-  *   where the columns sit when they do not fill the area — see [[Table]] for the full explanation. The reserved
-  *   `highlightSymbol` gutter is taken off the left first, so the flex distributes only what is left over after it.
-  * @param alignments
-  *   where each column's text sits inside its own column, by position: `alignments(0)` places column 0, `alignments(1)`
-  *   column 1, and so on. This is how a numeric column lines up on its last digit instead of on its first. It applies
-  *   to the header caption, the body cells and the footer alike, so a right-aligned column's title stays over its
-  *   figures.
-  *
-  * The sequence may be shorter than the column list, or empty — the default — and every column it does not reach is
-  * left-aligned, which is what every column did before this parameter existed. A short sequence is allowed on purpose:
-  * a table gains a column far more often than it changes an alignment, and a length check that threw from inside the
-  * render loop would be the worst way to find that out. Entries past the last column are ignored.
-  *
-  * A [[Table]] takes no such parameter because its cells are [[io.worxbend.tui.core.Line]]s, which carry their own
-  * alignment (`Line.raw("42").rightAligned`). A `DataTable` cell is a bare `String` — it has to be, because the widget
-  * sorts and filters on the text — so the placement has nowhere to live except here.
   */
-final case class DataTable(
-    columns: Seq[String],
-    rows: Seq[Seq[String]],
-    widths: Seq[Constraint],
+final case class DataTableOptions(
     footer: Option[Seq[String]] = None,
     columnSpacing: Int = 1,
     flex: Flex = Flex.Start,
@@ -257,7 +310,37 @@ final case class DataTable(
     cellHighlightStyle: Option[Style] = None,
     cellStyle: (Seq[String], Int) => Style = (_, _) => Style.Default,
     highlightSymbol: String = "",
-) extends StatefulWidget[DataTableState]:
+)
+
+/** A sortable, filterable table with a selectable, scrollable body — [[Table]] plus the interaction a data grid needs.
+  *
+  * The header shows a `▲`/`▼` indicator on the sorted column; the filter keeps rows where *any* cell contains the text
+  * (case-insensitive); sorting compares numerically when both cells parse as numbers, else as text.
+  *
+  * Each row is a [[KeyedRow]]: `cells` is what the table sorts, filters and draws, and `key` is the row's stable
+  * identity. The selection follows the key across re-sorts and data refreshes — see [[DataTableState]] — and
+  * [[selectedKey]] reads it back, so an app never has to parse its own formatted cells to recover which record is
+  * selected. [[DataTable.fromStrings]] builds a table from plain text rows, keying each by its original position, for
+  * callers that have no record identity of their own.
+  *
+  * @tparam K
+  *   the row key type; `Int` (the row's original position) for a table built by [[DataTable.fromStrings]]
+  * @param columns
+  *   the column titles; the header settles how many columns the table has
+  * @param rows
+  *   the body rows — see [[KeyedRow]] for the key's contract
+  * @param widths
+  *   one [[Constraint]] per column. An empty sequence means "equal columns": each of the `columns` titles gets an equal
+  *   share of the area. Before that fallback existed an empty sequence drew a blank rectangle instead.
+  */
+final case class DataTable[K](
+    columns: Seq[String],
+    rows: Seq[KeyedRow[K]],
+    widths: Seq[Constraint],
+    options: DataTableOptions = DataTableOptions(),
+) extends StatefulWidget[DataTableState[K]]:
+
+  import options.*
 
   /** Every row surviving the filter, in sort order — the domain paging windows over.
     *
@@ -265,7 +348,7 @@ final case class DataTable(
     * pushes a redraw past the tick budget. The cache key covers everything that can change the result, with the row
     * count standing in for the data itself — see [[DataTableState.invalidate]] for when that is not enough.
     */
-  def filteredRows(state: DataTableState): Seq[Seq[String]] =
+  def filteredRows(state: DataTableState[K]): Seq[KeyedRow[K]] =
     val key = DataTableState.ViewKey(state.sort, state.filter, rows.size)
     state.cachedView(key) {
       val filtered =
@@ -273,14 +356,16 @@ final case class DataTable(
         else
           // ROOT, not the default locale: in a Turkish locale "ID".toLowerCase is "ıd", which matches nothing.
           val needle = state.filter.toLowerCase(Locale.ROOT)
-          rows.filter(_.exists(_.toLowerCase(Locale.ROOT).contains(needle)))
+          rows.filter(_.cells.exists(_.toLowerCase(Locale.ROOT).contains(needle)))
       state.sort match
         case None                                => filtered
         case Some(ColumnSort(column, direction)) =>
-          val cells   = filtered.map(row => row.lift(column).getOrElse(""))
+          val cells   = filtered.map(_.cells.lift(column).getOrElse(""))
           val ordered = ordering(cells)
           val sorted  =
-            filtered.sortWith((a, b) => ordered.lt(a.lift(column).getOrElse(""), b.lift(column).getOrElse("")))
+            filtered.sortWith((a, b) =>
+              ordered.lt(a.cells.lift(column).getOrElse(""), b.cells.lift(column).getOrElse(""))
+            )
           direction match
             case SortDirection.Ascending  => sorted
             case SortDirection.Descending => sorted.reverse
@@ -289,7 +374,7 @@ final case class DataTable(
   /** The rows the widget is currently showing: filtered, sorted, and windowed to the current page — what a selection
     * indexes.
     */
-  def visibleRows(state: DataTableState): Seq[Seq[String]] =
+  def visibleRows(state: DataTableState[K]): Seq[KeyedRow[K]] =
     val all = filteredRows(state)
     state.paging match
       case None         => all
@@ -298,6 +383,31 @@ final case class DataTable(
         val page = pageOf(window, all.size)
         all.slice(page * size, (page + 1) * size)
 
+  /** The key of the selected row, or `None` when nothing is selected.
+    *
+    * This is the answer a caller used to recover by parsing its own formatted cells. The recorded anchor is answered
+    * when there is one, so a sort between frames does not leave the key pointing at a stale index — the anchor is what
+    * the next frame re-resolves.
+    */
+  def selectedKey(state: DataTableState[K]): Option[K] =
+    state.selectedRowKey.orElse(state.selected.flatMap(visibleRows(state).lift).map(_.key))
+
+  /** Moves the selection to the row keyed `key` in the current view, returning `true` when there is one.
+    *
+    * `false` — and no state touched — when no visible row carries the key: a record that left the data, or one sitting
+    * on another page, since a selection indexes the windowed view. On success both halves of the selection are set
+    * together (the index for this frame, the key for the frames after a re-sort), which a direct `state.selected = …`
+    * assignment cannot do.
+    */
+  def selectKey(state: DataTableState[K], key: K): Boolean =
+    val view  = visibleRows(state)
+    val index = view.indexWhere(_.key == key)
+    if index < 0 then false
+    else
+      state.selected = Some(index)
+      state.selectedRowKey = Some(key)
+      true
+
   /** Writes back the page [[visibleRows]] would show, so a page left past the end of a shrunken result set does not
     * stay there once the user turns it.
     *
@@ -305,7 +415,7 @@ final case class DataTable(
     * calls it on every frame alongside the selection and offset clamps, which is the moment all three state repairs
     * belong at.
     */
-  private[widgets] def clampPage(state: DataTableState): Unit =
+  private[widgets] def clampPage(state: DataTableState[K]): Unit =
     val total = filteredRows(state).size
     state.paging = state.paging.map(window => window.copy(page = pageOf(window, total)))
 
@@ -318,7 +428,7 @@ final case class DataTable(
     val lastPage = math.max(0, (total - 1) / pageSizeOf(window))
     math.max(0, math.min(window.page, lastPage))
 
-  def render(area: Rect, buffer: Buffer, state: DataTableState): Unit =
+  def render(area: Rect, buffer: Buffer, state: DataTableState[K]): Unit =
     if !area.isEmpty then
       clampPage(state)
       val view        = visibleRows(state)
@@ -333,26 +443,50 @@ final case class DataTable(
       val bodyHeight  = area.height - 1 - footerRows
       if footerRows == 1 then
         footer.foreach(cells => renderRow(buffer, segments, cells, area.bottom - 1, _ => footerStyle))
-      if bodyHeight > 0 && view.nonEmpty then
-        val selected = Selection.clamped(state.selected, view.size)
-        state.selected = selected
-        state.offset = ScrollWindow.offsetFor(state.offset, selected, view.size, bodyHeight)
-        val padding  = " ".repeat(symbolWidth)
-        // a column index past the last column would highlight nothing and hide the fact that it was set wrong
-        val cursor   = Selection.clamped(state.selectedColumn, segments.size)
-        state.selectedColumn = cursor
-        view.slice(state.offset, state.offset + bodyHeight).zipWithIndex.foreach { (cells, row) =>
-          val index      = state.offset + row
-          val isSelected = selected.contains(index)
-          val rowStyle   = if isSelected then style.patch(highlightStyle) else style
-          val y          = area.y + 1 + row
-          if symbolWidth > 0 then
-            val prefix = if isSelected then highlightSymbol else padding
-            buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, symbolWidth), rowStyle)
-          renderRow(buffer, segments, cells, y, cursorStyle(rowStyle, isSelected, cursor, _), Some(cells))
-        }
+      if bodyHeight > 0 && view.nonEmpty then renderBody(area, buffer, state, view, segments, symbolWidth, bodyHeight)
 
-  private def renderHeader(buffer: Buffer, segments: Seq[Rect], state: DataTableState): Unit =
+  /** Repairs the selection and the column cursor against the view that survived the filter, scrolls the selection into
+    * view, and paints the window of body rows that fits — the body half of [[render]], which keeps the layout solving.
+    *
+    * The selection is anchored to the selected row's *key*: a key recorded last frame is re-resolved to its index in
+    * this frame's view, so a re-sort or a refreshed data set keeps the highlight on the same record. A key that no
+    * longer resolves — the record left the data — falls back to the clamped index, the only answer left.
+    */
+  private def renderBody(
+      area: Rect,
+      buffer: Buffer,
+      state: DataTableState[K],
+      view: Seq[KeyedRow[K]],
+      segments: Seq[Rect],
+      symbolWidth: Int,
+      bodyHeight: Int,
+  ): Unit =
+    val anchored = state.selectedRowKey.flatMap { key =>
+      val index = view.indexWhere(_.key == key)
+      Option.when(index >= 0)(index)
+    }
+    val selected = Selection.clamped(anchored.orElse(state.selected), view.size)
+    state.selected = selected
+    // assigning `selected` clears the recorded key, so the anchor is written after it, from the resolved row
+    state.selectedRowKey = selected.map(index => view(index).key)
+    state.offset = ScrollWindow.offsetFor(state.offset, selected, view.size, bodyHeight)
+    val padding  = " ".repeat(symbolWidth)
+    // a column index past the last column would highlight nothing and hide the fact that it was set wrong
+    val cursor   = Selection.clamped(state.selectedColumn, segments.size)
+    state.selectedColumn = cursor
+    view.slice(state.offset, state.offset + bodyHeight).zipWithIndex.foreach { (keyed, row) =>
+      val cells      = keyed.cells
+      val index      = state.offset + row
+      val isSelected = selected.contains(index)
+      val rowStyle   = if isSelected then style.patch(highlightStyle) else style
+      val y          = area.y + 1 + row
+      if symbolWidth > 0 then
+        val prefix = if isSelected then highlightSymbol else padding
+        buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, symbolWidth), rowStyle)
+      renderRow(buffer, segments, cells, y, cursorStyle(rowStyle, isSelected, cursor, _), Some(cells))
+    }
+
+  private def renderHeader(buffer: Buffer, segments: Seq[Rect], state: DataTableState[K]): Unit =
     columns.zipWithIndex.foreach { (title, index) =>
       segments.lift(index).filterNot(_.isEmpty).foreach { segment =>
         val indicator = state.sort match
@@ -417,3 +551,67 @@ final case class DataTable(
     val numeric = cells.forall(cell => cell.toDoubleOption.exists(value => !value.isNaN))
     if numeric then Ordering.by[String, Double](_.toDoubleOption.getOrElse(0.0))
     else (left, right) => left.compareToIgnoreCase(right)
+
+object DataTable:
+
+  /** A table over plain text cells — the shape every `DataTable` row took before rows carried keys.
+    *
+    * Each row is keyed by its original position in `rows`, so the key-anchored selection behaves sensibly here too —
+    * the highlight follows the record across a re-sort — without the caller having an identity of its own to supply.
+    * Callers that do have one (a PID, a path, an id) should build [[KeyedRow]]s themselves instead.
+    */
+  def fromStrings(
+      columns: Seq[String],
+      rows: Seq[Seq[String]],
+      widths: Seq[Constraint],
+      options: DataTableOptions = DataTableOptions(),
+  ): DataTable[Int] =
+    DataTable(columns, rows.zipWithIndex.map((cells, index) => KeyedRow(index, cells)), widths, options)
+
+  /** The pre-0.15.0 signature: fifteen parameters over plain text rows.
+    *
+    * Kept so call sites written against 0.14.0 keep compiling; new code should pass [[KeyedRow]] rows (or go through
+    * [[fromStrings]]) and bundle everything past `widths` in a [[DataTableOptions]]. Because an overloaded `apply` may
+    * not repeat the default arguments the primary constructor carries, this delegate spells out every parameter — a
+    * call that relied on omitting trailing arguments moves to the primary constructor or to [[fromStrings]].
+    */
+  @deprecated(
+    "rows are KeyedRow[K] now; use fromStrings for plain text rows and DataTableOptions for the rest",
+    "0.15.0",
+  )
+  def apply(
+      columns: Seq[String],
+      rows: Seq[Seq[String]],
+      widths: Seq[Constraint],
+      footer: Option[Seq[String]],
+      columnSpacing: Int,
+      flex: Flex,
+      alignments: Seq[Alignment],
+      style: Style,
+      headerStyle: Style,
+      footerStyle: Style,
+      highlightStyle: Style,
+      columnHighlightStyle: Option[Style],
+      cellHighlightStyle: Option[Style],
+      cellStyle: (Seq[String], Int) => Style,
+      highlightSymbol: String,
+  ): DataTable[Int] =
+    fromStrings(
+      columns,
+      rows,
+      widths,
+      DataTableOptions(
+        footer = footer,
+        columnSpacing = columnSpacing,
+        flex = flex,
+        alignments = alignments,
+        style = style,
+        headerStyle = headerStyle,
+        footerStyle = footerStyle,
+        highlightStyle = highlightStyle,
+        columnHighlightStyle = columnHighlightStyle,
+        cellHighlightStyle = cellHighlightStyle,
+        cellStyle = cellStyle,
+        highlightSymbol = highlightSymbol,
+      ),
+    )

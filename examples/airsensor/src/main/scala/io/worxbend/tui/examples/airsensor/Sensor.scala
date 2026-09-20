@@ -81,7 +81,11 @@ final class AirGradientClient(
       else Left(s"sensor returned HTTP ${response.statusCode()}")
     catch
       case e: java.io.IOException  => Left(AirGradientClient.describeThrowable(e))
-      case e: InterruptedException => Left(AirGradientClient.describeThrowable(e))
+      case e: InterruptedException =>
+        // Catching InterruptedException clears the thread's interrupt status; swallowing it would stop the poller's
+        // worker thread from ever learning it was asked to shut down. Restore the status before returning the error.
+        Thread.currentThread().interrupt()
+        Left(AirGradientClient.describeThrowable(e))
 
 object AirGradientClient:
 

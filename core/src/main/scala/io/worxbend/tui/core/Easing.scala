@@ -64,24 +64,39 @@ object Easing:
   private val BackC1                    = 1.70158
   private def backIn(x: Double): Double = (BackC1 + 1) * x * x * x - BackC1 * x * x
 
+  // Penner's elastic: a decaying sine making ten swings across [0, 1], starting three quarters of a period into the
+  // cycle, with a third of a period per swing
+  private val ElasticSwings: Double     = 10.0
+  private val ElasticPhaseShift: Double = 0.75
+  private val ElasticPeriod: Double     = 2 * math.Pi / 3
+
   private def elasticOut(x: Double): Double =
     if x == 0 then 0.0
     else if x == 1 then 1.0
-    else math.pow(2, -10 * x) * math.sin((x * 10 - 0.75) * (2 * math.Pi / 3)) + 1
+    else math.pow(2, -ElasticSwings * x) * math.sin((x * ElasticSwings - ElasticPhaseShift) * ElasticPeriod) + 1
 
   /** The four-segment Penner bounce (the `easeOutBounce` of easings.net): four upward parabolas of the same steepness,
     * each one starting later, narrower and higher than the last, so the value drops and rebounds three times before
     * settling on 1.
     *
-    * `amplitude` is the shared steepness of those parabolas and `segments` splits `[0, 1]` into the four spans. The
-    * per-segment offsets (the centre `1.5 / segments`, `2.25 / segments`, `2.625 / segments` and the floors `0.75`,
-    * `0.9375`, `0.984375`) are the published constants of that curve: they are what makes each parabola touch the
-    * previous one exactly where it lands. Changing one in isolation puts a visible kink in the bounce.
+    * `BounceAmplitude` is the shared steepness of those parabolas and `BounceSegments` splits `[0, 1]` into the four
+    * spans. The per-segment offsets (`BounceOffset*`) and floors (`BounceFloor*`) are the published constants of that
+    * curve: they are what makes each parabola touch the previous one exactly where it lands. Changing one in isolation
+    * puts a visible kink in the bounce.
     */
+  private val BounceAmplitude: Double = 7.5625
+  private val BounceSegments: Double  = 2.75
+  private val BounceOffset1: Double   = 1.5
+  private val BounceOffset2: Double   = 2.25
+  private val BounceOffset3: Double   = 2.625
+  private val BounceFloor1: Double    = 0.75
+  private val BounceFloor2: Double    = 0.9375
+  private val BounceFloor3: Double    = 0.984375
+
   private def bounceOut(x: Double): Double =
-    val amplitude = 7.5625
-    val segments  = 2.75
-    if x < 1 / segments then amplitude * x * x
-    else if x < 2 / segments then { val y = x - 1.5 / segments; amplitude * y * y + 0.75 }
-    else if x < 2.5 / segments then { val y = x - 2.25 / segments; amplitude * y * y + 0.9375 }
-    else { val y = x - 2.625 / segments; amplitude * y * y + 0.984375 }
+    if x < 1 / BounceSegments then BounceAmplitude * x * x
+    else if x < 2 / BounceSegments then {
+      val y = x - BounceOffset1 / BounceSegments; BounceAmplitude * y * y + BounceFloor1
+    } else if x < 2.5 / BounceSegments then {
+      val y = x - BounceOffset2 / BounceSegments; BounceAmplitude * y * y + BounceFloor2
+    } else { val y = x - BounceOffset3 / BounceSegments; BounceAmplitude * y * y + BounceFloor3 }

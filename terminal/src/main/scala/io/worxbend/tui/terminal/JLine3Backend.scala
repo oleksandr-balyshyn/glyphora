@@ -5,9 +5,8 @@ import io.worxbend.tui.core.{Buffer, Event, Position, Size, Widget}
 import org.jline.terminal.{Attributes, Terminal, TerminalBuilder}
 import org.jline.utils.InfoCmp
 
-import java.io.{FileDescriptor, FileOutputStream, InterruptedIOException}
+import java.io.{FileDescriptor, FileOutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.duration.DurationInt
 import scala.util.control.NonFatal
@@ -21,38 +20,49 @@ import scala.util.control.NonFatal
   * Signals are owned here rather than left to JLine's defaults. `INT`/`QUIT` become [[Event.Interrupt]] so the runner
   * unwinds through its normal teardown; `TSTP`/`CONT` hand the terminal back to the shell and take it again on resume;
   * `WINCH` posts a coalesced resize. See [[JLine3Backend.create]] for why the defaults are unusable.
+  *
+  * The mechanics live in package-private collaborators — [[FrameEncoder]] and [[FrameBaseline]] for the frame diff,
+  * [[EventPump]] for the wake/poll machinery, [[ReplyQueries]] for the query/reply round trips, [[TerminalDressing]]
+  * for the dress/undress choreography, [[ScrollRegions]] for hardware scroll regions and [[TitleStack]] for the window
+  * title. This class wires them to the JLine terminal and carries the public contract.
   */
-final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) extends Backend:
+final class JLine3Backend private (private[terminal] val terminal: Terminal, colorDepth: ColorDepth) extends Backend:
 
   // written on the render thread, read by JLine's signal-dispatch thread and by the shutdown hook
   // holds the *cooked*-mode attributes captured when raw mode was entered, so it doubles as "are we in raw mode?"
-  @volatile private var cookedAttributes: Option[Attributes]         = None
-  @volatile private var alternateScreenActive                        = false
+  @volatile private var cookedAttributes: Option[Attributes]                   = None
+  @volatile private[terminal] var alternateScreenActive                        = false
   // which capture mode is in force, or `None` for "capture is off" — the mode has to be remembered, not just the fact
   // of capture, so that taking the terminal back after Ctrl+Z re-requests all-motion tracking rather than silently
   // downgrading a hover-driven app to buttons-only
-  @volatile private var mouseCaptureActive: Option[MouseCaptureMode] = None
-  @volatile private var cursorHidden                                 = false
+  @volatile private[terminal] var mouseCaptureActive: Option[MouseCaptureMode] = None
+  @volatile private[terminal] var cursorHidden                                 = false
   // whether *this* backend turned the caret's blink off. Only what an app suppressed is restored on the way out: a
   // user whose emulator is configured for a steady caret would otherwise have that preference overwritten by every
   // glyphora app that exits, including the ones that never touched blink at all.
-  @volatile private var cursorBlinkSuppressed                        = false
+  @volatile private[terminal] var cursorBlinkSuppressed                        = false
 
   /** Whether this backend has moved the cursor's shape away from the user's own configuration, and so owes a reset. */
-  @volatile private var cursorShaped   = false
-  @volatile private var suspendedState = TerminalState.Undressed
-  @volatile private var inlineRows     = 0
+  @volatile private[terminal] var cursorShaped = false
+  // how many rows an inline run reserved on the primary screen, so the dressing choreography can park the cursor below
+  // the frame such a run leaves behind
+  @volatile private[terminal] var inlineRows   = 0
+
+  /** The terminal modes [[TerminalDressing]] found active when SIGTSTP handed the terminal back, so SIGCONT can put
+    * them back. Written and read on JLine's signal-dispatch thread alone.
+    */
+  @volatile private var suspendedState: TerminalDressing.TerminalState = TerminalDressing.TerminalState.Undressed
+
+  /** What the terminal said about itself when raw mode was entered. Written once per raw-mode session, on the render
+    * thread, and read from `draw` — hence `@volatile`.
+    */
+  @volatile private var probed: TerminalCapabilities = TerminalCapabilities.unknown
 
   /** The terminal's last reported text-area size in pixels, and whether it has been asked at all.
     *
     * Cached because the answer only changes when the window does, and because the query costs a round trip on the
     * stream the event loop reads from. `onResize` clears both, so the next `windowSize` asks again.
     */
-  /** What the terminal said about itself when raw mode was entered. Written once per raw-mode session, on the render
-    * thread, and read from `draw` — hence `@volatile`.
-    */
-  @volatile private var probed: TerminalCapabilities = TerminalCapabilities.unknown
-
   @volatile private var textAreaPixels: Option[Size] = None
   @volatile private var pixelsAsked                  = false
 
@@ -62,25 +72,22 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   private val baseline = FrameBaseline()
 
   /** Serialises the three things that decide which screen the terminal is showing: writing a composed frame, handing
-    * the terminal back to the shell, and taking it again. See [[releaseTerminal]] for what goes wrong without it.
+    * the terminal back to the shell, and taking it again. See [[TerminalDressing.releaseTerminal]] for what goes wrong
+    * without it. Shared with the collaborators that write to the terminal ([[ReplyQueries]], [[ScrollRegions]],
+    * [[TerminalDressing]]), so every write is mutually exclusive with every other.
     */
-  private val screenOwnership = Object()
+  private[terminal] val screenOwnership = Object()
 
   // raised by any thread that disturbed the screen (alternate-screen entry, SIGCONT's reacquire), consumed by `draw`
   private val fullRedrawRequested = RedrawRequest()
 
-  private val frameEncoder = FrameEncoder(colorDepth)
-
-  // whether the shell's own window title has been pushed onto the terminal's title stack. Raised lazily by the first
-  // `setTitle`, so an app that never sets a title emits nothing at all and leaves no stack entry for `close()` to pop.
-  private val titlePushed = AtomicBoolean(false)
-
-  private val pendingResize    = AtomicReference[Option[Size]](None)
-  private val pendingInterrupt = AtomicBoolean(false)
-  private val woken            = AtomicBoolean(false)
-  // the thread currently parked in `blockingRead`, if any, so `wake` knows whom to interrupt
-  private val pollingThread    = AtomicReference[Option[Thread]](None)
-  private val decoder          = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
+  private val frameEncoder  = FrameEncoder(colorDepth)
+  private val decoder       = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
+  private val pump          = EventPump(decoder)
+  private val queries       = ReplyQueries(screenOwnership, terminal, decoder)
+  private val scrollRegions = ScrollRegions(screenOwnership, terminal, baseline)
+  private val titleStack    = TitleStack(sequence => attempt(write(sequence)))
+  private val dressing      = TerminalDressing(this)
 
   private val supportsAlternateScreen =
     terminal.getStringCapability(
@@ -117,11 +124,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
         pixelsAsked = true
         textAreaPixels =
           if cookedAttributes.isEmpty then None
-          else
-            write(AnsiSequences.RequestTextAreaPixels)
-            // the *read* deliberately stays outside the monitor, for the reason [[queryCursorPosition]] gives: a read
-            // holding it for the length of the timeout would block the Ctrl+Z handover
-            decoder.readTextAreaSize(JLine3Backend.PixelQueryTimeout)
+          else queries.textAreaSize(JLine3Backend.PixelQueryTimeout)
         WindowSize(currentSize, textAreaPixels)
     }
 
@@ -132,32 +135,46 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     // smaller area where no amount of repainting reaches them — see ScreenReset for why only a shrink pays for this
     val erasing = ScreenReset.clearsOnShrink(baseline.area, buffer.area)
     val result  = attempt {
-      // After an erase, when a full repaint was asked for, and after any resize, the baseline no longer describes what
-      // is on screen — so it answers `RepaintAll` and every cell of the frame is written, blanks included. Diffing
-      // against a blanked grid instead would emit only the frame's non-blank cells, leaving whatever the previous
-      // frame had drawn in every column this one leaves empty.
-      val body = baseline.prepareFor(buffer.area, blank = forced || erasing) match
-        case FrameSource.DiffAgainst(previous) => frameEncoder.encode(previous, buffer)
-        case FrameSource.RepaintAll            => frameEncoder.encodeAll(buffer)
+      val frame = composeFrame(buffer, blank = forced || erasing, erasing)
       // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent — unless
       // the erase itself has to go out, which is the one case where "nothing changed" still needs a write
-      if body.nonEmpty || erasing then
-        // one atomic update: the terminal shows the previous frame until the whole batch has arrived
-        val frame = AnsiSequences.frame(
-          (if erasing then AnsiSequences.ClearScreen else "") + body,
-          probed.synchronizedOutput.usable,
-        )
-        // under the monitor, so a Ctrl+Z landing mid-frame cannot leave the alternate screen between the two writes
-        // and spill this frame's cursor moves and box-drawing over the user's shell
-        screenOwnership.synchronized {
-          terminal.writer().write(frame)
-          terminal.writer().flush()
-        }
+      if frame.nonEmpty then writeFrameAtomically(frame)
       baseline.commit(buffer)
     }
     // the forced frame never reached the terminal and the baseline was not updated: the request has not been served
     if forced && result.isLeft then requestFullRedraw()
     result
+
+  /** Composes the frame to write for `buffer`, diffed against the retained baseline — or "" when the frame is unchanged
+    * and no erase is owed, which is the one case [[draw]] writes nothing at all.
+    *
+    * After an erase, when a full repaint was asked for, and after any resize, the baseline no longer describes what is
+    * on screen — so it answers `RepaintAll` and every cell of the frame is written, blanks included. Diffing against a
+    * blanked grid instead would emit only the frame's non-blank cells, leaving whatever the previous frame had drawn in
+    * every column this one leaves empty.
+    */
+  private def composeFrame(buffer: Buffer, blank: Boolean, erasing: Boolean): String =
+    val body = baseline.prepareFor(buffer.area, blank) match
+      case FrameSource.DiffAgainst(previous) => frameEncoder.encode(previous, buffer)
+      case FrameSource.RepaintAll            => frameEncoder.encodeAll(buffer)
+    if body.nonEmpty || erasing then
+      AnsiSequences.frame(
+        (if erasing then AnsiSequences.ClearScreen else "") + body,
+        probed.synchronizedOutput.usable,
+      )
+    else ""
+
+  /** Writes one composed frame as a single atomic update: the terminal shows the previous frame until the whole batch
+    * has arrived.
+    *
+    * Under the monitor, so a Ctrl+Z landing mid-frame cannot leave the alternate screen between the two writes and
+    * spill this frame's cursor moves and box-drawing over the user's shell.
+    */
+  private def writeFrameAtomically(frame: String): Unit =
+    screenOwnership.synchronized {
+      terminal.writer().write(frame)
+      terminal.writer().flush()
+    }
 
   /** Asks the next [[draw]] to repaint every cell. Safe to call from any thread.
     *
@@ -181,7 +198,7 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       cookedAttributes = Some(terminal.enterRawMode())
       // Ask before telling. The probe has to come after raw mode — there is no reader for a reply before it — and
       // before the modes below, so a terminal that denies one is never sent it at all.
-      probed = probeCapabilities()
+      probed = queries.probeCapabilities(JLine3Backend.CapabilityProbeTimeout)
       // modern input modes; a terminal that answered nothing still gets them, because an unsupported private mode is
       // ignored by an overwhelming majority of terminals and switching the feature off on silence would disable it
       // almost everywhere. Only an explicit denial skips one.
@@ -189,28 +206,6 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       if probed.focusReporting.usable then write(AnsiSequences.EnableFocusReporting)
       if probed.kittyKeyboard.usable then write(AnsiSequences.PushKittyKeyboard)
     }
-
-  /** Writes the capability queries and reads what comes back, or skips the round trip entirely.
-    *
-    * DA1 goes last because it is the fence: terminals answer in the order the queries arrived, so its reply means
-    * everything that was going to be answered has been. A terminal that answers nothing at all costs the timeout once,
-    * at start-up, and leaves every field unknown — which is exactly today's behaviour, since unknown means "use it".
-    *
-    * `GLYPHORA_NO_CAPABILITY_PROBE` set to any non-empty value skips the round trip, for a CI harness or a terminal
-    * where even a short start-up read is unwanted. Skipping is safe by construction: it produces the same unknown value
-    * a silent terminal would.
-    */
-  private def probeCapabilities(): TerminalCapabilities =
-    if sys.env.get("GLYPHORA_NO_CAPABILITY_PROBE").exists(_.nonEmpty) then TerminalCapabilities.unknown
-    else
-      screenOwnership.synchronized {
-        write(AnsiSequences.queryPrivateMode(CapabilityReplies.SynchronizedOutputMode))
-        write(AnsiSequences.queryPrivateMode(CapabilityReplies.BracketedPasteMode))
-        write(AnsiSequences.queryPrivateMode(CapabilityReplies.FocusReportingMode))
-        write(AnsiSequences.QueryKittyKeyboard)
-        write(AnsiSequences.QueryPrimaryDeviceAttributes)
-      }
-      decoder.readCapabilityReport(JLine3Backend.CapabilityProbeTimeout)
 
   /** Re-pushes the kitty keyboard flags with "report event types" added.
     *
@@ -335,7 +330,8 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   /** Writes DECSET/DECRST 12 to switch the caret's blink on or off.
     *
-    * The suppression is remembered so that [[releaseTerminal]] can undo it — see `cursorBlinkSuppressed`.
+    * The suppression is remembered so that [[TerminalDressing.releaseTerminal]] can undo it — see
+    * `cursorBlinkSuppressed`.
     */
   override def setCursorBlink(blinking: Boolean): Either[BackendError, Unit] =
     attempt {
@@ -343,39 +339,10 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       cursorBlinkSuppressed = !blinking
     }
 
-  def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
-    Backend.requirePositiveTimeout(timeout)
-    if pendingInterrupt.getAndSet(false) then Right(Some(Event.Interrupt))
-    else
-      pendingResize.getAndSet(None) match
-        case Some(resized) => Right(Some(Event.Resize(resized)))
-        case None          =>
-          // something queued render-thread work while we were away: go round the loop instead of blocking again
-          if woken.getAndSet(false) then Right(None) else blockingRead(timeout)
+  def readEvent(timeout: Duration): Either[BackendError, Option[Event]] = pump.poll(timeout)
 
-  private def blockingRead(timeout: Duration): Either[BackendError, Option[Event]] =
-    pollingThread.set(Some(Thread.currentThread()))
-    // Re-checked *after* registering, closing the window this registration opens: a wake that landed between
-    // `readEvent`'s check and this registration found nobody to interrupt, so without this second look the render
-    // thread parks for the whole timeout — up to a tick interval, or 100 ms with no tick rate — before draining the
-    // work that wake was announcing. That is exactly the latency `wake()` exists to remove.
-    try if woken.getAndSet(false) then Right(None) else Right(decoder.decode(JLine3Backend.readTimeoutMillis(timeout)))
-    catch
-      case _: InterruptedIOException => Right(None) // woken deliberately by `wake()`
-      case NonFatal(error)           => Left(BackendError.Io(error))
-    finally
-      pollingThread.set(None) // no read is in flight any more: `wake` has nobody to interrupt
-      val _ = Thread.interrupted() // drop an interrupt that landed after the read completed
-
-  /** Cuts short an in-flight [[readEvent]].
-    *
-    * JLine's reader waits on a monitor and converts an interrupt into an `InterruptedIOException` that it throws *and
-    * clears* (`NonBlockingReaderImpl.read`), so the reader stays usable and no buffered input is lost.
-    */
-  override def wake(): Unit =
-    woken.set(true)
-    // a thread never interrupts its own read: the `woken` flag above already sends it back round the loop
-    pollingThread.get().filter(_ ne Thread.currentThread()).foreach(_.interrupt())
+  /** Cuts short an in-flight [[readEvent]]. Safe from any thread. */
+  override def wake(): Unit = pump.wake()
 
   override def clearRegion(kind: ClearType): Either[BackendError, Unit] =
     attempt {
@@ -393,82 +360,38 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * can see and undo.
     */
   override def requestSize(size: Size): Either[BackendError, Unit] =
-    require(size.width > 0 && size.height > 0, s"requestSize needs a positive size, got $size")
+    Backend.requirePositiveSize(size)
     attempt(write(AnsiSequences.resizeWindow(size)))
 
-  /** Writes `ESC[6n` and reads the terminal's reply off the input stream.
-    *
-    * The *read* deliberately runs outside `screenOwnership`, unlike the write in front of it. A read that held the
-    * monitor for the length of the timeout would block the signal handler that hands the terminal back on Ctrl+Z —
-    * exactly the key a user reaches for when something seems stuck. What protects the decoder from a second reader is
-    * the render-thread contract in [[Backend.queryCursorPosition]], not this monitor.
+  /** Asks the terminal where its cursor currently is, waiting up to `timeout` for the answer.
     *
     * A terminal that does not implement the report never answers, so the timeout expiring is reported as an unsupported
-    * terminal rather than as an I/O failure: nothing broke, the terminal simply cannot say.
+    * terminal rather than as an I/O failure: nothing broke, the terminal simply cannot say. The round trip itself —
+    * request under the monitor, reply read outside it — is [[ReplyQueries.cursorPosition]].
     */
   override def queryCursorPosition(timeout: Duration): Either[BackendError, Position] =
     Backend.requirePositiveTimeout(timeout)
-    attempt {
-      write(AnsiSequences.RequestCursorPosition)
-      decoder.readCursorReport(timeout)
-    }.flatMap {
+    attempt(queries.cursorPosition(timeout)).flatMap {
       case Some(position) => Right(position)
       case None           => Left(BackendError.UnsupportedTerminal("the terminal did not report its cursor position"))
     }
 
   override def scrollRegionUp(region: RowRange, lines: Int): Either[BackendError, Unit] =
-    scrollRegion(region, lines, ScrollDirection.Up)
+    scrollRegions.scroll(region, lines, ScrollDirection.Up)
 
   override def scrollRegionDown(region: RowRange, lines: Int): Either[BackendError, Unit] =
-    scrollRegion(region, lines, ScrollDirection.Down)
-
-  /** Confines scrolling to `region`, scrolls it, and releases the region again.
-    *
-    * The release is not deferred to teardown: a region left set makes every later scroll — this app's, and the user's
-    * shell after it exits — refuse to touch the rest of the screen.
-    *
-    * The diff baseline is shifted to match, so the next [[draw]] writes only the rows the scroll newly exposed. That
-    * shift is the entire saving. Without it the following frame would find every row of the band changed and repaint
-    * the lot, which is the work this call exists to avoid.
-    *
-    * A region reaching past the bottom of the terminal is refused rather than clamped: clamping would scroll a band the
-    * caller did not name, and the wrong rows moving is far harder to notice than a rejected call.
-    */
-  private def scrollRegion(region: RowRange, lines: Int, direction: ScrollDirection): Either[BackendError, Unit] =
-    if lines <= 0 then Right(())
-    else
-      size.flatMap { terminalSize =>
-        if region.bottom >= terminalSize.height then
-          Left(BackendError.UnsupportedTerminal(s"row range $region does not fit a terminal of $terminalSize"))
-        else
-          attempt {
-            screenOwnership.synchronized {
-              write(
-                AnsiSequences.setScrollRegion(region.top, region.bottom) +
-                  ScrollDirection.sequence(direction, lines) +
-                  AnsiSequences.ResetScrollRegion
-              )
-            }
-            baseline.shift(region, lines, direction)
-          }
-      }
+    scrollRegions.scroll(region, lines, ScrollDirection.Down)
 
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
     attempt(write(AnsiSequences.clipboardCopy(text)))
 
-  override def setTitle(title: String): Either[BackendError, Unit] =
-    attempt {
-      // the push has to happen before the first change, because that is the last moment the stack top is still the
-      // title the shell set; `compareAndSet` makes it happen exactly once however many times the app retitles itself
-      if titlePushed.compareAndSet(false, true) then write(AnsiSequences.PushTitle)
-      write(AnsiSequences.setTitle(title))
-    }
+  override def setTitle(title: String): Either[BackendError, Unit] = titleStack.set(title)
 
   override def suspend[A](body: => A): Either[BackendError, A] =
     attempt {
-      val released = releaseTerminal()
+      val released = dressing.releaseTerminal()
       try body
-      finally reacquireTerminal(released.state)
+      finally dressing.reacquireTerminal(released.state)
     }
 
   /** Writes the sequence through the same writer every frame goes out on, so it lands in order with them.
@@ -481,14 +404,8 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
 
   override def printAbove(lines: Seq[String]): Either[BackendError, Unit] =
     // step out to the primary screen so the lines land in real scrollback, print them, then step back in and repaint
-    suspend {
-      lines.foreach { line =>
-        // these strings reach the terminal uninterpreted, so they get the same control-stripping as link targets
-        terminal.writer().write(AnsiSequences.stripControls(line))
-        terminal.writer().write("\r\n")
-      }
-      terminal.writer().flush()
-    }
+    // these strings reach the terminal uninterpreted, so they get the same control-stripping as link targets
+    suspend(writeScrollbackRows(lines.map(AnsiSequences.stripControls)))
 
   /** Renders `widget` into a block `height` rows tall and prints it into the terminal's real scrollback, styling and
     * all.
@@ -506,15 +423,18 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     if height <= 0 then Right(())
     else
       attempt(Backend.renderBlock(currentSize.width, height, widget)).flatMap { buffer =>
-        suspend {
-          var y = 0
-          while y < height do
-            terminal.writer().write(frameEncoder.encodeRow(buffer, y))
-            terminal.writer().write("\r\n")
-            y += 1
-          terminal.writer().flush()
-        }
+        suspend(writeScrollbackRows((0 until height).map(frameEncoder.encodeRow(buffer, _))))
       }
+
+  /** Writes each row plus its line ending to the terminal, then flushes — the shared skeleton of [[printAbove]] and
+    * [[insertBefore]], run inside their `suspend` so the rows land in real scrollback.
+    */
+  private def writeScrollbackRows(rows: Seq[String]): Unit =
+    rows.foreach { row =>
+      terminal.writer().write(row)
+      terminal.writer().write("\r\n")
+    }
+    terminal.writer().flush()
 
   /** Scrolls the screen up by `n` rows with SU (`CSI n S`).
     *
@@ -538,13 +458,13 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * and the undressing failure is what gets reported because it is the one the user can see.
     */
   def close(): Either[BackendError, Unit] =
-    val released     = releaseTerminal()
-    // only if this backend actually pushed one: popping a stack this app never wrote to would discard someone else's
-    // title. `getAndSet` makes a second `close()` — the shutdown hook racing the runner's teardown — pop nothing.
-    val titleFailure =
-      if titlePushed.getAndSet(false) then attempt(write(AnsiSequences.PopTitle)).left.toOption else None
+    val released     = dressing.releaseTerminal()
+    val titleFailure = titleStack.release()
     val closed       = attempt(terminal.close())
-    released.failure.orElse(titleFailure).toLeft(()).flatMap(_ => closed)
+    // first failure wins, but by this line everything has been attempted either way — stopping early would leave the
+    // terminal half-dressed, which is worse than the failure itself
+    val firstFailure = released.failure.orElse(titleFailure)
+    firstFailure.fold(closed)(Left(_))
 
   /** Last-resort restore, for a shutdown hook that may be racing JLine's own terminal closer.
     *
@@ -553,8 +473,8 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
     * every teardown write is silently discarded. Every sequence emitted is an idempotent mode *reset*, so this is safe
     * to call even when nothing was enabled, and safe to call twice.
     *
-    * Deliberately takes no monitor either — unlike [[releaseTerminal]], this is the path that must still work when the
-    * render thread is wedged mid-frame, and a last-resort restore that can block is not one.
+    * Deliberately takes no monitor either — unlike [[TerminalDressing.releaseTerminal]], this is the path that must
+    * still work when the render thread is wedged mid-frame, and a last-resort restore that can block is not one.
     */
   override def emergencyRestore(): Unit =
     try
@@ -571,125 +491,38 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
       out.flush()
     catch case NonFatal(_) => ()
 
-  /** Hands the terminal back to the shell, returning what was active so [[reacquireTerminal]] can restore it, together
-    * with the first undress step that failed.
-    *
-    * Every step is attempted even after one fails: an undress that stops halfway leaves the shell on the alternate
-    * screen *and* in raw mode instead of just one of the two. The first failure is kept so `close()` can report it — it
-    * used to be logged and dropped, which made "your terminal is now unusable" the one failure this library could not
-    * tell anyone about.
-    *
-    * Called from two threads: the render thread (via [[suspend]], [[printAbove]] and `close()`) and JLine's
-    * signal-dispatch thread (via the SIGTSTP handler). Both take `screenOwnership` for the whole sequence, and so does
-    * the frame write in [[draw]] — which is the case the flags alone could never cover. Undressing writes
-    * `LeaveAlternateScreen`; a frame is a full screen of cursor moves, SGR sequences and box-drawing glyphs. A Ctrl+Z
-    * landing between the two halves of an unguarded `draw` would put that payload on the *primary* screen: the user's
-    * shell and their scrollback, which is durable and outlives the app. Nothing repairs it either, because the
-    * backend's diff still believes `baseline` is on screen. (The mirror case — SIGCONT racing a draw — is self-healing,
-    * since [[reacquireTerminal]] raises a full redraw.) A frame write costs microseconds, so the signal thread never
-    * waits perceptibly.
-    *
-    * What the monitor does *not* make atomic is a whole `suspend`: the body between release and reacquire runs without
-    * it, because that body is `$EDITOR`. A Ctrl+Z arriving then still interleaves two complete undress/redress
-    * sequences, which stays tolerable for the reason it always was — every step either way is an idempotent mode reset,
-    * so the worst outcome is a mode disabled or re-enabled twice, and the last [[reacquireTerminal]] to run leaves the
-    * terminal dressed as its snapshot describes. The flags themselves stay volatile because the single-step public
-    * operations ([[enableRawMode]], [[hideCursor]]) write them from outside this monitor.
-    */
-  private def releaseTerminal(): TerminalRelease = screenOwnership.synchronized:
-    val state    =
-      TerminalState(
-        isRawMode,
-        alternateScreenActive,
-        cursorHidden,
-        cursorShaped,
-        mouseCaptureActive,
-        cursorBlinkSuppressed,
-      )
-    val failures = Seq.newBuilder[BackendError]
-
-    def undress(active: Boolean, step: => Either[BackendError, Unit]): Unit =
-      if active then
-        step.left.foreach { error =>
-          JLine3Backend.logTeardownFailure(error)
-          failures += error
-        }
-
-    undress(state.mouse.isDefined, disableMouseCapture())
-    undress(state.cursorHidden, showCursor())
-    // An inline run leaves its last frame on the primary screen on purpose, so park the cursor on the line below the
-    // strip: without this the shell's next prompt would be drawn straight over the frame the app just left behind.
-    if inlineRows > 0 then
-      try
-        terminal.writer().write("\r\n")
-        terminal.writer().flush()
-      catch case NonFatal(_) => ()
-    undress(state.alternateScreen, leaveAlternateScreen())
-    undress(state.raw, disableRawMode())
-    // each step above already flushed its own sequence; this is belt-and-braces and stays silent, so that closing an
-    // already-closed terminal (the shutdown hook racing the normal teardown) reports nothing rather than a scare
-    try terminal.writer().flush()
-    catch case NonFatal(_) => ()
-    TerminalRelease(state, failures.result().headOption)
-
   /** Whether raw mode is currently on, which is exactly "we are holding someone's cooked attributes to put back". */
-  private def isRawMode: Boolean = cookedAttributes.nonEmpty
-
-  /** Restores what [[releaseTerminal]] undressed. Same two callers, same two threads, same monitor. */
-  private def reacquireTerminal(state: TerminalState): Unit = screenOwnership.synchronized:
-    if state.raw then bestEffort(enableRawMode())
-    if state.alternateScreen then bestEffort(enterAlternateScreen())
-    if state.cursorHidden then bestEffort(hideCursor())
-    if state.cursorBlinkSuppressed then bestEffort(setCursorBlink(false))
-
-    // the shape itself is not remembered, so a resumed app is handed a block: whichever shape it wants, it is a mode
-    // change away from asking for it again, and guessing wrongly here would be worse than a known starting point
-    if state.cursorShaped then bestEffort(setCursorShape(CursorShape.SteadyBlock))
-    state.mouse.foreach(mode => bestEffort(enableMouseCapture(mode)))
-    requestFullRedraw() // whatever ran in between owned the screen: repaint everything
+  private[terminal] def isRawMode: Boolean = cookedAttributes.nonEmpty
 
   private def onResize(): Unit =
     // the window moved, so a cached pixel size describes a window that no longer exists; the next `windowSize` re-asks
     pixelsAsked = false
     textAreaPixels = None
-    pendingResize.set(Some(currentSize))
-    wake()
+    pump.postResize(currentSize)
 
-  private def onInterrupt(): Unit =
-    pendingInterrupt.set(true)
-    wake()
+  private def onInterrupt(): Unit = pump.postInterrupt()
 
   /** SIGTSTP: undress the terminal, then stop for real by re-raising with the default disposition. */
   private def onStop(): Unit =
-    suspendedState = releaseTerminal().state
+    suspendedState = dressing.releaseTerminal().state
     JLine3Backend.stopSelf()
 
   /** SIGCONT: take the terminal back and force a full repaint at whatever size it is now. */
   private def onContinue(): Unit =
-    reacquireTerminal(suspendedState)
-    suspendedState = TerminalState.Undressed
+    dressing.reacquireTerminal(suspendedState)
+    suspendedState = TerminalDressing.TerminalState.Undressed
     onResize()
 
   private def currentSize: Size =
     val jlineSize = terminal.getSize
     Size(jlineSize.getColumns, jlineSize.getRows)
 
-  /** Runs a re-dressing step, reporting a failure rather than propagating it.
-    *
-    * Only [[reacquireTerminal]] uses this. Taking the terminal back has no caller that could act on a failure — it
-    * happens on JLine's signal-dispatch thread after SIGCONT, or inside a `finally` — and abandoning the remaining
-    * steps would leave the app running against a terminal dressed in neither shape. Undressing is the direction that
-    * *does* report, through [[releaseTerminal]].
-    */
-  private def bestEffort(step: Either[BackendError, Unit]): Unit =
-    step.left.foreach(error => System.err.println(s"glyphora: could not reclaim the terminal: ${error.message}"))
-
   /** Writes one sequence to the terminal and flushes it, under `screenOwnership`.
     *
     * Every sequence goes out under the monitor, so a Ctrl+Z cannot land between leaving the alternate screen and the
     * write and aim it at the user's shell. The monitor is reentrant, so a caller that needs a wider critical section —
-    * `draw`'s single batched frame, `probeCapabilities`' five queries, the two teardown paths — simply takes it and
-    * calls this.
+    * `draw`'s single batched frame, [[ReplyQueries.probeCapabilities]]' five queries, the two teardown paths — simply
+    * takes it and calls this.
     */
   private def write(sequence: String): Unit =
     screenOwnership.synchronized {
@@ -700,27 +533,6 @@ final class JLine3Backend private (terminal: Terminal, colorDepth: ColorDepth) e
   private def attempt[A](body: => A): Either[BackendError, A] =
     try Right(body)
     catch case NonFatal(error) => Left(BackendError.Io(error))
-
-/** Which terminal modes were active at a given moment, so they can be restored in the same shape. */
-private[terminal] final case class TerminalState(
-    raw: Boolean,
-    alternateScreen: Boolean,
-    cursorHidden: Boolean,
-    cursorShaped: Boolean,
-    mouse: Option[MouseCaptureMode],
-    cursorBlinkSuppressed: Boolean,
-)
-
-private[terminal] object TerminalState:
-  /** Nothing was dressed up: cooked mode, primary screen, visible, blinking cursor of the user's own shape, no mouse
-    * capture.
-    */
-  val Undressed: TerminalState = TerminalState(false, false, false, false, None, false)
-
-/** The outcome of handing the terminal back: the modes that were undressed (so they can be re-dressed) and the first
-  * step that failed while doing it, if any.
-  */
-private[terminal] final case class TerminalRelease(state: TerminalState, failure: Option[BackendError])
 
 object JLine3Backend:
 
@@ -826,26 +638,8 @@ object JLine3Backend:
     * no UI left for the line to corrupt.
     */
   private[terminal] def logTeardownFailure(error: BackendError): Unit =
-    System.err.println(s"glyphora: could not restore the terminal: ${error.message}")
+    reportTeardownFailure("could not restore the terminal", error)
 
-/** The "repaint every cell next frame" request that [[JLine3Backend]] uses to keep `baseline` render-thread-private.
-  *
-  * A separate value rather than a bare flag because the ordering is the whole point and is worth testing on its own:
-  * `draw` [[claim]]s before it composes a frame, so a [[raise]] from another thread *during* that frame is not consumed
-  * by it and survives for the next one. Writing the baseline directly from the raising thread would instead lose the
-  * repaint, because the in-flight frame's own copy would overwrite it.
-  *
-  * Every operation is safe from any thread.
-  */
-private[terminal] final class RedrawRequest:
-
-  private val raised = AtomicBoolean(false)
-
-  /** Asks the next claim to repaint everything. Idempotent: two raises before a claim are one repaint. */
-  def raise(): Unit = raised.set(true)
-
-  /** Takes the pending request, if any, and clears it. Call before composing the frame that will serve it. */
-  def claim(): Boolean = raised.getAndSet(false)
-
-  /** Whether a request is pending, without taking it. Test and diagnostic use only. */
-  def isPending: Boolean = raised.get()
+  /** The one place teardown failures are printed, parameterized by what was being attempted. */
+  private[terminal] def reportTeardownFailure(phrase: String, error: BackendError): Unit =
+    System.err.println(s"glyphora: $phrase: ${error.message}")

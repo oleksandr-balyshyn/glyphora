@@ -18,15 +18,18 @@ final case class BigText(
       var x = area.x
       content.foreach { char =>
         val glyph = BigText.Font.getOrElse(char.toUpper, BigText.Blank)
-        if x + BigText.GlyphWidth <= area.right then
-          glyph.zipWithIndex.foreach { (row, dy) =>
-            if dy < area.height then
-              row.zipWithIndex.foreach { (bit, dx) =>
-                if bit == '#' then buffer.set(x + dx, area.y + dy, Cell(pixel, style))
-              }
-          }
+        if x + BigText.GlyphWidth <= area.right then drawGlyph(buffer, area, x, glyph)
         x += BigText.GlyphWidth + 1
       }
+
+  /** Paints one glyph's `#` pixels at column `x`, clipped to the area's rows. */
+  private def drawGlyph(buffer: Buffer, area: Rect, x: Int, glyph: Vector[String]): Unit =
+    glyph.zipWithIndex.foreach { (row, dy) =>
+      if dy < area.height then
+        row.zipWithIndex.foreach { (bit, dx) =>
+          if bit == '#' then buffer.set(x + dx, area.y + dy, Cell(pixel, style))
+        }
+    }
 
   /** The cells this banner occupies when rendered: one glyph box per character with a blank column between them. The
     * height it is given makes no difference — a glyph is always [[BigText.GlyphHeight]] rows, clipped if there is less

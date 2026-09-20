@@ -183,7 +183,7 @@ private[terminal] final class InputDecoder(
     arrived()
 
   private def decodeFirst(first: Int): Option[Event] =
-    if first == 0x1b then decodeEscape() else decodeControl(first, KeyModifiers.None)
+    if first == Esc then decodeEscape() else decodeControl(first, KeyModifiers.None)
 
   /** One non-`ESC` input byte as a key, folding in whatever modifiers its prefix already established.
     *
@@ -247,10 +247,10 @@ private[terminal] final class InputDecoder(
       case c if c < 0      => key(KeyCode.Escape)
       case '['             => decodeCsi()
       case 'O'             => decodeSs3()
-      case 0x1b            =>
+      case Esc             =>
         // ESC ESC: the second ESC opens the *next* sequence, so it is handed back rather than swallowed. That is what
         // makes `ESC` followed by an arrow key report Escape and then Up instead of Escape and the literal text `[A`.
-        pushBack(0x1b)
+        pushBack(Esc)
         key(KeyCode.Escape)
       case ']' | 'P' | '_' => skipControlString()
       case c               => decodeControl(c, KeyModifiers.Alt)
@@ -279,7 +279,7 @@ private[terminal] final class InputDecoder(
       val c = next(escapeTimeoutMillis)
       consumed += 1
       if c < 0 || c == Bel then done = true
-      else if c == 0x1b then
+      else if c == Esc then
         val terminator = next(escapeTimeoutMillis)
         done = true
         // `ESC \` ends the string and means nothing else; anything else after the ESC is a new sequence that has to be
@@ -324,7 +324,7 @@ private[terminal] final class InputDecoder(
       val c    = next(escapeTimeoutMillis)
       val read = consumed + 1
       if c < 0 then CsiScan.Torn
-      else if c == 0x1b then
+      else if c == Esc then
         // an ESC means the sequence in flight was torn off by a new one; hand it back so the next `decode` re-parses it
         // rather than consuming the new sequence's `[` as this one's final byte
         pushBack(c)
@@ -338,25 +338,57 @@ private[terminal] final class InputDecoder(
 
     scan(consumed = 0, overrun = false)
 
+  /** Dispatches a complete CSI sequence to its decoding tier: mouse report, terminal reply, or key.
+    *
+    * The tiers are tried in this order on purpose, and the order is load-bearing twice over: the mouse forms claimed by
+    * [[isMouseReport]] overlap the urxvt form's bare `M` final byte, and a terminal reply (`?`/`>`/`=` parameters, a
+    * cursor report's `R`, XTWINOPS's `t`) must be recognised before the key path can reach for it, because a reply is
+    * never a key. Within each tier the same rule holds — see [[decodeMouseForm]] and [[decodeTerminalReply]].
+    */
   private def decodeCsiFinal(params: String, finalByte: Int): Option[Event] =
+    if isMouseReport(params, finalByte) then decodeMouseForm(params, finalByte)
+    else if isTerminalReply(params, finalByte) then decodeTerminalReply(params, finalByte)
+    else decodeCsiModifiedKey(params, finalByte)
+
+  /** Whether a sequence is one of the three mouse report forms: X10 (`CSI M`), SGR (`CSI < … M/m`) or urxvt (`CSI …
+    * M`).
+    */
+  private def isMouseReport(params: String, finalByte: Int): Boolean =
+    finalByte == 'M' || (params.startsWith("<") && finalByte == 'm')
+
+  /** The three mouse report forms, in the order they have to be tried. */
+  private def decodeMouseForm(params: String, finalByte: Int): Option[Event] =
     if params.isEmpty && finalByte == 'M' then decodeX10Mouse()
     else if params.startsWith("<") && (finalByte == 'M' || finalByte == 'm') then
       decodeSgrMouse(params.drop(1), finalByte == 'M')
     // empty params and the `<` prefix were both taken above, so a bare `M` here is the urxvt form
-    else if finalByte == 'M' then decodeUrxvtMouse(params)
-    else if isPrivateReply(params) then captureProbeReply(params, finalByte)
+    else decodeUrxvtMouse(params)
+
+  /** Whether a sequence is a reply from the terminal rather than user input: a private-parameter reply (DA, DECRPM,
+    * XTVERSION), a cursor-position report, or an XTWINOPS answer.
+    */
+  private def isTerminalReply(params: String, finalByte: Int): Boolean =
+    isPrivateReply(params) || (awaitingCursorReport && finalByte == 'R') || finalByte == 't'
+
+  /** The terminal replies, in the order they have to be tried. Every branch reports no event: a reply is captured,
+    * never delivered.
+    */
+  private def decodeTerminalReply(params: String, finalByte: Int): Option[Event] =
+    if isPrivateReply(params) then captureProbeReply(params, finalByte)
     // A cursor-position report is caught here rather than down in `decodeCsiKey`, because its second parameter is a
     // *column*, and the modifier extraction below rejects any second parameter above 16 — so a report from anywhere
     // right of column 16 would never have reached a case at all.
     else if awaitingCursorReport && finalByte == 'R' then captureCursorReport(parameterNumbers(params))
     // XTWINOPS answers `CSI 4 ; height ; width t`. Caught here, before the key path, because `t` is not a key on any
     // terminal and a reply must never be dispatched into whatever has focus.
-    else if finalByte == 't' then captureTextAreaReport(parameterNumbers(params))
-    else
-      val numbers = parameterNumbers(params)
-      numbers.drop(1).headOption match
-        case Some(code) => modifiersFromCode(code).flatMap(decodeCsiKey(numbers, params, finalByte, _))
-        case None       => decodeCsiKey(numbers, params, finalByte, KeyModifiers.None)
+    else captureTextAreaReport(parameterNumbers(params))
+
+  /** A CSI key sequence: the modifier, when the sequence carries one, is the second parameter. */
+  private def decodeCsiModifiedKey(params: String, finalByte: Int): Option[Event] =
+    val numbers = parameterNumbers(params)
+    numbers.drop(1).headOption match
+      case Some(code) => modifiersFromCode(code).flatMap(decodeCsiKey(numbers, params, finalByte, _))
+      case None       => decodeCsiKey(numbers, params, finalByte, KeyModifiers.None)
 
   /** The numeric parameters of a CSI sequence, in order.
     *
@@ -563,23 +595,51 @@ private[terminal] final class InputDecoder(
     * ordinary keystrokes and dispatch it into whatever has focus: a `q` quits, an Enter submits. Past the cap the text
     * is truncated but the terminator is still consumed, so the stream stays aligned. [[PasteDrainLimit]] bounds even
     * that, so a paste whose terminator never arrives cannot spin here forever.
+    *
+    * The two negative answers the reader can give are told apart here, exactly as [[decodeOnce]] tells them apart for
+    * an event's first byte — and for the same reason, one sequence deeper. [[EndOfStream]] is permanent: no later read
+    * can produce the rest of the payload, so the paste ends where the stream did. A timed-out read is not: the sender
+    * has merely gone quiet for [[PasteTimeoutMillis]], which a large paste arriving over a slow link does routinely,
+    * and which the reader produces on its own whenever it is configured to return as soon as no byte is ready. Ending
+    * the paste there truncated it *and* left the rest of the payload and the `CSI 201~` terminator in the buffer, to be
+    * dispatched into the focused widget one keystroke at a time — a paste containing a `q` quit the application and one
+    * containing a newline submitted the form. So a stall is waited out instead, up to [[PasteStallLimit]] consecutive
+    * empty reads, and the counter resets the moment a character arrives; only a sender that has gone quiet for the
+    * whole of that budget gives up, and then there is nothing left in the buffer to misread anyway.
     */
   private def decodePaste(): Event =
     val content = StringBuilder()
     val tail    = StringBuilder()
     var read    = 0
+    var stalls  = 0
     var done    = false
+
+    /** Whether the sender has gone quiet for the whole of [[PasteStallLimit]]: the point at which the rest of the
+      * payload is given up on.
+      */
+    def stallExpired: Boolean = stalls >= PasteStallLimit
+
+    /** Folds one arrived character into the payload and the rolling tail, answering whether it completed the
+      * terminator.
+      */
+    def consumePayloadChar(c: Int): Boolean =
+      stalls = 0
+      read += 1
+      if content.length < PasteLimit then content.append(c.toChar)
+      tail.append(c.toChar)
+      if tail.length > PasteEnd.length then tail.deleteCharAt(0)
+      if isTerminator(tail) then
+        trimTerminator(content, read)
+        true
+      else false
+
     while !done && read < PasteDrainLimit do
       val c = next(PasteTimeoutMillis)
-      if c < 0 then done = true
-      else
-        read += 1
-        if content.length < PasteLimit then content.append(c.toChar)
-        tail.append(c.toChar)
-        if tail.length > PasteEnd.length then tail.deleteCharAt(0)
-        if isTerminator(tail) then
-          trimTerminator(content, read)
-          done = true
+      if c == EndOfStream then done = true
+      else if c < 0 then
+        stalls += 1
+        if stallExpired then done = true
+      else done = consumePayloadChar(c)
     Event.Paste(content.result())
 
   /** Drops whatever part of the paste terminator was appended to `content`.
@@ -756,6 +816,7 @@ private[terminal] object InputDecoder:
 
   private val NoChar             = -1
   private val Bel                = 7
+  private val Esc                = 0x1b
   private val PasteTimeoutMillis = 200L
   private val PasteLimit         = 1 << 20
   private val PasteStart         = 200
@@ -779,6 +840,16 @@ private[terminal] object InputDecoder:
     */
   private val PasteDrainLimit = PasteLimit * 16
 
+  /** How many consecutive empty reads — [[PasteTimeoutMillis]] apiece — a paste waits through before giving up on the
+    * rest of its payload.
+    *
+    * It bounds only a sender that has gone *silent*: the count resets on every character that arrives, so a slow paste
+    * that keeps trickling is never abandoned, however long it takes in total. Two seconds of silence is far longer than
+    * any gap inside one real paste, and short enough that a terminal which dropped the terminator on the floor cannot
+    * hold the render thread.
+    */
+  private val PasteStallLimit = 10
+
   /** How many bytes one CSI sequence may consume before it is abandoned outright. Only reachable once the parameter
     * budget has already overflowed, and far past anything a real terminal emits.
     */
@@ -792,9 +863,9 @@ private[terminal] object InputDecoder:
     */
   private val MaxModifierCode = 16
 
-  /** Nanoseconds in a millisecond, for the deadline arithmetic in `readCursorReport`. A named constant so the two
-    * places that convert cannot disagree by a factor of a thousand — which reads as a query that returns instantly or
-    * one that hangs, and neither points at the arithmetic.
+  /** Nanoseconds in a millisecond, for the deadline arithmetic in `awaitReply`. A named constant so the two places that
+    * convert cannot disagree by a factor of a thousand — which reads as a query that returns instantly or one that
+    * hangs, and neither points at the arithmetic.
     */
   private val NanosPerMilli = 1000000L
 

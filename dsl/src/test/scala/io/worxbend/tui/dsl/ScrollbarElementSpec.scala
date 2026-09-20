@@ -33,7 +33,7 @@ final class ScrollbarElementSpec extends AnyFunSuite:
     assert(bufferLine(buffer, 0).trim.isEmpty)
 
   test("vertical undoes a horizontal on an element built elsewhere"):
-    assert(scrollbar(8).horizontal.vertical.orientation == Direction.Vertical)
+    assert(scrollbar(8).horizontal.vertical.options.orientation == Direction.Vertical)
 
   test("symbols replaces the two glyphs the bar is drawn from"):
     assert(column(scrollbar(8).symbols(".", "#"), 3, 4) == "##..")

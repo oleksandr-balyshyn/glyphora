@@ -29,7 +29,9 @@ final class Buffer(val area: Rect):
     s"Buffer area $area covers ${area.cellCount} cells, more than the ${Buffer.MaxCells} a buffer can address",
   )
 
-  private val cells: Array[Cell] = Array.fill(area.area)(Cell.Empty)
+  // `private[core]` rather than `private` on the three planes: the frame-diff engine ([[FrameDiff]]) walks them by
+  // index from outside the class, which is the same trade the diff loop already made for `next`'s arrays
+  private[core] val cells: Array[Cell] = Array.fill(area.area)(Cell.Empty)
 
   /** Which cells are the second column of a two-column grapheme, recorded by [[set]] rather than measured.
     *
@@ -40,7 +42,7 @@ final class Buffer(val area: Rect):
     * real content as a continuation as soon as a second, independent write landed on that column — and [[diff]] then
     * silently refused to flush it.
     */
-  private val continuations: Array[Boolean] = Array.fill(area.area)(false)
+  private[core] val continuations: Array[Boolean] = Array.fill(area.area)(false)
 
   /** The per-position [[DiffDirective]] of each cell, held as the enum's ordinal.
     *
@@ -50,10 +52,10 @@ final class Buffer(val area: Rect):
     * value two fields wide.
     *
     * Ordinals in an `Array[Byte]` rather than an `Array[DiffDirective]`: a reference array would cost eight bytes per
-    * cell — 80 kB on a 200x50 frame — to store one of three constants. The encoding never escapes this class;
+    * cell — 80 kB on a 200x50 frame — to store one of three constants. The encoding never escapes `tui-core`;
     * [[diffDirective]] hands out the enum value.
     */
-  private val directives: Array[Byte] = new Array[Byte](area.area)
+  private[core] val directives: Array[Byte] = new Array[Byte](area.area)
 
   /** The cell at `(x, y)`, or [[Cell.Empty]] when the coordinates fall outside `area`. */
   def get(x: Int, y: Int): Cell = cellAt(x, y)
@@ -307,28 +309,20 @@ final class Buffer(val area: Rect):
   /** [[setStyle]] with the replacement derived from each cell's current style — a dim, a tint, a background swap that
     * keeps the foreground it finds.
     *
-    * `transform` must be a pure function of the style it is handed, because it is not called once per cell:
-    * neighbouring cells nearly always share one style, so the most recent input and its result are remembered and the
-    * transform re-run only where the style actually changes. Without that, a full-frame pass would build a fresh
-    * `Style` for each of ten thousand cells to arrive at the same answer ten thousand times.
+    * `transform` must be a pure function of the style it is handed, because it is not called once per cell: the pass
+    * runs through a [[MemoizedStyleTransform]], so the transform re-runs only where the style actually changes. Without
+    * that, a full-frame pass would build a fresh `Style` for each of ten thousand cells to arrive at the same answer
+    * ten thousand times.
     */
   def mapStyle(region: Rect)(transform: Style => Style): Unit =
     val clipped = region.intersection(area)
     if !clipped.isEmpty then
-      // `primed` distinguishes "no cell seen yet" from "the last cell happened to carry Style.Default", so the
-      // transform is never run on a style no cell in the region actually has
-      var primed  = false
-      var lastIn  = Style.Default
-      var lastOut = Style.Default
+      val memoized = MemoizedStyleTransform(transform)
       forEachIndex(clipped): (_, _, index) =>
         if !continuations(index) then
-          val cell = cells(index)
-          // reference equality first: a run of cells written by one call shares the very same `Style` object
-          if !primed || !((cell.style eq lastIn) || cell.style == lastIn) then
-            lastIn = cell.style
-            lastOut = transform(cell.style)
-            primed = true
-          if lastOut != cell.style then cells(index) = cell.copy(style = lastOut)
+          val cell   = cells(index)
+          val styled = memoized(cell.style)
+          if styled != cell.style then cells(index) = cell.copy(style = styled)
 
   /** Copies `region` of `source` into this buffer with the region's top-left landing at `at`.
     *
@@ -357,28 +351,44 @@ final class Buffer(val area: Rect):
         val y  = clipped.y + dy
         var dx = 0
         while dx < clipped.width do
-          val cell                  = source.get(clipped.x + dx, y)
-          // A column the source reserved for the wide grapheme in the column before it needs no write of its own: the
-          // previous iteration copied that grapheme, and writing it reserved the destination column in the same
-          // breath. Writing the source's blank over the reservation would instead read as content landing on a
-          // reserved column and blank the grapheme just copied. `dx == 0` is not such a column — the grapheme that
-          // owned it is outside the region being copied, so the half is blanked by `safe` below rather than skipped.
-          val ownedByPreviousColumn = dx > 0 && source.isContinuation(clipped.x + dx, y)
-          if !ownedByPreviousColumn then
-            val safe =
-              // a wide grapheme cut in half by the *window* edge would render torn — blank the half instead. This is
-              // a different edge from the destination's own: `set` blanks a wide cell that does not fit the
-              // destination row, but a window narrower than the destination would otherwise let the glyph spill one
-              // column past the region the caller asked to copy.
-              if dx == 0 && source.isContinuation(clipped.x, y) then Cell.Empty
-              else if dx == clipped.width - 1 && CharWidth.ofCluster(cell.symbol) == 2 then Cell.Empty
-              else cell
-            set(originX + dx, originY + dy, safe)
+          if !ownedByPreviousColumn(source, clipped, dx, y) then
+            set(originX + dx, originY + dy, cellToCopy(source, clipped, dx, y))
           // the directive travels with the cell: a sub-buffer that reserved columns for an image protocol must keep
           // that reservation once it is composited into the frame, or the frame flushes over the picture
           copyDirective(originX + dx, originY + dy, source, clipped.x + dx, y)
           dx += 1
         dy += 1
+
+  /** Whether the source column is reserved for the wide grapheme in the column before it, which the previous iteration
+    * of [[blit]] already copied — writing it reserved the destination column in the same breath. Such a column needs no
+    * write of its own: writing the source's blank over the reservation would instead read as content landing on a
+    * reserved column and blank the grapheme just copied. `dx == 0` is not such a column — the grapheme that owned it is
+    * outside the region being copied, so the half is blanked by [[cellToCopy]] rather than skipped.
+    */
+  private def ownedByPreviousColumn(source: Buffer, clipped: Rect, dx: Int, y: Int): Boolean =
+    dx > 0 && source.isContinuation(clipped.x + dx, y)
+
+  /** The cell [[blit]] writes for one source position, with the two window-edge cases blanked.
+    *
+    * A wide grapheme cut in half by the *window* edge would render torn — the half is blanked instead. This is a
+    * different edge from the destination's own: [[set]] blanks a wide cell that does not fit the destination row, but a
+    * window narrower than the destination would otherwise let the glyph spill one column past the region the caller
+    * asked to copy.
+    */
+  private def cellToCopy(source: Buffer, clipped: Rect, dx: Int, y: Int): Cell =
+    val cell = source.get(clipped.x + dx, y)
+    if cutByWindowStart(source, clipped, dx, y) || cutByWindowEnd(clipped, dx, cell) then Cell.Empty
+    else cell
+
+  /** Whether the window's first column lands on the second half of a wide grapheme whose left half lies outside the
+    * region being copied.
+    */
+  private def cutByWindowStart(source: Buffer, clipped: Rect, dx: Int, y: Int): Boolean =
+    dx == 0 && source.isContinuation(clipped.x, y)
+
+  /** Whether the window's last column holds a wide grapheme whose second half the window cuts off. */
+  private def cutByWindowEnd(clipped: Rect, dx: Int, cell: Cell): Boolean =
+    dx == clipped.width - 1 && CharWidth.ofCluster(cell.symbol) == 2
 
   /** Carries one position's [[DiffDirective]] from `source` to this buffer, allocating nothing.
     *
@@ -435,17 +445,17 @@ final class Buffer(val area: Rect):
   def foreachIn(region: Rect)(visit: (Int, Int, Cell) => Unit): Unit =
     forEachIndex(region)((x, y, index) => visit(x, y, cells(index)))
 
-  /** The private counterpart of [[foreachIn]]: the same clipped row-major walk, under the same contract — the bounds
-    * check happens once on `region` rather than once per cell, and nothing is allocated per position.
+  /** The index-based counterpart of [[foreachIn]]: the same clipped row-major walk, under the same contract — the
+    * bounds check happens once on `region` rather than once per cell, and nothing is allocated per position.
     *
     * What it yields is the difference. `foreachIn` hands out the [[Cell]], which is all a reader of a finished frame
-    * needs; the walks inside this class mostly want the backing array index instead, because they read or write
+    * needs; the walks over this grid mostly want the backing array index instead, because they read or write
     * [[continuations]] and [[directives]] at that position too and would otherwise recompute [[indexOf]] per plane.
     *
     * `inline`, with an `inline` function parameter, so each use is expanded into its caller as the plain nested `while`
     * pair it was written as: no closure is allocated and no call is made per cell.
     */
-  private inline def forEachIndex(region: Rect)(inline visit: (Int, Int, Int) => Unit): Unit =
+  private[core] inline def forEachIndex(region: Rect)(inline visit: (Int, Int, Int) => Unit): Unit =
     val clipped = region.intersection(area)
     var y       = clipped.y
     while y < clipped.bottom do
@@ -561,17 +571,11 @@ final class Buffer(val area: Rect):
   /** [[diff]] without the intermediate objects: calls `emit(x, y, cell)` for each changed cell, in row-major order.
     *
     * This is what backends use on the hot path — it allocates nothing per cell (no `Position`, no tuple, no iterator
-    * state), which matters because a 200x50 frame is 10 000 cells and runs at the tick rate.
-    *
-    * Both frames are walked by array index rather than by coordinate. `require` above has already established that they
-    * are the same width and start at the same column, which is exactly the condition under which one index names the
-    * same position in both grids, so the bounds check `get(x, y)` performs per read has nothing left to discover. A
-    * coordinate is computed only for a cell that is actually emitted. Each row is compared as a whole first: on a
-    * typical frame almost every row is untouched, and one scan that stops at the first difference is cheaper than
-    * running the per-cell emit machinery across it.
+    * state), which matters because a 200x50 frame is 10 000 cells and runs at the tick rate. The walk itself is
+    * [[FrameDiff]]'s.
     */
   def diff(next: Buffer, emit: (Int, Int, Cell) => Unit): Unit =
-    diff(next, emit, clearEmojiTrailingCell = false)
+    diff(next, emit, TrailingCellPolicy.Keep)
 
   /** [[diff]] with a workaround for terminals that draw an emoji presentation sequence in one column.
     *
@@ -581,94 +585,24 @@ final class Buffer(val area: Rect):
     * sequence in a single column anyway, and then the second column is never repainted at all, so whatever stood there
     * in an earlier frame stays on screen next to the emoji.
     *
-    * With `clearEmojiTrailingCell` set, a changed cell holding such a cluster is followed by a blank emitted into its
+    * With [[TrailingCellPolicy.Clear]], a changed cell holding such a cluster is followed by a blank emitted into its
     * reserved column, carrying the owning cell's style so a background fill stays continuous across the pair.
     *
-    * It is off by default, and it is a backend's decision rather than the buffer's, because the opposite artifact is
-    * just as real: on a terminal that does draw both columns, that blank lands on the right half of the glyph and clips
-    * it. Only the code that knows which terminal it is talking to can pick the lesser of the two.
+    * [[TrailingCellPolicy.Keep]] is the default, and picking between the two is a backend's decision rather than the
+    * buffer's, because the opposite artifact is just as real: on a terminal that does draw both columns, that blank
+    * lands on the right half of the glyph and clips it. Only the code that knows which terminal it is talking to can
+    * pick the lesser of the two.
     *
-    * The extra emission costs a boolean test per changed cell — the reserved-column flag is an array read and is
-    * checked before the cluster is scanned for the selector — so a frame with no emoji in it pays nothing measurable.
+    * The extra emission costs one enum test per changed cell — the reserved-column flag is an array read and is checked
+    * before the cluster is scanned for the selector — so a frame with no emoji in it pays nothing measurable.
     */
-  def diff(next: Buffer, emit: (Int, Int, Cell) => Unit, clearEmojiTrailingCell: Boolean): Unit =
+  def diff(next: Buffer, emit: (Int, Int, Cell) => Unit, trailingCellPolicy: TrailingCellPolicy): Unit =
     require(
       area.x == next.area.x && area.y == next.area.y && area.width == next.area.width,
       s"diff expects two buffers with the same origin and width, got $area and ${next.area}; " +
         "call emitAll on the new frame when the previous one is unusable (a resize, a resume from suspend)",
     )
-    // a next frame one row shorter is diffed over the rows the two share, the way ratatui does; the rows only `next`
-    // has are the caller's to paint, because this buffer has nothing to compare them against
-    val rows              = math.min(area.height, next.area.height)
-    val width             = area.width
-    val originX           = area.x
-    val originY           = area.y
-    // `next.cells` and `next.continuations` are readable from here because Scala's `private` is private to the class,
-    // not to the instance: no accessor is added, and neither array escapes the method
-    val nextCells         = next.cells
-    val nextContinuations = next.continuations
-    val nextDirectives    = next.directives
-    var row               = 0
-    while row < rows do
-      val start = row * width
-      val end   = start + width
-      if !rowUnchanged(nextCells, nextContinuations, nextDirectives, start, end) then
-        val y     = originY + row
-        var index = start
-        while index < end do
-          val candidate = nextCells(index)
-          // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
-          val changed   = nextDirectives(index) == Buffer.AlwaysUpdateCode ||
-            !sameCell(cells(index), candidate) ||
-            vacatedContinuation(nextContinuations, index, start) ||
-            released(nextDirectives, index)
-          if changed && !nextContinuations(index) && nextDirectives(index) != Buffer.SkipCode then
-            emit(originX + index - start, y, candidate)
-            // the reserved column exists only for a two-column cluster, so this is the pair the workaround is about
-            if clearEmojiTrailingCell && index + 1 < end && nextContinuations(index + 1)
-              && CharWidth.hasEmojiPresentationSelector(candidate.symbol)
-            then emit(originX + index + 1 - start, y, Cell(" ", candidate.style))
-          index += 1
-      row += 1
-
-  /** Whether the row spanning `[from, until)` of the flat grids is identical in both frames — the same cells and the
-    * same wide-grapheme continuation flags.
-    *
-    * The flags are part of the comparison and not an afterthought: [[vacatedContinuation]] emits a column whose cell
-    * did not change but whose continuation flag did, and a scan that looked only at cells would skip the row it lives
-    * in.
-    *
-    * `previous` is this buffer; the arrays are index-aligned because [[diff]] has already required both frames to be
-    * the same width and to start at the same column.
-    */
-  private def rowUnchanged(
-      nextCells: Array[Cell],
-      nextContinuations: Array[Boolean],
-      nextDirectives: Array[Byte],
-      from: Int,
-      until: Int,
-  ): Boolean =
-    var index = from
-    while index < until && positionUnchanged(nextCells, nextContinuations, nextDirectives, index) do index += 1
-    index == until
-
-  /** Whether one position of the row can be passed over without running the per-cell emit machinery.
-    *
-    * Three questions, and a "no" to any of them puts the row back on the slow path: the cell must be the same value,
-    * the wide-grapheme continuation flag must be the same (see [[vacatedContinuation]]), and the [[DiffDirective]] must
-    * be the same *and* not [[DiffDirective.AlwaysUpdate]] — a position that asks to be re-emitted is by definition one
-    * this scan must not declare finished.
-    */
-  private def positionUnchanged(
-      nextCells: Array[Cell],
-      nextContinuations: Array[Boolean],
-      nextDirectives: Array[Byte],
-      index: Int,
-  ): Boolean =
-    sameCell(cells(index), nextCells(index)) &&
-      continuations(index) == nextContinuations(index) &&
-      directives(index) == nextDirectives(index) &&
-      nextDirectives(index) != Buffer.AlwaysUpdateCode
+    new FrameDiff(this, next, emit, trailingCellPolicy).run()
 
   /** Emits every cell of this buffer, in the same row-major order and with the same continuation rule as [[diff]] — the
     * full repaint the first frame after a resize or a resume from suspend needs.
@@ -685,8 +619,7 @@ final class Buffer(val area: Rect):
     * buffer.
     */
   def emitAll(emit: (Int, Int, Cell) => Unit): Unit =
-    forEachIndex(area): (x, y, index) =>
-      if !continuations(index) && directives(index) != Buffer.SkipCode then emit(x, y, cells(index))
+    FrameDiff.emitAll(this, emit)
 
   /** Content equality: the same `area`, the same [[Cell]] at every position, and the same continuation flags.
     *
@@ -781,47 +714,7 @@ final class Buffer(val area: Rect):
   private def sameCell(a: Cell, b: Cell): Boolean =
     (a eq b) || a == b
 
-  /** Whether a style still paints its column when the glyph in it is a blank space.
-    *
-    * A background colour is drawn across the whole cell rather than behind the glyph's ink, and so are reverse video,
-    * underline, blink and crossed-out (all four draw something — a filled block, a rule, a strike — that a space does
-    * not hide). A foreground colour or bold, by contrast, is invisible on a space. This is the test for "the terminal
-    * would still be showing something here", which is what makes a vacated column worth repainting.
-    */
-  private def visibleOnBlank(style: Style): Boolean =
-    style.bg.exists(_ != Color.Reset) ||
-      style.modifiers.hasAny(Modifiers.Reverse | Modifiers.Underline | Modifiers.Blink | Modifiers.CrossedOut)
-
-  /** Whether `(x, y)` is a column this frame gave up: the previous frame drew the right half of a wide grapheme there,
-    * `next` does not, and that grapheme's style painted across the column.
-    *
-    * Before this test, such a column was never flushed. Both frames hold [[Cell.Empty]] at it — the previous frame's
-    * continuation cell is an ordinary blank, and so is the new content — so the cell compare said "unchanged" and the
-    * backend skipped it. On screen the terminal was still painting the right half of the old glyph: replace a
-    * red-backed `漢` with a plain `a` and the red block to its right stayed. Emitting the new (blank) cell repaints it.
-    *
-    * The `index - 1` read is the grapheme that owned the continuation. `rowStart` is where the row begins in the flat
-    * grid, and a continuation flag can never sit in the row's first column — a wide grapheme reserves the cell to its
-    * *right* — so the guard against reading the previous row's last cell is the flag itself, checked first.
-    *
-    * `nextContinuations` is `next`'s flag array and `index` is the position in both grids, which [[diff]] may pass
-    * directly because it has required the two frames to be the same width and to start at the same column.
-    */
-  private def vacatedContinuation(nextContinuations: Array[Boolean], index: Int, rowStart: Int): Boolean =
-    continuations(index) && !nextContinuations(index) && index > rowStart && visibleOnBlank(cells(index - 1).style)
-
-  /** Whether `index` is a position an out-of-band painter has just given back: [[DiffDirective.Skip]] in this (the
-    * previous) frame and not in `next`.
-    *
-    * Such a position has to be emitted whatever its content says. The buffer never flushed it while it was skipped, so
-    * the grid's memory of it describes a cell the terminal was never told about — and the picture that was really there
-    * is one this renderer cannot compare against. An ordinary content compare would call the position unchanged and
-    * leave the last frame of a dismissed image on screen.
-    */
-  private def released(nextDirectives: Array[Byte], index: Int): Boolean =
-    directives(index) == Buffer.SkipCode && nextDirectives(index) != Buffer.SkipCode
-
-  /** The single bounds-check-and-index site behind [[get]]. Kept separate from [[get]] so the hot diff loop reads a
+  /** The single bounds-check-and-index site behind [[get]]. Kept separate from [[get]] so the hot paths read a
     * `private` method the compiler can inline freely.
     */
   private def cellAt(x: Int, y: Int): Cell =
@@ -847,9 +740,9 @@ object Buffer:
   val MaxCells: Long = Int.MaxValue.toLong
 
   /** The [[DiffDirective]] ordinals the diff loop compares against, resolved once rather than per cell. */
-  private val DefaultCode: Byte      = DiffDirective.Default.ordinal.toByte
-  private val SkipCode: Byte         = DiffDirective.Skip.ordinal.toByte
-  private val AlwaysUpdateCode: Byte = DiffDirective.AlwaysUpdate.ordinal.toByte
+  private val DefaultCode: Byte            = DiffDirective.Default.ordinal.toByte
+  private[core] val SkipCode: Byte         = DiffDirective.Skip.ordinal.toByte
+  private[core] val AlwaysUpdateCode: Byte = DiffDirective.AlwaysUpdate.ordinal.toByte
 
   /** A fresh buffer covering `area` with every cell already set to `cell` — the starting point for a layer that is
     * opaque rather than transparent. The plain constructor `Buffer(area)` still starts out as [[Cell.Empty]]

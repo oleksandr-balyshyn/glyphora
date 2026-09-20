@@ -2,7 +2,7 @@ package io.worxbend.tui.terminal
 
 import io.worxbend.tui.core.{Buffer, Event, Position, Size, Widget}
 
-import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.duration.Duration
 
@@ -11,8 +11,13 @@ import scala.concurrent.duration.Duration
   *
   * Thread contract: the runner calls `readEvent`/`draw` on the render thread while a test thread posts events and
   * inspects `lastDrawn` — hence the blocking queue and volatile snapshot.
+  *
+  * Every operation succeeds unless a test says otherwise through [[failNext]], which is the seam that makes the
+  * `Either[BackendError, A]` half of [[Backend]] reachable from above this module.
   */
 final class HeadlessBackend(initialSize: Size) extends Backend:
+
+  import HeadlessBackend.Op
 
   private val events                                           = LinkedBlockingQueue[Event]()
   @volatile private var terminalSize                           = initialSize
@@ -38,6 +43,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val suspendCounter                          = AtomicLong(0)
   private val wakeCounter                             = AtomicLong(0)
   private val fullRedrawCounter                       = AtomicLong(0)
+  private val emergencyRestoreCounter                 = AtomicLong(0)
   private val printedLines                            = scala.collection.mutable.ArrayBuffer.empty[String]
   private val rawWrites                               = scala.collection.mutable.ArrayBuffer.empty[String]
   private val clears                                  = scala.collection.mutable.ArrayBuffer.empty[ClearType]
@@ -46,7 +52,20 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   private val scrolls                                 =
     scala.collection.mutable.ArrayBuffer.empty[(RowRange, Int, ScrollDirection)]
 
-  def size: Either[BackendError, Size] = Right(terminalSize)
+  /** The failures armed by [[failNext]], at most one per operation and removed as each is consumed. A concurrent map
+    * rather than a guarded `var`, because a test arms a failure from its own thread while the render thread is the one
+    * that performs — and so disarms — the operation.
+    */
+  private val armedFailures = ConcurrentHashMap[Op, BackendError]()
+
+  /** Performs `effect` and reports success, unless [[failNext]] armed `op`: the effect is then skipped entirely and the
+    * armed error is returned, disarming it. The one place the injection is consulted, so an operation that forgets to
+    * route through here is an operation no test can make fail.
+    */
+  private def attempt[A](op: Op)(effect: => A): Either[BackendError, A] =
+    Option(armedFailures.remove(op)).toLeft(effect)
+
+  def size: Either[BackendError, Size] = attempt(Op.Size)(terminalSize)
 
   /** The cell size, plus whatever [[pixelsTo]] was last told. `pixels` is empty until a test sets one, which is what a
     * real terminal that does not answer `CSI 14 t` also reports.
@@ -54,13 +73,13 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   override def windowSize: Either[BackendError, WindowSize] = Right(WindowSize(terminalSize, pixelSize))
 
   def draw(buffer: Buffer): Either[BackendError, Unit] =
-    lastFrame = Some(buffer.snapshot)
-    val _ = drawCounter.incrementAndGet()
-    Right(())
+    attempt(Op.Draw) {
+      lastFrame = Some(buffer.snapshot)
+      val _ = drawCounter.incrementAndGet()
+    }
 
   def enableRawMode(): Either[BackendError, Unit] =
-    rawMode = true
-    Right(())
+    attempt(Op.EnableRawMode) { rawMode = true }
 
   def disableRawMode(): Either[BackendError, Unit] =
     if !rawMode then Left(BackendError.NotInRawMode)
@@ -69,8 +88,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
       Right(())
 
   def enterAlternateScreen(): Either[BackendError, Unit] =
-    alternateScreen = true
-    Right(())
+    attempt(Op.EnterAlternateScreen) { alternateScreen = true }
 
   def leaveAlternateScreen(): Either[BackendError, Unit] =
     alternateScreen = false
@@ -79,16 +97,14 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
   def enableMouseCapture(): Either[BackendError, Unit] = enableMouseCapture(MouseCaptureMode.Buttons)
 
   override def enableMouseCapture(mode: MouseCaptureMode): Either[BackendError, Unit] =
-    mouseCapture = Some(mode)
-    Right(())
+    attempt(Op.EnableMouseCapture) { mouseCapture = Some(mode) }
 
   def disableMouseCapture(): Either[BackendError, Unit] =
     mouseCapture = None
     Right(())
 
   def hideCursor(): Either[BackendError, Unit] =
-    cursorVisible = false
-    Right(())
+    attempt(Op.HideCursor) { cursorVisible = false }
 
   def showCursor(): Either[BackendError, Unit] =
     cursorVisible = true
@@ -110,8 +126,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     Right(())
 
   override def reserveInlineRows(rows: Int): Either[BackendError, Unit] =
-    inlineRows = math.max(0, rows)
-    Right(())
+    attempt(Op.ReserveInlineRows) { inlineRows = math.max(0, rows) }
 
   /** Records where the hardware caret was asked to go, so a test can assert on it exactly as it asserts on a drawn
     * cell. Nothing is validated here: the real terminal clamps an out-of-range position and a test that expects
@@ -123,13 +138,17 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     Right(())
 
   def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
+    // outside `attempt`: a non-positive timeout is a defect in the caller, not an injected device failure, and it is
+    // still a defect when a test has armed this read to fail
     Backend.requirePositiveTimeout(timeout)
-    val polled =
-      if timeout.isFinite then Option(events.poll(timeout.toMillis, TimeUnit.MILLISECONDS))
-      else Some(events.take())
-    if polled.isEmpty then
-      val _ = idleReadCounter.incrementAndGet()
-    Right(polled)
+    attempt(Op.ReadEvent) {
+      val polled =
+        if timeout.isFinite then Option(events.poll(timeout.toMillis, TimeUnit.MILLISECONDS))
+        else Some(events.take())
+      if polled.isEmpty then
+        val _ = idleReadCounter.incrementAndGet()
+      polled
+    }
 
   /** Records the wake so tests can assert that queued render-thread work asked for one.
     *
@@ -157,7 +176,7 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     * the app asked for the right shape without also depending on the grant.
     */
   override def requestSize(size: Size): Either[BackendError, Unit] =
-    require(size.width > 0 && size.height > 0, s"requestSize needs a positive size, got $size")
+    Backend.requirePositiveSize(size)
     sizeRequests.synchronized { val _ = sizeRequests += size }
     resizeTo(size)
     Right(())
@@ -241,20 +260,54 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
       Right(())
 
   /** Releases the simulated terminal, so a test can assert the runner tore everything down on its way out. There is no
-    * device to fail, so this always succeeds.
+    * device to fail, so this succeeds unless [[failNext]] armed it — the one case that models the worst failure this
+    * library has, a shell handed back in raw mode on the alternate screen.
     */
   def close(): Either[BackendError, Unit] =
-    mouseCapture = None
-    cursorVisible = true
-    cursorBlinking = true
+    attempt(Op.Close) {
+      mouseCapture = None
+      cursorVisible = true
+      cursorBlinking = true
 
-    cursorShape = CursorShape.Default
-    alternateScreen = false
-    rawMode = false
-    caret = None
-    Right(())
+      cursorShape = CursorShape.Default
+      alternateScreen = false
+      rawMode = false
+      caret = None
+    }
+
+  /** Counts the emergency restore rather than performing one.
+    *
+    * There is no device here to wrestle back, and every field this class models is already reset by [[close]], which
+    * the runner calls first on both of the paths that reach here. What is left to observe is *that it happened* — and
+    * that is precisely the half a test above `terminal` needs, since the contract for a failed setup and for the JVM
+    * shutdown hook is that this call follows `close` rather than replacing it. See [[emergencyRestoreCount]].
+    */
+  override def emergencyRestore(): Unit =
+    val _ = emergencyRestoreCounter.incrementAndGet()
 
   // ---- test-driver surface ----
+
+  /** Arms `op` to fail once with `error`, instead of doing what it normally does.
+    *
+    * The seam that makes [[Backend]]'s central claim testable from above this module: failures are values because
+    * callers can meaningfully degrade, and until something can fail there is nothing to degrade from. The failure paths
+    * worth reaching this way are the ones with no other route to them — a `setup()` that dies half-way and hands the
+    * shell back in raw mode on the alternate screen, a `draw` that cannot reach the terminal, an input stream that
+    * closes under the event loop.
+    *
+    * One-shot: the next call to `op` consumes the arming, and every call after it behaves exactly as it always did. A
+    * backend nothing has armed is byte-for-byte the backend it always was, so this costs an existing test nothing.
+    *
+    * The armed operation does not happen at all — a failed `draw` retains no frame, a failed `enableRawMode` leaves
+    * [[isRawMode]] `false`. That is stricter than a real terminal, whose half-finished write may well have taken
+    * effect, and the strictness is the point: "the caller was told it failed" and "nothing changed" become one
+    * assertion each rather than one judgement call.
+    *
+    * Arming an op that is already armed replaces the pending error rather than queueing a second one. Safe from any
+    * thread, like [[postEvent]].
+    */
+  def failNext(op: Op, error: BackendError): Unit =
+    val _ = armedFailures.put(op, error)
 
   /** Queues a synthetic event for the runner to read. Safe from any thread. */
   def postEvent(event: Event): Unit = events.put(event)
@@ -285,16 +338,14 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
     var draining  = codeUnits.nonEmpty
     while draining do
       decoder.decode(0L) match
-        // A decoded event does not end the drain — the decoder may still hold a pushed-back character — but the
-        // same exhaustion test has to run here too, or a decoder that keeps answering would spin forever.
-        case Some(event) =>
-          postEvent(event)
-          draining = remaining.hasNext || decoder.hasPushback
-        // an undecodable sequence yields no event but may have consumed only part of the input, so keep going while
-        // there is any left — or while the decoder is holding a character it pushed back, which is the whole reason a
-        // decoded event does not end the loop either. `ESC [ ESC` ends that way: the torn CSI hands the trailing `ESC`
-        // back, and only the next decode turns it into the Escape keypress a real terminal would have delivered
-        case None        => draining = remaining.hasNext || decoder.hasPushback
+        case Some(event) => postEvent(event)
+        case None        => ()
+      // Re-checked after every decode, event or not. A decoded event does not end the drain — the decoder may still
+      // hold a pushed-back character — and an undecodable sequence yields no event but may have consumed only part of
+      // the input. `ESC [ ESC` ends that way: the torn CSI hands the trailing `ESC` back, and only the next decode
+      // turns it into the Escape keypress a real terminal would have delivered. The test has to run after a decoded
+      // event too, or a decoder that keeps answering once the script has run dry would spin forever.
+      draining = remaining.hasNext || decoder.hasPushback
 
   /** Sets the pixel size [[windowSize]] reports, or clears it with `None`.
     *
@@ -328,6 +379,12 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** How many times a full repaint was requested via [[requestFullRedraw]]. */
   def fullRedrawCount: Long = fullRedrawCounter.get()
+
+  /** How many times [[emergencyRestore]] was called — the last-resort teardown a runner owes after a failed setup and
+    * from its JVM shutdown hook. `0` for a run that ended cleanly, because the tidy [[close]] path is then the whole
+    * story.
+    */
+  def emergencyRestoreCount: Long = emergencyRestoreCounter.get()
 
   /** Every region scroll asked for via [[scrollRegionUp]] or [[scrollRegionDown]], in order, as
     * `(rows, lines, direction)`.
@@ -397,3 +454,42 @@ final class HeadlessBackend(initialSize: Size) extends Backend:
 
   /** The window title most recently requested via [[setTitle]], if any. */
   def titleContents: Option[String] = lastTitle
+
+object HeadlessBackend:
+
+  /** Which [[HeadlessBackend]] operation [[HeadlessBackend.failNext]] arms to fail.
+    *
+    * Deliberately not one case per [[Backend]] method. These are the operations whose failure a caller above `terminal`
+    * has to *do* something about — dress the terminal, read input, flush a frame, hand the terminal back — and listing
+    * the rest would fill the enum with cases no test has a reason to reach for while suggesting the coverage is
+    * complete. Both `enableMouseCapture` overloads share [[EnableMouseCapture]], because the no-argument one delegates
+    * to the other.
+    */
+  enum Op:
+
+    /** `size`, which a frame asks for before it composes: fails the frame before the app's render function runs. */
+    case Size
+
+    /** `draw`: the frame was composed and could not be flushed. */
+    case Draw
+
+    /** `readEvent`: the input stream broke underneath the event loop. */
+    case ReadEvent
+
+    /** `enableRawMode`, the first step of a runner's setup — so nothing after it is even attempted. */
+    case EnableRawMode
+
+    /** `enterAlternateScreen`: a full-screen setup dies half-way, with raw mode already on. */
+    case EnterAlternateScreen
+
+    /** `reserveInlineRows`: the inline viewport's counterpart to [[EnterAlternateScreen]]. */
+    case ReserveInlineRows
+
+    /** `hideCursor`, the last step of a setup every run performs. */
+    case HideCursor
+
+    /** `enableMouseCapture`, either overload — the first setup step a run performs only when configured to. */
+    case EnableMouseCapture
+
+    /** `close`: the terminal could not be handed back, which is the failure the user notices most. */
+    case Close

@@ -30,12 +30,10 @@ final case class LineGauge(
       val lineWidth = cursor.remaining
       if lineWidth > 0 then
         val glyphs = preset.glyphs(clamped, lineWidth)
-        val filled = preset.filledCells(clamped, lineWidth)
+        val filled = preset.filledCellsInclusiveOfBoundary(clamped, lineWidth)
         val fill   = fillRamp.fold(filledStyle)(ramp => filledStyle.withFg(ramp.at(clamped)))
         glyphs.zipWithIndex.foreach: (glyph, index) =>
-          // the boundary cell counts as filled for styling: it is part of the bar, not part of the track
-          val isFilled = index <= filled && (index < filled || preset.isSubCell)
-          buffer.set(lineStart + index, area.y, Cell(glyph, if isFilled then fill else style))
+          buffer.set(lineStart + index, area.y, Cell(glyph, if index < filled then fill else style))
 
 object LineGauge:
 

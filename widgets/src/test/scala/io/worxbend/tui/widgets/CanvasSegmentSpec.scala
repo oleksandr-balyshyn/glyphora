@@ -13,7 +13,7 @@ import org.scalatest.funsuite.AnyFunSuite
   */
 final class CanvasSegmentSpec extends AnyFunSuite:
 
-  private val unit = (0.0, 1.0)
+  private val unit = Bounds(0.0, 1.0)
 
   /** Every column of `row` that holds something other than a blank. */
   private def litColumns(lines: Seq[String], row: Int): Seq[Int] =
@@ -27,7 +27,7 @@ final class CanvasSegmentSpec extends AnyFunSuite:
 
   test("the same line is drawn identically whatever the world scale"):
     def linesFor(scale: Double): Seq[String] =
-      val bounds = (0.0, scale)
+      val bounds = Bounds(0.0, scale)
       val canvas =
         Canvas(bounds, bounds, Seq(Shape.SegmentShape(0.0, scale / 2, scale, scale / 2)), marker = "*")
       trimmedLines(rendered(canvas, 20, 5))
@@ -48,7 +48,8 @@ final class CanvasSegmentSpec extends AnyFunSuite:
     assert((0 until 9).forall(row => litColumns(lines, row).size == 1))
 
   test("a segment arriving from far off-screen draws a solid run up to where it stops"):
-    val canvas = Canvas((0.0, 10.0), (0.0, 10.0), Seq(Shape.SegmentShape(-1000.0, 5.0, 5.0, 5.0)), marker = "*")
+    val canvas =
+      Canvas(Bounds(0.0, 10.0), Bounds(0.0, 10.0), Seq(Shape.SegmentShape(-1000.0, 5.0, 5.0, 5.0)), marker = "*")
     val lines  = trimmedLines(rendered(canvas, 11, 11))
     // world x 0..5 of 0..10 is the left half of an 11-cell row, inclusive of the midpoint.
     assert(lines(5) == "******")
@@ -73,7 +74,7 @@ final class CanvasSegmentSpec extends AnyFunSuite:
     assert(lit.last >= 7 && lit.last <= 8)
 
   test("an enormous world renders in bounded time and touches both ends"):
-    val huge   = (0.0, 1e9)
+    val huge   = Bounds(0.0, 1e9)
     val canvas = Canvas(huge, huge, Seq(Shape.SegmentShape(0.0, 0.0, 1e9, 1e9)), marker = "*")
     val buffer = rendered(canvas, 5, 5)
     assert(buffer.get(0, 4).symbol == "*")
@@ -93,7 +94,7 @@ final class CanvasSegmentSpec extends AnyFunSuite:
   test("degenerate inputs render without throwing"):
     val zeroLength = Canvas(unit, unit, Seq(Shape.SegmentShape(0.5, 0.5, 0.5, 0.5)), marker = "*")
     assert(trimmedLines(rendered(zeroLength, 5, 5)).count(_.nonEmpty) == 1)
-    val flatBounds = Canvas((1.0, 1.0), unit, Seq(Shape.SegmentShape(1.0, 0.0, 1.0, 1.0)), marker = "*")
+    val flatBounds = Canvas(Bounds(1.0, 1.0), unit, Seq(Shape.SegmentShape(1.0, 0.0, 1.0, 1.0)), marker = "*")
     assert(trimmedLines(rendered(flatBounds, 5, 5)).forall(_.isEmpty))
     val noRoom     = Canvas(unit, unit, Seq(Shape.SegmentShape(0.0, 0.0, 1.0, 1.0)), marker = "*")
     assert(trimmedLines(rendered(noRoom, 0, 0)).forall(_.isEmpty))

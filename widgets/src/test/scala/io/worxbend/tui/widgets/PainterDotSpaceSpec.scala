@@ -10,7 +10,7 @@ import org.scalatest.funsuite.AnyFunSuite
   */
 final class PainterDotSpaceSpec extends AnyFunSuite:
 
-  private val unit = (0.0, 1.0)
+  private val unit = Bounds(0.0, 1.0)
 
   private def painterOn(width: Int, height: Int, resolution: CanvasResolution): Painter =
     Painter(Rect(0, 0, width, height), unit, unit, resolution, "•")
@@ -22,8 +22,8 @@ final class PainterDotSpaceSpec extends AnyFunSuite:
 
   test("bounds hands back exactly the world rectangle the canvas was given"):
     assert(
-      Painter(Rect(0, 0, 2, 2), (-1.0, 5.0), (2.0, 8.0), CanvasResolution.Cell, "•").bounds ==
-        ((-1.0, 5.0), (2.0, 8.0))
+      Painter(Rect(0, 0, 2, 2), Bounds(-1.0, 5.0), Bounds(2.0, 8.0), CanvasResolution.Cell, "•").bounds ==
+        (Bounds(-1.0, 5.0), Bounds(2.0, 8.0))
     )
 
   test("getPoint puts world y-max at dot row zero, at every resolution"):
@@ -50,7 +50,7 @@ final class PainterDotSpaceSpec extends AnyFunSuite:
     assert(painter.getPoint(0.5, Double.NegativeInfinity).isEmpty)
 
   test("getPoint refuses degenerate bounds and an empty area"):
-    val flat  = Painter(Rect(0, 0, 4, 3), (2.0, 2.0), unit, CanvasResolution.Cell, "•")
+    val flat  = Painter(Rect(0, 0, 4, 3), Bounds(2.0, 2.0), unit, CanvasResolution.Cell, "•")
     assert(flat.getPoint(2.0, 0.5).isEmpty)
     val empty = painterOn(0, 0, CanvasResolution.Braille)
     assert(empty.dotSize == (0, 0))

@@ -23,8 +23,8 @@ import io.worxbend.tui.core.{Buffer, Line, Rect, Style}
   */
 final class Painter private[widgets] (
     area: Rect,
-    xBounds: (Double, Double),
-    yBounds: (Double, Double),
+    xBounds: Bounds,
+    yBounds: Bounds,
     resolution: CanvasResolution,
     marker: String,
 ):
@@ -32,8 +32,10 @@ final class Painter private[widgets] (
   private val surface                = SubCellSurface(area, resolution, marker)
   private val styles                 = Array.fill(surface.slotCount)(Style.Default)
   private val (dotsAcross, dotsDown) = SubCell.dotsPerCell(resolution)
-  private val (xMin, xMax)           = xBounds
-  private val (yMin, yMax)           = yBounds
+  private val xMin                   = xBounds.min
+  private val xMax                   = xBounds.max
+  private val yMin                   = yBounds.min
+  private val yMax                   = yBounds.max
 
   /** Whether the world rectangle has extent on both axes. A degenerate bound (`xMin == xMax`) has no mapping onto dots
     * at all, so every paint is dropped rather than divided by zero.
@@ -47,13 +49,13 @@ final class Painter private[widgets] (
     */
   private val labels = scala.collection.mutable.ArrayBuffer.empty[(Int, Int, Line)]
 
-  /** The world rectangle this painter maps, as `((xMin, xMax), (yMin, yMax))`.
+  /** The world rectangle this painter maps, as `(xBounds, yBounds)`.
     *
     * A shape that clips or scan-converts has to know what it is being drawn inside. Without it the only thing a shape
     * can do is sample its own outline in world units and hope the density matches the surface, which is how a line
     * drawn under bounds of `0.0` to `1.0` used to come out as a handful of scattered dots.
     */
-  def bounds: ((Double, Double), (Double, Double)) = (xBounds, yBounds)
+  def bounds: (Bounds, Bounds) = (xBounds, yBounds)
 
   /** The dot grid's extent as `(columns, rows)` — the exclusive upper bound of [[paintDot]]'s arguments. Both are `0`
     * on an empty area, which makes every paint a no-op.
@@ -169,14 +171,23 @@ final class Painter private[widgets] (
           val lastColumn  = math.max(c0, c1)
           (firstColumn to lastColumn).foreach { column =>
             val (leftY, rightY) = worldYsInColumn(fromX, fromY, toX, toY, column)
-            nearestRow(leftY).zip(nearestRow(rightY)).foreach { (leftRow, rightRow) =>
-              val top    = math.min(math.min(leftRow, rightRow), baselineRow)
-              val bottom = math.max(math.max(leftRow, rightRow), baselineRow)
-              (top to bottom).foreach(row => paintDot(column, row, style))
-            }
+            fillDotColumn(column, leftY, rightY, baselineRow, style)
           }
         }
       }
+
+  /** Lights every dot of one column between the segment and the baseline.
+    *
+    * `leftY` and `rightY` are the world ys the segment has at the column's two edges — see [[worldYsInColumn]] — and a
+    * y outside the bounds is pulled onto the nearest edge rather than dropped, for the reason [[paintFilledSegment]]
+    * spells out: a value off the top of the range still fills the whole column beneath it.
+    */
+  private def fillDotColumn(column: Int, leftY: Double, rightY: Double, baselineRow: Int, style: Style): Unit =
+    nearestRow(leftY).zip(nearestRow(rightY)).foreach { (leftRow, rightRow) =>
+      val top    = math.min(math.min(leftRow, rightRow), baselineRow)
+      val bottom = math.max(math.max(leftRow, rightRow), baselineRow)
+      (top to bottom).foreach(row => paintDot(column, row, style))
+    }
 
   /** The world y the segment has at each edge of one dot column, as `(at the left edge, at the right edge)`.
     *

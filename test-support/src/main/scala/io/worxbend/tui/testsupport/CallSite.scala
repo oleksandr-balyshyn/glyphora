@@ -26,10 +26,14 @@ private[testsupport] object CallSite:
 
   /** The classes whose frames are dropped: the helpers that throw. Named one by one rather than matched by package,
     * because this library's own test suites live in that same package — trimming by package alone would throw away the
-    * very frame the trimming exists to expose whenever a glyphora suite is the caller. A new helper that throws an
-    * assertion adds its name here.
+    * very frame the trimming exists to expose whenever a glyphora suite is the caller. The names are derived from
+    * compile-time references, so renaming a helper cannot leave a stale string behind; a new helper that throws an
+    * assertion adds its reference here.
     */
-  private val Helpers: Set[String] = Set("BufferAssertions", "GoldenFrames", "GoldenFixtures", "Pilot", "CallSite")
+  private val Helpers: Set[String] =
+    (Set[Object](BufferAssertions, GoldenFixtures, GoldenFrames, CallSite).map(_.getClass.getName) +
+      classOf[Pilot].getName)
+      .map(_.stripPrefix(LibraryPackage).takeWhile(_ != '$'))
 
   /** Whether `frame` belongs to one of the [[Helpers]]. Companion objects and lambdas append `$…` to the class name, so
     * only the part before the first `$` is compared.

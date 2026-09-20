@@ -13,7 +13,8 @@ import scala.concurrent.duration.DurationInt
   *   - a refresh on a timer that does its blocking work off the render thread and lands the result back on it;
   *   - derived statistics as `Computed` fields on the app rather than arithmetic inside `view`;
   *   - `DataTableState.invalidate()`, without which a refresh that keeps the row count keeps the old ordering for ever;
-  *   - a selection pinned to a *process*, so a row that moves under a re-sort takes the highlight with it.
+  *   - a selection anchored to a *process* by row key, so a row that moves under a re-sort takes the highlight with it
+  *     — the pid is the `KeyedRow` key, never parsed back out of a formatted cell.
   *
   * It runs on any machine: [[ProcessSource.detect]] uses live `ps` output when it can and a synthetic list when it
   * cannot, and the tests always use the synthetic one.
@@ -40,17 +41,16 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
 
   /** Sort column and direction, filter text, selection and scroll offset. The widget half is rebuilt every frame; this
     * half is created once and never replaced, or every refresh would reset the user's view.
+    *
+    * The state is typed on the row key — the pid — because the widget records the selected row's key on every frame and
+    * re-anchors the highlight to it after a re-sort or a data refresh; that anchor is what lets everything below speak
+    * in pids rather than row numbers.
     */
-  val tableState: DataTableState = DataTableState()
+  val tableState: DataTableState[Int] = DataTableState()
 
   val filterInput: TextInputState = TextInputState()
 
   private val filterOpen: Signal[Boolean] = Signal(false)
-
-  /** Which *process* is selected. `DataTableState.selected` is an index into the filtered, sorted rows and means
-    * something different after every refresh; a pid does not.
-    */
-  private var selectedPid: Option[Int] = None
 
   private var ticksUntilRefresh: Int = 0
 
@@ -94,7 +94,6 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
         // stands in for the data with its *row count*. A refresh that returns the same number of processes with
         // different numbers in them would otherwise keep the previous ordering indefinitely.
         tableState.invalidate()
-        restoreSelection()
       case Left(error)    =>
         // toasts age in ticks, not seconds, so the lifetime has to be computed from the tick rate
         notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning, duration = 3.seconds)
@@ -117,8 +116,11 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
   )
 
   private def sortBy(column: Int): Unit =
+    // read the anchor *before* the sort changes what the view's indices mean
+    val pinned = selectedProcessId
     tableState.sortBy(column) // the same column twice flips the direction — that rule lives in the widget state
-    restoreSelection() // sorting moves every row; the selection has to follow its process to the new index
+    // the next frame re-anchors on its own; reselecting here covers a sort that lands before any frame does
+    pinned.foreach(reselect)
 
   /** Enter: hide the filter box and keep filtering. The text stays in `filterInput`, so `/` reopens the box with the
     * same substring still in it and the table never flickers back to the full list.
@@ -128,52 +130,47 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
 
   /** Escape: throw the filter away and show every process again.
     *
-    * `setFilter("")` also drops the widget's selection and scroll offset, which is why `restoreSelection()` runs right
-    * after it — the highlight follows its *process* back into the unfiltered list rather than landing on whatever row
-    * happens to sit at the old index.
+    * `setFilter("")` also drops the widget's selection and scroll offset, so the pid is selected again right after it —
+    * the highlight follows its *process* back into the unfiltered list rather than landing on whatever row happens to
+    * sit at the old index.
     */
   private def cancelFilter(): Unit =
     filterInput.clear()
+    val pinned = selectedProcessId
     tableState.setFilter("")
-    restoreSelection()
+    pinned.foreach(reselect)
     filterOpen.set(false)
 
-  // ---- selection, pinned to a process rather than to a row ----
+  // ---- selection, anchored to a process by the row's key ----
 
   /** The rows the table is showing right now, in sort order — the domain `tableState.selected` indexes into. */
-  private def visibleRows: Seq[Seq[String]] = buildTable(processes.peek).visibleRows(tableState)
+  private def visibleRows: Seq[KeyedRow[Int]] = buildTable(processes.peek).visibleRows(tableState)
 
-  /** Rows are strings by the time the widget sees them, so reading the selection back means parsing the PID cell. That
-    * is the cost of a table whose API is `Seq[Seq[String]]`; the alternative is a parallel index the sort would
-    * immediately invalidate.
+  /** Puts the selection back on `pid` after something dropped it or moved every row — a filter edit, a re-sort. A no-op
+    * when the process is not in the current view: it may have left the data or the filter, and `selectKey` says so by
+    * answering `false`.
     */
-  private def pidOf(row: Seq[String]): Option[Int] = row.headOption.flatMap(_.trim.toIntOption)
-
-  /** Pins the selection to a process by reading the PID out of the row the table is currently highlighting.
-    *
-    * `rows` is passed in rather than read from [[visibleRows]] again because the caller has just built that list —
-    * rebuilding it here would run every `String.format` in [[cellsOf]] a second time per keystroke, and would leave the
-    * reader to prove that the two independently computed lists still agree. Render thread only: it reads `tableState`.
-    */
-  private def rememberSelection(rows: Seq[Seq[String]]): Unit =
-    selectedPid = tableState.selected.flatMap(rows.lift).flatMap(pidOf)
-
-  private def restoreSelection(): Unit =
-    val rows = visibleRows
-    tableState.selected = selectedPid.map(pid => rows.indexWhere(pidOf(_).contains(pid))).filter(_ >= 0)
+  private def reselect(pid: Int): Unit =
+    val _ = buildTable(processes.peek).selectKey(tableState, pid)
 
   private def moveSelection(delta: Int): Unit =
     val rows = visibleRows
     if delta < 0 then tableState.selectPrevious(rows.size) else tableState.selectNext(rows.size)
-    rememberSelection(rows)
 
-  /** The pid under the highlight, for tests and for anything that would act on the selection (a `kill` key). */
-  def selectedProcessId: Option[Int] = selectedPid
+  /** One steering step that also claims the event: keys and the wheel all dispatch through here. */
+  private def steer(delta: Int): Boolean =
+    moveSelection(delta)
+    true
+
+  /** The pid under the highlight, for tests and for anything that would act on the selection (a `kill` key). The row's
+    * key *is* the pid, so this reads the widget's own selection anchor rather than parsing a formatted cell.
+    */
+  def selectedProcessId: Option[Int] = buildTable(processes.peek).selectedKey(tableState)
 
   /** The pids the table is showing, in sort order — the projection the tests assert against, and the same view
     * `tableState.selected` indexes into.
     */
-  def visibleProcessIds: Seq[Int] = visibleRows.flatMap(pidOf)
+  def visibleProcessIds: Seq[Int] = visibleRows.map(_.key)
 
   // ---- view ----
 
@@ -186,12 +183,14 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
     ).onKeyEvent(handleUnclaimedKey)
 
   /** Pushes the input's text into the table state, but only when it actually changed: `setFilter` also clears the
-    * selection and the scroll offset, and doing that on every frame would make the table impossible to use.
+    * selection and the scroll offset, and doing that on every frame would make the table impossible to use. The pid is
+    * selected again right after, so the highlight keeps following its process through each keystroke.
     */
   private def syncFilter(): Unit =
     if tableState.filter != filterInput.value then
+      val pinned = selectedProcessId
       tableState.setFilter(filterInput.value)
-      restoreSelection()
+      pinned.foreach(reselect)
 
   private def summaryPanel(shown: Int)(using ReactiveScope, Theme): Element =
     val stats = summary.get
@@ -230,69 +229,50 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
         ).length(1)
       )
 
-  private def tableElement(table: DataTable): Element =
-    dataTable(table, tableState)
-      .onKeyEvent {
-        // handled here rather than left to the widget's built-in Up/Down so that every move also records *which
-        // process* is selected; the built-in only knows about row indices
-        case KeyEvent(KeyCode.Down, _) =>
-          moveSelection(1)
-          true
-        case KeyEvent(KeyCode.Up, _)   =>
-          moveSelection(-1)
-          true
+  private def tableElement(table: DataTable[Int]): Element =
+    dataTable(table, tableState).onMouseEvent { event =>
+      // `DataTableElement` has no built-in wheel behavior of its own, unlike `list`; Up/Down it handles itself,
+      // and the render re-anchors the highlight to the row's pid either way
+      event.kind match
+        case MouseEventKind.ScrollDown => steer(1)
+        case MouseEventKind.ScrollUp   => steer(-1)
         case _                         => false
-      }
-      .onMouseEvent { event =>
-        // `DataTableElement` has no built-in wheel behavior of its own, unlike `list`
-        event.kind match
-          case MouseEventKind.ScrollDown =>
-            moveSelection(1)
-            true
-          case MouseEventKind.ScrollUp   =>
-            moveSelection(-1)
-            true
-          case _                         => false
-      }
-      .fill
+    }.fill
 
   /** Up/Down while the filter box holds focus. The table consumes them first whenever the table is focused, so this
     * only ever fires for the other case — the reader can keep steering the list while still typing.
     */
   private def handleUnclaimedKey(event: KeyEvent): Boolean =
     event.code match
-      case KeyCode.Down =>
-        moveSelection(1)
-        true
-      case KeyCode.Up   =>
-        moveSelection(-1)
-        true
+      case KeyCode.Down => steer(1)
+      case KeyCode.Up   => steer(-1)
       case _            => false
 
   // ---- rows ----
 
   /** A fresh `DataTable` per call: it is an immutable case class over the rows, and cheap. Only `tableState` persists.
+    *
+    * Each row is keyed by its pid — the identity the selection follows across re-sorts and refreshes. `cells` stays the
+    * projection the widget sorts, filters and draws; the record is never parsed back out of its own formatting.
     */
-  private def buildTable(rows: Seq[ProcessInfo]): DataTable =
+  private def buildTable(rows: Seq[ProcessInfo]): DataTable[Int] =
     DataTable(
       columns = Seq("   PID", "USER", " CPU%", " MEM%", "COMMAND"),
-      rows = rows.map(cellsOf),
+      rows = rows.map(process => KeyedRow(process.pid, cellsOf(process))),
       widths = Seq(
         Constraint.Length(PidWidth + 2),
-        Constraint.Length(10),
+        Constraint.Length(UserWidth),
         Constraint.Length(NumberWidth + 2),
         Constraint.Length(NumberWidth + 2),
         Constraint.Fill(1),
       ),
     )
 
-  /** Numbers are right-aligned to a fixed width, which buys two things at once.
-    *
-    * `DataTable` has no column alignment, so padding is the only way to make a numeric column readable. And it makes
-    * the column sort correctly whichever branch the widget takes: it compares cells numerically when every one of them
-    * parses as a number, and lexicographically otherwise — and for non-negative numbers padded to one common width and
-    * one decimal place, those two orderings agree. Add a unit suffix here and that stops being true, which is why the
-    * units live in the header.
+  /** Numbers are right-aligned to a fixed width rather than through `DataTableOptions.alignments`, because alignment
+    * would buy only the look. The padding also makes the column sort correctly whichever branch the widget takes: it
+    * compares cells numerically when every one of them parses as a number, and lexicographically otherwise — and for
+    * non-negative numbers padded to one common width and one decimal place, those two orderings agree. Add a unit
+    * suffix here and that stops being true, which is why the units live in the header.
     */
   private def cellsOf(process: ProcessInfo): Seq[String] =
     Seq(
@@ -315,6 +295,8 @@ object ProcmonApp:
 
   private val PidWidth    = 6
   private val NumberWidth = 5
+  // Must stay >= the longest synthetic user name (`www-data`, `postgres`) or the column truncates it.
+  private val UserWidth   = 10
 
   private val MaxRefreshSeconds = 10
 

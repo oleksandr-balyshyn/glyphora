@@ -15,10 +15,12 @@ final case class PieChart(
   def render(area: Rect, buffer: Buffer): Unit =
     val total = data.map((_, value) => value).filter(_ > 0).sum
     if !area.isEmpty && total > 0 then
-      val legendWidth = if showLegend then data.map((label, _) => CharWidth.of(label)).maxOption.getOrElse(0) + 7 else 0
+      val legendWidth = if showLegend then LegendFit.width(data.map((label, _) => label), LegendPadding) else 0
       // a legend wider than the area would otherwise push the disc — and the legend's own left edge — outside it
       val discWidth   = math.max(0, area.width - legendWidth)
-      val radius      = math.min(discWidth / 2.0 / 2.0, area.height / 2.0) // width halved for cell aspect
+      // width is halved once for the radius and again for the cell aspect: a cell is roughly half as tall as it is
+      // wide, so a column of cells covers twice the visual distance of a row of them
+      val radius      = math.min(discWidth / 2.0 / CellAspect, area.height / 2.0)
       val centerX     = area.x + discWidth / 2.0
       val centerY     = area.y + area.height / 2.0
       // the running total after each sector, so a point's angle can be looked up by the first edge it falls before
@@ -27,7 +29,7 @@ final case class PieChart(
       while y < area.bottom do
         var x = area.x
         while x < area.x + discWidth do
-          val dx = (x - centerX) / 2.0 // undo the aspect correction
+          val dx = (x - centerX) / CellAspect // undo the aspect correction the radius applied
           val dy = y - centerY
           if math.sqrt(dx * dx + dy * dy) <= radius then
             val angle  = (math.atan2(dy, dx) + math.Pi) / (2 * math.Pi) // 0..1 around the disc
@@ -37,6 +39,14 @@ final case class PieChart(
           x += 1
         y += 1
       if showLegend then renderLegend(area, buffer, discWidth, total)
+
+  /** How many times wider than tall a terminal cell is, as a divisor: horizontal distances are halved so the disc reads
+    * as a circle rather than an ellipse.
+    */
+  private val CellAspect = 2.0
+
+  /** Columns a legend entry needs beyond its label: the `■ ` swatch and the widest ` 100%` suffix. */
+  private val LegendPadding = 7
 
   private def renderLegend(area: Rect, buffer: Buffer, discWidth: Int, total: Double): Unit =
     data.take(area.height).zipWithIndex.foreach { case ((label, value), index) =>

@@ -217,6 +217,31 @@ final class ReactiveSpec extends AnyFunSuite:
     ratio.set(0.5)
     assert(invalidations == 1)
 
+  test("a signal holding Float.NaN does not repaint on every rewrite of NaN"):
+    var invalidations = 0
+    val scope         = ReactiveScope.onInvalidation(() => invalidations += 1)
+    val ratio         = Signal(Float.NaN)
+    val _             = ratio.get(using scope)
+    ratio.set(Float.NaN)
+    assert(invalidations == 0)
+    ratio.set(0.5f)
+    assert(invalidations == 1)
+
+  test("a local SignalEquality given overrides change detection for the signals created under it"):
+    given SignalEquality[String] with
+      def unchanged(next: String, current: String): Boolean = next.equalsIgnoreCase(current)
+
+    var invalidations = 0
+    val scope         = ReactiveScope.onInvalidation(() => invalidations += 1)
+    val name          = Signal("hello")
+    val _             = name.get(using scope)
+    name.set("HELLO")
+    assert(invalidations == 0)
+    assert(name.peek == "hello") // a dropped write keeps the previous value, not the new casing
+    name.set("world")
+    assert(invalidations == 1)
+    assert(name.peek == "world")
+
   test("mutating a held value in place and setting the same instance notifies nobody"):
     var invalidations = 0
     val scope         = ReactiveScope.onInvalidation(() => invalidations += 1)

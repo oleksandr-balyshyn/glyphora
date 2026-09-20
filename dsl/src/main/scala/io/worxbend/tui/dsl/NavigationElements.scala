@@ -198,9 +198,9 @@ final case class SplitPaneElement(
   * `io.worxbend.tui.widgets` into a view for one type.
   *
   * The widget underneath is stateless: where the thumb sits is a pure function of `contentLength`, `position` and the
-  * area, so this node holds two plain numbers and nothing that has to be kept in step with anything. An out-of-range
-  * `position` pins the thumb to an end rather than drawing it off the track, and when the content already fits the area
-  * only the track is drawn.
+  * area, so this node holds two plain numbers plus the [[io.worxbend.tui.widgets.ScrollbarOptions]] describing how the
+  * bar looks, and nothing that has to be kept in step with anything. An out-of-range `position` pins the thumb to an
+  * end rather than drawing it off the track, and when the content already fits the area only the track is drawn.
   *
   * A vertical scrollbar paints on the *right* edge of the area it is given and a horizontal one on the *bottom* edge,
   * which is why it is usually given a one-column or one-row slice next to the content rather than laid over it.
@@ -208,11 +208,7 @@ final case class SplitPaneElement(
 final case class ScrollbarElement(
     contentLength: Int,
     position: Int,
-    orientation: Direction,
-    trackStyle: Style,
-    thumbStyle: Style,
-    trackSymbol: String,
-    thumbSymbol: String,
+    options: w.ScrollbarOptions,
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = ScrollbarElement
@@ -221,18 +217,17 @@ final case class ScrollbarElement(
     w.Scrollbar(
       contentLength,
       position,
-      orientation,
-      trackStyle.patch(props.style),
-      thumbStyle.patch(props.style),
-      trackSymbol,
-      thumbSymbol,
+      options.copy(
+        style = options.style.patch(props.style),
+        thumbStyle = options.thumbStyle.patch(props.style),
+      ),
     )
 
   /** Runs the bar down the right edge of its area — the default, and what a scrolling pane of text wants. */
-  def vertical: ScrollbarElement = copy(orientation = Direction.Vertical)
+  def vertical: ScrollbarElement = copy(options = options.copy(orientation = Direction.Vertical))
 
   /** Runs the bar along the bottom edge of its area, for content that is too wide rather than too tall. */
-  def horizontal: ScrollbarElement = copy(orientation = Direction.Horizontal)
+  def horizontal: ScrollbarElement = copy(options = options.copy(orientation = Direction.Horizontal))
 
   /** Moves the thumb to `offset`, in the same units as `contentLength`: rows for a vertical bar, columns for a
     * horizontal one. Values outside the content are clamped rather than rejected.
@@ -240,12 +235,14 @@ final case class ScrollbarElement(
   def at(offset: Int): ScrollbarElement = copy(position = offset)
 
   /** Styles the thumb — the moving part — independently of the track it runs in. */
-  def thumbStyle(transform: Style => Style): ScrollbarElement = copy(thumbStyle = transform(thumbStyle))
+  def thumbStyle(transform: Style => Style): ScrollbarElement =
+    copy(options = options.copy(thumbStyle = transform(options.thumbStyle)))
 
   /** Replaces the two glyphs the bar is drawn from: the track cell first, then the thumb cell. Both must be a single
     * terminal column wide, or the bar will not line up with the content beside it.
     */
-  def symbols(track: String, thumb: String): ScrollbarElement = copy(trackSymbol = track, thumbSymbol = thumb)
+  def symbols(track: String, thumb: String): ScrollbarElement =
+    copy(options = options.copy(trackSymbol = track, thumbSymbol = thumb))
 
   private[dsl] def withProps(props: ElementProps): ScrollbarElement = copy(props = props)
 
@@ -253,6 +250,6 @@ final case class ScrollbarElement(
     * tall as it is offered, and a horizontal bar the other way round.
     */
   private[dsl] override def claim: SizeClaim =
-    orientation match
+    options.orientation match
       case Direction.Vertical   => SizeClaim(Constraint.Fill(1), Constraint.Length(1))
       case Direction.Horizontal => SizeClaim(Constraint.Length(1), Constraint.Fill(1))
