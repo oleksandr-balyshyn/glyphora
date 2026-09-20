@@ -82,9 +82,17 @@ private[terminal] object MouseReports:
     * byte after the report is then consumed as the missing coordinate — damage one character of lookahead cannot
     * repair. Reading raw bytes instead is not an option: the same reader's UTF-16 code units are what
     * `InputDecoder.decodeControl`'s C1 branch and `printable`'s surrogate recombination are built on.
+    *
+    * The lower bound matters as much as the upper one, for the reason [[urxvt]] gives and one more: every byte of a
+    * real report carries the +32 bias, so a smaller one cannot be one — and subtracting the bias from it anyway
+    * produces a *negative* button value whose two's-complement bits have [[WheelBit]] set. `ESC [ M NUL NUL NUL` —
+    * control bytes that anything sharing the tty can leave behind — therefore used to decode as a scroll-up at the
+    * origin, and scrolled whatever list had focus.
     */
   def x10(button: Int, column: Int, row: Int): Option[Event] =
-    if button > 0xff || column > 0xff || row > 0xff then None // a replacement character, not a coordinate byte
+    // outside the biased byte range in either direction: a replacement character or a stray control byte, not a report
+    if button > 0xff || column > 0xff || row > 0xff then None
+    else if button < X10Bias || column < X10Bias || row < X10Bias then None
     else
       val bits = button - X10Bias
       event(bits, column - X10Bias - 1, row - X10Bias - 1, isPressFromBits(bits))
