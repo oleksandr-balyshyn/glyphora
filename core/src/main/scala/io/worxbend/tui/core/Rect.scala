@@ -173,9 +173,16 @@ final case class Rect(x: Int, y: Int, width: Int, height: Int):
     */
   def intersects(other: Rect): Boolean = !intersection(other).isEmpty
 
-  /** The smallest rectangle covering both (their bounding box). */
+  /** The smallest rectangle covering both (their bounding box).
+    *
+    * An empty input contributes no cells, so it hands the other back — but an empty rect can still carry a negative
+    * extent, and a bounding box never does: two empties merge to the second one's position with its extents clamped to
+    * zero rather than propagating, say, a `width` of -2 that arithmetic on the result would trip over.
+    */
   def union(other: Rect): Rect =
-    if isEmpty then other
+    if isEmpty then
+      if other.isEmpty then Rect(other.x, other.y, math.max(0, other.width), math.max(0, other.height))
+      else other
     else if other.isEmpty then this
     else
       val left        = math.min(x, other.x)
