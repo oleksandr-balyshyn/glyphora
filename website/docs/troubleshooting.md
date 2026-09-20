@@ -154,6 +154,9 @@ sequence. Resolve the selection with:
 state.selected.flatMap(table.visibleRows(state).lift)
 ```
 
+A table whose rows are `KeyedRow`s usually wants the record instead of the row:
+`table.selectedKey(state)` answers the selected row's key directly.
+
 ## Native-image compilation fails
 
 First confirm the JVM build and tests:

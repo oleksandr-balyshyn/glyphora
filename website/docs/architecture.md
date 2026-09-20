@@ -303,17 +303,18 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   shape mismatch by quietly repainting, which meant a caller who really had passed
   the wrong buffer got a full repaint on every frame rather than an error.
 
-  `Buffer.diff` also takes an optional third argument, `clearEmojiTrailingCell`. A
+  `Buffer.diff` also takes an optional third argument, a `TrailingCellPolicy`. A
   cluster containing U+FE0F — the variation selector that asks for a character's
   colourful emoji form, as in `❤️` — is two columns wide by the Unicode rules
   glyphora measures with, so the buffer reserves the column to its right and never
   repaints it on its own: drawing the glyph covers both halves. Terminals that draw
   such a sequence in a single column leave whatever an earlier frame put in that
-  reserved column on screen beside the emoji. Setting the flag emits a blank into
-  it, in the emoji's own style so a background fill stays continuous. It is off by
-  default and belongs to a backend rather than to the buffer, because the opposite
-  artifact is equally real: on a terminal that does draw both columns, that blank
-  clips the glyph's right half.
+  reserved column on screen beside the emoji. `TrailingCellPolicy.Clear` emits a blank
+  into it, in the emoji's own style so a background fill stays continuous.
+  `TrailingCellPolicy.Keep` — the default — leaves the column unpainted. The choice is
+  an enum rather than a flag because it belongs to a backend rather than to the
+  buffer, and the opposite artifact is equally real: on a terminal that does draw both
+  columns, that blank clips the glyph's right half.
 
   Style is written in two forms. The first painted cell of a frame gets the
   *absolute* sequence — one that opens with `ESC[0`, a reset — so no attribute the
@@ -347,8 +348,10 @@ table (`SubCell`), used by both the `Canvas` painter and the shape spinners.
 
 The mid-level framework tier:
 
-- **`Signal[A]` / `Computed[A]` / `ReactiveScope`** — fine-grained signals. See
-  [State & signals](./state-and-signals).
+- **`Signal[A]` / `Computed[A]` / `ReactiveScope`** — fine-grained signals. A signal's
+  change detection is the `SignalEquality[A]` given in scope at its creation: `==` by
+  default, IEEE-754 total order for `Double` and `Float`, overridable with a local
+  `given`. See [State & signals](./state-and-signals).
 - **`RenderThread`** — single-render-thread contract: `checkRenderThread()` is a
   no-op when no runtime is running (so plain unit tests need no setup),
   `runOnRenderThread`, `runLater`. `Signal.set` asserts it.

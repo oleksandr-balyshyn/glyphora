@@ -160,12 +160,16 @@ import io.worxbend.tui.widgets as w
 widget(
   w.Chart(
     datasets = Seq(w.Dataset("latency", points, graphType = w.GraphType.Line)),
-    xBounds = (0.0, 60.0),
-    yBounds = (0.0, ceiling),
-    showLabels = true,
+    xBounds = w.Bounds(0.0, 60.0),
+    yBounds = w.Bounds(0.0, ceiling),
+    options = w.ChartOptions(showLabels = true),
   )
 )
 ```
+
+At this tier the two world ranges are `Bounds` values rather than `(min, max)` tuples,
+and the knobs the element factory spells out as its own parameters live on one
+`ChartOptions` — `showLabels`, `marker`, `resolution` among them.
 
 `widget(...)` is not an escape hatch you should feel bad about — it is the documented
 way down a tier, and the element layer is a convenience over exactly this.

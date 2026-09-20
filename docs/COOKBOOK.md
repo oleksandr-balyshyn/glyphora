@@ -102,8 +102,8 @@ assert(pilot.screenText.contains("hi"))
 ## Charts
 
 ```scala
-chart(Seq(Dataset("cpu", points)), xBounds = (0, 60), yBounds = (0, 100))
-  // smoother: Chart(..., resolution = CanvasResolution.Braille, showLabels = true)
+chart(Seq(Dataset("cpu", points)), xBounds = Bounds(0, 60), yBounds = Bounds(0, 100))
+  // smoother: Chart(datasets, Bounds(0, 60), Bounds(0, 100), ChartOptions(resolution = CanvasResolution.Braille, showLabels = true))
 pieChart(Seq("a" -> 3.0, "b" -> 1.0)); heatmap(grid); stackedBarChart(series)
 image(Image.fromFile(path).toOption.get)  // half-block raster
 ```

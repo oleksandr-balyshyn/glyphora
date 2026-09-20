@@ -90,8 +90,9 @@ failed is reported as a test failure instead of reading as a clean exit.)
 
 ## 2. Model a process, not a row
 
-The table widget speaks `Seq[Seq[String]]`. Your application must not: once a process
-is a row of strings, its pid is a substring and its CPU figure is text.
+The table widget speaks `KeyedRow`s of `String` cells. Your application must not: once
+a process is only its row of strings, its pid is a substring and its CPU figure is
+text.
 
 ```scala title="examples/procmon/src/main/scala/io/worxbend/tui/examples/procmon/ProcessSource.scala"
 package io.worxbend.tui.examples.procmon
@@ -255,18 +256,18 @@ Run it: the count is your machine's, and the header reads `source ps` — or
 
 ## 4. Put the snapshot on screen
 
-Add `java.util.Locale` and `io.worxbend.tui.widgets.{ColumnSort, DataTable, DataTableState, SortDirection}` to
+Add `java.util.Locale` and `io.worxbend.tui.widgets.{ColumnSort, DataTable, DataTableState, KeyedRow, SortDirection}` to
 `Main.scala`'s imports, plus `import ProcmonApp.*` at the top of the class body.
 
 ```scala title="Main.scala"
-  val tableState: DataTableState = DataTableState()
+  val tableState: DataTableState[Int] = DataTableState()
 
   tableState.sort = Some(ColumnSort(CpuColumn, SortDirection.Descending))
 
-  private def buildTable(rows: Seq[ProcessInfo]): DataTable =
+  private def buildTable(rows: Seq[ProcessInfo]): DataTable[Int] =
     DataTable(
       columns = Seq("   PID", "USER", " CPU%", " MEM%", "COMMAND"),
-      rows = rows.map(cellsOf),
+      rows = rows.map(process => KeyedRow(process.pid, cellsOf(process))),
       widths = Seq(
         Constraint.Length(PidWidth + 2),
         Constraint.Length(10),
@@ -310,11 +311,13 @@ object ProcmonApp:
 
 A fresh `DataTable` per frame is correct and cheap — it is an immutable case class
 over the rows. Only `tableState` persists, which is why it is a field and not a
-local; see [the state ownership rule](./widgets#the-state-ownership-rule).
-`DataTable` has no column alignment, so padding to a fixed width is the only way to
-make a numeric column readable, and `Locale.ROOT` rather than the ambient locale
-because `%.1f` writes `12,5` across much of Europe — which looks wrong and, from
-step 7, stops the column sorting as a number.
+local; see [the state ownership rule](./widgets#the-state-ownership-rule). Each
+row is a `KeyedRow`: the cells are what the table sorts, filters and draws, and
+the key — the pid — is the row's stable identity, which step 8's selection leans
+on. Padding to a fixed width is what makes a numeric column sort the same whether
+the widget reads it as numbers or as text, and `Locale.ROOT` rather than the
+ambient locale because `%.1f` writes `12,5` across much of Europe — which looks
+wrong and, from step 7, stops the column sorting as a number.
 
 ```bash
 ./mill examples.procmon.run
@@ -467,33 +470,22 @@ Run it, press `p`, then `p` again: pid ascending, then descending.
 ## 8. Keep the selection on the same process
 
 `tableState.selected` is an index into the *currently visible* rows. Sort, filter or
-refresh, and index 3 is a different process, so the highlight appears to jump to
-another program. Pin it to a pid instead.
+refresh, and index 3 is a different process. Because step 4 keyed every row by its
+pid, the widget already pins the highlight to the process: every render records the
+selected row's key on the state, and the next render re-anchors the selection to
+wherever that pid landed. The application code for all of that is nothing — what
+remains is reading the pid back, and steering the selection from the keys:
 
 ```scala title="Main.scala"
-  private var selectedPid: Option[Int] = None
+  def selectedProcessId: Option[Int] = buildTable(processes.peek).selectedKey(tableState)
 
-  private def visibleRows: Seq[Seq[String]] = buildTable(processes.peek).visibleRows(tableState)
-
-  private def pidOf(row: Seq[String]): Option[Int] = row.headOption.flatMap(_.trim.toIntOption)
-
-  private def rememberSelection(): Unit =
-    selectedPid = tableState.selected.flatMap(visibleRows.lift).flatMap(pidOf)
-
-  private def restoreSelection(): Unit =
-    val rows = visibleRows
-    tableState.selected = selectedPid.map(pid => rows.indexWhere(pidOf(_).contains(pid))).filter(_ >= 0)
+  def visibleProcessIds: Seq[Int] = buildTable(processes.peek).visibleRows(tableState).map(_.key)
 
   private def moveSelection(delta: Int): Unit =
-    val rows = visibleRows
+    val rows = buildTable(processes.peek).visibleRows(tableState)
     if delta < 0 then tableState.selectPrevious(rows.size) else tableState.selectNext(rows.size)
-    rememberSelection()
 
-  def selectedProcessId: Option[Int] = selectedPid
-
-  def visibleProcessIds: Seq[Int] = visibleRows.flatMap(pidOf)
-
-  private def tableElement(table: DataTable): Element =
+  private def tableElement(table: DataTable[Int]): Element =
     dataTable(table, tableState)
       .onKeyEvent {
         case KeyEvent(KeyCode.Down, _) =>
@@ -507,15 +499,16 @@ another program. Pin it to a pid instead.
       .fill
 ```
 
-Call `restoreSelection()` from both places that move rows underneath the user: as the
-second line of `sortBy`, and after `tableState.invalidate()` in `refresh()`. Then use
-`tableElement(buildTable(processes.get))` in `view` in place of the inline
-`dataTable(...)`.
+`selectedKey` answers the recorded anchor, so a sort between frames never leaves it
+naming a stale row — no parsing the PID cell back out of the widget's own text, and
+no parallel index into the domain rows that the first sort would invalidate. The
+widget's built-in Up/Down moves by row index the same way; intercepting the keys
+here keeps the arrows and step 12's wheel on the one `moveSelection` path. An index
+move drops the recorded key, and the next render records the key of the row the
+highlight lands on — the anchor is always the process the reader is looking at.
 
-Reading the selection back means parsing the PID cell, which is the price of a widget
-whose API is `Seq[Seq[String]]`; the alternative — a parallel index into the domain
-rows — is invalidated by the very next sort. The built-in Up/Down handler is bypassed
-rather than extended, because it only knows about row indices.
+Use `tableElement(buildTable(processes.get))` in `view` in place of the inline
+`dataTable(...)`.
 
 Run it, select a row with `↓`, then press `p`: the highlight follows its process to
 the new position instead of staying on row 3.
@@ -533,13 +526,11 @@ Add `TextInputState` to the widgets import.
     if clear then
       filterInput.clear()
       tableState.setFilter("")
-      restoreSelection()
     filterOpen.set(false)
 
   private def syncFilter(): Unit =
     if tableState.filter != filterInput.value then
       tableState.setFilter(filterInput.value)
-      restoreSelection()
 
   private def filterRow(using ReactiveScope): Seq[Element] =
     if !filterOpen.get then Seq.empty
@@ -754,7 +745,8 @@ sample a tick started on an `Async` worker that lands on a later render-thread d
 `waitUntil` polls the app's own counter instead, which is why `sampleCount` exists,
 and polling rather than sleeping a fixed time survives a parallel test run starving
 the tick thread. `visibleProcessIds` and `selectedProcessId` exist for exactly this:
-they are the domain projection of a widget state that speaks only in row indices.
+they are the domain projection the row keys make a one-liner, over a widget state
+that otherwise speaks in row indices.
 
 ```bash
 ./mill examples.procmon.test

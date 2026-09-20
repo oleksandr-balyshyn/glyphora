@@ -67,17 +67,18 @@ rows — behaves exactly as it does for `table`.
 
 ## Rebuild the table, keep the state
 
-`DataTable` is an immutable case class over the rows. `DataTableState` is the
+`DataTable[K]` is an immutable case class over the rows — `K` is the key type
+naming a row's record, the process pid here. `DataTableState[K]` is the
 mutable half holding everything the reader has done to them. Build the first per
 frame; create the second once:
 
 ```scala
-val tableState: DataTableState = DataTableState()
+val tableState: DataTableState[Int] = DataTableState()
 
-private def buildTable(rows: Seq[ProcessInfo]): DataTable =
+private def buildTable(rows: Seq[ProcessInfo]): DataTable[Int] =
   DataTable(
     columns = Seq("   PID", "USER", " CPU%", " MEM%", "COMMAND"),
-    rows = rows.map(cellsOf),
+    rows = rows.map(process => KeyedRow(process.pid, cellsOf(process))),
     widths = Seq(
       Constraint.Length(8),
       Constraint.Length(10),
@@ -90,6 +91,14 @@ private def buildTable(rows: Seq[ProcessInfo]): DataTable =
 def view(using ReactiveScope, Theme): Element =
   dataTable(buildTable(processes.get), tableState).fill
 ```
+
+Each row is a `KeyedRow(key, cells)`: the cells are what the table sorts,
+filters and draws, and the key is the row's stable identity, which the selection
+pins itself to — see [Pin the selection to an
+identity](#pin-the-selection-to-an-identity). Rows with no identity of their own
+build through `DataTable.fromStrings(columns, rows, widths)`, which keys each by
+its original position; their state keeps the plain `DataTableState()` spelling,
+because that key type is `Int`.
 
 A fresh `DataTable` per frame is cheap: it holds the rows and nothing derived
 from them. `DataTableState` is the half that must not be rebuilt — constructing
@@ -105,8 +114,8 @@ the app theme's `focus` style, but `DataTable` is a widget value *you* built, so
 deliberate choice. Pass it explicitly to line the table up with everything else:
 
 ```scala
-private def buildTable(rows: Seq[ProcessInfo])(using theme: Theme): DataTable =
-  DataTable(..., highlightStyle = theme.focus)
+private def buildTable(rows: Seq[ProcessInfo])(using theme: Theme): DataTable[Int] =
+  DataTable(..., options = DataTableOptions(highlightStyle = theme.focus))
 ```
 
 ## Invalidate on every refresh
@@ -122,7 +131,6 @@ private def refresh(): Unit =
     case Right(sampled) =>
       processes.set(sampled.toVector)
       tableState.invalidate()
-      restoreSelection()
     case Left(error) =>
       notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning)
   }
@@ -133,7 +141,9 @@ same *number* of rows with different numbers in them keeps the previous ordering
 indefinitely. Call `invalidate()` on every refresh that might not change the row
 count, which in practice means every refresh. The bug survives a casual test
 because a list whose length happens to change on each sample hides it completely.
-The refresh itself — timers, cancellation, stale responses — belongs to [Live
+The selection needs no saving across this: the render re-anchors it to the
+recorded row key on the very next frame. The refresh itself — timers,
+cancellation, stale responses — belongs to [Live
 data & background work](./live-data).
 
 ## Sort numbers that carry units
@@ -184,7 +194,6 @@ override def bindings: KeyBindings = KeyBindings(
 
 private def sortBy(column: Int): Unit =
   tableState.sortBy(column)
-  restoreSelection()
 ```
 
 `state.sortBy(column)` starts ascending and flips the direction when the same
@@ -207,7 +216,6 @@ val filterInput: TextInputState = TextInputState()
 private def syncFilter(): Unit =
   if tableState.filter != filterInput.value then
     tableState.setFilter(filterInput.value)
-    restoreSelection()
 
 def view(using ReactiveScope, Theme): Element =
   val table = buildTable(processes.get)
@@ -226,40 +234,45 @@ of re-sorting by command.
 
 `tableState.selected` is an index into `visibleRows`, and that sequence is
 rebuilt by every sort, filter and refresh — index 3 names a different process
-each time. Re-derive it from an identity you own:
+each time. A `KeyedRow` table needs no workaround for that, because the key *is*
+the identity: every render records the selected row's key on the state, and the
+next render re-anchors the selection to wherever that key landed after a re-sort
+or a refresh. The highlight follows the record rather than the row number, and
+the application code for that is nothing at all.
+
+Reading the identity back is `selectedKey`; setting it is `selectKey`:
 
 ```scala
-private var selectedPid: Option[Int] = None
+def selectedProcessId: Option[Int] =
+  buildTable(processes.peek).selectedKey(tableState)
 
-private def visibleRows: Seq[Seq[String]] =
-  buildTable(processes.peek).visibleRows(tableState)
-
-private def pidOf(row: Seq[String]): Option[Int] =
-  row.headOption.flatMap(_.trim.toIntOption)
-
-private def rememberSelection(): Unit =
-  selectedPid = tableState.selected.flatMap(visibleRows.lift).flatMap(pidOf)
-
-private def restoreSelection(): Unit =
-  val rows = visibleRows
-  tableState.selected = selectedPid
-    .map(pid => rows.indexWhere(pidOf(_).contains(pid)))
-    .filter(_ >= 0)
+private def selectProcess(pid: Int): Unit =
+  buildTable(processes.peek).selectKey(tableState, pid)
 
 private def moveSelection(delta: Int): Unit =
-  val rows = visibleRows
+  val rows = buildTable(processes.peek).visibleRows(tableState)
   if delta < 0 then tableState.selectPrevious(rows.size)
   else tableState.selectNext(rows.size)
-  rememberSelection()
 ```
 
-Nothing built in can do this for you: the widget's rows are `Seq[Seq[String]]`
-and map to no domain object, so `selected` is an index and only an index. Reading
-the pid back out of a cell is the price of that API — a parallel index kept
-alongside would be invalidated by the first sort. Move the selection through
-`moveSelection` rather than the widget's built-in Up/Down, which knows about row
-indices and nothing else, and call `restoreSelection()` after every sort, filter
-and refresh.
+`selectedKey` answers the recorded anchor when there is one, so a sort between
+frames never leaves it pointing at a stale index. `selectKey` moves the selection
+to the row carrying the key in the current view, or returns `false` — touching
+nothing — when no visible row does: a record that left the data, or one sitting
+on another page, since a selection indexes the windowed view.
+
+An index move — `selectNext` here, the built-in Up/Down, a direct `selected = …`
+assignment — drops the recorded key on purpose, and the next render records the
+key of the row the highlight now sits on, so the anchor is always the record the
+reader is looking at rather than a stale one. The one move that clears the
+selection outright is `setFilter`: a new filter is a new view, and a highlight
+carried across it would land on a row the reader never chose.
+
+`DataTable.fromStrings` keys rows by their original position, which follows a row
+across a re-sort but means nothing across a refresh that rebuilds the list. An
+app with an identity of its own — a pid, a path, an id — should key on it, and
+then never has to parse its own formatted cells to learn which record is
+selected.
 
 ## Page without arithmetic bugs
 
@@ -282,8 +295,8 @@ bounded by the filtered domain, and the larger number lets the reader page off
 the end into blank rows. Both calls clear the selection and the offset
 deliberately, because a highlight inherited from the previous page reads as a
 choice the reader did not make. And with a page size set, `selected` indexes the
-*page* rather than the whole filtered set, so the identity search above must run
-over the page. `Paging(size = area.height - 2, page = 0)` is the tempting idiom
+*page* rather than the whole filtered set, so `selectKey` reaches only the
+records on the current page. `Paging(size = area.height - 2, page = 0)` is the tempting idiom
 and yields a size of zero on a two-row terminal; the widget floors the page at
 one row rather than showing nothing on every page for ever.
 
@@ -309,14 +322,18 @@ dataTable(table, tableState)
 ```
 
 Moving the selection rather than the offset keeps the wheel and the arrow keys
-doing the same thing, and lets one `moveSelection` record the pinned identity for
+doing the same thing, and the key anchor records itself on the next render for
 both. See [Mouse & focus](./mouse#backend-support) for what a terminal has to
 support before any of this arrives.
 
 ## Right-align a numeric column
 
-Neither `Table` nor `DataTable` can align a column, so padding is the only way to
-make a numeric column readable:
+`DataTable` aligns a column through `alignments` on its `DataTableOptions` — one
+`Alignment` per column by position (see
+[Tables: simple and interactive](./widgets#tables-simple-and-interactive)) — and
+`Table` aligns per cell, because its cells are `Line`s. Padding a `DataTable`
+column to a fixed width still earns its keep, because it also makes the column
+*sort* correctly:
 
 ```scala
 import java.util.Locale

@@ -91,7 +91,7 @@ where the content is:
 panel("Throughput")(
   responsive {
     case size if size.width < 60 => sparkline(samples)
-    case _                       => chart(datasets, xBounds = (0.0, 60.0), yBounds = (0.0, 100.0))
+    case _                       => chart(datasets, xBounds = Bounds(0.0, 60.0), yBounds = Bounds(0.0, 100.0))
   }
 )
 ```

@@ -83,6 +83,12 @@ commits that option through the callback. Escape closes the list and changes not
 highlight is not the chosen value until it is committed, which is what makes "open it,
 look around, back out" safe.
 
+The state carries the navigation those keys drive, for an app that wants its own
+bindings: `regionState.openAt(selected)` opens the list with the highlight parked on the
+current value, `highlighted` reads where the highlight sits, `selectNext(options)` and
+`selectPrevious(options)` move it with wraparound, and `highlightAt(visibleRow,
+optionCount)` turns a clicked popup row into the option it shows.
+
 Two things are worth knowing before reaching for it. An open dropdown **consumes Escape**,
 so an app that binds Escape globally will not see it while a list is showing. And the popup
 is drawn inside the node's own area rather than floated over the screen, so while the list
@@ -103,10 +109,12 @@ The DSL fills it in for you from the app theme's `focus` style, so a `list` and 
 `menu` in the same app highlight identically and switching to `Theme.HighContrast`
 moves every one of them at once. You only pass it by hand when you build the widget
 value yourself — `DataTable` is the common case, because its sort, filter and paging
-options mean you construct it rather than let a factory do it:
+options mean you construct it rather than let a factory do it. Everything past the
+columns, rows and widths bundles into one `DataTableOptions` value, and plain text
+rows build through `DataTable.fromStrings`:
 
 ```scala
-DataTable(rows, columns, highlightStyle = theme.focus)
+DataTable.fromStrings(columns, rows, widths, DataTableOptions(highlightStyle = theme.focus))
 ```
 
 ## Layout and chrome
@@ -177,14 +185,18 @@ row(
 )
 
 // along the bottom edge instead
-Scrollbar(200, 40, orientation = Direction.Horizontal)
+Scrollbar(200, 40, ScrollbarOptions(orientation = Direction.Horizontal))
 
 // a left-hand gutter instead of the right edge
-Scrollbar(200, 40, side = ScrollbarSide.Near)
+Scrollbar(200, 40, ScrollbarOptions(side = ScrollbarSide.Near))
 
 // the same bar as a DSL element
 scrollbar(200).at(40).horizontal
 ```
+
+Everything past `position` — orientation, side, symbols, styles, the viewport length —
+bundles into one `ScrollbarOptions` value, so the two numbers that move every frame stay
+the widget's only bare arguments.
 
 `side` picks which of the axis's two edges the strip lands on. `Far`, the default, is the
 right edge for a vertical bar and the bottom edge for a horizontal one; `Near` is the left
@@ -211,7 +223,7 @@ out the wrong length and stops short of the end of the track:
 
 ```scala
 // the strip is 10 cells tall, but the pane behind it shows only 8 of the 200 rows
-Scrollbar(contentLength = 200, position = 40, viewportLength = Some(8))
+Scrollbar(contentLength = 200, position = 40, options = ScrollbarOptions(viewportLength = Some(8)))
 ```
 
 Arrow caps mark the two ends of the strip, which is how a reader tells a scrollbar from a
@@ -800,14 +812,14 @@ on its character count.
 
 `DataTable` cells are plain `String`s — they have to be, because the widget sorts and
 filters on the text — so there is no `Line` to carry a placement and the widget takes an
-`alignments` sequence instead, one entry per column by position:
+`alignments` sequence on its `DataTableOptions` instead, one entry per column by position:
 
 ```scala
-DataTable(
+DataTable.fromStrings(
   columns = Seq("Service", "Replicas"),
   rows = rows,
   widths = Seq(Constraint.Fill(1), Constraint.Length(8)),
-  alignments = Seq(Alignment.Left, Alignment.Right),
+  options = DataTableOptions(alignments = Seq(Alignment.Left, Alignment.Right)),
 )
 ```
 
@@ -828,7 +840,7 @@ table(rows, Constraint.Length(18), Constraint.Length(9)).center.gap(2)
 ```
 
 The same knob exists one level down on the widgets, as `Table(…, flex = Flex.Center)`
-and `DataTable(…, flex = Flex.Center)`. It changes nothing when a `Fill` or `Min` column
+and `DataTable(…, options = DataTableOptions(flex = Flex.Center))`. It changes nothing when a `Fill` or `Min` column
 is already absorbing the slack, because then there is no leftover to place.
 
 Use `DataTable` when users need sorting, filtering, selection, scrolling, or paging:
@@ -837,7 +849,7 @@ Use `DataTable` when users need sorting, filtering, selection, scrolling, or pag
 import io.worxbend.tui.widgets.{DataTable, DataTableState}
 
 private val tableState = DataTableState()
-private val deployments = DataTable(
+private val deployments = DataTable.fromStrings(
   columns = Seq("Service", "Status", "Replicas"),
   rows = Seq(
     Seq("api", "ready", "3"),
@@ -849,16 +861,23 @@ private val deployments = DataTable(
 def tableView: Element = dataTable(deployments, tableState)
 ```
 
+`fromStrings` keys each row by its original position, which is all the identity a plain
+text row has. Rows with a real identity of their own — a pid, a path, an id — build as
+`KeyedRow(key, cells)` instead and go to the `DataTable[K]` constructor directly, which
+is what lets the selection follow a record across a re-sort; see
+[Tables & selection](./tables-and-selection#pin-the-selection-to-an-identity).
+
 A `DataTable` cell can carry a style of its own through `cellStyle`, which is asked
 about the row's cells and the column index and returns a patch:
 
 ```scala
-DataTable(
+DataTable.fromStrings(
   columns = Seq("Service", "Status"),
   rows = rows,
   widths = Seq(Constraint.Fill(1), Constraint.Length(8)),
-  cellStyle = (row, column) =>
+  options = DataTableOptions(cellStyle = (row, column) =>
     if column == 1 && row(1) == "FAILED" then Style.Default.withFg(Color.Red) else Style.Default,
+  ),
 )
 ```
 
@@ -869,7 +888,9 @@ rows around between frames — an index names a different record after every sor
 header and footer never consult it; `headerStyle` and `footerStyle` own those rows.
 
 `tableState.selected` indexes `deployments.visibleRows(tableState)`, not the original
-unsorted data. Use that method when opening the selected record.
+unsorted data. Use that method when opening the selected record — or skip the indexing
+entirely with `deployments.selectedKey(tableState)`, which answers the selected row's key
+directly.
 
 `DataTableState` also carries a `selectedColumn`, the horizontal half of a
 spreadsheet-style cursor. It is independent of `selected`: a column on its own
@@ -882,10 +903,12 @@ Nothing is drawn for a column cursor unless the widget is given a style for it, 
 table that only selects rows behaves exactly as before:
 
 ```scala
-DataTable(
+DataTable.fromStrings(
   columns, rows, widths,
-  columnHighlightStyle = Some(theme.focus),
-  cellHighlightStyle = Some(theme.focus.bold),
+  DataTableOptions(
+    columnHighlightStyle = Some(theme.focus),
+    cellHighlightStyle = Some(theme.focus.bold),
+  ),
 )
 ```
 
@@ -898,7 +921,7 @@ reverse video, and one where the row already carries a background colour the rev
 blends into. `highlightSymbol` adds a text marker instead, the same way `ListView` does:
 
 ```scala
-DataTable(columns, rows, widths, highlightSymbol = "> ")
+DataTable.fromStrings(columns, rows, widths, DataTableOptions(highlightSymbol = "> "))
 ```
 
 The symbol's display width is reserved as a gutter on *every* row, header included, so
@@ -1000,8 +1023,8 @@ def dashboard(using ReactiveScope, Theme): Element =
     panel("Signal")(
       chart(
         Seq(Dataset("wave", wave, graphType = GraphType.Line)),
-        xBounds = (0.0, 80.0),
-        yBounds = (0.0, 100.0),
+        xBounds = Bounds(0.0, 80.0),
+        yBounds = Bounds(0.0, 100.0),
       )
     ).fill,
   )
@@ -1084,7 +1107,7 @@ meaningful floor is somewhere else:
 Dataset("above ambient", readings, graphType = GraphType.Area, fillToY = 20.0)
 ```
 
-`chart(..., showLabels = true)` prints the two y bounds beside the vertical axis. The
+`ChartOptions(showLabels = true)` prints the two y bounds beside the vertical axis. The
 numbers get a *gutter* of their own — a strip of columns reserved to the left of the
 axis, as wide as the widest of the two labels — and the axis and the plot both move
 right by that much. Earlier versions wrote the labels at the first plot column, where a
@@ -1096,10 +1119,9 @@ between the two.
 ```scala
 chart(
   Seq(Dataset("wave", wave)),
-  xBounds = (0.0, 80.0),
-  yBounds = (0.0, 100.0),
-  showLabels = true,
-  labelAlignment = Alignment.Left,
+  xBounds = Bounds(0.0, 80.0),
+  yBounds = Bounds(0.0, 100.0),
+  options = ChartOptions(showLabels = true, labelAlignment = Alignment.Left),
 )
 ```
 
@@ -1115,10 +1137,9 @@ and end of the range.
 ```scala
 chart(
   Seq(Dataset("throughput", points)),
-  xBounds = (0.0, 60.0),
-  yBounds = (0.0, 100.0),
-  xLabels = Seq("0s", "30s", "60s"),
-  yLabels = Seq("0", "50", "100"),
+  xBounds = Bounds(0.0, 60.0),
+  yBounds = Bounds(0.0, 100.0),
+  options = ChartOptions(xLabels = Seq("0s", "30s", "60s"), yLabels = Seq("0", "50", "100")),
 )
 ```
 
@@ -1136,10 +1157,9 @@ nothing at all rather than a chart with no plot in it:
 ```scala
 chart(
   Seq(Dataset("latency", points)),
-  xBounds = (0.0, 60.0),
-  yBounds = (0.0, 250.0),
-  xTitle = Some("seconds"),
-  yTitle = Some("ms"),
+  xBounds = Bounds(0.0, 60.0),
+  yBounds = Bounds(0.0, 250.0),
+  options = ChartOptions(xTitle = Some("seconds"), yTitle = Some("ms")),
 )
 ```
 
@@ -1154,9 +1174,9 @@ chart(
     Dataset("cpu", cpuPoints, Style.Default.withFg(Color.Red)),
     Dataset("mem", memPoints, Style.Default.withFg(Color.Blue)),
   ),
-  xBounds = (0.0, 80.0),
-  yBounds = (0.0, 100.0),
-  showLegend = true,
+  xBounds = Bounds(0.0, 80.0),
+  yBounds = Bounds(0.0, 100.0),
+  options = ChartOptions(showLegend = true),
 )
 ```
 
@@ -1171,8 +1191,8 @@ chart(
     Dataset("signal", signal, resolution = Some(CanvasResolution.Braille)),
     Dataset("samples", samples, graphType = GraphType.Scatter, marker = Some("*")),
   ),
-  xBounds = (0.0, 80.0),
-  yBounds = (0.0, 100.0),
+  xBounds = Bounds(0.0, 80.0),
+  yBounds = Bounds(0.0, 100.0),
 )
 ```
 
@@ -1185,21 +1205,28 @@ nothing is still exactly one pass, drawing exactly what it always drew.
 
 The key is painted over the plot, so it costs the data no space — but only while it
 stays small. The widget-level `Chart` carries `hiddenLegendConstraints`, a pair of
-`Constraint`s for `(width, height)`, and the key is dropped entirely unless it satisfies
-both. The default lets it claim up to a quarter of the plot in either direction, so a
-pane that shrinks loses its key rather than its data. Dropping it is all-or-nothing on
-purpose: half a key says less than none, because a reader cannot tell which series the
-missing rows belonged to. Widen the allowance when you would rather keep the names:
+`Constraint`s for `(width, height)`, on its `ChartOptions`, and the key is dropped
+entirely unless it satisfies both. The default lets it claim up to a quarter of the plot
+in either direction, so a pane that shrinks loses its key rather than its data. Dropping
+it is all-or-nothing on purpose: half a key says less than none, because a reader cannot
+tell which series the missing rows belonged to. Widen the allowance when you would rather
+keep the names:
 
 ```scala
 Chart(
   datasets,
-  xBounds = (0.0, 80.0),
-  yBounds = (0.0, 100.0),
-  showLegend = true,
-  hiddenLegendConstraints = (Constraint.Percentage(50), Constraint.Percentage(50)),
+  xBounds = Bounds(0.0, 80.0),
+  yBounds = Bounds(0.0, 100.0),
+  options = ChartOptions(
+    showLegend = true,
+    hiddenLegendConstraints = (Constraint.Percentage(50), Constraint.Percentage(50)),
+  ),
 )
 ```
+
+Down at the widget, and at the `chart(...)` element factory alike, the two world ranges
+are `Bounds` values rather than bare `(min, max)` tuples, and everything else — labels,
+legend, titles, marker, resolution — bundles into one `ChartOptions`.
 
 ### Comparing several series side by side
 
@@ -1266,10 +1293,12 @@ at all — timestamps, dates, weekdays. `xLabels` supplies them:
 ```scala
 Chart(
   datasets,
-  xBounds = (0.0, 24.0),
-  yBounds = (0.0, 100.0),
-  showLabels = true,
-  xLabels = Seq("00:00", "12:00", "24:00"),
+  xBounds = Bounds(0.0, 24.0),
+  yBounds = Bounds(0.0, 100.0),
+  options = ChartOptions(
+    showLabels = true,
+    xLabels = Seq("00:00", "12:00", "24:00"),
+  ),
 )
 ```
 
@@ -1293,8 +1322,8 @@ import io.worxbend.tui.widgets as w
 
 widget(
   w.Canvas(
-    xBounds = (-180.0, 180.0),
-    yBounds = (-90.0, 90.0),
+    xBounds = w.Bounds(-180.0, 180.0),
+    yBounds = w.Bounds(-90.0, 90.0),
     shapes = coastline,
     labels = Seq(w.CanvasLabel(13.4, 52.5, Line("Berlin"))),
   )
@@ -1320,7 +1349,7 @@ and the horizontal line `baselineY`. `Shape.FilledPolyline(points, baselineY)` d
 same for a whole series — that is an area chart:
 
 ```scala
-canvas((0.0, 24.0), (0.0, 100.0))(
+canvas(Bounds(0.0, 24.0), Bounds(0.0, 100.0))(
   Shape.FilledPolyline(readings, baselineY = 0.0, style = Style.Default.fg(Color.Cyan)),
 )
 ```
@@ -1341,7 +1370,7 @@ longitude from −180 to 180 on x, latitude from −90 to 90 on y — so the can
 given those same bounds, or the coastlines land somewhere no map has them:
 
 ```scala
-canvas((-180.0, 180.0), (-90.0, 90.0))(
+canvas(Bounds(-180.0, 180.0), Bounds(-90.0, 90.0))(
   Shape.WorldMap(MapResolution.High),
   Shape.Points(Seq((-0.13, 51.51), (139.69, 35.69)), Style.Default.fg(Color.Yellow)),
 ).braille
@@ -1702,7 +1731,10 @@ spinnerGrid().preset(SpinnerPreset.DotsRing)
 it. `radius` is in **dots**, not cells, because that is the resolution the shape is drawn
 at — a radius in cells could not express the difference between the two smallest legible
 rings. `sweep` is the fraction of the lap that is lit, not a dot count, so the arc
-subtends the same angle at every radius.
+subtends the same angle at every radius. Down at the widget the constructor takes just
+`elapsed`; every knob the fluent builders below set bundles into one
+`OrbitSpinnerOptions`, so `OrbitSpinner(elapsed, OrbitSpinnerOptions())` is the figure
+the no-argument element draws.
 
 | Method | Effect |
 |---|---|

@@ -33,6 +33,22 @@ scroll or velocity delta) and a signal holding `NaN` does *not* repaint on every
 rewrite of `NaN`. Both are IEEE-754 artefacts of using `==` as a change flag rather
 than anything a caller meant.
 
+Which comparison runs is not hard-coded: a `Signal` consults the `SignalEquality[A]`
+given in scope at its creation, and the two behaviours above are just the companion's
+defaults. A `given SignalEquality[A]` in lexical or imported scope outranks them, so
+a type whose "same value" means something narrower — a case class compared on a subset
+of its fields, say — can declare it once and every signal of that type picks it up:
+
+```scala
+given SignalEquality[Reading] with
+  def unchanged(next: Reading, current: Reading): Boolean =
+    next.station == current.station && next.value == current.value
+```
+
+The instance is consulted inline on the render thread on every `set`, so it must be
+stateless and pure — an implementation that allocates, blocks, or reads mutable state
+outside its two arguments breaks the signal's contract, not just its performance.
+
 The one case no comparison can catch is mutating a value in place and setting the same
 instance back — see below.
 

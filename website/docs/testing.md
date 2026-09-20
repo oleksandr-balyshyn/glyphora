@@ -345,6 +345,11 @@ click. `clickWith(x, y, MouseButton.Right)` is the down/up pair with a chosen bu
 the gesture to reach for when testing a context menu, since the built-in click behavior
 of a `button` or `checkbox` fires on the left button only.
 
+Every mouse method that takes `x, y` also takes a `Position`, for a test that already
+holds the coordinate as a value — one read back from `pilot.cursorPosition`, or
+computed from a widget's bounds — rather than written as two literals:
+`pilot.click(pilot.cursorPosition.get)`.
+
 When an assertion has to wait for something other than the queue going quiet, use
 `waitUntil` rather than a sleep — it re-checks the condition, re-raises any failure the
 app threw, and fails with the description you gave it if the timeout runs out:

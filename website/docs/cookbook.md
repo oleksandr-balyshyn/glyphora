@@ -183,7 +183,7 @@ be started from.
 import io.worxbend.tui.widgets.{DataTable, DataTableState}
 
 private val tableState = DataTableState()
-private val table = DataTable(
+private val table = DataTable.fromStrings(
   columns = Seq("Service", "Status", "Replicas"),
   rows = Seq(
     Seq("api", "ready", "3"),
@@ -200,12 +200,14 @@ def deployments: Element =
   dataTable(table, tableState).onKey(Key.Enter) {
     tableState.selected
       .flatMap(table.visibleRows(tableState).lift)
-      .foreach(openDeployment)
+      .foreach(row => openDeployment(row.cells))
   }
 ```
 
 Selection indexes the filtered/sorted `visibleRows`, which is why the action maps
-through that method.
+through that method. Rows built with `KeyedRow(key, cells)` instead of `fromStrings`
+carry a record identity, and then `table.selectedKey(tableState)` answers the selected
+key with no indexing at all.
 
 ## Build tabs with reactive selection
 
