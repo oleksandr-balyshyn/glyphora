@@ -123,10 +123,17 @@ final case class Menu(
           else style
         // paint the full row so the highlight spans the popup width
         buffer.setString(inner.x, y, " ".repeat(inner.width), rowStyle)
-        val fitted   = CharWidth.substringByWidth(" " + label, inner.width)
-        buffer.setString(inner.x, y, fitted, rowStyle)
-        shortcut.foreach { hint =>
-          val padded = hint + " "
-          val hintW  = CharWidth.of(padded)
-          if hintW + 2 <= inner.width then buffer.setString(inner.right - hintW, y, padded, rowStyle)
-        }
+        shortcut match
+          case Some(hint) =>
+            val padded = hint + " "
+            val hintW  = CharWidth.of(padded)
+            // the hint shares the row: it claims its own columns plus a two-column gap, and the label is fitted to
+            // what remains rather than written full-width and overwritten at the tail. A hint that would leave the
+            // label no column at all is dropped instead — a shortcut nobody can read is worth less than the label.
+            if hintW + 2 < inner.width then
+              val fitted = CharWidth.substringByWidth(" " + label, inner.width - hintW - 2)
+              buffer.setString(inner.x, y, fitted, rowStyle)
+              buffer.setString(inner.right - hintW, y, padded, rowStyle)
+            else buffer.setString(inner.x, y, CharWidth.substringByWidth(" " + label, inner.width), rowStyle)
+          case None       =>
+            buffer.setString(inner.x, y, CharWidth.substringByWidth(" " + label, inner.width), rowStyle)

@@ -19,9 +19,6 @@ object SeriesPalette:
     Style.Default.withFg(Color.Blue),
   )
 
-  /** The style for series `index`, wrapping round [[Default]]. */
-  def at(index: Int): Style = Default(index % Default.size)
-
   /** Cycles `styles`, falling back to [[Default]] when the caller passed an empty palette — `styles` is a public
     * parameter, and `index % 0` is an `ArithmeticException` out of the middle of a render.
     */

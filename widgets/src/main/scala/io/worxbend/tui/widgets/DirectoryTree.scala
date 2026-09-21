@@ -32,6 +32,12 @@ import scala.util.control.NonFatal
   * instead of every caller's job; until then this is deliberately spelled out rather than left for a caller to discover
   * from behaviour.
   *
+  * The one thing following links cannot be allowed to do is recurse forever: [[visibleEntries]] resolves each expanded
+  * directory's real path and skips one that is already an ancestor of the walk, so a symlink loop — a link back to the
+  * root, a parent, or itself — renders as an expanded entry with no children instead of overflowing the render thread's
+  * stack. Two sibling links to the same target both still expand: only the current walk's chain is compared, not every
+  * directory visited so far.
+  *
   * Render-thread-only, and mutating it does not by itself schedule a frame. This is a plain mutable object, invisible
   * to the reactive layer: a background result written straight into it stays off screen until something unrelated
   * happens to repaint. Pair the mutation with a `Signal` write, or call `TuiApp.requestRedraw()` from the same
@@ -79,13 +85,28 @@ final class DirectoryTreeState(val root: Path):
 
   /** [[visiblePaths]] paired with each entry's cached directory flag, so rendering needs no second lookup. */
   private[widgets] def visibleEntries(): Vector[(Path, Boolean)] =
-    def walk(directory: Path): Vector[(Path, Boolean)] =
+    // `ancestors` holds the real paths of the directories the walk is currently inside, so a link — to the root, to a
+    // parent, or to itself — that would recurse back onto that chain is drawn as an expanded entry with no children
+    // rather than followed again: the listing below it would be the one already on the stack, and following it means
+    // a symlink loop recurses until the render thread overflows its stack.
+    def walk(directory: Path, ancestors: Set[Path]): Vector[(Path, Boolean)] =
       cachedEntries(directory).flatMap { entry =>
         val (child, isDir) = entry
-        if expanded.contains(child) && isDir then entry +: walk(child)
+        if expanded.contains(child) && isDir then
+          val target = realPathOf(child)
+          if ancestors.contains(target) then Vector(entry)
+          else entry +: walk(child, ancestors + target)
         else Vector(entry)
       }
-    walk(root)
+    walk(root, Set(realPathOf(root)))
+
+  /** `path` with every link resolved — the identity two routes to the same directory share. A dangling link resolves to
+    * nothing, and rather than drop it (its listing fails to empty anyway) it falls back to the unresolved path, which
+    * no real directory on the chain can equal.
+    */
+  private def realPathOf(path: Path): Path =
+    try path.toRealPath()
+    catch case NonFatal(_) => path
 
   private def moveSelection(delta: Int): Unit =
     val visible = visiblePaths()

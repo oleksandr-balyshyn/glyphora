@@ -130,12 +130,14 @@ final case class ListView(
       val selected    = Selection.clamped(state.selected, items.size)
       state.selected = selected
       // Uniform lists take the padding-aware rule they always did; a list with a multi-row item takes the row-counting
-      // one, which has no padding to offer because "two more items" is not a fixed number of rows there.
-      val heights     = items.map(heightOf)
+      // one, which has no padding to offer because "two more items" is not a fixed number of rows there. The uniformity
+      // probe runs over `items` directly and the per-item heights are built only on the row-counting branch: a uniform
+      // list pays for what it draws, not a boxed height per item on every repaint — the viewport-cost rule the class
+      // Scaladoc states.
       state.offset =
-        if heights.forall(_ == 1) then
+        if items.forall(heightOf(_) == 1) then
           ScrollWindow.offsetFor(state.offset, selected, items.size, area.height, state.scrollPadding)
-        else ScrollWindow.offsetForItems(state.offset, selected, heights, area.height)
+        else ScrollWindow.offsetForItems(state.offset, selected, items.map(heightOf), area.height)
       // how many columns the marker gutter takes off the text on *every* row. Nothing is drawn in it on an unselected
       // row, but the columns still have to be subtracted so the text of the selected row and the text of the others
       // start in the same place.

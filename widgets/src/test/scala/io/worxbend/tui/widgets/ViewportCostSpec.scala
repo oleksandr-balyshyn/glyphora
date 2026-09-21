@@ -1,6 +1,7 @@
 package io.worxbend.tui.widgets
 
 import io.worxbend.tui.core.{Buffer, Constraint, Line, Rect, Span, Style, Text}
+import io.worxbend.tui.testsupport.BufferAssertions.trimmedLines
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -16,10 +17,14 @@ final class ViewportCostSpec extends AnyFunSuite:
 
   /** A view over `rows` that records how many elements were actually pulled. */
   final class CountingSeq[A](underlying: Seq[A]) extends Seq[A]:
-    var touched: Int          = 0
-    def apply(i: Int): A      = { touched += 1; underlying(i) }
-    def length: Int           = underlying.length
-    def iterator: Iterator[A] =
+    var touched: Int                       = 0
+    var mapped: Int                        = 0
+    def apply(i: Int): A                   = { touched += 1; underlying(i) }
+    def length: Int                        = underlying.length
+    override def map[B](f: A => B): Seq[B] =
+      mapped += 1
+      underlying.map(f)
+    def iterator: Iterator[A]              =
       underlying.iterator.map { element =>
         touched += 1
         element
@@ -109,3 +114,25 @@ final class ViewportCostSpec extends AnyFunSuite:
     assert(
       DataTable.fromStrings(Seq("id", "name"), second, widths).filteredRows(state).map(_.cells(1)) == Seq("y", "z")
     )
+
+  test("ListView derives a uniform list's scroll offset without materializing per-item heights"):
+    // the scroll arithmetic must cost what the viewport costs, not what the dataset costs: a uniform 10 000-item
+    // list used to build a boxed height for every item on every frame just to discover they were all one
+    val data   = Vector.tabulate(10000)(i => s"item $i")
+    val items  = CountingSeq(data)
+    val buffer = Buffer(Rect(0, 0, 20, 10))
+    val state  = ListState(selected = Some(9999), scrollPadding = 2)
+    ListView(items).render(Rect(0, 0, 20, 10), buffer, state)
+    assert(items.mapped == 0, "a uniform list materialized per-item heights to compute its offset")
+    assert(state.offset == 9990, "the window still lands where ScrollWindow.offsetFor puts it")
+    assert(trimmedLines(buffer).last == "> item 9999", "the same window renders, selection included")
+
+  test("ListView still materializes per-item heights when a multi-row item needs them"):
+    val data  = Vector.tabulate(100)(i =>
+      if i == 50 then Text(Seq(Line.raw("tall"), Line.raw("tall2"))) else Line.raw(s"item $i")
+    )
+    val items = CountingSeq(data)
+    val state = ListState(selected = Some(50))
+    ListView(items).render(Rect(0, 0, 20, 3), Buffer(Rect(0, 0, 20, 3)), state)
+    assert(items.mapped == 1, "the row-counting branch must build the heights it scrolls by")
+    assert(state.offset == 49, "the tall item's last row is what the window scrolls to show")

@@ -79,22 +79,3 @@ final case class Canvas(
       shapes.foreach(_.draw(painter))
       labels.foreach(label => painter.print(label.x, label.y, label.line))
       painter.flush(buffer)
-
-object Canvas:
-
-  /** The pre-0.15.0 signature, which took the two world ranges as bare `(min, max)` tuples.
-    *
-    * Kept so positional call sites written against 0.14.0 keep compiling; new code should pass [[Bounds]] instead.
-    * Because an overloaded `apply` may not repeat the default arguments the primary constructor carries, this delegate
-    * spells out every parameter — a call that relied on omitting trailing arguments moves to the primary constructor.
-    */
-  @deprecated("pass Bounds for xBounds/yBounds instead of (Double, Double) tuples", "0.15.0")
-  def apply(
-      xBounds: (Double, Double),
-      yBounds: (Double, Double),
-      shapes: Seq[Shape],
-      marker: String,
-      resolution: CanvasResolution,
-      labels: Seq[CanvasLabel],
-  ): Canvas =
-    Canvas(Bounds.of(xBounds), Bounds.of(yBounds), shapes, marker, resolution, labels)

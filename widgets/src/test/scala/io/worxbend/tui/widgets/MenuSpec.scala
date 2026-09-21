@@ -57,3 +57,14 @@ final class MenuSpec extends AnyFunSuite:
     // the `q` while every reader of the frame — the diff engine included — stepped straight over it.
     val buffer = rendered(Menu(Seq(MenuEntry.Item("設定パネル", shortcut = Some("q")))), MenuState(), 12, 3)
     assert(trimmedLines(buffer)(1).contains("q"))
+
+  test("a label that would fill the whole width is fitted left of its shortcut, not overwritten at the tail"):
+    // inner width 12: the hint "^R " claims the last 3 columns plus a 2-column gap, so the label gets 7. Previously
+    // the label was fitted to all 12 and the hint painted over its tail (reading " Rename fi^R ").
+    val buffer = rendered(Menu(Seq(MenuEntry.Item("Rename file now", shortcut = Some("^R")))), MenuState(), 14, 3)
+    assert(trimmedLines(buffer)(1) == "│ Rename  ^R │")
+
+  test("a hint that would leave the label no column at all is dropped"):
+    // inner width 4 and a 5-column hint cannot share the row: the label keeps the whole width
+    val buffer = rendered(Menu(Seq(MenuEntry.Item("Rename", shortcut = Some("Long")))), MenuState(), 6, 3)
+    assert(trimmedLines(buffer)(1) == "│ Ren│")

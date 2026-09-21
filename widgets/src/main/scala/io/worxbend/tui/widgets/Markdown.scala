@@ -39,7 +39,7 @@ final case class Markdown(
     */
   override def heightAt(width: Int): Option[Int] = rendered.heightAt(width)
 
-  private def rendered: Paragraph = Paragraph(MarkdownParser.parse(source, theme), overflow = Overflow.Wrap)
+  private lazy val rendered: Paragraph = Paragraph(MarkdownParser.parse(source, theme), overflow = Overflow.Wrap)
 
 private[widgets] object MarkdownParser:
 

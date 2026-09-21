@@ -164,10 +164,11 @@ object Shape:
 
   /** The world's coastlines, in EPSG:4326 degrees: x is longitude from −180 to 180, y is latitude from −90 to 90.
     *
-    * Those are the bounds to give the canvas as well — `Canvas((-180.0, 180.0), (-90.0, 90.0), Seq(Shape.WorldMap()))`
-    * — because a shape drawn in degrees and a canvas scaled to something else would put the coastlines somewhere no map
-    * has them. A narrower window is a legitimate thing to ask for and works the way every other shape does: bounds of
-    * `((-11.0, 32.0), (35.0, 72.0))` draw Europe filling the pane, with everything outside clipped away.
+    * Those are the bounds to give the canvas as well — `Canvas(Bounds(-180.0, 180.0), Bounds(-90.0, 90.0),
+    * Seq(Shape.WorldMap()))` — because a shape drawn in degrees and a canvas scaled to something else would put the
+    * coastlines somewhere no map has them. A narrower window is a legitimate thing to ask for and works the way every
+    * other shape does: bounds of `(Bounds(-11.0, 32.0), Bounds(35.0, 72.0))` draw Europe filling the pane, with
+    * everything outside clipped away.
     *
     * The projection is plate carrée — longitude straight onto x, latitude straight onto y — which is what the raw
     * coordinates give and what a terminal, whose cells are already twice as tall as they are wide, can show without

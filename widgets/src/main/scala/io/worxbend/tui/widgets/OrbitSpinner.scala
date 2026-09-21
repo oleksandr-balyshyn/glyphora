@@ -273,45 +273,6 @@ final case class OrbitSpinner(
 
 object OrbitSpinner:
 
-  /** The pre-0.15.0 signature: twelve parameters laid out positionally.
-    *
-    * Kept so call sites written against 0.14.0 keep compiling; new code should bundle everything past `elapsed` in an
-    * [[OrbitSpinnerOptions]]. Because an overloaded `apply` may not repeat the default arguments the primary
-    * constructor carries, this delegate spells out every parameter — a call that relied on omitting trailing arguments
-    * moves to the primary constructor.
-    */
-  @deprecated("bundle everything past elapsed in an OrbitSpinnerOptions", "0.15.0")
-  def apply(
-      elapsed: FiniteDuration,
-      style: Style,
-      arcStyle: Style,
-      path: OrbitPath,
-      trail: OrbitTrail,
-      sweep: Double,
-      radius: Option[Int],
-      thickness: Int,
-      resolution: CanvasResolution,
-      marker: String,
-      direction: SpinDirection,
-      period: FiniteDuration,
-  ): OrbitSpinner =
-    OrbitSpinner(
-      elapsed,
-      OrbitSpinnerOptions(
-        style = style,
-        arcStyle = arcStyle,
-        path = path,
-        trail = trail,
-        sweep = sweep,
-        radius = radius,
-        thickness = thickness,
-        resolution = resolution,
-        marker = marker,
-        direction = direction,
-        period = period,
-      ),
-    )
-
   /** The cells a figure of `radius` dot rows occupies at `resolution`.
     *
     * Exact in both directions: rendered into precisely this area the figure paints every edge cell of it, because the

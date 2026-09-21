@@ -11,7 +11,7 @@ final case class Heatmap(
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
-    val ceiling = values.flatten.filter(_ > 0).maxOption.getOrElse(0.0)
+    val ceiling = values.iterator.flatMap(_.iterator).filter(_ > 0).maxOption.getOrElse(0.0)
     if !area.isEmpty && ceiling > 0 then
       values.take(area.height).zipWithIndex.foreach { (row, y) =>
         row.take(area.width).zipWithIndex.foreach { (value, x) =>
