@@ -58,7 +58,7 @@ final class DisciplineSpec extends AnyFunSuite:
 
   private val PublishVersionDeclaration = """def\s+publishVersion\b""".r
 
-  /** A coordinate a reader can paste: `io.worxbend::tui-dsl:0.14.0` or `"io.worxbend" %% "tui-dsl" % "0.14.0"`. */
+  /** A coordinate a reader can paste: `io.worxbend::tui-dsl:0.15.0` or `"io.worxbend" %% "tui-dsl" % "0.15.0"`. */
   private val PublishedCoordinate =
     """io\.worxbend(?:"\s*%%\s*"|::)(tui-[a-z-]+)(?:"\s*%\s*"|:)([0-9][0-9A-Za-z.+-]*)""".r
 
