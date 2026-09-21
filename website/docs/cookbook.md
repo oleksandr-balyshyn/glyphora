@@ -155,7 +155,7 @@ render thread.
 ```scala
 import scala.concurrent.duration.*
 
-private var poller: Cancelable = Cancelable.noop
+private var poller: Cancelable = () => ()
 
 private def startPolling(): Unit =
   poller.cancel()

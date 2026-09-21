@@ -154,7 +154,10 @@ first, and the popup then paints onto empty cells.
 layers(
   page,
   positioned(10, 4, 24, 6)(
-    layers(clear(), menu(items, menuState)(onPick)),
+    layers(
+      clear(),
+      menu(Seq(MenuEntry.Item("Open"), MenuEntry.Separator, MenuEntry.Item("Quit")), menuState)(onPick),
+    ),
   ),
 )
 ```
@@ -324,7 +327,8 @@ every one of them is, and `show` prints the set as `"Top|Left"` instead of a raw
 `titleBottom` writes into the bottom border at the right, `title` into the top border at
 the left. Neither costs a content row: they overwrite border cells that were being drawn
 anyway. Below the DSL, `Block` takes a `Seq[BlockTitle]` and any number of them can share
-a border — `BlockTitle.top(line, Alignment.Center)`, `BlockTitle.bottom(line)`, and so on.
+a border — `BlockTitle.top(line, Alignment.Center)`, `BlockTitle.bottom(line)`, and so on,
+each a shorthand for setting `TitlePosition.Top` or `TitlePosition.Bottom` on the caption.
 
 `Block` has two styles and they do different jobs. `borderStyle` colours the frame glyphs
 and the titles. `style` paints the *whole* area — frame and interior together — before
@@ -1742,6 +1746,7 @@ the no-argument element draws.
 | `.radius(dots)` | pins the size; unset, it fills its area |
 | `.sweep(fraction)` | how much of the lap is lit — `.sweep(1.0).solid` is a static "queued" ring |
 | `.solid` or `.ramp(ColorRamp.Heat)` | a uniform window, or a graded comet tail |
+| `.trail(OrbitTrail.Solid)` or `.trail(OrbitTrail.Comet(ramp))` | the shading enum the two presets above set |
 | `.thickness(dots)` | thickens arc and path inwards; worth it above ~radius 8 |
 | `.reversed`, `.period(d)` | direction and revolution time |
 | `.markers("*")` or `.halfBlocks` | the ASCII and no-braille-font floors |
@@ -1767,12 +1772,21 @@ arguments, rather than two modes in which half the options are silently ignored.
 has no dwell frame at the turn; the extreme slots are visited once per cycle and the
 interior twice.
 
+| Method | Effect |
+|---|---|
+| `.vertical` | runs the track down a column (`LinearAxis.Vertical`) instead of along a row |
+| `.bouncing` | the head turns back at each end (`LinearPath.Bounce`) rather than wrapping |
+| `.reversed` | runs the head the other way (`LinearFlow.Backward`) |
+| `.solid` | a uniform lit window behind the head (`LinearTrail.Solid`) instead of a fading tail |
+| `.period(d)` | one full cycle — a traverse when wrapping, a round trip when bouncing |
+
 **`spinnerGrid`** turns any `SpinnerPreset` into an area-filling block by giving each slot
 a time offset. It *consumes* the preset catalogue rather than extending it, which is the
 point of it existing: a preset is a function of time alone and can never carry a spatial
 offset, yet every preset already in the catalogue becomes an area animation the moment it
-is put here. `.phase(...)` chooses `Uniform` (lockstep — the reduced-motion member),
-`Diagonal`, or `Radial`. It is also the one place in this family where per-slot colour is
+is put here. `.phase(...)` chooses `GridPhase.Uniform` (lockstep — the reduced-motion
+member), `GridPhase.Diagonal(framesPerCell)`, or `GridPhase.Radial(framesPerCell)`. It
+is also the one place in this family where per-slot colour is
 free, because every slot holds exactly one frame — `.ramp(...)` shades the block by phase
 with none of the compromise above.
 

@@ -87,8 +87,11 @@ object `package` extends Module {
       */
     def jvmVersion = "graalvm-community:25.0.2"
 
-    /** CI requires every example to build with no fallback image, which is what proves the no-reflection rule holds. */
-    def nativeImageOptions = Seq("--no-fallback")
+    /** CI requires every example to build with no fallback image, which is what proves the no-reflection rule holds.
+      * `--enable-native-access=ALL-UNNAMED` silences the JEP 472 warnings JLine 4's native access otherwise prints
+      * (four WARNING lines) at every binary startup.
+      */
+    def nativeImageOptions = Seq("--no-fallback", "--enable-native-access=ALL-UNNAMED")
 
     object test extends TuiPilotTests
   }

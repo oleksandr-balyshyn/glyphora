@@ -63,7 +63,7 @@ jobs:
       - name: Generate Scaladoc for every published module
         run: |
           set -euo pipefail
-          for m in core terminal widgets runtime dsl macros; do
+          for m in core terminal widgets runtime dsl macros test-support; do
             jar=$(./mill show "${m}.docJar" | tail -1 | sed -E 's/^"ref:v0:[^:]+:(.*)"$/\1/')
             mkdir -p "website/build/api/${m}"
             unzip -oq "$jar" -d "website/build/api/${m}"

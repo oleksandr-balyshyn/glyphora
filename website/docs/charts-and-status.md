@@ -150,9 +150,8 @@ bars on a smaller one — silently, because the widget clips rather than complai
 
 ## Show axis numbers on a chart
 
-`Element.chart` hides `showLabels`, `marker` and `resolution`, and `CanvasResolution`
-is not re-exported from `io.worxbend.tui.dsl`. When you need any of them, drop to the
-widget and wrap it:
+`Element.chart` hides `showLabels`, `marker` and `resolution` behind its own parameter
+list. When you need any of them, drop to the widget and wrap it:
 
 ```scala
 import io.worxbend.tui.widgets as w

@@ -11,7 +11,7 @@ Implemented, grouped by what they are for:
   caller passes content length and offset).
 - **Text**: `Paragraph` (alignment, cluster-safe wrapping), `Markdown` (subset:
   headings, lists, quotes, code fences, inline styles — no links/images/tables),
-  `Link`, `WaveText`, `TextArea` (+`TextAreaState`; multi-line cluster-safe editing,
+  `Link`, `AnimatedText`, `TextArea` (+`TextAreaState`; multi-line cluster-safe editing,
   bounded undo, 2D cursor/scroll — no syntax highlighting).
 - **Lists and tables**: `ListView` (+`ListState`; named to avoid colliding with
   `scala.List`; items are `String | Line`, so plain text needs no wrapping), `Table`

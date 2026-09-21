@@ -52,11 +52,15 @@ jobs:
       - name: Every example is covered by CI
         # The example list used to be hardcoded here, and an example added afterwards was
         # silently never built. The matrices below now derive it, and this asserts the
-        # derivation still finds everything on disk.
+        # derivation still finds everything on disk: one depth-2 package.mill per
+        # examples/<name>/ dir, and none buried deeper. (A depth-1 package.mill is the
+        # examples aggregator module, not an example.)
         run: |
           modules=$(find examples -mindepth 2 -maxdepth 2 -name package.mill -printf '%h\n' | wc -l)
-          if [ "$modules" -lt 1 ]; then
-            echo "::error::example discovery found no modules — the matrices would silently be empty" >&2
+          dirs=$(find examples -mindepth 1 -maxdepth 1 -type d | wc -l)
+          deep=$(find examples -mindepth 3 -name package.mill | wc -l)
+          if [ "$modules" -lt 1 ] || [ "$modules" -ne "$dirs" ] || [ "$deep" -ne 0 ]; then
+            echo "::error::example discovery mismatch: $modules depth-2 package.mill vs $dirs example dirs vs $deep deeper ones" >&2
             exit 1
           fi
           echo "discovered $modules example modules"
@@ -165,6 +169,9 @@ jobs:
         with:
           path: out
           key: mill-build-${{ runner.os }}-${{ github.sha }}
+          # Keyed by SHA only, so 'Re-run all jobs' on the same commit re-enters this step
+          # with the key already present — save without this would fail the whole re-run.
+          overwrite: true
 
   test:
     name: Test library (JDK ${{ matrix.jdk }})
@@ -295,3 +302,25 @@ jobs:
             echo "::error::native binaries failed:$failed" >&2
             exit 1
           fi
+
+  # ── the guide itself ──────────────────────────────────────────────────────────────
+  website-build:
+    name: Build website
+    runs-on: ubuntu-latest
+    # docusaurus.config.js sets onBrokenLinks/onBrokenAnchors to 'throw', so a dead
+    # cross-reference fails the build — but only if something builds the site before
+    # merge. The docs workflow builds it on main; this gate builds it on the PR.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          # The lockfile lives under website/, not at the repository root, so the
+          # default cache lookup would find nothing to key on.
+          cache-dependency-path: website/package-lock.json
+      - name: Build Docusaurus site
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
