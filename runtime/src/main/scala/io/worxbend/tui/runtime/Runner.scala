@@ -183,7 +183,7 @@ enum RunnerError:
       case QueuedTask(failures)        => describe(failures)
       case Handler(error)              =>
         val detail = Option(error.getMessage).getOrElse(error.getClass.getName)
-        s"the event handler threw on the render thread: $detail"
+        s"an app callback threw on the render thread: $detail"
 
   /** How many render-thread bodies failed and what the first one said. */
   private def describe(failures: QueuedTaskFailures): String =

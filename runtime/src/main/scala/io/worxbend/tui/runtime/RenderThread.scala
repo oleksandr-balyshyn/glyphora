@@ -50,8 +50,13 @@ object RenderThread:
       if !closed then
         val _ = pending.add(body)
         val _ = queued.incrementAndGet()
-        limit.foreach(trimTo)
-        wake()
+        // re-check after the add: close() retires this queue concurrently, and a body that lands after its clear would
+        // sit in `pending` for the life of the JVM with `queued` one higher than anything will ever drain back down
+        if closed && pending.remove(body) then
+          val _ = queued.decrementAndGet()
+        else
+          limit.foreach(trimTo)
+          wake()
 
     /** Drops the oldest waiting bodies until at most `cap` are left.
       *
@@ -258,6 +263,3 @@ object RenderTaskErrorHandler:
     * [[RenderThread]] directly still fails that test instead of vanishing.
     */
   val rethrow: RenderTaskErrorHandler = error => throw error
-
-  /** Swallows the error silently. */
-  val ignore: RenderTaskErrorHandler = _ => ()

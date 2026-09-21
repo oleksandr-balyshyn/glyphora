@@ -8,9 +8,6 @@ import scala.util.control.NonFatal
 trait Cancelable:
   def cancel(): Unit
 
-object Cancelable:
-  val noop: Cancelable = () => ()
-
 /** Structured background work for a signals-driven app — glyphora's answer to bubbletea's `Cmd`/`Msg`.
   *
   * The problem it solves: [[Signal]]s may only be mutated on the render thread ([[RenderThread]]), so a naive

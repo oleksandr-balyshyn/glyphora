@@ -5,7 +5,7 @@ import io.worxbend.tui.terminal.{Backend, BackendError, HeadlessBackend}
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import scala.concurrent.duration.{Duration, DurationInt}
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 
 /** Regressions for event-loop lifecycle defects found by the terminal audit. */
 final class RunnerLifecycleSpec extends AnyFunSuite:
@@ -46,6 +46,33 @@ final class RunnerLifecycleSpec extends AnyFunSuite:
     def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
       Right(if scripted.isEmpty then None else Some(scripted.dequeue()))
     def close(): Either[BackendError, Unit] = Left(BackendError.UnsupportedTerminal("cannot restore"))
+
+  /** Drives the loop's clock forward by a whole tick rate on every read — simulating the time a blocking read spends
+    * waiting, so a tick is always due at the end of the iteration that handles the answer — then answers with the next
+    * scripted value, or `Event.EndOfInput` forever once the script runs out.
+    */
+  private final class TickingBackend(rate: FiniteDuration, script: Either[BackendError, Event]*) extends Backend:
+    private var now     = 0L
+    private val answers = scala.collection.mutable.Queue.from(script)
+
+    /** The clock the runner under test must be started with. */
+    def nanoTime: () => Long = () => now
+
+    def size: Either[BackendError, Size]                                  = Right(Size(20, 3))
+    def draw(buffer: Buffer): Either[BackendError, Unit]                  = Right(())
+    def enableRawMode()                                                   = Right(())
+    def disableRawMode()                                                  = Right(())
+    def enterAlternateScreen()                                            = Right(())
+    def leaveAlternateScreen()                                            = Right(())
+    def enableMouseCapture()                                              = Right(())
+    def disableMouseCapture()                                             = Right(())
+    def hideCursor()                                                      = Right(())
+    def showCursor()                                                      = Right(())
+    def readEvent(timeout: Duration): Either[BackendError, Option[Event]] =
+      now += rate.toNanos
+      val next = if answers.isEmpty then Right(Event.EndOfInput) else answers.dequeue()
+      next.map(Some(_))
+    def close(): Either[BackendError, Unit]                               = Right(())
 
   test("a clean run that cannot restore the terminal reports the failure instead of exiting silently"):
     // the most user-visible failure the library has: the shell comes back raw, on the alternate screen, or with no
@@ -241,6 +268,53 @@ final class RunnerLifecycleSpec extends AnyFunSuite:
   test("a backend must reject a zero timeout rather than silently polling once"):
     val backend = HeadlessBackend(Size(10, 3))
     assertThrows[IllegalArgumentException](backend.readEvent(Duration.Zero))
+
+  test("a tick that falls due in the iteration that quits is not delivered to the handler"):
+    // only the repaint used to be guarded by `state.isLive`, not the dispatch itself: a tick falling due in the same
+    // iteration that stopped the run reached the handler as one last Event.Tick the app could no longer answer
+    val rate    = 10.millis
+    val seen    = scala.collection.mutable.ArrayBuffer.empty[Event]
+    val backend = TickingBackend(rate, Right(Event.Key(KeyEvent.of(KeyCode.Char('q')))))
+    val result  = TerminalRunner(backend, RunnerConfig(tickRate = Some(rate)), nanoTime = backend.nanoTime).run(
+      _ => (),
+      (event, handle) =>
+        seen += event
+        handle.quit()
+        EventOutcome.Ignored
+      ,
+      _ => (),
+    )
+    assert(result == Right(()))
+    assert(seen.toSeq == Seq(Event.Key(KeyEvent.of(KeyCode.Char('q')))), s"the handler also saw: ${seen.toSeq}")
+
+  test("a tick that falls due in the end-of-input iteration is not delivered to the handler"):
+    // the same guard for the loop's other clean exit: the stream ends, dispatch quits the loop, and the tick due at
+    // the end of that iteration must not fire either
+    val rate    = 10.millis
+    val seen    = scala.collection.mutable.ArrayBuffer.empty[Event]
+    val backend = TickingBackend(rate) // no script: the very first read reports the end of the stream
+    val result  = TerminalRunner(backend, RunnerConfig(tickRate = Some(rate)), nanoTime = backend.nanoTime).run(
+      _ => (),
+      (event, _) => { seen += event; EventOutcome.Ignored },
+      _ => (),
+    )
+    assert(result == Right(()))
+    assert(seen.toSeq == Seq(Event.EndOfInput), s"the handler also saw: ${seen.toSeq}")
+
+  test("a tick that falls due in the iteration that fails is not delivered to the handler"):
+    // and the third way an iteration stops the run: the backend call itself fails. The handler never runs for the
+    // failing read, and it must not run for a tick either
+    val boom    = BackendError.NotInRawMode
+    val rate    = 10.millis
+    val seen    = scala.collection.mutable.ArrayBuffer.empty[Event]
+    val backend = TickingBackend(rate, Left(boom))
+    val result  = TerminalRunner(backend, RunnerConfig(tickRate = Some(rate)), nanoTime = backend.nanoTime).run(
+      _ => (),
+      (event, _) => { seen += event; EventOutcome.Ignored },
+      _ => (),
+    )
+    assert(result == Left(RunnerError.Backend(boom)))
+    assert(seen.isEmpty, s"the handler also saw: ${seen.toSeq}")
 
   test("an unconsumed interrupt quits the runner through its normal teardown"):
     val backend = HeadlessBackend(Size(20, 3))

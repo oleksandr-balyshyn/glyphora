@@ -268,10 +268,13 @@ private final class LoopBody(
           // bounded anyway: a paste arrives as a single `Event.Paste`, and resizes coalesce inside the backend.
           if dispatch(event) == DispatchOutcome.Repaint && state.isLive then redraw()
         case Right(None)        => ()
-      // when no tick is due the handler is not invoked at all
-      val tickDue     = ticks.takeDue()
-      val tickOutcome = if tickDue then guarded(handleEvent(Event.Tick, handle)) else EventOutcome.Ignored
-      if tickDue && tickOutcome == EventOutcome.Redraw && state.isLive then redraw()
+      // the loop may have stopped inside dispatch above — a quit(), the end of input, a failed backend call — and a
+      // tick that falls due now is not owed to an app that has already exited: only a live loop delivers one
+      if state.isLive then
+        // when no tick is due the handler is not invoked at all
+        val tickDue     = ticks.takeDue()
+        val tickOutcome = if tickDue then guarded(handleEvent(Event.Tick, handle)) else EventOutcome.Ignored
+        if tickDue && tickOutcome == EventOutcome.Redraw && state.isLive then redraw()
     state.outcome
 
 /** What [[LoopBody.dispatch]] settled about the frame that follows the event it handled — named so the loop reads
