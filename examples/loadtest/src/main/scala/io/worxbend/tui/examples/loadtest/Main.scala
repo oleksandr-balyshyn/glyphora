@@ -59,14 +59,10 @@ final class LoadTestApp(
   private var startedNanos: Long               = 0L
   private var runId: Int                       = 0
 
-  // Derived values live here, not in `view`. A `Computed` built inside `view` re-subscribes on every frame and is
-  // never released; out here each one recomputes lazily, once per change to `stats`.
-  private val latency: Computed[LatencySummary] =
-    Computed(LatencySummary.of(stats.get.latencies))
-
-  private val histogram: Computed[Vector[LatencyBucket]] =
-    Computed(Histogram.of(stats.get.latencies, LoadTestApp.HistogramBuckets))
-
+  // Derived values live inside [[RunStats]], not in `Computed`s over a raw latencies vector: a `Computed` recomputes
+  // every time `stats` changes, which while a run is in flight is every render tick, each recompute re-sorting a
+  // vector that grows to a million samples. `RunStats.record` folds the summary and histogram in as it absorbs each
+  // batch, so the panels below read them like any other field.
   override def bindings: KeyBindings = KeyBindings(
     binding("s", "start the run")(start()),
     binding("x", "stop the run")(stop()),
@@ -136,7 +132,7 @@ final class LoadTestApp(
 
   private def absorb(): Unit =
     val batch = runner.drain()
-    stats.update(_.record(batch))
+    stats.update(_.record(batch, LoadTestApp.HistogramBuckets))
     throughput.update(window => (window :+ batch.size.toLong).takeRight(LoadTestApp.ThroughputWindow))
     peakThroughput.update(peak => math.max(peak, batch.size.toLong))
 
@@ -232,7 +228,7 @@ final class LoadTestApp(
     )
 
   private def histogramPanel(using ReactiveScope, Theme): Element =
-    val buckets = histogram.get
+    val buckets = stats.get.histogram
     val tallest = buckets.map(_.count).maxOption.getOrElse(0)
     panel("Latency histogram (ms)")(
       if buckets.isEmpty then text("no samples yet").dim.fill
@@ -252,7 +248,7 @@ final class LoadTestApp(
     ).length(1)
 
   private def latencyPanel(using ReactiveScope, Theme): Element =
-    val summary                                           = latency.get
+    val summary                                           = stats.get.summary
     // `TableElement`'s rows are plain strings with no per-column alignment, so the numbers are padded to a fixed
     // width here.
     def statRow(label: String, micros: Long): Seq[String] = Seq(label, fixed("%9.2f", LoadTestApp.ms(micros)))
@@ -284,7 +280,7 @@ final class LoadTestApp(
 
   private def summaryView(using ReactiveScope, Theme): Element =
     val current      = stats.get
-    val summary      = latency.get
+    val summary      = current.summary
     val seconds      = math.max(0.001, elapsedSeconds)
     val success      = if current.sent == 0 then 0.0 else current.ok * 100.0 / current.sent
     // oha's rule, and a good one: the success rate is the only number worth colouring by threshold.

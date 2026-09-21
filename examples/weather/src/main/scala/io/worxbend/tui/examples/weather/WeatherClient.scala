@@ -90,7 +90,11 @@ final class OpenMeteoClient(
       else Left(WeatherError.NetworkFailure(s"HTTP ${response.statusCode()}"))
     catch
       case e: java.io.IOException  => Left(WeatherError.NetworkFailure(describeException(e)))
-      case e: InterruptedException => Left(WeatherError.NetworkFailure(describeException(e)))
+      case e: InterruptedException =>
+        // Catching InterruptedException clears the thread's interrupt status; swallowing it would stop the worker
+        // thread from ever learning it was asked to shut down. Restore the status before returning the error.
+        Thread.currentThread().interrupt()
+        Left(WeatherError.NetworkFailure(describeException(e)))
 
   private def encode(value: String): String = java.net.URLEncoder.encode(value, "UTF-8")
 

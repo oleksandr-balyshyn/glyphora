@@ -6,14 +6,19 @@ import io.worxbend.tui.testsupport.Pilot
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 
-private final class FakeWeatherClient(response: Either[WeatherError, WeatherReport]) extends WeatherClient:
+private final class FakeWeatherClient(
+    response: String => Either[WeatherError, WeatherReport],
+    delay: String => FiniteDuration = _ => Duration.Zero,
+) extends WeatherClient:
   @volatile var lastRequestedCity: Option[String] = None
 
   def fetch(city: String): Either[WeatherError, WeatherReport] =
     lastRequestedCity = Some(city)
-    response
+    val pause = delay(city)
+    if pause > Duration.Zero then Thread.sleep(pause.toMillis)
+    response(city)
 
 final class WeatherAppSpec extends AnyFunSuite:
 
@@ -35,7 +40,7 @@ final class WeatherAppSpec extends AnyFunSuite:
   )
 
   test("typing a city and pressing Enter shows the fetched conditions"):
-    val client  = FakeWeatherClient(Right(sampleReport))
+    val client  = FakeWeatherClient(_ => Right(sampleReport))
     val backend = HeadlessBackend(Size(60, 16))
     val app     = WeatherApp(client)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
@@ -50,7 +55,7 @@ final class WeatherAppSpec extends AnyFunSuite:
     assert(pilot.awaitTermination(2.seconds))
 
   test("a failed lookup shows an error instead of crashing"):
-    val client  = FakeWeatherClient(Left(WeatherError.CityNotFound("Nowhereville")))
+    val client  = FakeWeatherClient(_ => Left(WeatherError.CityNotFound("Nowhereville")))
     val backend = HeadlessBackend(Size(60, 16))
     val app     = WeatherApp(client)
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
@@ -59,5 +64,30 @@ final class WeatherAppSpec extends AnyFunSuite:
     waitUntil(pilot)(_.contains("Couldn't fetch Nowhereville"))
 
     assert(pilot.screenText.contains("Couldn't fetch Nowhereville"))
+    pilot.pressKey(KeyCode.Escape)
+    assert(pilot.awaitTermination(2.seconds))
+
+  test("a slower earlier search cannot overwrite the result of a newer one"):
+    // Kyiv answers after 500ms, Lisbon immediately: Kyiv's fetch is still in flight when Lisbon's result lands, and
+    // its late completion is the stale write the request-generation guard exists to drop. Without the guard the
+    // screen would flip back to Kyiv's figures once the slow fetch finished.
+    val slow    = sampleReport.copy(city = "Kyiv", country = "", temperatureC = -3.0)
+    val client  = FakeWeatherClient(
+      response = city => Right(if city == "Kyiv" then slow else sampleReport),
+      delay = city => if city == "Kyiv" then 500.millis else Duration.Zero,
+    )
+    val backend = HeadlessBackend(Size(60, 16))
+    val app     = WeatherApp(client)
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.typeText("Kyiv").pressKey(KeyCode.Enter)
+    pilot.typeText("Lisbon").pressKey(KeyCode.Enter)
+    waitUntil(pilot)(_.contains("Lisbon, Portugal"))
+
+    // Wait out Kyiv's in-flight delay (plus its delivery to the render thread), then Lisbon must still own the
+    // screen and Kyiv's temperature must never have appeared.
+    Thread.sleep(750)
+    assert(pilot.screenText.contains("Lisbon, Portugal"))
+    assert(!pilot.screenText.contains("-3.0"))
     pilot.pressKey(KeyCode.Escape)
     assert(pilot.awaitTermination(2.seconds))

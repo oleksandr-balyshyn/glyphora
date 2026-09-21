@@ -26,6 +26,10 @@ class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
   private val history: Signal[Vector[String]] = Signal(Vector.empty)
   private val HistoryLimit: Int               = 5
 
+  // Render thread only: written in `search` (a key handler) and read in the completion it posts, the same
+  // generation-counter pattern `examples/loadtest` uses for run ids.
+  private var requestId: Int = 0
+
   def view(using ReactiveScope, Theme): Element =
     column(
       panel("City")(
@@ -85,11 +89,18 @@ class WeatherApp(client: WeatherClient = OpenMeteoClient()) extends TuiApp:
       // ordinary signal write with no `RenderThread.runOnRenderThread` hop; and it delivers a thrown exception as a
       // `Left` instead of dropping it, so a `client.fetch` that blows up shows an error rather than leaving the UI
       // spinning on `Status.Loading` for ever.
-      Async.runCatching(client.fetch(city)) {
-        case Right(Right(report)) => status.set(Status.Loaded(report))
-        case Right(Left(failure)) => status.set(Status.Failed(city, WeatherError.describe(failure)))
-        case Left(thrown)         =>
-          status.set(Status.Failed(city, Option(thrown.getMessage).getOrElse(thrown.getClass.getSimpleName)))
+      requestId += 1
+      val thisRequest = requestId
+      Async.runCatching(client.fetch(city)) { result =>
+        // `requestId` is checked because two searches can overlap: a slow first fetch finishes *after* a fast second
+        // one and would otherwise paste its own stale city over the newer result. Comparing generations drops the
+        // stale completion, the same guard `examples/loadtest`'s `finish` applies to late run callbacks.
+        if thisRequest == requestId then
+          result match
+            case Right(Right(report)) => status.set(Status.Loaded(report))
+            case Right(Left(failure)) => status.set(Status.Failed(city, WeatherError.describe(failure)))
+            case Left(thrown)         =>
+              status.set(Status.Failed(city, Option(thrown.getMessage).getOrElse(thrown.getClass.getSimpleName)))
       }
 
 object Main extends WeatherApp()
