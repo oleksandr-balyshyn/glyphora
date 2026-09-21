@@ -2,8 +2,6 @@ package io.worxbend.tui.terminal
 
 import io.worxbend.tui.core.{Position, Size}
 
-import org.jline.terminal.Terminal
-
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
 /** The query/reply round trips of [[JLine3Backend]]: asking the terminal something with an escape sequence and reading
@@ -15,13 +13,18 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
   * terminal back on Ctrl+Z — exactly the key a user reaches for when something seems stuck. What protects the decoder
   * from a second reader is the render-thread contract in [[Backend.queryCursorPosition]], not the monitor.
   *
+  * `emit` is the backend's monitored, flushing write, injected the way [[TitleStack]] receives it: this class owns no
+  * writer and no flush logic of its own, so there is one definition of "a sequence went out" rather than one per
+  * collaborator. A throw from it propagates to the caller, which wraps the round trip in [[Backend.attempt]] exactly as
+  * it did when the write lived here.
+  *
   * A terminal that does not implement a query never answers, so every read is bounded by a timeout and a silence is
   * reported as "unknown" (`None`, or [[TerminalCapabilities.unknown]] from [[probeCapabilities]]), never as an I/O
   * failure: nothing broke, the terminal simply cannot say.
   */
 private[terminal] final class ReplyQueries(
     screenOwnership: AnyRef,
-    terminal: Terminal,
+    emit: String => Unit,
     decoder: InputDecoder,
 ):
 
@@ -38,33 +41,26 @@ private[terminal] final class ReplyQueries(
   def probeCapabilities(timeout: FiniteDuration): TerminalCapabilities =
     if sys.env.get("GLYPHORA_NO_CAPABILITY_PROBE").exists(_.nonEmpty) then TerminalCapabilities.unknown
     else
+      // the five queries are one critical section, so a Ctrl+Z handover cannot land between the question and the
+      // fence; `emit` re-enters the reentrant monitor per query
       screenOwnership.synchronized {
-        write(AnsiSequences.queryPrivateMode(CapabilityReplies.SynchronizedOutputMode))
-        write(AnsiSequences.queryPrivateMode(CapabilityReplies.BracketedPasteMode))
-        write(AnsiSequences.queryPrivateMode(CapabilityReplies.FocusReportingMode))
-        write(AnsiSequences.QueryKittyKeyboard)
-        write(AnsiSequences.QueryPrimaryDeviceAttributes)
+        emit(AnsiSequences.queryPrivateMode(CapabilityReplies.SynchronizedOutputMode))
+        emit(AnsiSequences.queryPrivateMode(CapabilityReplies.BracketedPasteMode))
+        emit(AnsiSequences.queryPrivateMode(CapabilityReplies.FocusReportingMode))
+        emit(AnsiSequences.QueryKittyKeyboard)
+        emit(AnsiSequences.QueryPrimaryDeviceAttributes)
       }
       decoder.readCapabilityReport(timeout)
 
   /** Writes `ESC[6n` and waits up to `timeout` for the cursor report, or answers `None` when the terminal never does.
     */
   def cursorPosition(timeout: Duration): Option[Position] =
-    write(AnsiSequences.RequestCursorPosition)
+    emit(AnsiSequences.RequestCursorPosition)
     decoder.readCursorReport(timeout)
 
   /** Writes `ESC[14t` and waits up to `timeout` for the text-area size, or answers `None` when the terminal never
     * replies — the ordinary outcome, including on most Windows terminals.
     */
   def textAreaSize(timeout: FiniteDuration): Option[Size] =
-    write(AnsiSequences.RequestTextAreaPixels)
+    emit(AnsiSequences.RequestTextAreaPixels)
     decoder.readTextAreaSize(timeout)
-
-  /** Writes one sequence to the terminal and flushes it, under `screenOwnership`. The monitor is reentrant, so the
-    * five-query burst in [[probeCapabilities]] takes it once around the whole batch and this simply re-enters.
-    */
-  private def write(sequence: String): Unit =
-    screenOwnership.synchronized {
-      terminal.writer().write(sequence)
-      terminal.writer().flush()
-    }

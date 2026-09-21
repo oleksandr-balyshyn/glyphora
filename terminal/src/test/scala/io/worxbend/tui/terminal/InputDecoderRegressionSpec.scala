@@ -316,3 +316,21 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
     assert(decoded(csi("97;5:3u")*) == Event.KeyRelease(KeyEvent(KeyCode.Char('a'), KeyModifiers.Ctrl)))
     // :2 is auto-repeat and stays a press on purpose — a held key on a legacy terminal produces exactly that
     assert(decoded(csi("97;5:2u")*) == decoded(csi("97;5u")*))
+
+  /** A modified key whose first parameter is omitted used to lose its modifier: the empty field was skipped, the
+    * modifier code slid into the key's own slot, and xterm's Ctrl+Up — written `CSI ;5A`, the omitted parameter
+    * defaulting to 1 — reached the application as a plain Up.
+    */
+  test("a modified key with an omitted first parameter keeps its modifier"):
+    assert(decoded(csi(";5A")*) == Event.Key(KeyEvent(KeyCode.Up, KeyModifiers.Ctrl)))
+    assert(decoded(csi(";5B")*) == Event.Key(KeyEvent(KeyCode.Down, KeyModifiers.Ctrl)))
+    assert(decoded(csi(";2D")*) == Event.Key(KeyEvent(KeyCode.Left, KeyModifiers.Shift)))
+    // the explicit spelling names the same key
+    assert(decoded(csi(";5A")*) == decoded(csi("1;5A")*))
+
+  /** The defaulting is positional, not a license to invent parameters: a sequence that carries none at all must keep
+    * naming nothing, or `CSI ~` starts decoding as Home.
+    */
+  test("a parameter-less sequence names nothing rather than defaulting its parameters"):
+    dropped(csi("~")*)
+    dropped(csi("u")*)

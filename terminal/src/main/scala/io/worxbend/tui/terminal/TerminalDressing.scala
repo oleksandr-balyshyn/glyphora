@@ -81,9 +81,16 @@ private[terminal] final class TerminalDressing(backend: JLine3Backend):
     try backend.terminal.writer().flush()
     catch case NonFatal(_) => ()
 
-  /** Restores what [[releaseTerminal]] undressed. Same two callers, same two threads, same monitor. */
+  /** Restores what [[releaseTerminal]] undressed. Same two callers, same two threads, same monitor.
+    *
+    * The raw-mode half re-dresses without re-probing: the probe is a read, and this runs on JLine's signal-dispatch
+    * thread after SIGCONT (or in the `finally` of a `suspend`), where reading would race the render thread's in-flight
+    * [[io.worxbend.tui.terminal.InputDecoder.decode]] on the decoder's mutable state. The probe was paid at the first
+    * raw-mode entry and its answer is retained for the whole session, so the re-dress simply re-applies the modes that
+    * answer established — which is also what keeps a `suspend` from paying a 100 ms round trip per call.
+    */
   def reacquireTerminal(state: TerminalState): Unit = backend.screenOwnership.synchronized:
-    if state.raw then bestEffort(backend.enableRawMode())
+    if state.raw then bestEffort(backend.dressRawMode(probe = false))
     if state.alternateScreen then bestEffort(backend.enterAlternateScreen())
     if state.cursorHidden then bestEffort(backend.hideCursor())
     if state.cursorBlinkSuppressed then bestEffort(backend.setCursorBlink(false))

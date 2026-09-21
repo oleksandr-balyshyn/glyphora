@@ -28,11 +28,11 @@ import java.nio.charset.StandardCharsets.UTF_8
   *   - a `LineDisciplineTerminal` writes through synchronously and emits nothing of its own, so a byte in the sink is a
   *     byte this backend wrote.
   *
-  * Nothing here ever waits on input. The reader is fed by nobody, so it answers `READ_EXPIRED` when its timeout
-  * elapses; the only call that reads at all is `enableRawMode`, whose capability probe is bounded at 100 ms by
-  * construction. An earlier attempt at a JLine-backed suite blocked on a reply that a stream pair could never deliver
-  * and had to be deleted — see [[JLine3BackendRedrawSpec]]. This one cannot repeat that, because it asserts only on
-  * bytes written.
+  * Nothing here ever waits on input beyond a bounded timeout. The reader is fed by nobody, so it answers `READ_EXPIRED`
+  * when its timeout elapses; the only calls that read at all are `enableRawMode`'s capability probe and `windowSize`'s
+  * pixel query, each bounded at 100 ms by construction. An earlier attempt at a JLine-backed suite blocked on a reply
+  * that a stream pair could never deliver and had to be deleted — see [[JLine3BackendRedrawSpec]]. This one cannot
+  * repeat that, because every read has a timeout and the suite asserts only on bytes written.
   */
 final class JLineContractSpec extends AnyFunSuite:
 
@@ -246,4 +246,62 @@ final class JLineContractSpec extends AnyFunSuite:
       assert(harness.backend.close().isRight)
       assert(occurrences(harness.written, AnsiSequences.PushTitle) == 0)
       assert(occurrences(harness.written, AnsiSequences.PopTitle) == 0)
+    }
+
+  // ---------------------------------------------------------------- suspend and the capability probe
+
+  /** The probe is a *read*, so taking the terminal back must not run it. `reacquireTerminal` runs on JLine's
+    * signal-dispatch thread after SIGCONT, and in the `finally` of every `suspend` — on either, reading would race the
+    * render thread's in-flight decode of the same decoder state, and a 100 ms DA1 round trip would tax every `suspend`,
+    * `printAbove` and `insertBefore`. The probe is paid once, at the first raw-mode entry; the re-dress re-applies the
+    * modes that first probe established.
+    */
+  test("taking the terminal back re-dresses raw mode without re-probing capabilities"):
+    wired("xterm-256color") { harness =>
+      assert(harness.backend.enableRawMode().isRight)
+      harness.forget()
+
+      assert(harness.backend.suspend(()) == Right(()))
+
+      val redressed = harness.written
+      // no query went out — not the DA1 fence, not the DECRQM mode queries
+      assert(!redressed.contains(AnsiSequences.QueryPrimaryDeviceAttributes))
+      assert(!redressed.contains(AnsiSequences.queryPrivateMode(CapabilityReplies.SynchronizedOutputMode)))
+      // the input modes the retained probe answer established are back: silence means "use it", so all three return
+      assert(redressed.contains(AnsiSequences.EnableBracketedPaste))
+      assert(redressed.contains(AnsiSequences.EnableFocusReporting))
+      assert(redressed.contains(AnsiSequences.PushKittyKeyboard))
+    }
+
+  // ---------------------------------------------------------------- windowSize's pixel query
+
+  /** Asked before raw mode there is no reader to receive a reply, so the query must be skipped entirely — and skipping
+    * it must not mark it asked, or the first real opportunity to measure a cell shape (raw mode entered) silently never
+    * comes.
+    */
+  test("windowSize asked before raw mode spends nothing and does not suppress the later ask"):
+    wired("xterm-256color") { harness =>
+      val askedEarly = harness.backend.windowSize
+      assert(askedEarly.map(_.pixels) == Right(None))
+      assert(askedEarly.map(_.cells) == harness.backend.size)
+      assert(!harness.written.contains(AnsiSequences.RequestTextAreaPixels)) // skipped, not merely timed out
+
+      assert(harness.backend.enableRawMode().isRight)
+      harness.forget()
+      val _ = harness.backend.windowSize // pays the round trip now that raw mode is on and nobody answers
+      assert(harness.written.contains(AnsiSequences.RequestTextAreaPixels))
+    }
+
+  /** The query is asked at most once. This terminal never answers, so the first ask caches "no pixels" and the second
+    * call must not write `ESC[14t` again.
+    */
+  test("the pixel query is asked once and its silence is cached"):
+    wired("xterm-256color") { harness =>
+      assert(harness.backend.enableRawMode().isRight)
+      harness.forget()
+      val _ = harness.backend.windowSize
+      assert(harness.written.contains(AnsiSequences.RequestTextAreaPixels))
+      harness.forget()
+      val _ = harness.backend.windowSize
+      assert(!harness.written.contains(AnsiSequences.RequestTextAreaPixels))
     }

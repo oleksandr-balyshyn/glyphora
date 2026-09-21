@@ -1,17 +1,21 @@
 package io.worxbend.tui.testsupport
 
-import io.worxbend.tui.core.{Event, Size, Style}
+import io.worxbend.tui.core.{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, Position, Size, Style}
 import io.worxbend.tui.runtime.{EventOutcome, Frame, TerminalRunner}
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
-/** Pins the posting verbs for the events that are neither a key, a mouse report nor a resize.
+/** Pins the posting verbs that no other suite exercises.
   *
-  * Those three used to be everything `Pilot` could post, so paste handling, terminal-focus reporting, ticks and
-  * interrupts could only be driven by reaching past the harness into `pilot.backend.postEvent(...)` — the raw seam the
-  * harness exists to hide. Each test below posts through the verb and asserts on what the *application* saw, because a
-  * verb that posted the wrong event would still look like it worked from the pilot's side.
+  * The non-key/mouse/resize events used to be undrivable: paste handling, terminal-focus reporting, ticks and
+  * interrupts could only be posted by reaching past the harness into `pilot.backend.postEvent(...)` — the raw seam the
+  * harness exists to hide — until the verbs existed. The mouse gestures were the opposite problem: `drag` and
+  * `mouseMove` are public, documented API that nothing in this repository called, so their Down/Drag/Up sequencing and
+  * the Moved-with-no-button convention had no guard at all.
+  *
+  * Each test below posts through the verb and asserts on what the *application* saw, because a verb that posted the
+  * wrong event would still look like it worked from the pilot's side.
   */
 final class PilotEventPostingSpec extends AnyFunSuite:
 
@@ -19,10 +23,11 @@ final class PilotEventPostingSpec extends AnyFunSuite:
     * after a `waitForIdle`, which is why it is an atomic and not a plain `var`.
     */
   private final class Observed:
-    val ticks: AtomicInteger                 = AtomicInteger(0)
-    val interrupts: AtomicInteger            = AtomicInteger(0)
-    val pastes: AtomicReference[Seq[String]] = AtomicReference(Seq.empty)
-    val focus: AtomicReference[Seq[Boolean]] = AtomicReference(Seq.empty)
+    val ticks: AtomicInteger                   = AtomicInteger(0)
+    val interrupts: AtomicInteger              = AtomicInteger(0)
+    val pastes: AtomicReference[Seq[String]]   = AtomicReference(Seq.empty)
+    val focus: AtomicReference[Seq[Boolean]]   = AtomicReference(Seq.empty)
+    val mice: AtomicReference[Seq[MouseEvent]] = AtomicReference(Seq.empty)
 
     def record[A](holder: AtomicReference[Seq[A]], value: A): Unit =
       val _ = holder.updateAndGet(_ :+ value)
@@ -42,22 +47,25 @@ final class PilotEventPostingSpec extends AnyFunSuite:
 
   private def handle(observed: Observed, consumeInterrupt: Boolean, event: Event): EventOutcome =
     event match
-      case Event.Tick        =>
+      case Event.Tick         =>
         val _ = observed.ticks.incrementAndGet()
         EventOutcome.Redraw
-      case Event.Paste(text) =>
+      case Event.Paste(text)  =>
         observed.record(observed.pastes, text)
         EventOutcome.Redraw
-      case Event.FocusGained =>
+      case Event.FocusGained  =>
         observed.record(observed.focus, true)
         EventOutcome.Redraw
-      case Event.FocusLost   =>
+      case Event.FocusLost    =>
         observed.record(observed.focus, false)
         EventOutcome.Redraw
-      case Event.Interrupt   =>
+      case Event.Interrupt    =>
         val _ = observed.interrupts.incrementAndGet()
         if consumeInterrupt then EventOutcome.Redraw else EventOutcome.Ignored
-      case _                 => EventOutcome.Ignored
+      case Event.Mouse(mouse) =>
+        observed.record(observed.mice, mouse)
+        EventOutcome.Redraw
+      case _                  => EventOutcome.Ignored
 
   private def render(observed: Observed, frame: Frame): Unit =
     frame.renderWidget(
@@ -119,3 +127,58 @@ final class PilotEventPostingSpec extends AnyFunSuite:
     assert(observed.ticks.get() == 2)
     assert(observed.pastes.get() == Seq("x"))
     assert(observed.focus.get() == Seq(false, true))
+
+  // ------------------------------------------------------------------ the mouse gestures
+
+  /** `drag` and `mouseMove` are public, documented API that nothing in this repository exercised — the drag helpers
+    * were the only posting verbs with zero callers — so nothing guarded their conventions: that a drag is exactly Down,
+    * Drag, Up in that order, that it runs from the start point to the end point, and that a motion report names no
+    * button. Each test drives the verb through the same event-recording app as everything above and asserts on the
+    * events the *application* saw.
+    */
+  test("drag posts Down, Drag and Up in order, from the start point to the end point"):
+    val observed = Observed()
+    val pilot    = start(observed, consumeInterrupt = false)
+    pilot.drag(1, 2, 3, 4).waitForIdle()
+    assert(
+      observed.mice.get() == Seq(
+        MouseEvent(Position(1, 2), MouseEventKind.Down, KeyModifiers.None, MouseButton.Left),
+        MouseEvent(Position(3, 4), MouseEventKind.Drag, KeyModifiers.None, MouseButton.Left),
+        MouseEvent(Position(3, 4), MouseEventKind.Up, KeyModifiers.None, MouseButton.Left),
+      )
+    )
+
+  test("drag names the modifiers and the button it is given"):
+    val observed = Observed()
+    val pilot    = start(observed, consumeInterrupt = false)
+    pilot.drag(Position(0, 0), Position(2, 2), KeyModifiers.Shift, MouseButton.Right).waitForIdle()
+    assert(
+      observed.mice.get() == Seq(
+        MouseEvent(Position(0, 0), MouseEventKind.Down, KeyModifiers.Shift, MouseButton.Right),
+        MouseEvent(Position(2, 2), MouseEventKind.Drag, KeyModifiers.Shift, MouseButton.Right),
+        MouseEvent(Position(2, 2), MouseEventKind.Up, KeyModifiers.Shift, MouseButton.Right),
+      )
+    )
+
+  test("mouseMove posts a Moved with no button, the way a motion report reads"):
+    val observed = Observed()
+    val pilot    = start(observed, consumeInterrupt = false)
+    pilot.mouseMove(5, 6).waitForIdle()
+    assert(
+      observed.mice.get() ==
+        Seq(MouseEvent(Position(5, 6), MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown))
+    )
+
+  test("drag and mouseMove chain like the key verbs"):
+    val observed = Observed()
+    val pilot    = start(observed, consumeInterrupt = false)
+    pilot.mouseMove(0, 0).drag(1, 1, 2, 2).mouseMove(3, 3).waitForIdle()
+    assert(
+      observed.mice.get() == Seq(
+        MouseEvent(Position(0, 0), MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown),
+        MouseEvent(Position(1, 1), MouseEventKind.Down, KeyModifiers.None, MouseButton.Left),
+        MouseEvent(Position(2, 2), MouseEventKind.Drag, KeyModifiers.None, MouseButton.Left),
+        MouseEvent(Position(2, 2), MouseEventKind.Up, KeyModifiers.None, MouseButton.Left),
+        MouseEvent(Position(3, 3), MouseEventKind.Moved, KeyModifiers.None, MouseButton.Unknown),
+      )
+    )

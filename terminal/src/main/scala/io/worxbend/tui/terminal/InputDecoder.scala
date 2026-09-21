@@ -396,9 +396,10 @@ private[terminal] final class InputDecoder(
     * one accepted neither an empty field nor a sub-parameter, so an SGR report written as `CSI <0:1;10;5M` — legal, and
     * what a terminal that reports a sub-parameter sends — matched nothing and the whole click was dropped.
     *
-    * An empty field (`CSI ;5H`, a sequence that omits its first parameter) is skipped rather than defaulted, and a `:`
-    * sub-parameter (kitty writes the shifted key and the base layout key after a colon) is discarded: glyphora has no
-    * vocabulary for either, and a parameter it cannot read must not shift the ones after it out of position.
+    * An empty field keeps its position and defaults to 1 (`CSI ;5A` is Ctrl+Up, exactly as `CSI 1;5A` is — ECMA-48
+    * §5.4.1: "a default value of 1 is used when no explicit value is given"), and a `:` sub-parameter (kitty writes the
+    * shifted key and the base layout key after a colon) is discarded: glyphora has no vocabulary for it, and a
+    * parameter it cannot read must not shift the ones after it out of position.
     */
   private def parameterNumbers(params: String): Seq[Int] =
     parameterFields(params).flatMap(_.takeWhile(_ != ':').toIntOption)
@@ -406,11 +407,15 @@ private[terminal] final class InputDecoder(
   /** The positional fields of a CSI parameter string.
     *
     * One owner for "which field is at which index", because that is the rule the numeric reading above and the
-    * sub-parameter reading in [[kittyEventType]] must agree on. An empty field (`CSI ;5H`) is skipped rather than
-    * defaulted: a parameter glyphora cannot read must not shift the ones after it out of position.
+    * sub-parameter reading in [[kittyEventType]] must agree on. An empty field (`CSI ;5A`, a sequence that omits its
+    * first parameter) keeps its position and reads as `"1"`: skipping it instead used to shift every later field one
+    * slot left, and the modifier code landed in the key's own slot — `CSI ;5A` decoded as a plain Up with Ctrl dropped.
+    * A sequence with no parameters at all stays field-less, so `CSI ~` names nothing rather than defaulting to
+    * `CSI 1~`.
     */
   private def parameterFields(params: String): Seq[String] =
-    params.split(';').toSeq.filter(_.nonEmpty)
+    if params.isEmpty then Seq.empty
+    else params.split(';').toSeq.map(field => if field.isEmpty then "1" else field)
 
   /** Decodes a CSI key sequence, then applies the kitty event type the sequence carried.
     *

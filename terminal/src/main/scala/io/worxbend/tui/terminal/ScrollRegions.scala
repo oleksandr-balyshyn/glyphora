@@ -1,10 +1,6 @@
 package io.worxbend.tui.terminal
 
-import io.worxbend.tui.core.Size
-
 import org.jline.terminal.Terminal
-
-import scala.util.control.NonFatal
 
 /** Hardware scroll regions for [[JLine3Backend]]: confining scrolling to a band of rows (DECSTBM), scrolling the band,
   * and releasing the region again.
@@ -16,11 +12,12 @@ import scala.util.control.NonFatal
   * is the entire saving. Without it the following frame would find every row of the band changed and repaint the lot,
   * which is the work a scroll exists to avoid.
   *
-  * Render thread only: the baseline shift touches the render-thread-private [[FrameBaseline]]. The write goes out under
-  * the backend's `screenOwnership` monitor, like every write, so a Ctrl+Z handover cannot interleave with it.
+  * Render thread only: the baseline shift touches the render-thread-private [[FrameBaseline]]. `emit` is the backend's
+  * monitored, flushing write, injected the way [[TitleStack]] receives it, so the sequence goes out under the
+  * `screenOwnership` monitor like every other write and this class owns no writer of its own.
   */
 private[terminal] final class ScrollRegions(
-    screenOwnership: AnyRef,
+    emit: String => Unit,
     terminal: Terminal,
     baseline: FrameBaseline,
 ):
@@ -34,31 +31,16 @@ private[terminal] final class ScrollRegions(
   def scroll(region: RowRange, lines: Int, direction: ScrollDirection): Either[BackendError, Unit] =
     if lines <= 0 then Right(())
     else
-      size.flatMap { terminalSize =>
+      Backend.attempt(Backend.sizeOf(terminal)).flatMap { terminalSize =>
         if region.bottom >= terminalSize.height then
           Left(BackendError.UnsupportedTerminal(s"row range $region does not fit a terminal of $terminalSize"))
         else
-          attempt {
-            screenOwnership.synchronized {
-              terminal
-                .writer()
-                .write(
-                  AnsiSequences.setScrollRegion(region.top, region.bottom) +
-                    ScrollDirection.sequence(direction, lines) +
-                    AnsiSequences.ResetScrollRegion
-                )
-              terminal.writer().flush()
-            }
+          Backend.attempt {
+            emit(
+              AnsiSequences.setScrollRegion(region.top, region.bottom) +
+                ScrollDirection.sequence(direction, lines) +
+                AnsiSequences.ResetScrollRegion
+            )
             baseline.shift(region, lines, direction)
           }
       }
-
-  private def size: Either[BackendError, Size] =
-    attempt {
-      val jlineSize = terminal.getSize
-      Size(jlineSize.getColumns, jlineSize.getRows)
-    }
-
-  private def attempt[A](body: => A): Either[BackendError, A] =
-    try Right(body)
-    catch case NonFatal(error) => Left(BackendError.Io(error))

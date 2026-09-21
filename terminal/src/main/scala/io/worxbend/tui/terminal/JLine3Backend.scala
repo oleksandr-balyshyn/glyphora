@@ -54,7 +54,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   @volatile private var suspendedState: TerminalDressing.TerminalState = TerminalDressing.TerminalState.Undressed
 
   /** What the terminal said about itself when raw mode was entered. Written once per raw-mode session, on the render
-    * thread, and read from `draw` — hence `@volatile`.
+    * thread, and read from `draw` and from the probe-free re-dress after a handover — hence `@volatile`.
     */
   @volatile private var probed: TerminalCapabilities = TerminalCapabilities.unknown
 
@@ -84,9 +84,11 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   private val frameEncoder  = FrameEncoder(colorDepth)
   private val decoder       = InputDecoder(timeoutMillis => terminal.reader().read(timeoutMillis))
   private val pump          = EventPump(decoder)
-  private val queries       = ReplyQueries(screenOwnership, terminal, decoder)
-  private val scrollRegions = ScrollRegions(screenOwnership, terminal, baseline)
-  private val titleStack    = TitleStack(sequence => attempt(write(sequence)))
+  // `write` is the backend's monitored write, passed the way TitleStack receives it: the collaborators emit through
+  // it and so own no writer, no flush and no monitor of their own.
+  private val queries       = ReplyQueries(screenOwnership, sequence => write(sequence), decoder)
+  private val scrollRegions = ScrollRegions(sequence => write(sequence), terminal, baseline)
+  private val titleStack    = TitleStack(sequence => Backend.attempt(write(sequence)))
   private val dressing      = TerminalDressing(this)
 
   private val supportsAlternateScreen =
@@ -103,7 +105,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
 
   override def capabilities: TerminalCapabilities = probed
 
-  def size: Either[BackendError, Size] = attempt(currentSize)
+  def size: Either[BackendError, Size] = Backend.attempt(currentSize)
 
   /** The window in cells, plus its pixel size when this terminal will report one.
     *
@@ -116,15 +118,20 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     * returned with no pixels — which is what most terminals, including most of the Windows ones, will produce. Asked
     * outside raw mode there is no reader to receive a reply at all, so the query is skipped entirely rather than
     * spending the timeout.
+    *
+    * `pixelsAsked` is set only where the query actually runs, and only after it returns: asked outside raw mode, or on
+    * a transient I/O failure, it stays unset so the next call — raw mode entered, the error cleared — still asks.
     */
   override def windowSize: Either[BackendError, WindowSize] =
-    attempt {
+    Backend.attempt {
       if pixelsAsked then WindowSize(currentSize, textAreaPixels)
       else
-        pixelsAsked = true
         textAreaPixels =
           if cookedAttributes.isEmpty then None
-          else queries.textAreaSize(JLine3Backend.PixelQueryTimeout)
+          else
+            val pixels = queries.textAreaSize(JLine3Backend.PixelQueryTimeout)
+            pixelsAsked = true
+            pixels
         WindowSize(currentSize, textAreaPixels)
     }
 
@@ -134,7 +141,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     // a terminal that narrowed has already reflowed what was on screen, and the wrapped remnants sit outside the new,
     // smaller area where no amount of repainting reaches them — see ScreenReset for why only a shrink pays for this
     val erasing = ScreenReset.clearsOnShrink(baseline.area, buffer.area)
-    val result  = attempt {
+    val result  = Backend.attempt {
       val frame = composeFrame(buffer, blank = forced || erasing, erasing)
       // an unchanged frame writes nothing at all, so a redraw-on-tick app with a static screen stays silent — unless
       // the erase itself has to go out, which is the one case where "nothing changed" still needs a write
@@ -188,8 +195,18 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     */
   override def requestFullRedraw(): Unit = fullRedrawRequested.raise()
 
-  def enableRawMode(): Either[BackendError, Unit] =
-    attempt {
+  def enableRawMode(): Either[BackendError, Unit] = dressRawMode(probe = true)
+
+  /** Enters raw mode and applies the input-mode dressing, probing capabilities first when `probe`.
+    *
+    * The probe is the expensive half — a DA1 round trip of up to [[JLine3Backend.CapabilityProbeTimeout]] — and it is
+    * also a *read*, so it happens only here, on the render thread's first entry into raw mode. Taking the terminal back
+    * after a handover goes through `dressRawMode(probe = false)` instead: the answer is retained in `probed` for the
+    * whole raw-mode session, and reading from JLine's signal-dispatch thread (SIGCONT) or mid-`suspend` would race the
+    * render thread's in-flight read on the decoder.
+    */
+  private[terminal] def dressRawMode(probe: Boolean): Either[BackendError, Unit] =
+    Backend.attempt {
       // first, before anything this backend does can move the cursor: this is where the shell's prompt was, and it is
       // where `disableRawMode` has to put the cursor back. It matters most on a terminal with no alternate screen —
       // the case `enterAlternateScreen` refuses outright — where the app draws over the shell's own scrollback and
@@ -198,7 +215,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
       cookedAttributes = Some(terminal.enterRawMode())
       // Ask before telling. The probe has to come after raw mode — there is no reader for a reply before it — and
       // before the modes below, so a terminal that denies one is never sent it at all.
-      probed = queries.probeCapabilities(JLine3Backend.CapabilityProbeTimeout)
+      if probe then probed = queries.probeCapabilities(JLine3Backend.CapabilityProbeTimeout)
       // modern input modes; a terminal that answered nothing still gets them, because an unsupported private mode is
       // ignored by an overwhelming majority of terminals and switching the feature off on silence would disable it
       // almost everywhere. Only an explicit denial skips one.
@@ -217,7 +234,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     * way: there is nothing to fail, and nothing to promise.
     */
   override def enableKeyEventTypes(): Either[BackendError, Unit] =
-    attempt {
+    Backend.attempt {
       write(AnsiSequences.PopKittyKeyboard)
       write(AnsiSequences.PushKittyKeyboardEvents)
     }
@@ -226,7 +243,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     cookedAttributes match
       case None             => Left(BackendError.NotInRawMode)
       case Some(attributes) =>
-        attempt {
+        Backend.attempt {
           write(AnsiSequences.PopKittyKeyboard)
           write(AnsiSequences.DisableFocusReporting)
           write(AnsiSequences.DisableBracketedPaste)
@@ -247,7 +264,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     if !supportsAlternateScreen then
       Left(BackendError.UnsupportedTerminal(s"${terminal.getType} has no alternate screen (no smcup capability)"))
     else
-      attempt {
+      Backend.attempt {
         write(AnsiSequences.EnterAlternateScreen)
         write(AnsiSequences.clear(ClearType.All))
         alternateScreenActive = true
@@ -266,7 +283,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   override def reserveInlineRows(rows: Int): Either[BackendError, Unit] =
     if rows <= 0 then Right(())
     else
-      attempt {
+      Backend.attempt {
         screenOwnership.synchronized {
           terminal.writer().write("\n".repeat(rows))
           terminal.writer().flush()
@@ -276,7 +293,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
       }
 
   def leaveAlternateScreen(): Either[BackendError, Unit] =
-    attempt {
+    Backend.attempt {
       write(AnsiSequences.LeaveAlternateScreen)
       alternateScreenActive = false
     }
@@ -284,25 +301,25 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   def enableMouseCapture(): Either[BackendError, Unit] = enableMouseCapture(MouseCaptureMode.Buttons)
 
   override def enableMouseCapture(mode: MouseCaptureMode): Either[BackendError, Unit] =
-    attempt {
+    Backend.attempt {
       write(AnsiSequences.enableMouseCapture(mode))
       mouseCaptureActive = Some(mode)
     }
 
   def disableMouseCapture(): Either[BackendError, Unit] =
-    attempt {
+    Backend.attempt {
       write(AnsiSequences.DisableMouseCapture)
       mouseCaptureActive = None
     }
 
   def hideCursor(): Either[BackendError, Unit] =
-    attempt {
+    Backend.attempt {
       write(AnsiSequences.HideCursor)
       cursorHidden = true
     }
 
   def showCursor(): Either[BackendError, Unit] =
-    attempt {
+    Backend.attempt {
       write(AnsiSequences.ShowCursor)
       cursorHidden = false
     }
@@ -314,7 +331,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     * [[CursorShape.Default]], and taking it back means asking for the app's shape again.
     */
   override def setCursorShape(shape: CursorShape): Either[BackendError, Unit] =
-    attempt {
+    Backend.attempt {
       write(AnsiSequences.cursorShape(shape))
       cursorShaped = shape != CursorShape.Default
     }
@@ -326,7 +343,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     * was left by the previous frame.
     */
   override def setCursorPosition(position: Position): Either[BackendError, Unit] =
-    attempt(write(AnsiSequences.moveTo(position.x, position.y)))
+    Backend.attempt(write(AnsiSequences.moveTo(position.x, position.y)))
 
   /** Writes DECSET/DECRST 12 to switch the caret's blink on or off.
     *
@@ -334,7 +351,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     * `cursorBlinkSuppressed`.
     */
   override def setCursorBlink(blinking: Boolean): Either[BackendError, Unit] =
-    attempt {
+    Backend.attempt {
       write(if blinking then AnsiSequences.EnableCursorBlink else AnsiSequences.DisableCursorBlink)
       cursorBlinkSuppressed = !blinking
     }
@@ -345,7 +362,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   override def wake(): Unit = pump.wake()
 
   override def clearRegion(kind: ClearType): Either[BackendError, Unit] =
-    attempt {
+    Backend.attempt {
       write(AnsiSequences.clear(kind))
       // the screen no longer shows what `baseline` describes, so a diff against it would leave the erased cells
       // blank for as long as the app kept drawing them to the same values
@@ -361,7 +378,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     */
   override def requestSize(size: Size): Either[BackendError, Unit] =
     Backend.requirePositiveSize(size)
-    attempt(write(AnsiSequences.resizeWindow(size)))
+    Backend.attempt(write(AnsiSequences.resizeWindow(size)))
 
   /** Asks the terminal where its cursor currently is, waiting up to `timeout` for the answer.
     *
@@ -371,7 +388,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     */
   override def queryCursorPosition(timeout: Duration): Either[BackendError, Position] =
     Backend.requirePositiveTimeout(timeout)
-    attempt(queries.cursorPosition(timeout)).flatMap {
+    Backend.attempt(queries.cursorPosition(timeout)).flatMap {
       case Some(position) => Right(position)
       case None           => Left(BackendError.UnsupportedTerminal("the terminal did not report its cursor position"))
     }
@@ -383,12 +400,12 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     scrollRegions.scroll(region, lines, ScrollDirection.Down)
 
   override def copyToClipboard(text: String): Either[BackendError, Unit] =
-    attempt(write(AnsiSequences.clipboardCopy(text)))
+    Backend.attempt(write(AnsiSequences.clipboardCopy(text)))
 
   override def setTitle(title: String): Either[BackendError, Unit] = titleStack.set(title)
 
   override def suspend[A](body: => A): Either[BackendError, A] =
-    attempt {
+    Backend.attempt {
       val released = dressing.releaseTerminal()
       try body
       finally dressing.reacquireTerminal(released.state)
@@ -400,7 +417,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     * caller owes the terminal in return.
     */
   override def writeRaw(sequence: String): Either[BackendError, Unit] =
-    attempt(write(sequence))
+    Backend.attempt(write(sequence))
 
   override def printAbove(lines: Seq[String]): Either[BackendError, Unit] =
     // step out to the primary screen so the lines land in real scrollback, print them, then step back in and repaint
@@ -422,7 +439,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   override def insertBefore(height: Int, widget: Widget): Either[BackendError, Unit] =
     if height <= 0 then Right(())
     else
-      attempt(Backend.renderBlock(currentSize.width, height, widget)).flatMap { buffer =>
+      Backend.attempt(Backend.renderBlock(currentSize.width, height, widget)).flatMap { buffer =>
         suspend(writeScrollbackRows((0 until height).map(frameEncoder.encodeRow(buffer, _))))
       }
 
@@ -446,7 +463,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   override def appendLines(n: Int): Either[BackendError, Unit] =
     if n <= 0 then Right(())
     else
-      attempt {
+      Backend.attempt {
         write(AnsiSequences.scrollUp(n))
         requestFullRedraw()
       }
@@ -460,7 +477,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   def close(): Either[BackendError, Unit] =
     val released     = dressing.releaseTerminal()
     val titleFailure = titleStack.release()
-    val closed       = attempt(terminal.close())
+    val closed       = Backend.attempt(terminal.close())
     // first failure wins, but by this line everything has been attempted either way — stopping early would leave the
     // terminal half-dressed, which is worse than the failure itself
     val firstFailure = released.failure.orElse(titleFailure)
@@ -513,9 +530,7 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     suspendedState = TerminalDressing.TerminalState.Undressed
     onResize()
 
-  private def currentSize: Size =
-    val jlineSize = terminal.getSize
-    Size(jlineSize.getColumns, jlineSize.getRows)
+  private def currentSize: Size = Backend.sizeOf(terminal)
 
   /** Writes one sequence to the terminal and flushes it, under `screenOwnership`.
     *
@@ -529,10 +544,6 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
       terminal.writer().write(sequence)
       terminal.writer().flush()
     }
-
-  private def attempt[A](body: => A): Either[BackendError, A] =
-    try Right(body)
-    catch case NonFatal(error) => Left(BackendError.Io(error))
 
 object JLine3Backend:
 

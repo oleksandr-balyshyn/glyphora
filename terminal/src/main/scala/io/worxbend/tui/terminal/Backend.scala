@@ -2,7 +2,10 @@ package io.worxbend.tui.terminal
 
 import io.worxbend.tui.core.{Buffer, Event, Position, Rect, Size, Widget}
 
+import org.jline.terminal.Terminal
+
 import scala.concurrent.duration.Duration
+import scala.util.control.NonFatal
 
 /** A terminal a TUI can draw to and read input from.
   *
@@ -389,6 +392,26 @@ trait Backend:
   def close(): Either[BackendError, Unit]
 
 private[terminal] object Backend:
+
+  /** Runs `body`, catching what it throws as [[BackendError.Io]] — the failure shape every fallible backend operation
+    * reports in.
+    *
+    * Lives here, rather than as a private helper on each JLine-backed collaborator, so all of them raise the identical
+    * failure: a closed stream or a failed write must read the same way from `JLine3Backend.draw` and from
+    * `ScrollRegions.scroll`, not pick up a per-class copy that can drift.
+    */
+  private[terminal] def attempt[A](body: => A): Either[BackendError, A] =
+    try Right(body)
+    catch case NonFatal(error) => Left(BackendError.Io(error))
+
+  /** The window in cells of a JLine terminal, as [[Backend.size]] reports it.
+    *
+    * One owner for the JLine `Terminal.Size` → [[Size]] conversion, because the backend and its collaborators all ask
+    * the same question and a conversion written twice can drift by an argument order.
+    */
+  private[terminal] def sizeOf(terminal: Terminal): Size =
+    val jlineSize = terminal.getSize
+    Size(jlineSize.getColumns, jlineSize.getRows)
 
   /** Enforces the strictly-positive (or infinite) timeout that [[Backend.readEvent]] documents.
     *

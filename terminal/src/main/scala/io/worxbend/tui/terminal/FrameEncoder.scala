@@ -178,8 +178,23 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     */
   private def guarded(symbol: String): String =
     if CharWidth.isPrintableAscii(symbol) then symbol
-    else if symbol.codePoints().anyMatch(Character.isISOControl) then " "
+    else if containsControl(symbol) then " "
     else symbol
+
+  /** Whether `symbol` carries a C0 or C1 control code (`ESC` included) — [[AnsiSequences.isControl]], walked character
+    * by character.
+    *
+    * The walk is a plain `charAt` loop rather than `codePoints().anyMatch(Character.isISOControl)`: this runs for every
+    * non-ASCII cell of every frame, and the `IntStream` the code-point view allocates per call is a real cost on the
+    * render hot path for what is, in the end, a `< 0x20 || == 0x7f || C1` test per char.
+    */
+  private def containsControl(symbol: String): Boolean =
+    var index = 0
+    var found = false
+    while !found && index < symbol.length do
+      if AnsiSequences.isControl(symbol.charAt(index)) then found = true
+      index += 1
+    found
 
   /** Emits the OSC-8 transitions that carry the hyperlink state from `open` to `next`, and answers `next`.
     *

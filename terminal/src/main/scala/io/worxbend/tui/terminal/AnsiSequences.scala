@@ -182,8 +182,19 @@ private[terminal] object AnsiSequences:
   def stripControls(text: String): String =
     if text.forall(isSafeText) then text else text.filter(isSafeText)
 
+  /** Whether `c` can safely travel inside a control-sequence-delimited string: tab, or a printable character outside
+    * the C1 range.
+    */
   private def isSafeText(c: Char): Boolean =
-    c == '\t' || (c >= 0x20 && c != 0x7f && !(c >= 0x80 && c <= 0x9f))
+    c == '\t' || !isControl(c)
+
+  /** Whether `c` is a control code a terminal would act on rather than draw: a C0 code, DEL, or a C1 code.
+    *
+    * One owner for the character class, because [[FrameEncoder]] guards every cell symbol with the same question and
+    * the two must never disagree about what is a control.
+    */
+  private[terminal] def isControl(c: Char): Boolean =
+    c < 0x20 || c == 0x7f || (c >= 0x80 && c <= 0x9f)
 
   /** OSC 52 clipboard write: sets the system clipboard (`c`) to `text`, base64-encoded per the protocol. Terminals that
     * don't support OSC 52 ignore it.

@@ -517,7 +517,9 @@ final class Pilot private (
     * a clean exit: this fails with that throwable as the cause rather than reporting success.
     */
   def awaitTermination(timeout: FiniteDuration = Pilot.DefaultTimeout): Boolean =
-    thread.join(timeout.toMillis)
+    // `join(0)` waits forever, so a sub-millisecond timeout has to round *up*, not truncate: turning "give up quickly"
+    // into an unbounded wait would hang the suite instead of failing it
+    thread.join(math.max(1L, timeout.toMillis))
     rethrowAppFailure()
     !thread.isAlive
 
