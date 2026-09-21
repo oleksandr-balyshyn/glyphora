@@ -62,6 +62,15 @@ final class CharWidthAmbiguousSpec extends AnyFunSuite:
     assert(CharWidth.substringByWidth("───", 4, WidthMode.Wide) == "──")
     assert(CharWidth.substringByWidth("───", 1, WidthMode.Wide) == "")
 
+  test("dropByWidth cuts at the columns the chosen mode counts"):
+    // three box-drawing characters: three columns narrow, six wide, so skipping four columns leaves nothing narrow
+    // and one character wide; the mode-free overload must agree with WidthMode.Narrow
+    assert(CharWidth.dropByWidth("───", 4) == "")
+    assert(CharWidth.dropByWidth("───", 4, WidthMode.Narrow) == "")
+    assert(CharWidth.dropByWidth("───", 4, WidthMode.Wide) == "─")
+    assert(CharWidth.dropByWidth("───", 1, WidthMode.Wide) == "──")
+    assert(CharWidth.dropByWidth("hello", 3, WidthMode.Wide) == "lo")
+
   test("a span, a line and a text all answer the same question one level up"):
     val span = Span.raw("─α")
     assert(span.width == 2)

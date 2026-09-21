@@ -124,10 +124,16 @@ object CharWidth:
     *
     * A `skipWidth` of zero or less returns `text` itself; a `skipWidth` at or beyond the text's width returns `""`.
     */
-  def dropByWidth(text: String, skipWidth: Int): String =
+  def dropByWidth(text: String, skipWidth: Int): String = dropByWidth(text, skipWidth, WidthMode.Narrow)
+
+  /** [[dropByWidth]] measuring East Asian Ambiguous codepoints according to `mode` — the suffix that would remain once
+    * `skipWidth` columns of a terminal running that locale's width rules have scrolled off.
+    */
+  def dropByWidth(text: String, skipWidth: Int, mode: WidthMode): String =
     if skipWidth <= 0 then text
     else if isPrintableAscii(text) then
-      // one column per character on this path, so the column index is also the char index
+      // one column per character on this path, so the column index is also the char index; and, as in [[of]], the
+      // fast path is valid under either mode because nothing printable-ASCII is East Asian Ambiguous
       text.substring(
         math.min(text.length, skipWidth)
       ) // scalafix:ok DisableSyntax; ASCII fast path: exactly one column per char, so columns and chars coincide
@@ -138,7 +144,7 @@ object CharWidth:
       while clusters.hasNext do
         val cluster = clusters.next()
         if skipped >= skipWidth then remainder ++= cluster
-        else skipped += clusterWidth(cluster, WidthMode.Narrow)
+        else skipped += clusterWidth(cluster, mode)
       remainder.result()
 
   /** `text` with every grapheme cluster whose base code point is a control character (C0, DEL, C1) removed.

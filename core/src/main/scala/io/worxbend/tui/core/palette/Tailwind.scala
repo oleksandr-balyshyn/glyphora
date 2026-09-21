@@ -79,10 +79,10 @@ object Tailwind:
   /** Pure black. Named here so a design that wants true black, rather than the terminal's idea of `Color.Black`, can
     * say so.
     */
-  val Black: Color = fromPacked(0x000000)
+  val Black: Color = Color.fromInt(0x000000)
 
   /** Pure white, for the reason [[Black]] exists. */
-  val White: Color = fromPacked(0xffffff)
+  val White: Color = Color.fromInt(0xffffff)
 
   /** The Tailwind `slate` ramp, lightest (`c50`) to darkest (`c950`). */
   val Slate: Shades =
@@ -244,19 +244,15 @@ object Tailwind:
       c950: Int,
   ): Shades =
     Shades(
-      fromPacked(c50),
-      fromPacked(c100),
-      fromPacked(c200),
-      fromPacked(c300),
-      fromPacked(c400),
-      fromPacked(c500),
-      fromPacked(c600),
-      fromPacked(c700),
-      fromPacked(c800),
-      fromPacked(c900),
-      fromPacked(c950),
+      Color.fromInt(c50),
+      Color.fromInt(c100),
+      Color.fromInt(c200),
+      Color.fromInt(c300),
+      Color.fromInt(c400),
+      Color.fromInt(c500),
+      Color.fromInt(c600),
+      Color.fromInt(c700),
+      Color.fromInt(c800),
+      Color.fromInt(c900),
+      Color.fromInt(c950),
     )
-
-  /** Unpacks one `0xrrggbb` integer into a [[Color.Rgb]]. */
-  private def fromPacked(packed: Int): Color =
-    Color.Rgb((packed >> 16) & 0xff, (packed >> 8) & 0xff, packed & 0xff)

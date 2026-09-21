@@ -318,7 +318,7 @@ final class Buffer(val area: Rect):
     val clipped = region.intersection(area)
     if !clipped.isEmpty then
       val memoized = MemoizedStyleTransform(transform)
-      forEachIndex(clipped): (_, _, index) =>
+      foreachIndex(clipped): (_, _, index) =>
         if !continuations(index) then
           val cell   = cells(index)
           val styled = memoized(cell.style)
@@ -443,7 +443,7 @@ final class Buffer(val area: Rect):
     * and the traversal has already decided which positions it will read.
     */
   def foreachIn(region: Rect)(visit: (Int, Int, Cell) => Unit): Unit =
-    forEachIndex(region)((x, y, index) => visit(x, y, cells(index)))
+    foreachIndex(region)((x, y, index) => visit(x, y, cells(index)))
 
   /** The index-based counterpart of [[foreachIn]]: the same clipped row-major walk, under the same contract — the
     * bounds check happens once on `region` rather than once per cell, and nothing is allocated per position.
@@ -455,7 +455,7 @@ final class Buffer(val area: Rect):
     * `inline`, with an `inline` function parameter, so each use is expanded into its caller as the plain nested `while`
     * pair it was written as: no closure is allocated and no call is made per cell.
     */
-  private[core] inline def forEachIndex(region: Rect)(inline visit: (Int, Int, Int) => Unit): Unit =
+  private[core] inline def foreachIndex(region: Rect)(inline visit: (Int, Int, Int) => Unit): Unit =
     val clipped = region.intersection(area)
     var y       = clipped.y
     while y < clipped.bottom do
@@ -498,7 +498,7 @@ final class Buffer(val area: Rect):
     */
   def setDiffDirective(region: Rect, directive: DiffDirective): Unit =
     val code = directive.ordinal.toByte
-    forEachIndex(region)((_, _, index) => directives(index) = code)
+    foreachIndex(region)((_, _, index) => directives(index) = code)
 
   /** An independent copy of this buffer. Backends snapshot the frame they just flushed so later mutation of the
     * caller's buffer cannot corrupt the next diff.
@@ -697,7 +697,7 @@ final class Buffer(val area: Rect):
   private def appendStyleRuns(out: StringBuilder): Unit =
     // `None` is "no run has started yet", so the very first cell always opens one
     var previous: Option[Style] = None
-    forEachIndex(area): (x, y, index) =>
+    foreachIndex(area): (x, y, index) =>
       val style = cells(index).style
       if !previous.contains(style) then
         out ++= s"  x: $x, y: $y, $style\n"
@@ -705,13 +705,13 @@ final class Buffer(val area: Rect):
 
   /** Appends one line per continuation cell to `out` — the columns a wide grapheme draws over from the left. */
   private def appendHiddenPositions(out: StringBuilder): Unit =
-    forEachIndex(area): (x, y, index) =>
+    foreachIndex(area): (x, y, index) =>
       if continuations(index) then out ++= s"  x: $x, y: $y, hidden by a two-column grapheme\n"
 
   /** Whether two cells would render identically: a reference-equality fast path before the structural compare, because
     * `Cell.equals` walks a `String`.
     */
-  private def sameCell(a: Cell, b: Cell): Boolean =
+  private[core] def sameCell(a: Cell, b: Cell): Boolean =
     (a eq b) || a == b
 
   /** The single bounds-check-and-index site behind [[get]]. Kept separate from [[get]] so the hot paths read a

@@ -53,7 +53,7 @@ private[core] final class FrameDiff(
       val candidate = nextCells(index)
       // reference equality first: unchanged cells are usually the *same* object, and Cell.equals walks a String
       val changed   = nextDirectives(index) == Buffer.AlwaysUpdateCode ||
-        !sameCell(previousCells(index), candidate) ||
+        !previous.sameCell(previousCells(index), candidate) ||
         vacatedContinuation(index, start) ||
         released(index)
       if changed && !nextContinuations(index) && nextDirectives(index) != Buffer.SkipCode then
@@ -84,7 +84,7 @@ private[core] final class FrameDiff(
     * this scan must not declare finished.
     */
   private def positionUnchanged(index: Int): Boolean =
-    sameCell(previousCells(index), nextCells(index)) &&
+    previous.sameCell(previousCells(index), nextCells(index)) &&
       previousContinuations(index) == nextContinuations(index) &&
       previousDirectives(index) == nextDirectives(index) &&
       nextDirectives(index) != Buffer.AlwaysUpdateCode
@@ -116,18 +116,12 @@ private[core] final class FrameDiff(
   private def released(index: Int): Boolean =
     previousDirectives(index) == Buffer.SkipCode && nextDirectives(index) != Buffer.SkipCode
 
-  /** Whether two cells would render identically: a reference-equality fast path before the structural compare, because
-    * `Cell.equals` walks a `String`.
-    */
-  private def sameCell(a: Cell, b: Cell): Boolean =
-    (a eq b) || a == b
-
 private[core] object FrameDiff:
 
   /** The body of [[Buffer.emitAll]]: every cell of `buffer`, in the same row-major order and with the same continuation
     * rule as [[FrameDiff]]'s diff — the full repaint the first frame after a resize or a resume from suspend needs.
     */
   def emitAll(buffer: Buffer, emit: (Int, Int, Cell) => Unit): Unit =
-    buffer.forEachIndex(buffer.area): (x, y, index) =>
+    buffer.foreachIndex(buffer.area): (x, y, index) =>
       if !buffer.continuations(index) && buffer.directives(index) != Buffer.SkipCode then
         emit(x, y, buffer.cells(index))

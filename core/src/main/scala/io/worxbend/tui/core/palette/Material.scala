@@ -92,10 +92,10 @@ object Material:
   /** Pure black. Named here so a design that wants true black, rather than the terminal's idea of `Color.Black`, can
     * say so.
     */
-  val Black: Color = fromPacked(0x000000)
+  val Black: Color = Color.fromInt(0x000000)
 
   /** Pure white, for the reason [[Black]] exists. */
-  val White: Color = fromPacked(0xffffff)
+  val White: Color = Color.fromInt(0xffffff)
 
   /** The Material `red` ramp, `c50` (lightest) to `c900` (darkest), plus its four accents. */
   val Red: Accented =
@@ -203,16 +203,16 @@ object Material:
       c900: Int,
   ): Tonal =
     Tonal(
-      fromPacked(c50),
-      fromPacked(c100),
-      fromPacked(c200),
-      fromPacked(c300),
-      fromPacked(c400),
-      fromPacked(c500),
-      fromPacked(c600),
-      fromPacked(c700),
-      fromPacked(c800),
-      fromPacked(c900),
+      Color.fromInt(c50),
+      Color.fromInt(c100),
+      Color.fromInt(c200),
+      Color.fromInt(c300),
+      Color.fromInt(c400),
+      Color.fromInt(c500),
+      Color.fromInt(c600),
+      Color.fromInt(c700),
+      Color.fromInt(c800),
+      Color.fromInt(c900),
     )
 
   /** Builds a ramp plus its four accents: the ten [[tonal]] literals followed by `a100`, `a200`, `a400`, `a700`. */
@@ -234,12 +234,8 @@ object Material:
   ): Accented =
     Accented(
       tonal(c50, c100, c200, c300, c400, c500, c600, c700, c800, c900),
-      fromPacked(a100),
-      fromPacked(a200),
-      fromPacked(a400),
-      fromPacked(a700),
+      Color.fromInt(a100),
+      Color.fromInt(a200),
+      Color.fromInt(a400),
+      Color.fromInt(a700),
     )
-
-  /** Unpacks one `0xrrggbb` integer into a [[io.worxbend.tui.core.Color.Rgb]]. */
-  private def fromPacked(packed: Int): Color =
-    Color.Rgb((packed >> 16) & 0xff, (packed >> 8) & 0xff, packed & 0xff)
