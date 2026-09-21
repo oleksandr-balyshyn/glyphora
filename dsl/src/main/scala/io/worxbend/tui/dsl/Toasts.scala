@@ -12,9 +12,10 @@ import scala.concurrent.duration.FiniteDuration
   * `dismissAll` from event handlers, `age` from the tick stage, `overlay` from the view evaluation — so the queue needs
   * no synchronisation of its own; the [[Signal]] it lives in enforces that with its own render-thread check.
   *
-  * A toast's lifetime is wall-clock time rather than a count of ticks. Ticks are what *notices* the expiry (the app
-  * needs a `config.tickRate` for a toast to disappear on its own), but they no longer decide how long "three seconds"
-  * is, so the same `notify` call means the same thing in an app that ticks every 20ms and one that ticks every 200ms.
+  * A toast's lifetime is wall-clock time rather than a count of ticks. Ticks are what *notices* the expiry — a run arms
+  * its own ambient tick for as long as a toast is live, so no `config.tickRate` is needed for a toast to disappear on
+  * its own — but they no longer decide how long "three seconds" is, so the same `notify` call means the same thing in
+  * an app that ticks every 20ms and one that ticks every 200ms.
   */
 private[dsl] final class ToastStack:
 

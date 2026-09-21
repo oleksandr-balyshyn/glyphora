@@ -89,10 +89,11 @@ export Element.{
 // Every core type the exported API's own signatures mention, so a view never needs a second import.
 //
 // The rule this block and the two below are kept to: if a name appears in the *signature* of anything this package
-// exports, it is re-exported here. The regression test is the examples directory — nine of the ten example apps take
-// `io.worxbend.tui.dsl.*` and nothing else from glyphora, and the tenth adds only
-// `io.worxbend.tui.macros.{deriveForm, Field}`, a genuinely separate module a form-less app never touches. An example
-// that needs a second glyphora import means this list is short.
+// exports, it is re-exported here. The regression test is the examples directory — eight of the ten example apps take
+// `io.worxbend.tui.dsl.*` and nothing else from glyphora; `form-demo` adds only
+// `io.worxbend.tui.macros.{deriveForm, Field}`, a genuinely separate module a form-less app never touches, and
+// `loadtest` separately imports `io.worxbend.tui.runtime.Async`. An example that needs a second glyphora import means
+// this list is short.
 //
 // `core.Progress` is the deliberate omission from the motion group (`Easing`, `Effect`, `Spring`, `Tween`): it is the
 // shared time-to-position arithmetic those four and the animated widgets are built *from*, so it belongs to whoever

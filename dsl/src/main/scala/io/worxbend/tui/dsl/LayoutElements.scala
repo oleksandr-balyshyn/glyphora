@@ -151,14 +151,26 @@ final case class PanelElement(
   private def framedHeight(width: Int): Option[Int] =
     // Every drawn border side eats one cell across its own axis, and the padding eats whatever it was asked for on
     // top of that. Counting the sides that are actually drawn, rather than assuming all four, is what keeps a
-    // `.borders(Borders.Top)` panel from reserving two rows it never paints.
-    val chrome = borderCells(w.Borders.Left) + borderCells(w.Borders.Right) + padding.horizontalCells
-    val rows   = borderCells(w.Borders.Top) + borderCells(w.Borders.Bottom) + padding.verticalCells
-    val gaps   = spacing * math.max(0, children.size - 1)
+    // `.borders(Borders.Top)` panel from reserving two rows it never paints. A caption on a side with no border
+    // reserves the outermost row too — the same rule `w.Block.inner` applies — so the measurement can never hand a
+    // scrollView a height that leaves the panel's last content row unreachable.
+    val chrome      = borderCells(w.Borders.Left) + borderCells(w.Borders.Right) + padding.horizontalCells
+    val topInset    = rowsAbove(w.Borders.Top, w.TitlePosition.Top)
+    val bottomInset = rowsAbove(w.Borders.Bottom, w.TitlePosition.Bottom)
+    val rows        = topInset + bottomInset + padding.verticalCells
+    val gaps        = spacing * math.max(0, children.size - 1)
     measuredHeights(children, math.max(0, width - chrome)).map(_.sum + gaps + rows)
 
-  /** One cell if that side of the frame is drawn, none if it is not — the same rule `w.Block.inner` applies. */
+  /** One cell if that side of the frame is drawn, none if it is not — the column rule `w.Block.inner` applies. */
   private def borderCells(side: w.Borders): Int = if borders.hasAny(side) then 1 else 0
+
+  /** How many rows one horizontal edge of the frame costs the content: one for a border, one for a caption with no
+    * border under it, and one — not two — when there is both. The same rule `w.Block.inner` applies, computed here from
+    * the same `blockTitles` the render hands the block, so a titled borderless panel measures the row its caption is
+    * written on.
+    */
+  private def rowsAbove(side: w.Borders, position: w.TitlePosition): Int =
+    if borders.hasAny(side) || blockTitles.exists(_.position == position) then 1 else 0
 
 /** Border glyph sets, on the one node type where a border exists at all.
   *
@@ -210,7 +222,7 @@ final case class RowElement(
   private[dsl] def withProps(props: ElementProps): RowElement                = copy(props = props)
   private[dsl] override def withChildren(children: Seq[Element]): RowElement = copy(children = children)
   private[dsl] override def intrinsicHeight(width: Int): Option[Int]         =
-    constrainedHeight(measuredHeights(children, width).flatMap(_.maxOption))
+    constrainedHeight(measuredHeights(children, width).map(_.maxOption.getOrElse(0)))
 
 /** Children stacked top to bottom. */
 final case class ColumnElement(

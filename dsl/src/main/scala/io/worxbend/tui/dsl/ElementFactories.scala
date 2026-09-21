@@ -382,8 +382,8 @@ private[dsl] trait ElementFactories:
   def heatmap(values: Seq[Seq[Double]]): WidgetElement =
     WidgetElement(w.Heatmap(values))
 
-  /** An animation frame indicator. Needs a `config.tickRate` to animate and nothing else — it reads the ambient
-    * [[AnimationClock]], so there is no counter to declare, advance, or thread through.
+  /** An animation frame indicator. Needs a tick to animate — its own `config.tickRate` or the ambient one — and nothing
+    * else to declare: it reads the ambient [[AnimationClock]], so there is no counter to advance or thread through.
     *
     * Colors come from the ambient [[Theme]]'s [[LoadingTheme]]; the animation from [[w.SpinnerPreset]], swappable with
     * `.preset(...)`.
@@ -496,8 +496,9 @@ private[dsl] trait ElementFactories:
   def skeletonAt(elapsed: FiniteDuration)(using theme: Theme): SkeletonElement =
     SkeletonElement(elapsed, theme.loading.track, theme.loading.band)
 
-  /** A figure with an arc chasing round it — a spinner big enough to fill a pane. Needs a `config.tickRate` and nothing
-    * else: it reads the ambient [[AnimationClock]], so there is no counter to declare or thread through.
+  /** A figure with an arc chasing round it — a spinner big enough to fill a pane. Needs a tick to animate — its own
+    * `config.tickRate` or the ambient one — and nothing else: it reads the ambient [[AnimationClock]], so there is no
+    * counter to declare or thread through.
     *
     * Defaults to a circle fitted to its area with a quarter of it lit as a fading comet; `.radius(n)` pins the size,
     * `.path(OrbitPath.Square)` squares it off, `.markers("*")` drops it to an ASCII-safe cell grid. Colors come from

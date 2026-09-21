@@ -47,13 +47,13 @@ private object LayerSnapshot:
 
 /** The mutable state of a single [[TuiApp.runWith]] invocation: whether a redraw is pending, the focus-decorated tree
   * the last frame produced (events are routed against that tree, not against a freshly evaluated one), the focus
-  * tracker, and the intro player.
+  * tracker, the intro player, and the one [[RunnerConfig]] the run was started with.
   *
   * Owned by one `runWith` call and touched only on the render thread — the event callbacks, the render lambda, and the
   * app's own hooks all run there, so none of these fields is synchronised. The splash player lives here rather than on
   * the app because an intro belongs to a run: running the same app twice plays it twice.
   */
-private final class RunState(val splash: SplashPlayer):
+private final class RunState(val splash: SplashPlayer, val config: RunnerConfig):
   var invalidated: Boolean = false
 
   /** The render-and-dispatch engine this run drives. `TuiApp` is that engine plus this file's policy — Tab traversal,
@@ -345,7 +345,8 @@ trait TuiApp:
 
   // ---- services ----
 
-  /** Starts a post-render [[Effect]] over the whole frame. Needs a `config.tickRate` to animate; the effect is dropped
+  /** Starts a post-render [[Effect]] over the whole frame. Animates on the run's own negotiated tick — the ambient
+    * ticker retargets to whatever the composed frame needs, so no `config.tickRate` is required; the effect is dropped
     * once done.
     */
   protected final def runEffect(effect: Effect): Unit = effects.start(effect)
@@ -417,7 +418,9 @@ trait TuiApp:
     */
   protected final def screenDepthNow: Int = screenStack.depthNow
 
-  /** Shows a toast in the top-right corner for `duration` (needs a `config.tickRate` for it to age out again). */
+  /** Shows a toast in the top-right corner for `duration`. The run's ambient ticker keeps ticking for as long as a
+    * toast is live, so it ages out on its own without a `config.tickRate`.
+    */
   protected final def notify(
       message: String,
       level: NoticeLevel = NoticeLevel.Info,
@@ -629,11 +632,11 @@ trait TuiApp:
     */
   final def runWith(backend: Backend): Either[RunnerError, Unit] =
     val intro     = splash
-    val run       = RunState(SplashPlayer(intro, () => System.nanoTime()))
-    val scope     = ReactiveScope.generational(() => run.invalidated = true)
     // read once: `config` is an overridable def, and the runner, the tick decision and the resize path must all agree
     // on one value for the whole run
     val runConfig = config
+    val run       = RunState(SplashPlayer(intro, () => System.nanoTime()), runConfig)
+    val scope     = ReactiveScope.generational(() => run.invalidated = true)
     run.runnerTicks = runConfig.tickRate.isDefined
     try
       TerminalRunner(backend, runConfig, redrawRequested = () => run.invalidated).run(
@@ -808,8 +811,9 @@ trait TuiApp:
         // `onResize` override — and anything it calls — already peeks the new size rather than the previous frame's.
         // What is published is the app's own area, not the terminal's: an inline app owns the bottom few rows, so the
         // two differ in height, and the frame about to be composed publishes the area. Writing the terminal size here
-        // let an `onResize` — and any view recomputed from it — lay itself out for a height it does not have.
-        val area = config.viewport.areaIn(size)
+        // let an `onResize` — and any view recomputed from it — lay itself out for a height it does not have. The
+        // viewport comes from `run.config` — the one read of the overridable `config` this run made — not a fresh one.
+        val area = run.config.viewport.areaIn(size)
         terminalSizeSignal.set(Size(area.width, area.height))
         onResize(size)
         true

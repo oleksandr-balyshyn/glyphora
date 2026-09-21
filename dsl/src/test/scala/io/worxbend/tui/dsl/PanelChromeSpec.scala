@@ -33,6 +33,18 @@ final class PanelChromeSpec extends AnyFunSuite:
     assert(panel(threeLines).borders(Borders.Top).intrinsicHeight(10) == Some(4))
     assert(panel(threeLines).borderless.intrinsicHeight(10) == Some(3))
 
+  test("a caption on a side with no drawn border still costs the row the render path reserves for it"):
+    // `Block.inner` reserves the outermost row for a caption whose border is not drawn, so the measurement must count
+    // that row too — a titled borderless panel measuring only its content would hand a scrollView a height one row
+    // short, and the panel's last content row would be unreachable.
+    val threeLines = text("a\nb\nc")
+    assert(panel("t")(threeLines).intrinsicHeight(10) == Some(5)) // caption written over a drawn border row
+    assert(panel("t")(threeLines).borders(Borders.Top).intrinsicHeight(10) == Some(4))
+    assert(panel("t")(threeLines).borders(Borders.Top).titleBottom("s").intrinsicHeight(10) == Some(5))
+    assert(panel("t")(threeLines).borderless.intrinsicHeight(10) == Some(4))
+    assert(panel(threeLines).titleBottom("s").borderless.intrinsicHeight(10) == Some(4))
+    assert(panel("t")(threeLines).titleBottom("s").borderless.intrinsicHeight(10) == Some(5))
+
   test("the measured width available to a child drops with the vertical sides"):
     // The child wraps, so the rows it reports reveal how many columns the panel left it.
     val prose = text("abcdefgh").wrapped

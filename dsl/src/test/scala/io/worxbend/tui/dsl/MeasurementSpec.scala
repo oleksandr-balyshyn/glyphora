@@ -22,6 +22,8 @@ final class MeasurementSpec extends AnyFunSuite:
     assert(row(text("a"), text("b\nc")).intrinsicHeight(20).contains(2))
     assert(panel("t")(text("a"), text("b")).intrinsicHeight(20).contains(4))
     assert(column(text("a"), spacer).intrinsicHeight(20).isEmpty) // a fill child poisons the sum
+    assert(row().intrinsicHeight(20).contains(0)) // an empty row is measurable emptiness, like an empty column
+    assert(column().intrinsicHeight(20).contains(0))
 
   test("a panel's gaps are charged to its measured height, the way a column's are"):
     // two children, one gap: 2 content rows + 1 gap + 2 border rows. Left out, a spaced panel inside a scrollView
@@ -92,6 +94,24 @@ final class MeasurementSpec extends AnyFunSuite:
     pilot.pressKey(KeyCode.PageDown).waitForIdle()
     assert(state.offset == 3, "the gaps have to be in the measured height or the bottom border is unreachable")
     assert(pilot.screenLines.last.contains("└"))
+    pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
+    assert(pilot.awaitTermination())
+
+  test("a scrollView reaches the last row of a titled borderless panel"):
+    val backend = HeadlessBackend(Size(12, 3))
+    val state   = ScrollViewState()
+    // 3 content rows + 1 row for the caption the borderless panel reserves above them = 4; a viewport of 3 leaves one
+    // row below the fold
+    val content = panel("t")(text("row 0"), text("row 1"), text("row 2")).borderless
+    assert(content.intrinsicHeight(11).contains(4))
+    val app     = new TuiApp:
+      override def bindings: KeyBindings            = KeyBindings(binding("ctrl+q", "quit")(quit()))
+      def view(using ReactiveScope, Theme): Element = scrollView(content, state)
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
+    pilot.waitForIdle()
+    pilot.pressKey(KeyCode.PageDown).waitForIdle()
+    assert(state.offset == 1, "the caption's row has to be in the measured height or the last content row is lost")
+    assert(pilot.screenLines.last.startsWith("row 2"))
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
 
