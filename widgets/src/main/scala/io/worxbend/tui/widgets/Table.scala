@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Constraint, Direction, Flex, Layout, Line, Rect, Style, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, Constraint, Direction, Flex, Layout, Line, Rect, Style, Widget}
 
 /** Rows of cells laid out in columns sized by the core constraint solver.
   *

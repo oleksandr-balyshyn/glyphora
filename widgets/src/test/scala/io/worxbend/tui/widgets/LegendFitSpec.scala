@@ -9,7 +9,7 @@ final class LegendFitSpec extends AnyFunSuite:
   private val area = Rect(0, 0, 40, 20)
 
   private def fits(width: Int, height: Int, constraint: Constraint): Boolean =
-    LegendFit.fits(area, width, height, (constraint, constraint))
+    LegendFit.fits(area, width, height, LegendConstraints(constraint, constraint))
 
   test("width measures the widest entry in terminal columns and adds the padding"):
     assert(LegendFit.width(Seq("■ cpu", "■ memory"), padding = 0) == 8)

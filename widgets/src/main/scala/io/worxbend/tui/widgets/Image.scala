@@ -61,4 +61,6 @@ object Image:
               Color.Rgb((argb >> 16) & 0xff, (argb >> 8) & 0xff, argb & 0xff): Color.Rgb
             }
           })
-    catch case NonFatal(error) => Left(s"failed to read $path: ${error.getMessage}")
+    catch
+      case NonFatal(error) =>
+        Left(s"failed to read $path: ${Option(error.getMessage).getOrElse(error.getClass.getName)}")

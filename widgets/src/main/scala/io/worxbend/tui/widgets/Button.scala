@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, CharWidth, Rect, Style, Widget}
 
 /** A pressable control rendered as `[ label ]`, centered in its area. Stateless — press handling lives with the caller
   * (the DSL element activates on Enter/Space while focused).

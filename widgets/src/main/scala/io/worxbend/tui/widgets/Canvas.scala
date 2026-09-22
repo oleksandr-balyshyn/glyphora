@@ -59,18 +59,17 @@ final case class CanvasLabel(x: Double, y: Double, line: Line)
   * `marker` is read only at [[CanvasResolution.Cell]], where there is one dot per cell; a marker that is not exactly
   * one column wide is replaced by [[Marker.Dot]] rather than allowed to smear into the next cell.
   *
-  * `labels` breaks the "required data first" parameter order this repository otherwise keeps to, and does so
-  * deliberately: it is an optional annotation layer rather than the canvas's subject, and putting it anywhere but last
-  * would silently rebind the arguments of every positional `Canvas(...)` already written. Labels are drawn after every
-  * shape, so a dot cannot land on top of the text that names it.
+  * `labels` pins pieces of text to world coordinates — a city on a map, a threshold on a plot — and, like the shapes,
+  * is content rather than appearance, so it sits with the data ahead of the drawing configuration. Labels are drawn
+  * after every shape, so a dot cannot land on top of the text that names it.
   */
 final case class Canvas(
     xBounds: Bounds,
     yBounds: Bounds,
     shapes: Seq[Shape],
+    labels: Seq[CanvasLabel] = Seq.empty,
     marker: String = Marker.Dot,
     resolution: CanvasResolution = CanvasResolution.Cell,
-    labels: Seq[CanvasLabel] = Seq.empty,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =

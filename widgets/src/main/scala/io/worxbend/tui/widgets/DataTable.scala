@@ -3,6 +3,7 @@ package io.worxbend.tui.widgets
 import java.util.Locale
 
 import io.worxbend.tui.core.{
+  Alignment,
   Buffer,
   CharWidth,
   Constraint,
@@ -489,17 +490,22 @@ final case class DataTable[K](
   private def renderHeader(buffer: Buffer, segments: Seq[Rect], state: DataTableState[K]): Unit =
     columns.zipWithIndex.foreach { (title, index) =>
       segments.lift(index).filterNot(_.isEmpty).foreach { segment =>
-        val indicator = state.sort match
-          case Some(ColumnSort(`index`, SortDirection.Ascending))  => " ▲"
-          case Some(ColumnSort(`index`, SortDirection.Descending)) => " ▼"
-          case _                                                   => ""
-        val line      = Line(Seq(Span(title + indicator, headerStyle)))
         // the sort indicator is part of the caption before it is placed, so a right-aligned column's arrow sits at the
-        // column's right edge rather than floating away from the title it belongs to
-        val _         =
+        // column's right edge rather than floating away from the title it belongs to. It is appended only when this
+        // column is the sorted one; an unsorted header is the title alone and pays no concatenation for an empty
+        // indicator
+        val line = sortIndicator(state.sort, index)
+          .fold(Line(Seq(Span(title, headerStyle))))(indicator => Line(Seq(Span(title + indicator, headerStyle))))
+        val _    =
           LineRenderer.render(buffer, segment.x, segment.y, line, segment.width, Style.Default, alignmentOf(index))
       }
     }
+
+  /** The sort-indicator glyph for column `index`, or `None` when `sort` is not on that column. */
+  private def sortIndicator(sort: Option[ColumnSort], index: Int): Option[String] = sort match
+    case Some(ColumnSort(`index`, SortDirection.Ascending))  => Some(DataTable.AscendingIndicator)
+    case Some(ColumnSort(`index`, SortDirection.Descending)) => Some(DataTable.DescendingIndicator)
+    case _                                                   => None
 
   /** The style one body cell is drawn in before the caller's own `cellStyle` has a say: the row's style, then the
     * column cursor over it, then the cell cursor over both. Layering in that order is what lets the intersection of the
@@ -530,8 +536,14 @@ final case class DataTable[K](
         // the caller's patch goes on last, over the selection and the cursors, so a cell it colours keeps that colour
         // wherever the selection happens to be
         val resolved = source.fold(styleAt(column))(row => styleAt(column).patch(cellStyle(row, column)))
-        val line     = Line.styled(cell, resolved)
-        val _ = LineRenderer.render(buffer, segment.x, y, line, segment.width, Style.Default, alignmentOf(column))
+        alignmentOf(column) match
+          // the common case — a left-aligned cell — writes straight into the buffer: no Line/Seq/Span wrapper is
+          // built just to carry one string and one style through the renderer, and the budgeted `setString` clips a
+          // too-wide cell no differently than the renderer's RowCursor does
+          case Alignment.Left => val _ = buffer.setString(segment.x, y, cell, resolved, segment.width)
+          case alignment      =>
+            val line = Line.styled(cell, resolved)
+            val _    = LineRenderer.render(buffer, segment.x, y, line, segment.width, Style.Default, alignment)
     }
 
   /** Where column `column`'s text sits, defaulting to the left edge for every column `alignments` does not reach —
@@ -553,6 +565,12 @@ final case class DataTable[K](
     else (left, right) => left.compareToIgnoreCase(right)
 
 object DataTable:
+
+  /** The caption suffix a sorted column carries, hoisted out of [[DataTable.renderHeader]] so the glyphs are not
+    * re-allocated per column per frame.
+    */
+  private val AscendingIndicator  = " ▲"
+  private val DescendingIndicator = " ▼"
 
   /** A table over plain text cells — the shape every `DataTable` row took before rows carried keys.
     *

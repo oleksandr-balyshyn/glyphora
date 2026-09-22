@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Line, Rect, Style, Text, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, CharWidth, Line, Rect, Style, Text, Widget}
 
 /** A modal-style dialog drawn over existing content: clears a centered box, borders it, renders the message and a row
   * of buttons with one highlighted.

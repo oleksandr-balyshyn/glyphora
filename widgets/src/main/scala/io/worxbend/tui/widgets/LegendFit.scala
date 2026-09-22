@@ -25,15 +25,15 @@ private[widgets] object LegendFit:
   def width(entries: Seq[String], padding: Int): Int =
     entries.map(CharWidth.of).maxOption.getOrElse(0) + padding
 
-  /** Whether a `legendWidth` by `legendHeight` legend satisfies both constraints inside `area`.
+  /** Whether a `legendWidth` by `legendHeight` legend satisfies both `constraints` inside `area`.
     *
-    * `constraints` is `(horizontal, vertical)`: the first limits how many of the area's columns the key may claim, the
-    * second how many of its rows. A legend of zero width or zero height never fits — there is nothing to draw.
+    * `constraints.horizontal` limits how many of the area's columns the key may claim, `constraints.vertical` how many
+    * of its rows. A legend of zero width or zero height never fits — there is nothing to draw.
     */
-  def fits(area: Rect, legendWidth: Int, legendHeight: Int, constraints: (Constraint, Constraint)): Boolean =
-    val (horizontal, vertical) = constraints
+  def fits(area: Rect, legendWidth: Int, legendHeight: Int, constraints: LegendConstraints): Boolean =
     legendWidth > 0 && legendHeight > 0 &&
-    legendWidth <= budget(horizontal, area.width) && legendHeight <= budget(vertical, area.height)
+      legendWidth <= budget(constraints.horizontal, area.width) &&
+      legendHeight <= budget(constraints.vertical, area.height)
 
   /** How many of `total` cells a constraint permits the legend to use.
     *

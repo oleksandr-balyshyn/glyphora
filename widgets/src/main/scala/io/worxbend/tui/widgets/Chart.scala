@@ -2,7 +2,7 @@ package io.worxbend.tui.widgets
 
 import java.util.Locale
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Constraint, Rect, Style, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, Cell, CharWidth, Constraint, Rect, Style, Widget}
 
 /** How a [[Dataset]]'s points are drawn.
   *
@@ -36,12 +36,10 @@ enum GraphType:
 final case class Dataset(
     name: String,
     points: Seq[(Double, Double)],
-    style: Style = Style.Default,
     graphType: GraphType = GraphType.Line,
     fillToY: Double = 0.0,
-    // Appended rather than placed in their conventional slots: inserting a parameter mid-list would silently change
-    // what every positional caller written against an earlier release means.
     resolution: Option[CanvasResolution] = None,
+    style: Style = Style.Default,
     marker: Option[String] = None,
 )
 
@@ -67,7 +65,8 @@ final case class Dataset(
   *   whether the plot's top-right corner carries a key with one entry per named dataset
   * @param hiddenLegendConstraints
   *   `(horizontal, vertical)` limits the legend must satisfy or the whole key is dropped. The default allows it a
-  *   quarter of the plot in either direction, so a chart that shrinks loses its key and keeps its data
+  *   quarter of the plot in either direction, so a chart that shrinks loses its key and keeps its data. See
+  *   [[LegendConstraints]]
   * @param legendMarker
   *   the glyph each legend entry starts with
   * @param xTitle
@@ -86,13 +85,25 @@ final case class ChartOptions(
     showLabels: Boolean = false,
     labelAlignment: Alignment = Alignment.Right,
     showLegend: Boolean = false,
-    hiddenLegendConstraints: (Constraint, Constraint) = (Constraint.Ratio(1, 4), Constraint.Ratio(1, 4)),
+    hiddenLegendConstraints: LegendConstraints = LegendConstraints(Constraint.Ratio(1, 4), Constraint.Ratio(1, 4)),
     legendMarker: String = "■",
     xTitle: Option[String] = None,
     yTitle: Option[String] = None,
     xLabels: Seq[String] = Seq.empty,
     yLabels: Seq[String] = Seq.empty,
 )
+
+/** The two limits a [[Chart]] legend must satisfy before it is drawn: how much of the plot's width `horizontal` and
+  * height `vertical` it may claim. A named pair, because `(Constraint, Constraint)` says nothing about which limit is
+  * which — the same tuple shape serves this module for other paired values — and a function handed the wrong one
+  * compiles fine. Mirrors [[Bounds]], the same idea over the chart's world range.
+  */
+final case class LegendConstraints(horizontal: Constraint, vertical: Constraint)
+
+object LegendConstraints:
+
+  /** The same limits read from a `(horizontal, vertical)` tuple — the shape this type replaces. */
+  def of(pair: (Constraint, Constraint)): LegendConstraints = LegendConstraints(pair._1, pair._2)
 
 /** An x/y chart with drawn axes; the plot region is a [[Canvas]] over the datasets' shapes.
   *
@@ -105,9 +116,9 @@ final case class ChartOptions(
   * With `options.showLegend` the plot's top-right corner carries a key: one entry per dataset with a non-empty `name`,
   * each drawn in that dataset's own style, so several series in one plot can be told apart by more than colour alone.
   * The key is drawn over the plot, so it costs the data no space — but only while it stays small:
-  * `options.hiddenLegendConstraints` is `(horizontal, vertical)` and the whole key is dropped unless it satisfies both.
-  * The default allows it a quarter of the plot in either direction, so a chart that shrinks loses its key and keeps its
-  * data.
+  * `options.hiddenLegendConstraints` carries `(horizontal, vertical)` limits and the whole key is dropped unless it
+  * satisfies both. The default allows it a quarter of the plot in either direction, so a chart that shrinks loses its
+  * key and keeps its data.
   *
   * `options.xTitle` and `options.yTitle` name what the axes measure — the units a plotted series otherwise leaves the
   * reader to guess. Each takes a row of its own: the y title on the row above the plot, starting at the axis column,
@@ -158,7 +169,8 @@ final case class Chart(
       // One canvas pass per distinct (resolution, marker) pair, in the order those pairs first appear, so a chart
       // whose datasets override nothing is still exactly one pass drawing exactly the frame it always drew.
       groupedBySurface.foreach { case ((groupResolution, groupMarker), group) =>
-        Canvas(xBounds, yBounds, group.map(shapeOf), groupMarker, groupResolution).render(plotArea, buffer)
+        Canvas(xBounds, yBounds, group.map(shapeOf), marker = groupMarker, resolution = groupResolution)
+          .render(plotArea, buffer)
       }
       if gutter > 0 then
         if options.yLabels.nonEmpty then drawYLabels(buffer, area.x, gutter, plotTop, axisRow)

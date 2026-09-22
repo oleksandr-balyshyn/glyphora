@@ -16,6 +16,8 @@ import scala.collection.mutable
   */
 final class LogState(maxLines: Int = 1000):
 
+  require(maxLines > 0, s"a log needs a positive maxLines, got $maxLines")
+
   private val ring                             = mutable.ArrayDeque[Line]()
   var follow: Boolean                          = true
   var offset: Int                              = 0

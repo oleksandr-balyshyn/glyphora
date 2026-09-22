@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, CharWidth, Rect, Style, Widget}
 
 import java.time.format.TextStyle as JTextStyle
 import java.time.{DayOfWeek, LocalDate, Year, YearMonth}

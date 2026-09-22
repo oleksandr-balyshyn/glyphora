@@ -238,10 +238,9 @@ final class Painter private[widgets] (
   private def clipToBounds(x1: Double, y1: Double, x2: Double, y2: Double): Option[(Double, Double, Double, Double)] =
     if !hasExtent then None
     else
-      val dx    = x2 - x1
-      val dy    = y2 - y1
-      val edges = Seq((-dx, x1 - xMin), (dx, xMax - x1), (-dy, y1 - yMin), (dy, yMax - y1))
-      visibleSpan(edges).map { (t0, t1) =>
+      val dx = x2 - x1
+      val dy = y2 - y1
+      visibleSpan(dx, dy, x1, y1, includeYEdges = true).map { (t0, t1) =>
         (
           clampInto(x1 + dx * t0, xMin, xMax),
           clampInto(y1 + dy * t0, yMin, yMax),
@@ -262,25 +261,52 @@ final class Painter private[widgets] (
     else
       val dx = x2 - x1
       val dy = y2 - y1
-      visibleSpan(Seq((-dx, x1 - xMin), (dx, xMax - x1))).map { (t0, t1) =>
+      visibleSpan(dx, dy, x1, y1, includeYEdges = false).map { (t0, t1) =>
         (clampInto(x1 + dx * t0, xMin, xMax), y1 + dy * t0, clampInto(x1 + dx * t1, xMin, xMax), y1 + dy * t1)
       }
 
-  /** Narrows `0..1` — the whole segment — against each `(p, q)` edge in turn, or `None` if nothing survives. See
-    * [[clipToBounds]] for what `p` and `q` mean; this is the fold itself, shared so that clipping against two edges and
-    * against four cannot drift apart.
+  /** Narrows `0..1` — the whole segment — against each bound edge in turn, or `None` if nothing survives. See
+    * [[clipToBounds]] for the Liang-Barsky idea; this is the narrowing itself, shared so that clipping against two
+    * edges and against four cannot drift apart.
+    *
+    * `p` is how fast the segment approaches an edge and `q` how far it starts from it. A `p == 0` edge runs parallel to
+    * that edge and keeps the surviving range only when the segment starts inside (`q >= 0`); otherwise the crossing
+    * point `q / p` either raises the range's lower end or lowers its upper one, and an inverted range means no part of
+    * the segment is visible. Local `var`s rather than a fold over a collection of edge tuples: this runs once per
+    * segment per frame, and the four (or two) edges are unrolled calls, not allocated values.
+    *
+    * With `includeYEdges` false only the two horizontal edges are applied, leaving the surviving `y`s as the segment's
+    * real values — what [[clipToXBounds]] needs.
     */
-  private def visibleSpan(edges: Seq[(Double, Double)]): Option[(Double, Double)] =
-    edges.foldLeft(Option((0.0, 1.0))) { (surviving, edge) =>
-      surviving.flatMap { (t0, t1) =>
-        val (p, q) = edge
-        if p == 0.0 then Option.when(q >= 0.0)((t0, t1))
+  private def visibleSpan(
+      dx: Double,
+      dy: Double,
+      x1: Double,
+      y1: Double,
+      includeYEdges: Boolean,
+  ): Option[(Double, Double)] =
+    var t0      = 0.0
+    var t1      = 1.0
+    var visible = true
+
+    def narrow(p: Double, q: Double): Unit =
+      if visible then
+        if p == 0.0 then
+          if q < 0.0 then visible = false
         else
           val crossing = q / p
-          if p < 0.0 then Option.when(crossing <= t1)((math.max(t0, crossing), t1))
-          else Option.when(crossing >= t0)((t0, math.min(t1, crossing)))
-      }
-    }
+          if p < 0.0 then
+            if crossing > t1 then visible = false
+            else if crossing > t0 then t0 = crossing
+          else if crossing < t0 then visible = false
+          else if crossing < t1 then t1 = crossing
+
+    narrow(-dx, x1 - xMin)
+    narrow(dx, xMax - x1)
+    if includeYEdges then
+      narrow(-dy, y1 - yMin)
+      narrow(dy, yMax - y1)
+    if visible then Some((t0, t1)) else None
 
   private def clampInto(value: Double, low: Double, high: Double): Double = math.min(high, math.max(low, value))
 

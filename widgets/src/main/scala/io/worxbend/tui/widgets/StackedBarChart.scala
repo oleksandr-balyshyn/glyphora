@@ -8,19 +8,14 @@ import io.worxbend.tui.core.{Buffer, Cell, Rect, Style, Widget}
   * the tallest stack it was handed, which is what makes two of these charts side by side — or the same chart across two
   * frames — silently mean different things: a stack that stays the same size appears to shrink the moment a taller one
   * arrives beside it. Pin both charts to the same ceiling and the heights compare.
-  *
-  * @param max
-  *   by the widget parameter-order convention this is behaviour and would belong beside `barGap`; it sits after the
-  *   styles because `StackedBarChart` is a published 0.12.0 signature and inserting a parameter before `styles` would
-  *   silently repoint every positional call site.
   */
 final case class StackedBarChart(
     data: Seq[(String, Seq[Long])],
     barWidth: Int = 3,
     barGap: Int = 1,
+    max: Option[Long] = None,
     styles: Seq[Style] = SeriesPalette.Default,
     labelStyle: Style = Style.Default,
-    max: Option[Long] = None,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =

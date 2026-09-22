@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, CharWidth, Modifiers, Rect, Style, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, Cell, CharWidth, Modifiers, Rect, Style, Widget}
 
 /** A filled progress bar with a centered label; the fill spans the whole area height.
   *

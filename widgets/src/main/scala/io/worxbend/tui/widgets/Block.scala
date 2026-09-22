@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Line, Rect, Span, Style, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, Cell, Line, Rect, Span, Style, Widget}
 
 /** Which horizontal border a [[BlockTitle]] is written into. */
 enum TitlePosition:
@@ -69,14 +69,12 @@ final case class Block(
     titles: Seq[BlockTitle] = Seq.empty,
     borders: Borders = Borders.All,
     padding: Padding = Padding.zero,
+    mergeBorders: MergeStrategy = MergeStrategy.Replace,
     style: Style = Style.Default,
     borderStyle: Style = Style.Default,
     borderType: BorderType = BorderType.Plain,
     borderSet: Option[BorderGlyphs] = None,
     shadow: Option[Shadow] = None,
-    // Appended rather than placed in the layout-and-behaviour slot the widget conventions ask for: inserting a
-    // parameter mid-list would silently change what every positional caller written against 0.12.0 means.
-    mergeBorders: MergeStrategy = MergeStrategy.Replace,
     titleStyle: Style = Style.Default,
 ) extends Widget:
 

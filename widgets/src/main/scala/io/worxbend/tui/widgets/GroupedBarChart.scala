@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, CharWidth, Rect, Style, Widget}
 
 /** One bar inside a [[BarGroup]]: what it measures, how tall it is, and the colour that identifies the series it
   * belongs to.

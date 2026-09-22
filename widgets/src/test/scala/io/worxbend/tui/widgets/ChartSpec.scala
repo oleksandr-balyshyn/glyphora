@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Color, Constraint, Style}
+import io.worxbend.tui.core.{Alignment, Color, Constraint, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.{rendered, trimmedLines}
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -80,8 +80,8 @@ final class ChartSpec extends AnyFunSuite:
     assert(trimmedLines(buffer).mkString.forall(!_.isDigit))
 
   test("a legend lists each named dataset in its own style"):
-    val cpu    = Dataset("cpu", Seq((0.0, 0.0)), Style.Default.withFg(Color.Red))
-    val mem    = Dataset("mem", Seq((0.0, 1.0)), Style.Default.withFg(Color.Blue))
+    val cpu    = Dataset("cpu", Seq((0.0, 0.0)), style = Style.Default.withFg(Color.Red))
+    val mem    = Dataset("mem", Seq((0.0, 1.0)), style = Style.Default.withFg(Color.Blue))
     val buffer =
       rendered(Chart(Seq(cpu, mem), Bounds(0.0, 1.0), Bounds(0.0, 1.0), ChartOptions(showLegend = true)), 40, 12)
     assert(trimmedLines(buffer)(0).endsWith("\u25a0 cpu"))
@@ -137,7 +137,7 @@ final class ChartSpec extends AnyFunSuite:
       Bounds(0.0, 1.0),
       ChartOptions(
         showLegend = true,
-        hiddenLegendConstraints = (Constraint.Percentage(100), Constraint.Percentage(100)),
+        hiddenLegendConstraints = LegendConstraints(Constraint.Percentage(100), Constraint.Percentage(100)),
       ),
     )
     val buffer   = rendered(chart, 40, 12)

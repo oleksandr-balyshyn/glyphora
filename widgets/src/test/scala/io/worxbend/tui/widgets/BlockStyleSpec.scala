@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, Cell, Color, Line, Modifiers, Rect, Span, Style}
+import io.worxbend.tui.core.{Alignment, Buffer, Cell, Color, Line, Modifiers, Rect, Span, Style}
 import io.worxbend.tui.testsupport.BufferAssertions.rendered
 
 import org.scalatest.funsuite.AnyFunSuite

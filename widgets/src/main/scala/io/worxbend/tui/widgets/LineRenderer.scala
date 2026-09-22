@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Line, Style}
+import io.worxbend.tui.core.{Alignment, Buffer, CharWidth, Line, Style}
 
 /** Shared span-aware single-row text rendering: writes a [[Line]]'s spans in order, clipping at a column budget,
   * layering each span's style over a base style.
@@ -40,9 +40,26 @@ private[widgets] object LineRenderer:
       baseStyle: Style = Style.Default,
       alignment: Alignment = Alignment.Left,
       skipWidth: Int = 0,
+  ): Int = render(buffer, x, y, line, maxWidth, baseStyle, alignment, skipWidth, line.width)
+
+  /** Renders `line` as [[render]] does, for a caller that has already measured it: `lineWidth` is the line's width in
+    * terminal columns, so the line — and, through the skip path below, its spans — is not measured again. Every in-repo
+    * caller measures with the same [[io.worxbend.tui.core.CharWidth]] the line itself uses, so the handed-in width and
+    * the line's own agree; a width that disagrees is a defect of the caller, not something this renderer re-checks.
+    */
+  def render(
+      buffer: Buffer,
+      x: Int,
+      y: Int,
+      line: Line,
+      maxWidth: Int,
+      baseStyle: Style,
+      alignment: Alignment,
+      skipWidth: Int,
+      lineWidth: Int,
   ): Int =
     // what is left of the line once the skipped columns are gone is what has to be placed, not the whole line
-    val drawnWidth = math.max(0, line.width - math.max(0, skipWidth))
+    val drawnWidth = math.max(0, lineWidth - math.max(0, skipWidth))
     val start      = alignment.originAt(x, maxWidth, drawnWidth)
     val cursor     = RowCursor(buffer, y, start, x + maxWidth)
     val lineStyle  = baseStyle.patch(line.style)

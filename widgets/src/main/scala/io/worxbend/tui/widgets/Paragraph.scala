@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Line, LineBreaks, Measured, Rect, Span, Style, Text, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, CharWidth, Line, LineBreaks, Measured, Rect, Span, Style, Text, Widget}
 
 /** Multi-line styled text with alignment and optional wrapping.
   *
@@ -44,11 +44,9 @@ final case class Paragraph(
     text: Text,
     alignment: Alignment = Alignment.Left,
     overflow: Overflow = Overflow.Clip,
-    style: Style = Style.Default,
-    // Appended rather than placed in the layout-and-behaviour slot the widget conventions ask for: inserting a
-    // parameter mid-list would silently change what every positional caller written against 0.12.0 means.
     scrollY: Int = 0,
     scrollX: Int = 0,
+    style: Style = Style.Default,
 ) extends Widget
     with Measured:
 
@@ -75,9 +73,12 @@ final case class Paragraph(
         // the line's own alignment wins over the text's, which wins over the paragraph's argument; `None` at both
         // inner levels means "use the paragraph's", which is what every line said before either could carry one
         val placement  = line.alignment.orElse(text.alignment).getOrElse(alignment)
+        // measured once here and handed to the renderer as `lineWidth`, so the line — and, through the skip path, its
+        // spans — is not measured a second time on the same draw
+        val lineWidth  = line.width
         // A line wider than the area loses the side *away* from the alignment: a right-aligned line keeps its end, a
         // centred one loses as much from each side. Left-aligned text keeps its beginning, as before.
-        val tooWideBy  = math.max(0, line.width - area.width)
+        val tooWideBy  = math.max(0, lineWidth - area.width)
         val alignSkip  = placement match
           case Alignment.Left   => 0
           case Alignment.Center => tooWideBy / 2
@@ -87,12 +88,21 @@ final case class Paragraph(
         val skipWidth  = alignSkip + math.max(0, scrollX)
         // What is left of the line once those columns are gone, capped at the area: the number the alignment places.
         // With no scroll offset and no over-wide line this is the plain `min(line.width, area.width)` it always was.
-        val drawnWidth = math.max(0, math.min(line.width - skipWidth, area.width))
+        val drawnWidth = math.max(0, math.min(lineWidth - skipWidth, area.width))
         val startX     = placement.originAt(area.x, area.width, drawnWidth)
         // the paragraph has already placed the line itself, by choosing `startX`, so the renderer is told to draw from
         // there and not to align a second time
-        val _          =
-          LineRenderer.render(buffer, startX, area.y + row, line, area.right - startX, baseStyle, skipWidth = skipWidth)
+        val _          = LineRenderer.render(
+          buffer,
+          startX,
+          area.y + row,
+          line,
+          area.right - startX,
+          baseStyle,
+          Alignment.Left,
+          skipWidth,
+          lineWidth,
+        )
       }
 
   /** The rows this text occupies at `width` — the measurement counterpart of [[render]], and always an answer: a

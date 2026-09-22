@@ -47,44 +47,46 @@ enum SparkDirection:
   * `styleFor` restyles individual columns — `(_, value) => Option.when(value > limit)(Style.Default.withFg(Color.Red))`
   * paints a threshold breach red and leaves everything else alone. It is handed the point's index in `data` (not its
   * screen column, which differs from it whenever a `RightToLeft` trace has scrolled) and the value, and what it returns
-  * is patched over the sparkline's own `style`, so an override setting only a colour keeps the rest. It sits in the
-  * last parameter slot rather than beside `style`, where the widget convention would put it, because inserting a
-  * parameter into a published 0.12.0 signature would silently repoint every positional call site. See [[BarStyling]].
+  * is patched over the sparkline's own `style`, so an override setting only a colour keeps the rest. See
+  * [[BarStyling]].
   */
 final case class Sparkline(
     data: Seq[Long],
     max: Option[Long] = None,
     direction: SparkDirection = SparkDirection.LeftToRight,
-    style: Style = Style.Default,
-    barSet: BarSet = BarSet.Eighths,
-    // Appended rather than placed in the layout-and-behaviour slot the widget conventions ask for: inserting a
-    // parameter mid-list would silently change what every positional caller written against 0.12.0 means.
     absentColumns: Set[Int] = Set.empty,
-    absentSymbol: Option[String] = None,
-    absentStyle: Style = Style.Default,
+    style: Style = Style.Default,
     styleFor: (Int, Long) => Option[Style] = BarStyling.NoOverride,
+    absentStyle: Style = Style.Default,
+    barSet: BarSet = BarSet.Eighths,
+    absentSymbol: Option[String] = None,
 ) extends Widget:
 
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty && data.nonEmpty then
       // The scale ignores absent points: whatever placeholder sits in `data` at an absent index is not a reading, and
-      // letting it set the ceiling would rescale the whole trace around a number nobody measured.
-      val readings = data.zipWithIndex.collect { case (value, index) if !absentColumns.contains(index) => value }
-      val ceiling  = math.max(1L, max.getOrElse(if readings.isEmpty then 0L else readings.max))
-      // Indices are carried alongside the values, because which points are absent is stated in terms of positions in
-      // `data` and a `takeRight` would otherwise renumber them. That index is also exactly what `styleFor` is asked
-      // about: with `RightToLeft` the visible window starts part-way into the series, so the screen column and the
-      // data index are not the same number.
-      val indexed  = data.zipWithIndex
-      // A series shorter than the area still hugs the edge it is anchored to: LeftToRight starts at column 0,
-      // RightToLeft is pushed right so its last point lands in the last column.
-      val (visible, offset) = direction match
-        case SparkDirection.LeftToRight => (indexed.take(area.width), 0)
-        case SparkDirection.RightToLeft =>
-          val newest = indexed.takeRight(area.width)
-          (newest, area.width - newest.size)
-      visible.zipWithIndex.foreach { case ((value, index), column) =>
-        val x = area.x + offset + column
+      // letting it set the ceiling would rescale the whole trace around a number nobody measured. The collect runs only
+      // when there are absent points at all — with an empty `absentColumns` the readings are the data as given, and no
+      // zipWithIndex is built to find them.
+      val ceiling              =
+        if absentColumns.isEmpty then math.max(1L, max.getOrElse(if data.isEmpty then 0L else data.max))
+        else
+          val readings = data.zipWithIndex.collect { case (value, index) if !absentColumns.contains(index) => value }
+          math.max(1L, max.getOrElse(if readings.isEmpty then 0L else readings.max))
+      // A series shorter than the area still hugs the edge it is anchored to: LeftToRight starts at index 0,
+      // RightToLeft starts windowSize points from the end so its last point lands in the last column. The window is
+      // walked by plain index, because which points are absent and what `styleFor` is asked are both stated in terms of
+      // positions in `data` — a `takeRight` would renumber them, and with `RightToLeft` the screen column and the data
+      // index are not the same number.
+      val windowSize           = math.min(area.width, data.size)
+      val (firstIndex, offset) = direction match
+        case SparkDirection.LeftToRight => (0, 0)
+        case SparkDirection.RightToLeft => (data.size - windowSize, area.width - windowSize)
+      var column               = 0
+      while column < windowSize do
+        val index = firstIndex + column
+        val value = data(index)
+        val x     = area.x + offset + column
         if absentColumns.contains(index) then drawAbsent(buffer, x, area)
         else
           // one terminal column per data point, filled over the full area height
@@ -99,7 +101,7 @@ final case class Sparkline(
             style = BarStyling.styleAt(style, styleFor, index, value),
             set = barSet,
           )
-      }
+        column += 1
 
   /** Draws the whole of column `x` as the absent glyph, or leaves it untouched when there is none.
     *

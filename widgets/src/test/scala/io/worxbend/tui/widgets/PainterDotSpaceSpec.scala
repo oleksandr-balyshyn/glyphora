@@ -66,8 +66,8 @@ final class PainterDotSpaceSpec extends AnyFunSuite:
       def draw(painter: Painter): Unit =
         points.foreach((x, y) => painter.getPoint(x, y).foreach((c, r) => painter.paintDot(c, r, style)))
 
-    val world = rendered(Canvas(unit, unit, Seq(ViaWorld(Style.Default)), "*"), 7, 5)
-    val dots  = rendered(Canvas(unit, unit, Seq(ViaDots(Style.Default)), "*"), 7, 5)
+    val world = rendered(Canvas(unit, unit, Seq(ViaWorld(Style.Default)), marker = "*"), 7, 5)
+    val dots  = rendered(Canvas(unit, unit, Seq(ViaDots(Style.Default)), marker = "*"), 7, 5)
     assert(trimmedLines(world) == trimmedLines(dots))
     assert(trimmedLines(world).exists(_.contains("*")))
 
@@ -80,7 +80,7 @@ final class PainterDotSpaceSpec extends AnyFunSuite:
         painter.paintDot(columns, 0, Style.Default)
         painter.paintDot(0, rows, Style.Default)
 
-    assert(trimmedLines(rendered(Canvas(unit, unit, Seq(OffGrid()), "*"), 5, 4)).forall(_.isEmpty))
+    assert(trimmedLines(rendered(Canvas(unit, unit, Seq(OffGrid()), marker = "*"), 5, 4)).forall(_.isEmpty))
 
   test("a shape can scan-convert a filled box in dot space"):
     // The whole point of the dot-space API: fill exactly the dots inside the world box, once each, with no sample

@@ -88,12 +88,10 @@ final case class ListView(
     items: Seq[String | Line | Text],
     direction: ListDirection = ListDirection.TopToBottom,
     highlightSpacing: HighlightSpacing = HighlightSpacing.Always,
+    repeatHighlightSymbol: Boolean = false,
     style: Style = Style.Default,
     highlightStyle: Style = Style.Default.reverse,
     highlightSymbol: String = "> ",
-    // Appended rather than placed in the layout-and-behaviour slot: inserting a parameter mid-list would silently
-    // change what every positional caller written against an earlier release means.
-    repeatHighlightSymbol: Boolean = false,
 ) extends StatefulWidget[ListState]
     with Measured:
 
@@ -157,18 +155,24 @@ final case class ListView(
           // with no gutter reserved there is no room for the marker either, so the highlight style is the only cue.
           // The marker belongs to the item, so on a multi-row item it is drawn once, at the top, unless the caller
           // asked for it on every row.
-          val marks  = isSelected && gutterWidth > 0 && (lineIndex == 0 || repeatHighlightSymbol)
-          val prefix = if marks then highlightSymbol else padding
+          val marks       = isSelected && gutterWidth > 0 && (lineIndex == 0 || repeatHighlightSymbol)
+          val prefix      = if marks then highlightSymbol else padding
           // `row` counts visible rows away from the anchored edge, so only the edge changes between the two directions
           // and the scroll arithmetic above cannot drift apart from what is drawn. `area.bottom - 1 - row` never falls
           // above the area because the walk stops at `area.height` rows.
-          val y      = direction match
+          val y           = direction match
             case ListDirection.TopToBottom => area.y + row
             case ListDirection.BottomToTop => area.bottom - 1 - row
           // clip to the area, not just to the buffer: a highlight symbol wider than a narrow list would otherwise be
-          // written straight over whatever owns the columns to the right
-          buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, area.width), rowStyle)
-          val _      = LineRenderer.render(buffer, area.x + gutterWidth, y, line, area.width - gutterWidth, rowStyle)
+          // written straight over whatever owns the columns to the right. The width is measured once: when the prefix
+          // already fits, the substringByWidth cut (and its copy) is skipped, and a padding run in the default style
+          // draws nothing the frame does not already show, so that write is skipped too
+          val prefixWidth = CharWidth.of(prefix)
+          if prefixWidth > area.width then
+            buffer.setString(area.x, y, CharWidth.substringByWidth(prefix, area.width), rowStyle)
+          else if prefix.nonEmpty && (marks || rowStyle != Style.Default) then
+            buffer.setString(area.x, y, prefix, rowStyle)
+          val _ = LineRenderer.render(buffer, area.x + gutterWidth, y, line, area.width - gutterWidth, rowStyle)
           row += 1
         }
       }

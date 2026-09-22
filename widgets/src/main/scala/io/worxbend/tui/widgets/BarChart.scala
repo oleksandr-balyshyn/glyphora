@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Direction, Rect, Style, Widget}
+import io.worxbend.tui.core.{Alignment, Buffer, CharWidth, Direction, Rect, Style, Widget}
 
 /** Bars with labels, one per `(label, value)`, scaled against `max` (defaulting to the data's maximum) and topped with
   * a partial block glyph for sub-cell precision.
@@ -19,10 +19,9 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Direction, Rect, Style, Widget}
   * unit or a thousands separator goes.
   *
   * @param direction
-  *   by the widget parameter-order convention this is layout and would belong immediately after `data`; it sits after
-  *   the styles because `BarChart` is a published 0.12.0 signature and inserting a parameter before `barWidth` would
-  *   silently repoint every positional call site. `barHeight`, which only the horizontal layout reads, keeps it
-  *   company.
+  *   picks the layout — `Vertical` (the default) draws upright bars with their labels on the row underneath,
+  *   `Horizontal` draws bars rightwards with the labels in a gutter down the left edge. `barHeight`, which only the
+  *   horizontal layout reads, sits beside it.
   *
   * `barSet` swaps the glyphs the bars are drawn from — [[BarSet.Ascii]] for a terminal with no block elements,
   * [[BarSet.Solid]] or [[BarSet.Halves]] for blunter bars, or a set of your own. Its `empty` glyph, if it has one, also
@@ -32,19 +31,18 @@ import io.worxbend.tui.core.{Buffer, CharWidth, Direction, Rect, Style, Widget}
   * paints the bars over a limit red and leaves the rest alone. It is handed the bar's index in `data` and its value,
   * and what it returns is patched over `barStyle`, so an override setting only a colour keeps the rest. It colours the
   * bar and nothing else: the label under it and the number beside it keep `labelStyle` and `valueStyle`, because those
-  * are text a reader has to be able to read whatever the bar is doing. Like `direction` above it sits at the end of the
-  * parameter list rather than beside the styles, so that no positional call site moves. See [[BarStyling]].
+  * are text a reader has to be able to read whatever the bar is doing. See [[BarStyling]].
   */
 final case class BarChart(
     data: Seq[(String, Long)],
+    direction: Direction = Direction.Vertical,
+    barHeight: Int = 1,
     barWidth: Int = 3,
     barGap: Int = 1,
     max: Option[Long] = None,
     barStyle: Style = Style.Default,
     labelStyle: Style = Style.Default,
     barSet: BarSet = BarSet.Eighths,
-    direction: Direction = Direction.Vertical,
-    barHeight: Int = 1,
     showValues: Boolean = false,
     valueStyle: Style = Style.Default,
     valueFormat: Long => String = _.toString,

@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style}
+import io.worxbend.tui.core.{Alignment, Buffer, CharWidth, Rect, Style}
 
 /** The geometry a bar chart drawn sideways shares, the mirror image of [[ColumnChart]].
   *

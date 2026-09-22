@@ -18,5 +18,5 @@ final case class DualSparkline(
   def render(area: Rect, buffer: Buffer): Unit =
     if !area.isEmpty then
       val halves = Layout(Direction.Vertical, Seq(Constraint.Ratio(1, 2), Constraint.Fill(1))).split(area)
-      Sparkline(upper, max, direction, upperStyle).render(halves(0), buffer)
-      Sparkline(lower, max, direction, lowerStyle).render(halves(1), buffer)
+      Sparkline(upper, max, direction, style = upperStyle).render(halves(0), buffer)
+      Sparkline(lower, max, direction, style = lowerStyle).render(halves(1), buffer)

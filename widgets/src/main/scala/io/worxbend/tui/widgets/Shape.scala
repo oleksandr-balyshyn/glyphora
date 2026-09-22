@@ -33,9 +33,14 @@ object Shape:
   /** Consecutive points joined by segments — what a line chart plots. */
   final case class Polyline(points: Seq[(Double, Double)], style: Style = Style.Default) extends Shape:
     def draw(painter: Painter): Unit =
-      points.lazyZip(points.drop(1)).foreach { case ((x1, y1), (x2, y2)) =>
-        SegmentShape(x1, y1, x2, y2, style).draw(painter)
-      }
+      // one segment per adjacent pair, drawn straight on the painter: a throwaway SegmentShape per segment per frame
+      // would allocate for no reader, and the pairs are walked by index so nothing is dropped or zipped into being
+      var index = 0
+      while index + 1 < points.size do
+        val (x1, y1) = points(index)
+        val (x2, y2) = points(index + 1)
+        painter.paintSegment(x1, y1, x2, y2, style)
+        index += 1
 
   /** One upright bar per point: a segment from `baseline` up (or down) to the point's own y.
     *
@@ -44,7 +49,8 @@ object Shape:
     */
   final case class Bars(points: Seq[(Double, Double)], baseline: Double, style: Style = Style.Default) extends Shape:
     def draw(painter: Painter): Unit =
-      points.foreach((x, y) => SegmentShape(x, baseline, x, y, style).draw(painter))
+      // each bar is one vertical segment, painted directly rather than wrapped in a throwaway SegmentShape
+      points.foreach((x, y) => painter.paintSegment(x, baseline, x, y, style))
 
   /** A segment plus the area between it and the horizontal line `baselineY` — one span of an area plot.
     *
@@ -74,9 +80,14 @@ object Shape:
       style: Style = Style.Default,
   ) extends Shape:
     def draw(painter: Painter): Unit =
-      points.lazyZip(points.drop(1)).foreach { case ((x1, y1), (x2, y2)) =>
-        FilledLine(x1, y1, x2, y2, baselineY, style).draw(painter)
-      }
+      // one filled span per adjacent pair, drawn straight on the painter — the same no-throwaway, index-walk rule as
+      // [[Polyline]]
+      var index = 0
+      while index + 1 < points.size do
+        val (x1, y1) = points(index)
+        val (x2, y2) = points(index + 1)
+        painter.paintFilledSegment(x1, y1, x2, y2, baselineY, style)
+        index += 1
 
   /** A solid axis-aligned rectangle — a highlighted band, a selection box, a heat cell.
     *
@@ -106,12 +117,12 @@ object Shape:
       style: Style = Style.Default,
   ) extends Shape:
     def draw(painter: Painter): Unit =
-      Seq(
-        SegmentShape(x, y, x + width, y, style),
-        SegmentShape(x, y + height, x + width, y + height, style),
-        SegmentShape(x, y, x, y + height, style),
-        SegmentShape(x + width, y, x + width, y + height, style),
-      ).foreach(_.draw(painter))
+      // the four edges as direct painter calls — a Seq of throwaway SegmentShapes would allocate five objects per
+      // rectangle per frame to say what four lines say
+      painter.paintSegment(x, y, x + width, y, style)
+      painter.paintSegment(x, y + height, x + width, y + height, style)
+      painter.paintSegment(x, y, x, y + height, style)
+      painter.paintSegment(x + width, y, x + width, y + height, style)
 
   /** A circle outline, sampled at even angles around its circumference.
     *

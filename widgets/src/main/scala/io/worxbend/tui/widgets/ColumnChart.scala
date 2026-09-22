@@ -1,6 +1,6 @@
 package io.worxbend.tui.widgets
 
-import io.worxbend.tui.core.{Buffer, CharWidth, Rect, Style}
+import io.worxbend.tui.core.{Alignment, Buffer, CharWidth, Rect, Style}
 
 /** The geometry every column chart in this module shares.
   *
