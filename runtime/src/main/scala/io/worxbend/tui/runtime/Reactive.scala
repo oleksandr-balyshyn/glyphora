@@ -95,7 +95,8 @@ object Signal:
   * Render-thread-confined in *both* directions, unlike [[Signal]]. Reading is not the safe half here: `peek` (and
   * therefore `get`) recomputes when the cache is stale, and recomputing rewrites the cached value, the stale flag, the
   * dirty epoch and both the dependency and subscriber sets — none of which is volatile or guarded by a lock.
-  * `markStale` and `dispose` mutate those same sets. So all four must be called on the render thread. In particular
+  * `markStale` and `dispose` mutate those same sets. So all four must be called on the render thread — enforced by
+  * `RenderThread.checkRenderThread()` on each of them, which is a no-op in tests with no running runtime. In particular
   * `Signal.peek` is explicitly safe off the render thread and `Computed.peek` is not: reading a computed from an
   * [[Async]] worker corrupts the dependency graph quietly, with no exception thrown and nothing for a test to catch.
   * Read the signals a background thread needs directly, or marshal the read back with [[RenderThread.runLater]].
@@ -111,6 +112,7 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
   private val dependencies   = mutable.LinkedHashSet[Subscribable]()
 
   def peek: A =
+    RenderThread.checkRenderThread()
     if stale then recompute()
     cachedValue
 
@@ -126,6 +128,7 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
     * produced right now, and would otherwise never reach anyone.
     */
   def markStale(): Unit =
+    RenderThread.checkRenderThread()
     dirtyEpoch += 1
     val wasFresh = !stale
     stale = true
@@ -143,6 +146,7 @@ final class Computed[A] private (thunk: ReactiveScope ?=> A) extends Reactive[A]
     * detaches, it does not close.
     */
   def dispose(): Unit =
+    RenderThread.checkRenderThread()
     dependencies.toSeq.foreach(_.unsubscribe(this))
     dependencies.clear()
     stale = true

@@ -158,9 +158,7 @@ final class TerminalRunnerSpec extends AnyFunSuite:
       message = "after"
       dirty = true
     }
-    val deadline          = System.nanoTime() + scala.concurrent.duration.DurationInt(3).seconds.toNanos
-    while !pilot.screenLines.headOption.exists(_.startsWith("after")) && System.nanoTime() < deadline do
-      Thread.sleep(20)
+    pilot.waitUntil("the redrawn frame to land")(pilot.screenLines.headOption.exists(_.startsWith("after")))
     assert(pilot.screenLines.head.startsWith("after"))
     pilot.pressKey(KeyCode.Char('q'))
     assert(pilot.awaitTermination())

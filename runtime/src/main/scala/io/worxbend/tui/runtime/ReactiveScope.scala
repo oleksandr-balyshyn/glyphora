@@ -13,7 +13,12 @@ trait ReactiveScope:
   */
 final class GenerationalScope private[runtime] (onInvalidate: () => Unit) extends ReactiveScope:
 
-  private val subscriber: Subscriber                               = () => onInvalidate()
+  private val subscriber: Subscriber = () => onInvalidate()
+
+  // Two buffers swapped per generation, never reallocated: `track` adds every value the in-progress generation reads;
+  // `beginGeneration` unsubscribes whatever the previous generation read but the new one did not, then hands the
+  // emptied buffer to `track` and keeps what was just read for next time. `subscribe`/`unsubscribe` are idempotent set
+  // operations, so clearing a buffer and refilling it is sound.
   private var previous: scala.collection.mutable.Set[Subscribable] = scala.collection.mutable.Set.empty
   private var current: scala.collection.mutable.Set[Subscribable]  = scala.collection.mutable.Set.empty
 
@@ -23,9 +28,13 @@ final class GenerationalScope private[runtime] (onInvalidate: () => Unit) extend
 
   /** Marks the start of a new evaluation: values read two generations ago but not renewed since are dropped. */
   def beginGeneration(): Unit =
-    previous.filterNot(current.contains).foreach(_.unsubscribe(subscriber))
+    previous.foreach { dependency =>
+      if !current.contains(dependency) then dependency.unsubscribe(subscriber)
+    }
+    val swap = previous
     previous = current
-    current = scala.collection.mutable.Set.empty
+    current = swap
+    current.clear()
 
 object ReactiveScope:
 

@@ -53,6 +53,11 @@ object Async:
     * drawing on, which the frame diff never repaints. Install a `given AsyncErrorHandler` to take reporting over.
     *
     * The default is evaluated at the call site, on the calling thread, which is what lets it capture the right loop.
+    *
+    * The work runs on a bounded pool (see the `worker` field): a slow endpoint cannot inflate the process past
+    * `max(2, availableProcessors)` worker threads, excess calls queue. Submission throws `RejectedExecutionException`
+    * only if the pool has been shut down, which a process-lifetime daemon never is — so the failure mode under load is
+    * queueing, not rejection.
     */
   def run[A](work: => A)(onResult: A => Unit)(using
       onError: AsyncErrorHandler = AsyncErrorHandler.toRenderThread()
@@ -65,6 +70,9 @@ object Async:
 
   /** Like [[run]] but delivers `Right(value)` or `Left(throwable)` to `onDone` on the render thread — no ambient error
     * handler needed. The idiomatic way to drive a load into `Signal[Either[Throwable, A]]` (or a loading/error state).
+    *
+    * Same submission contract as [[run]]: bounded worker pool, unbounded queue behind it, and
+    * `RejectedExecutionException` only if the pool is shut down — which the process-lifetime daemon pool never is.
     */
   def runCatching[A](work: => A)(onDone: Either[Throwable, A] => Unit): Unit =
     val deliver = deliverToRenderThread(onDone)
@@ -145,8 +153,17 @@ object Async:
   private def cancelling(future: java.util.concurrent.Future[?]): Cancelable =
     () => future.cancel(false)
 
+  /** The pool one-shot work ([[run]], [[runCatching]]) runs on: bounded to `max(2, availableProcessors)` threads, so
+    * the documented "poll with [[every]], load via [[run]]" pattern under a slow endpoint queues work instead of
+    * minting one thread per outstanding request. The queue behind the fixed threads is unbounded and the pool is a
+    * process-lifetime daemon that is never shut down, so submission does not throw `RejectedExecutionException` in
+    * practice — rejection is reachable only through pool shutdown, which never happens here.
+    */
   private val worker =
-    Executors.newCachedThreadPool(daemonFactory("glyphora-async"))
+    Executors.newFixedThreadPool(
+      math.max(2, Runtime.getRuntime.availableProcessors()),
+      daemonFactory("glyphora-async"),
+    )
 
   private val scheduler: ScheduledExecutorService =
     Executors.newSingleThreadScheduledExecutor(daemonFactory("glyphora-timer"))
