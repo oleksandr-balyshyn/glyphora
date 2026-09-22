@@ -36,17 +36,14 @@ object `package` extends build.TuiPublishModule {
     // the interrupt from the control byte the way `InputDecoder` already did before this bump, rather than
     // inheriting a default JLine itself says is not stable.
     //
-    // JEP 472 (JDK 24+): `jline-native`'s JNI loader now prints four `WARNING:` lines to stderr on every run —
-    // confirmed on the built `examples.hello-world.nativeImage` binary under GraalVM 25.0.2/JDK 25. The binary
-    // still exits 1 with the expected message (CI's check is a substring match, not exact), so nothing is broken,
-    // but every native-image app built with glyphora now prints that noise on startup. Silencing it needs
-    // `--enable-native-access=ALL-UNNAMED` wired into `nativeImageOptions`, which is a new build convention this
-    // repo has not needed before — left as a follow-up rather than added unreviewed.
+    // JEP 472 (JDK 24+): `jline-native`'s JNI loader would otherwise print four `WARNING:` lines to stderr on
+    // every run — confirmed on the built `examples.hello-world.nativeImage` binary under GraalVM 25.0.2/JDK 25.
+    // The binary still exits 1 with the expected message (CI's check is a substring match, not exact), so the
+    // noise was the only symptom. `TuiExampleModule.nativeImageOptions` (build.mill) passes
+    // `--enable-native-access=ALL-UNNAMED` to every native image, which silences it.
     mvn"org.jline:jline-terminal:4.4.5",
     mvn"org.jline:jline-terminal-jni:4.4.5",
   )
 
-  // `TuiPilotTests` rather than `TuiTests` for the `test-support` dependency alone: `FramePipelineBench` uses the
-  // shared `Bench` harness. No suite here drives a `Pilot`.
-  object test extends TuiPilotTests
+  object test extends TuiSupportTests
 }

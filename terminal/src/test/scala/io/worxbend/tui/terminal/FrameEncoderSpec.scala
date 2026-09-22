@@ -111,6 +111,14 @@ final class FrameEncoderSpec extends AnyFunSuite:
         AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + "漢" + AnsiSequences.moveTo(3, 0) + "b"
     )
 
+  test("a run of wide graphemes advances two columns each, with no repositioning between them"):
+    // every cell in this row is non-ASCII, which is exactly the case the ordering inside `advanceOf` serves: the
+    // buffer's continuation bookkeeping must answer the width question on its own — a single move for the whole run,
+    // and any answer of one column per grapheme would show up as `moveTo` sequences between them
+    val previous = frame(_ => ())
+    val next     = frame(_.setString(0, 0, "漢字x", Style.Default))
+    assert(encoder.encode(previous, next) == AnsiSequences.moveTo(0, 0) + sgr(Style.Default) + "漢字x")
+
   test("a frame of a different shape repaints in full instead of diffing"):
     // what a resize looks like from here: the previous frame describes a grid the terminal no longer has, so there is
     // nothing to compare against. `Buffer.diff` refuses such a pair outright, and the encoder is the caller that has to

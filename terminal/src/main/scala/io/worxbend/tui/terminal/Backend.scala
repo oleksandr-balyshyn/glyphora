@@ -114,8 +114,9 @@ trait Backend:
     *   - It must run on the render thread, the one thread allowed to read input. A query racing a [[readEvent]] would
     *     hand the reply to the key decoder, where it decodes to nothing and is dropped.
     *   - A key pressed while the query is in flight arrives before the reply. Those keys are held and delivered by the
-    *     following [[readEvent]] calls in the order they were typed, so nothing the user does is lost — but the reply
-    *     is not instant, and an app that queries every frame will feel it.
+    *     following [[readEvent]] calls in the order they were typed — up to a bounded queue (256 events per query; past
+    *     that the oldest are dropped, which only a terminal flooding input during an unbounded-timeout query can reach)
+    *     — but the reply is not instant, and an app that queries every frame will feel it.
     *   - A terminal that does not implement the report never answers at all. That is the ordinary outcome, not a
     *     defect, and it is why there is a timeout rather than a blocking read.
     *

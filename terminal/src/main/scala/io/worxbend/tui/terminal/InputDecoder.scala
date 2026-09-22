@@ -2,6 +2,8 @@ package io.worxbend.tui.terminal
 
 import io.worxbend.tui.core.{Event, KeyCode, KeyEvent, KeyModifiers, Position, Size}
 
+import java.io.InterruptedIOException
+
 import scala.concurrent.duration.Duration
 
 /** Decodes terminal input bytes into [[Event]]s: printable keys, control keys, ANSI CSI/SS3 escape sequences for
@@ -55,13 +57,36 @@ private[terminal] final class InputDecoder(
     */
   private var ended = false
 
-  /** Events decoded while [[readCursorReport]] was waiting for its reply, waiting their turn.
+  /** Events decoded while a reply round trip was waiting for its reply, waiting their turn.
     *
     * A cursor-position query is a round trip: the reply travels back on the same stream the user's keystrokes do, and a
     * key pressed while it is in flight arrives first. Dropping those keys would make an inline app lose input every
     * time it anchored itself, so they are held here and handed to the next [[decode]] in the order they arrived.
+    *
+    * Bounded: a query can be armed with `Duration.Inf` — see [[awaitReply]] — and on a terminal that never answers it
+    * waits forever, so input that keeps arriving in the meantime must not grow this queue without limit. Past
+    * [[InputDecoder.DeferredQueueLimit]] the *oldest* is dropped, and [[deferredDrops]] counts how many were: the same
+    * bounded-queue policy the runtime's render loop documents for work nobody is draining.
     */
   private val deferred = scala.collection.mutable.Queue.empty[Event]
+
+  /** How many events have been dropped because [[deferred]] was full, since this decoder was constructed. */
+  private var deferredDropped = 0L
+
+  /** The count a test can assert on: a queue that silently drops work needs one number that says it did. */
+  private[terminal] def deferredDrops: Long = deferredDropped
+
+  /** Queues `event` for a later [[decode]], dropping the oldest deferred event once the queue is full.
+    *
+    * The oldest rather than the newest, for the reason the render loop gives for the same choice: the events describe
+    * arriving state, and if only some can be kept, the most recent ones are the ones worth keeping. The drop is counted
+    * in [[deferredDrops]] rather than swallowed.
+    */
+  private def defer(event: Event): Unit =
+    if deferred.length >= InputDecoder.DeferredQueueLimit then
+      val _ = deferred.dequeue()
+      deferredDropped += 1
+    deferred.enqueue(event)
 
   /** Whether a `CSI … R` currently means a cursor-position report rather than the F3 key. See [[readCursorReport]]. */
   private var awaitingCursorReport = false
@@ -116,7 +141,8 @@ private[terminal] final class InputDecoder(
     * [[isFunctionKey3]] explains why the two cannot be told apart on their contents alone.
     *
     * Anything else that decodes while the reply is awaited is a real event the user produced, so it is queued rather
-    * than dropped and comes back out of the next [[decode]] calls in order. `None` means the terminal did not answer in
+    * than dropped and comes back out of the next [[decode]] calls in order — in order up to [[deferred]]'s bound, past
+    * which the oldest waiters are dropped and counted in [[deferredDrops]]. `None` means the terminal did not answer in
     * time — which is the ordinary outcome on a terminal that does not implement the report, not a failure.
     *
     * Subject to the same one-reader rule as [[decode]], and for a sharper reason: a second thread decoding concurrently
@@ -146,9 +172,9 @@ private[terminal] final class InputDecoder(
     * to be answered has been.
     *
     * Subject to the same rules as the other two reply round trips: render thread only, and a key typed while the
-    * answers are in flight is queued rather than dropped. A terminal that answers nothing at all — including one that
-    * does not implement DA1 — costs the full timeout once, at start-up, and yields [[TerminalCapabilities.unknown]],
-    * which every caller reads as "use the features anyway".
+    * answers are in flight is queued rather than dropped, both bounded as [[deferred]] documents. A terminal that
+    * answers nothing at all — including one that does not implement DA1 — costs the full timeout once, at start-up, and
+    * yields [[TerminalCapabilities.unknown]], which every caller reads as "use the features anyway".
     */
   private[terminal] def readCapabilityReport(timeout: Duration): TerminalCapabilities =
     probing = true
@@ -162,7 +188,9 @@ private[terminal] final class InputDecoder(
   /** Pumps the decoder until `arrived` answers or `timeout` runs out, queueing every real event it meets.
     *
     * Shared by the two reply round trips so there is one loop, and therefore one place where the ordering guarantee
-    * they both make — nothing the user typed is lost, it is only deferred — is actually implemented.
+    * they both make — nothing the user typed is lost, it is only deferred — is actually implemented. The "nothing is
+    * lost" half holds up to [[deferred]]'s bound: past it the oldest deferred events are dropped and counted, which is
+    * what keeps an unbounded wait on a chatty terminal from growing the queue without end.
     *
     * `Duration.Inf` means "wait until the reply arrives", and so does any finite wait too large to express in
     * nanoseconds. That second case is not pedantry: `Long.MaxValue * 1_000_000` does not fit in a `Long`, it wraps
@@ -179,7 +207,7 @@ private[terminal] final class InputDecoder(
       val remaining =
         if unbounded then InputDecoder.UnboundedPollMillis
         else math.max(1L, (deadline - System.nanoTime()) / NanosPerMilli)
-      decodeOnce(remaining).foreach(event => deferred.enqueue(event))
+      decodeOnce(remaining).foreach(defer)
     arrived()
 
   private def decodeFirst(first: Int): Option[Event] =
@@ -321,7 +349,14 @@ private[terminal] final class InputDecoder(
     // `overrun` records that parameters have been dropped; the scan continues so the stream stays aligned
     @annotation.tailrec
     def scan(consumed: Int, overrun: Boolean): CsiScan =
-      val c    = next(escapeTimeoutMillis)
+      // An InterruptedIOException is `wake()`'s interrupt reaching a read parked inside a sequence (JLine's reader
+      // converts the interrupt into one and throws it). The read was cut short exactly as a timeout cuts it short, so
+      // the sequence is Torn for the same reason and with the same consequences; letting the exception unwind out of
+      // `decode` instead aborted the whole decode with an error `decode`'s contract never throws — the reply round
+      // trips drive `decodeOnce` and would surface the interrupt as a spurious I/O failure.
+      val c    =
+        try next(escapeTimeoutMillis)
+        catch case _: InterruptedIOException => -1 // read the interrupt as "nothing arrived", like a timeout
       val read = consumed + 1
       if c < 0 then CsiScan.Torn
       else if c == Esc then
@@ -862,6 +897,16 @@ private[terminal] object InputDecoder:
 
   /** The same bound for a control string, whose payload (a colour, a title, a graphics acknowledgement) is short. */
   private val MaxControlStringLength = 4096
+
+  /** How many events may wait in the `deferred` queue before the oldest start being dropped.
+    *
+    * The render loop's bounded queues use the same number for the same reason. A reply round trip that waits on a
+    * silent terminal — a `Duration.Inf` cursor query is documented as legal — defers every key typed while it waits;
+    * without a cap, an unattended terminal with something still writing to it grows the queue without end. A quarter
+    * thousand is far past anything a real round trip defers: the queries that use the queue otherwise time out within a
+    * tenth of a second.
+    */
+  private[terminal] val DeferredQueueLimit: Int = 256
 
   /** The largest xterm modifier parameter: `1 + shift|alt|ctrl|meta`. Used only to tell a modified F3 from a
     * cursor-position report, which are otherwise the same shape.

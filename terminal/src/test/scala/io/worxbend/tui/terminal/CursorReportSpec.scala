@@ -109,6 +109,20 @@ final class CursorReportSpec extends AnyFunSuite:
     val input  = decoder(script*)
     assert(input.readCursorReport(Duration.Inf) == Some(Position(8, 4)))
 
+  test("keys deferred while an unbounded query waits are bounded, and the drops are counted"):
+    // the query can be armed with `Duration.Inf` on a terminal that never answers, and input keeps arriving while it
+    // waits — without a cap the deferred queue grows without end. Past the cap the oldest are dropped, the render
+    // loop's bounded-queue policy, and `deferredDrops` is the one number that says so.
+    val cap       = InputDecoder.DeferredQueueLimit
+    val typed     = (0 until cap + 2).map(i => 'a'.toInt + (i % 26))
+    val input     = decoder((typed ++ csi("5;9R"))*)
+    assert(input.readCursorReport(Duration.Inf).contains(Position(8, 4)))
+    assert(input.deferredDrops == 2L)
+    // the two oldest keys were dropped: exactly `cap` survive, and the first survivor is the third key typed
+    val survivors = List.fill(cap)(input.decode(10)).flatten
+    assert(survivors.length == cap)
+    assert(survivors.head == Event.Key(KeyEvent.char('c')))
+
   test("Duration.Inf reaches the decoder as a wait that actually waits"):
     // the decoder still clamps a finite-but-huge wait, so that is the value the guard has to survive; anything above
     // roughly 292 years overflows the same way

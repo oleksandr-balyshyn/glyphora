@@ -7,6 +7,7 @@ import org.jline.utils.InfoCmp
 
 import java.io.{FileDescriptor, FileOutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.duration.DurationInt
 import scala.util.control.NonFatal
@@ -66,6 +67,12 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   @volatile private var textAreaPixels: Option[Size] = None
   @volatile private var pixelsAsked                  = false
 
+  /** Versions the pixel cache above. Bumped by `onResize` on the signal-dispatch thread, captured by `windowSize`
+    * before it queries and compared after the query returns: a reply that measured the pre-resize window is discarded,
+    * not published as geometry of the window that exists now.
+    */
+  @volatile private var pixelsGeneration: Long = 0L
+
   // Owned by the render thread alone — no other thread may read or write it. A thread that takes the screen away (the
   // SIGCONT handler re-entering the alternate screen) raises `fullRedrawRequested` instead: a reset written here from
   // the signal-dispatch thread would be overwritten by an in-flight `draw` and the repaint lost.
@@ -120,18 +127,26 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
     * spending the timeout.
     *
     * `pixelsAsked` is set only where the query actually runs, and only after it returns: asked outside raw mode, or on
-    * a transient I/O failure, it stays unset so the next call — raw mode entered, the error cleared — still asks.
+    * a transient I/O failure, it stays unset so the next call — raw mode entered, the error cleared — still asks. A
+    * resize landing mid-query discards the reply the same way: the generation `onResize` bumps is compared against the
+    * one captured before the round trip, a mismatch leaves the cache unset, and the next call asks at the new size.
     */
   override def windowSize: Either[BackendError, WindowSize] =
     Backend.attempt {
       if pixelsAsked then WindowSize(currentSize, textAreaPixels)
       else
+        // Capture the generation before the query and compare after it. Without the comparison a WINCH during the
+        // round trip lets the render thread publish pixels that measured the pre-resize window and mark them current —
+        // mixed with the new cell count that is a stale cell geometry surviving until the next resize.
+        val generation = pixelsGeneration
         textAreaPixels =
           if cookedAttributes.isEmpty then None
           else
             val pixels = queries.textAreaSize(JLine3Backend.PixelQueryTimeout)
-            pixelsAsked = true
-            pixels
+            if generation == pixelsGeneration then
+              pixelsAsked = true
+              pixels
+            else None
         WindowSize(currentSize, textAreaPixels)
     }
 
@@ -511,11 +526,22 @@ final class JLine3Backend private (private[terminal] val terminal: Terminal, col
   /** Whether raw mode is currently on, which is exactly "we are holding someone's cooked attributes to put back". */
   private[terminal] def isRawMode: Boolean = cookedAttributes.nonEmpty
 
+  /** SIGWINCH: drop the cached pixel geometry and queue a coalesced resize for the next poll.
+    *
+    * Runs on JLine's signal-dispatch thread, and so does the `Backend.sizeOf` inside `currentSize`: an uncaught throw
+    * here — `terminal.getSize` on a terminal `close()` is racing — would kill the JDK's one signal-dispatch thread,
+    * after which every Java signal handler in the process is silently dead. Total like `onStop`, at the price of a
+    * missed resize notification on a terminal that is already gone.
+    */
   private def onResize(): Unit =
-    // the window moved, so a cached pixel size describes a window that no longer exists; the next `windowSize` re-asks
-    pixelsAsked = false
-    textAreaPixels = None
-    pump.postResize(currentSize)
+    try
+      // the window moved, so a cached pixel size describes a window that no longer exists; the generation bump is what
+      // invalidates an in-flight `windowSize` query, whose reply would otherwise be published as fresh geometry
+      pixelsGeneration += 1
+      pixelsAsked = false
+      textAreaPixels = None
+      pump.postResize(currentSize)
+    catch case NonFatal(_) => ()
 
   private def onInterrupt(): Unit = pump.postInterrupt()
 
@@ -625,7 +651,11 @@ object JLine3Backend:
     try
       val pid     = ProcessHandle.current().pid()
       val stopped = ProcessBuilder("kill", "-STOP", pid.toString).start()
-      val _       = stopped.waitFor()
+      // bounded, not forever: this runs on the signal-dispatch thread, and a wedged `kill` child would otherwise hang
+      // the process's only dispatcher — every signal after it lost. The child is destroyed rather than reaped once it
+      // outlives the wait; the SIGSTOP it was sent either already landed or was never going to.
+      if !stopped.waitFor(1L, TimeUnit.SECONDS) then
+        val _ = stopped.destroyForcibly()
     catch case NonFatal(_) => ()
 
   /** The millisecond timeout to hand JLine's reader for a [[Backend.readEvent]] timeout.

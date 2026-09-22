@@ -15,7 +15,9 @@ import io.worxbend.tui.core.{
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import io.worxbend.tui.terminal.ScriptedInput.{Esc, csi, decoder}
+import io.worxbend.tui.terminal.ScriptedInput.{Esc, NothingAvailable, csi, decoder}
+
+import java.io.InterruptedIOException
 
 /** Regressions for input-decoding defects found by terminal-level audit.
   *
@@ -226,6 +228,34 @@ final class InputDecoderRegressionSpec extends AnyFunSuite:
   test("the escape timeout is configurable"):
     val impatient = InputDecoder(_ => -2, escapeTimeoutMillis = 5L)
     assert(impatient.decode(1).isEmpty)
+
+  /** `wake()` interrupts the render thread through JLine's reader, which answers a blocked read with an
+    * `InterruptedIOException` — including a read parked *inside* a sequence. The scan used to let that unwind out of
+    * `decode`, aborting the caller with an error `decode` never promised; it is Torn now, exactly as a timeout would
+    * tear the sequence, and the decoder stays usable.
+    */
+  test("an interrupt landing mid-sequence tears it instead of unwinding out of decode"):
+    // Ctrl+Up arrives as `ESC[1;5A`; the interrupt lands between the parameters and the final byte
+    val script = Seq(Esc, '['.toInt, '1'.toInt, ';'.toInt, '5'.toInt, 'A'.toInt)
+    var reads  = 0
+    var tape   = script
+    val input  = InputDecoder { _ =>
+      reads += 1
+      // the interrupt fires *instead of* the fifth read's answer: the byte that read was waiting on is still buffered,
+      // so the tape only advances when a character is actually handed back. Past the end, a quiet terminal:
+      // NothingAvailable, never an exception
+      if reads == 5 then throw new InterruptedIOException()
+      else if tape.isEmpty then NothingAvailable
+      else
+        val c = tape.head
+        tape = tape.tail
+        c
+    }
+    assert(input.decode(10).isEmpty) // torn by the interrupt, dropped — and answered instead of thrown
+    // what stayed buffered is not part of a sequence any more; it decodes on its own, as literals
+    assert(input.decode(10).contains(Event.Key(KeyEvent.char('5'))))
+    assert(input.decode(10).contains(Event.Key(KeyEvent.char('A'))))
+    assert(input.decode(10).isEmpty) // and the interrupt was not mistaken for end of input
 
   test("a runaway parameter string is abandoned instead of looping forever"):
     dropped(csi("1" * 500)*)

@@ -145,6 +145,12 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     * row of "a", a combining acute and "b" as three adjacent glyphs: the terminal's cursor was still in column 1 when
     * "b" arrived, so "b" and every later changed cell of the row landed one column left of where the buffer says it is.
     *
+    * The continuation test comes first, and it is the only test a wide cell pays for: it is a plain read of the
+    * buffer's bookkeeping, while `CharWidth.of` walks the symbol's grapheme clusters and copies the non-ASCII tail into
+    * a fresh string per cluster — per cell, per frame, on the render hot path. The reorder answers every cell
+    * identically because a zero-width cell can never own a continuation: the buffer reserves the column to a grapheme's
+    * right only when the grapheme is two columns wide, so `isContinuation(x + 1, y)` already implies a non-zero width.
+    *
     * The width question is asked of the symbol only to separate "no advance" from "some advance"; the size of a
     * non-zero advance still comes from the buffer, never from re-measuring, for the reason below.
     *
@@ -159,8 +165,8 @@ private[terminal] final class FrameEncoder(colorDepth: ColorDepth):
     * construction.
     */
   private def advanceOf(next: Buffer, x: Int, y: Int, cell: Cell): Int =
-    if CharWidth.of(cell.symbol) == 0 then 0
-    else if next.isContinuation(x + 1, y) then 2
+    if next.isContinuation(x + 1, y) then 2
+    else if CharWidth.of(cell.symbol) == 0 then 0
     else 1
 
   /** `symbol`, or a single blank if it contains a C0 or C1 control code (`ESC` included).
