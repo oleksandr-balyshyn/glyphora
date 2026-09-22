@@ -32,16 +32,14 @@ final class MotionSpec extends AnyFunSuite:
     assert(math.abs(Easing.BackOut(1.0) - 1.0) < 1e-6)
 
   test("a spring converges on its target and reports settled"):
-    val spring     = Spring(frequency = 8.0, damping = 1.0)
-    var (pos, vel) = (0.0, 0.0)
-    var steps      = 0
-    while !spring.settled(pos, vel, 1.0) && steps < 10000 do
-      val next = spring.step(pos, vel, 1.0)
-      pos = next._1
-      vel = next._2
+    val spring = Spring(frequency = 8.0, damping = 1.0)
+    var state  = Spring.State(0.0, 0.0)
+    var steps  = 0
+    while !spring.settled(state.position, state.velocity, 1.0) && steps < 10000 do
+      state = spring.step(state, 1.0)
       steps += 1
     assert(steps < 10000, "spring did not settle")
-    assert(math.abs(pos - 1.0) < 1e-2)
+    assert(math.abs(state.position - 1.0) < 1e-2)
 
   test("a spring cannot be built with a time step that would never advance"):
     // `while !settled(...) do step(...)` is the documented usage, and a non-positive step makes that loop hang
@@ -50,12 +48,10 @@ final class MotionSpec extends AnyFunSuite:
     assertThrows[IllegalArgumentException](Spring().copy(deltaTime = 0.0))
 
   test("an underdamped spring overshoots its target at least once"):
-    val spring     = Spring(frequency = 12.0, damping = 0.2)
-    var (pos, vel) = (0.0, 0.0)
-    var maxPos     = 0.0
+    val spring = Spring(frequency = 12.0, damping = 0.2)
+    var state  = Spring.State(0.0, 0.0)
+    var maxPos = 0.0
     for _ <- 0 until 200 do
-      val next = spring.step(pos, vel, 1.0)
-      pos = next._1
-      vel = next._2
-      maxPos = math.max(maxPos, pos)
+      state = spring.step(state, 1.0)
+      maxPos = math.max(maxPos, state.position)
     assert(maxPos > 1.0, "underdamped spring should overshoot")

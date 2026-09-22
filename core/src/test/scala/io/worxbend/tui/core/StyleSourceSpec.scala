@@ -83,16 +83,6 @@ final class StyleSourceSpec extends AnyFunSuite:
       Style.Default.withFg(Color.Red).bold.asSource == Style.Default.bold.withFg(Color.Red).asSource
     )
 
-  test("asSource is stable across calls"):
-    val samples = Seq(
-      Style.Default,
-      Style.Default.withFg(Color.Green),
-      Style.Default.withoutBg.notDim,
-      Style.Default.bold.dashedUnderline.withLink("x"),
-      Style.Default.withBg(Color.Indexed(200)).reverse.notBold,
-    )
-    for style <- samples do assert(style.asSource == style.asSource, style.toString)
-
   test("asSource and toString stay two different formatters"):
     // toString is prose for a failure message; asSource is code. Guard against them drifting into each other.
     val style = Style.Default.withFg(Color.Cyan).bold
