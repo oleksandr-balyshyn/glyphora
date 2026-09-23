@@ -1175,8 +1175,8 @@ colours. A dataset with an empty name is left out of the key:
 ```scala
 chart(
   Seq(
-    Dataset("cpu", cpuPoints, Style.Default.withFg(Color.Red)),
-    Dataset("mem", memPoints, Style.Default.withFg(Color.Blue)),
+    Dataset("cpu", cpuPoints, style = Style.Default.withFg(Color.Red)),
+    Dataset("mem", memPoints, style = Style.Default.withFg(Color.Blue)),
   ),
   xBounds = Bounds(0.0, 80.0),
   yBounds = Bounds(0.0, 100.0),
@@ -1223,7 +1223,7 @@ Chart(
   yBounds = Bounds(0.0, 100.0),
   options = ChartOptions(
     showLegend = true,
-    hiddenLegendConstraints = (Constraint.Percentage(50), Constraint.Percentage(50)),
+    hiddenLegendConstraints = LegendConstraints(Constraint.Percentage(50), Constraint.Percentage(50)),
   ),
 )
 ```

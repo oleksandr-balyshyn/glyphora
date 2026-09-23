@@ -162,7 +162,7 @@ Three ideas carry through the entire toolkit:
 | Module | Owns |
 |---|---|
 | 🧱 [`tui-core`](core/README.md) | cells, buffer, geometry, style, layout, events, Unicode display width, motion values |
-| 🖥️ [`tui-terminal`](terminal/README.md) | backend contract, JLine 3, ANSI diffing, input decoder, headless backend |
+| 🖥️ [`tui-terminal`](terminal/README.md) | backend contract, JLine 4 backend, ANSI diffing, input decoder, headless backend |
 | 🧩 [`tui-widgets`](widgets/README.md) | backend-independent content, controls, data, visualization, and feedback widgets |
 | ⚡ [`tui-runtime`](runtime/README.md) | signals, render thread, loop, async work, timers |
 | 🎨 [`tui-dsl`](dsl/README.md) | element tree, `TuiApp`, focus/mouse routing, themes, shell, screens, toasts, palette |

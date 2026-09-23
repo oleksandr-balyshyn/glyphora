@@ -194,9 +194,9 @@ private var velocity = 0.0
 private val target = Signal(100.0)
 
 override def onTick(): Unit =
-  val next = spring.step(position, velocity, target.peek)
-  position = next._1
-  velocity = next._2
+  val next = spring.step(Spring.State(position, velocity), target.peek)
+  position = next.position
+  velocity = next.velocity
 ```
 
 Lower damping bounces; `1.0` is approximately critically damped; higher values feel

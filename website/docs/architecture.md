@@ -33,7 +33,7 @@ example, `tui-widgets` with a backend of your own, skipping the DSL entirely).
 | Module | What it owns | API reference |
 |---|---|---|
 | `tui-core` | `Buffer`/`Cell`, `Style`, `Layout` solver, `Widget` traits, event ADT, `CharWidth` (UCD-generated width table), the motion values `Progress`/`Easing`/`Tween`/`Spring`/`Effect` | [tui-core](pathname:///api/core/) |
-| `tui-terminal` | `Backend` trait, JLine 3 impl (diff flush, input decoding), `HeadlessBackend` | [tui-terminal](pathname:///api/terminal/) |
+| `tui-terminal` | `Backend` trait, `JLine3Backend` impl (diff flush, input decoding), `HeadlessBackend` | [tui-terminal](pathname:///api/terminal/) |
 | `tui-widgets` | every built-in widget — backend-agnostic, render-to-`Buffer` tested | [tui-widgets](pathname:///api/widgets/) |
 | `tui-runtime` | `Signal`/`Computed`, render thread, runner loop, tick clocks (`Stopwatch`/`Timer`) | [tui-runtime](pathname:///api/runtime/) |
 | `tui-dsl` | `TuiApp`, `Element` tree, focus/mouse routing, chrome presets, screens/toasts/palette | [tui-dsl](pathname:///api/dsl/) |
@@ -279,7 +279,7 @@ The terminal backend layer. Everything above (`tui-runtime`, widgets, DSL) talks
   All the others are defaulted no-ops on the trait, so a backend written before they
   existed still compiles.
 - **`JLine3Backend`** — the production implementation over `org.jline:jline-terminal`
-  and `org.jline:jline-terminal-jni` 3.30.x, pinned. Those two rather than the
+  and `org.jline:jline-terminal-jni` 4.4.x, pinned. Those two rather than the
   `org.jline:jline` bundle: this layer uses four JLine types and never asks JLine to
   read a line, so the bundle's line reader, SSH server and telnet server are dead
   weight in every downstream POM and every native image.

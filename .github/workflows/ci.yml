@@ -95,6 +95,15 @@ jobs:
       - uses: ./.github/actions/mill
       - name: Formatting
         run: ./mill mill.scalalib.scalafmt.ScalafmtModule/checkFormatAll __.sources
+      - name: Meta-build formatting
+        # The scalafmt gate above walks __.sources, which never includes build.mill or the
+        # package.mill files — the sources that define the build itself went unchecked.
+        # The binary version is read from .scalafmt.conf so the two cannot drift apart.
+        run: |
+          v=$(sed -n 's/^version = "\(.*\)"/\1/p' .scalafmt.conf)
+          curl -sL -o /tmp/scalafmt-native "https://github.com/scalameta/scalafmt/releases/download/v${v}/scalafmt-linux-glibc"
+          chmod +x /tmp/scalafmt-native
+          /tmp/scalafmt-native --check build.mill $(git ls-files '*package.mill')
       - name: Lints
         run: ./mill __.fix --check
 
@@ -126,6 +135,17 @@ jobs:
         run: |
           ./mill mill.scalalib.scalafmt.ScalafmtModule/reformatAll __.sources
           ./mill __.fix
+          v=$(sed -n 's/^version = "\(.*\)"/\1/p' .scalafmt.conf)
+          curl -sL -o /tmp/scalafmt-native "https://github.com/scalameta/scalafmt/releases/download/v${v}/scalafmt-linux-glibc"
+          chmod +x /tmp/scalafmt-native
+          /tmp/scalafmt-native build.mill $(git ls-files '*package.mill')
+
+      - name: Test the fixed tree
+        # A push made with the default token retriggers no workflows, so this job is the
+        # only CI the formatting commit will ever see — run the full suite before pushing
+        # rather than after. Formatting and syntactic rewrites are semantics-preserving,
+        # but "should be" is not a gate.
+        run: ./mill __.test
 
       - name: Commit anything that changed
         run: |

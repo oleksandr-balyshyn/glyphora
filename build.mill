@@ -17,10 +17,10 @@ object `package` extends Module {
     def scalaVersion = "3.9.0"
 
     /** JDK 25 or newer, declared rather than left to whatever JDK happened to compile it. Coupled to
-      * `TuiExampleModule.jvmVersion` below: `-release:N` is only accepted when the JVM running scalac is itself
-      * feature `>= N` (Scala 3.9.0's `supportedReleaseVersions` is `17 to min(Runtime.version().feature, 26)`), and
-      * Mill compiles every example in a Zinc subprocess under that `jvmVersion` — so this and the GraalVM pin below
-      * move together or the `build` job fails at scalac option parsing on the older of the two.
+      * `TuiExampleModule.jvmVersion` below: `-release:N` is only accepted when the JVM running scalac is itself feature
+      * `>= N` (Scala 3.9.0's `supportedReleaseVersions` is `17 to min(Runtime.version().feature, 26)`), and Mill
+      * compiles every example in a Zinc subprocess under that `jvmVersion` — so this and the GraalVM pin below move
+      * together or the `build` job fails at scalac option parsing on the older of the two.
       */
     def scalacOptions = super.scalacOptions() ++ Seq(
       "-deprecation",
@@ -33,13 +33,14 @@ object `package` extends Module {
 
     /** Test sources are held to the same Scalafix rules as main sources.
       *
-      * Without `ScalafixModule` here, `./mill __.fix` walked main sources only — so the `DisableSyntax` rules the
-      * repo does enforce (no `asInstanceOf`, no `isInstanceOf`, no `null`) were unchecked in exactly the sources that
-      * are most tempted by them. A test asserting on a node type says what it means as a pattern match.
+      * Without `ScalafixModule` here, `./mill __.fix` walked main sources only — so the `DisableSyntax` rules the repo
+      * does enforce (no `asInstanceOf`, no `isInstanceOf`, no `null`) were unchecked in exactly the sources that are
+      * most tempted by them. A test asserting on a node type says what it means as a pattern match.
       */
     trait TuiTests extends SbtTests with TestModule.ScalaTest with ScalafixModule {
-      /** Extra test-only dependencies a module can add without re-overriding `mvnDeps` (Mill cannot resolve a
-        * second `super.mvnDeps` chain in nested test objects).
+
+      /** Extra test-only dependencies a module can add without re-overriding `mvnDeps` (Mill cannot resolve a second
+        * `super.mvnDeps` chain in nested test objects).
         */
       def extraTestDeps: Seq[Dep] = Seq.empty
 
@@ -59,19 +60,27 @@ object `package` extends Module {
       def testForkGrouping: T[Seq[Seq[String]]] = Task { discoveredTestClasses().map(Seq(_)) }
     }
 
-    /** Test module for anything that drives a whole app through `Pilot`: `TuiTests` plus the test-support module.
+    /** Test module for anything that uses `test-support` helpers without driving a whole app through `Pilot`:
+      * `TuiTests` plus the test-support module. Shape-wise it is [[TuiPilotTests]]'s body under a name that does not
+      * claim a Pilot harness runs here — terminal and widgets pull in `test-support` for the shared `Bench` harness
+      * alone.
+      */
+    trait TuiSupportTests extends TuiTests {
+      def moduleDeps = super.moduleDeps ++ Seq(build.`test-support`)
+    }
+
+    /** Test module for anything that drives a whole app through `Pilot`: [[TuiSupportTests]] under a name that says the
+      * harness is the point.
       *
       * Its own `object test` cannot live here — a trait cannot both be the test module and contain it — so modules
       * declare `object test extends TuiPilotTests` themselves.
       */
-    trait TuiPilotTests extends TuiTests {
-      def moduleDeps = super.moduleDeps ++ Seq(build.`test-support`)
-    }
+    trait TuiPilotTests extends TuiSupportTests
   }
 
-  /** Every `examples/<name>` module: the library conventions, a native image, the GraalVM pin, and a Pilot-capable
-    * test submodule. An example's own `package.mill` then declares only what actually differs — its `moduleDeps` and
-    * its `mainClass`.
+  /** Every `examples/<name>` module: the library conventions, a native image, the GraalVM pin, and a Pilot-capable test
+    * submodule. An example's own `package.mill` then declares only what actually differs — its `moduleDeps` and its
+    * `mainClass`.
     *
     * The GraalVM version lives here rather than in ten files, so bumping it is one edit that cannot be half-applied.
     */
@@ -79,11 +88,10 @@ object `package` extends Module {
 
     /** GraalVM distribution pinned for every example's native image; Mill downloads it automatically.
       *
-      * Also the JDK every example compiles under (`JavaTests.jvmVersion` follows the outer module's), which is why
-      * this is JDK 25 — the floor `TuiModule.scalacOptions`' `-release:25` declares. macOS x64 has no GraalVM CE
-      * build past 25.0.1 (25.0.2 dropped it); ubuntu-latest, the only platform CI builds on, is unaffected, but a
-      * contributor on an Intel Mac needs 25.0.1 to build an example locally, and CONTRIBUTING.md says nothing about
-      * it today.
+      * Also the JDK every example compiles under (`JavaTests.jvmVersion` follows the outer module's), which is why this
+      * is JDK 25 — the floor `TuiModule.scalacOptions`' `-release:25` declares. macOS x64 has no GraalVM CE build past
+      * 25.0.1 (25.0.2 dropped it); ubuntu-latest, the only platform CI builds on, is unaffected, but a contributor on
+      * an Intel Mac needs 25.0.1 to build an example locally, and CONTRIBUTING.md says nothing about it today.
       */
     def jvmVersion = "graalvm-community:25.0.2"
 
