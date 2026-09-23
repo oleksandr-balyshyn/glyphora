@@ -25,6 +25,21 @@ final class ShowcaseAppSpec extends AnyFunSuite:
     pilot.pressKey(KeyCode.Escape)
     assert(pilot.awaitTermination())
 
+  test("the sidebar mirrors the selected tab and steers it"):
+    val (app, pilot) = startedApp()
+    assert(app.sidebarList.selected.contains(0), "the sidebar highlight starts on the first tab")
+    // focus starts on the sidebar list: its arrows step the tab ring, and the highlight follows on the next frame
+    pilot.pressKey(KeyCode.Down).waitForIdle()
+    assert(app.selectedTab.peek == 1)
+    assert(app.sidebarList.selected.contains(1))
+    // the mirror direction too: switching pages from the tab row moves the sidebar highlight
+    pilot.pressKey(KeyCode.Tab).waitForIdle() // focus the tabbed content
+    pilot.pressKey(KeyCode.Right).waitForIdle()
+    assert(app.selectedTab.peek == 2)
+    assert(app.sidebarList.selected.contains(2))
+    pilot.pressKey(KeyCode.Escape)
+    assert(pilot.awaitTermination())
+
   /** The gallery renders every preset at once, so this doubles as a smoke test that none of them blows up or draws a
     * hole in a real app's layout rather than in an isolated buffer.
     */

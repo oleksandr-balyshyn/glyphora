@@ -13,6 +13,13 @@ class TodoApp extends TuiApp:
   val inputState: TextInputState    = TextInputState()
   val listState: ListState          = ListState()
 
+  /** `Esc` is global, so it is a binding, not a panel-level handler: one declaration also feeds the palette and the
+    * help overlay. `TextInput` never consumes Esc, so this still fires while the input holds the focus.
+    */
+  override def bindings: KeyBindings = KeyBindings(
+    binding("esc", "quit")(quit())
+  )
+
   def view(using ReactiveScope, Theme): Element =
     panel("Todo")(
       input(inputState, placeholder = "what needs doing?").onKeyEvent {
@@ -29,12 +36,7 @@ class TodoApp extends TuiApp:
         case _                              => false
       },
       text("Enter: add · Tab: switch · ↑/↓: select · d: delete · Esc: quit").dim,
-    ).rounded.onKeyEvent {
-      case KeyEvent(KeyCode.Escape, _) =>
-        quit()
-        true
-      case _                           => false
-    }
+    ).rounded
 
   private def addItem(): Unit =
     val value = inputState.value.trim

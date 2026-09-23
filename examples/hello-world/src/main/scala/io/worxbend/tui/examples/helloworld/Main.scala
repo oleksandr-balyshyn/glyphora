@@ -3,7 +3,7 @@ package io.worxbend.tui.examples.helloworld
 import io.worxbend.tui.dsl.*
 
 /** hello-world, DSL edition: a static paragraph in a bordered panel. */
-class HelloWorld extends TuiApp:
+class HelloWorldApp extends TuiApp:
 
   def view(using ReactiveScope, Theme): Element =
     panel("Hello")(
@@ -18,4 +18,4 @@ class HelloWorld extends TuiApp:
     }
 
 /** `TuiApp` supplies `main`, so the entry point is one line naming the app the launcher should start. */
-object Main extends HelloWorld
+object Main extends HelloWorldApp

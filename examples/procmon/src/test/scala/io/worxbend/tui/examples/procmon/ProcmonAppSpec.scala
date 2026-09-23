@@ -7,19 +7,9 @@ import io.worxbend.tui.widgets.{ColumnSort, SortDirection}
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.duration.DurationInt
 
 final class ProcmonAppSpec extends AnyFunSuite:
-
-  /** Polls until `predicate` holds.
-    *
-    * `Pilot.waitForIdle` proves the posted event queue drained; it says nothing about a sample that a tick started on
-    * an `Async` worker and that lands on a later render-thread drain. Polling rather than sleeping a fixed time also
-    * survives a parallel test run starving the tick thread for a while.
-    */
-  private def waitUntil(timeout: FiniteDuration = 10.seconds)(predicate: => Boolean): Unit =
-    val deadline = System.nanoTime() + timeout.toNanos
-    while !predicate && System.nanoTime() < deadline do Thread.sleep(20)
 
   /** A started app with its first sample already on screen. The synthetic source keeps this offline and repeatable. */
   private def startedApp(): (ProcmonApp, Pilot) =
@@ -27,7 +17,7 @@ final class ProcmonAppSpec extends AnyFunSuite:
     val app     = ProcmonApp(SyntheticProcessSource())
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
-    waitUntil()(app.sampleCount.peek > 0)
+    pilot.waitUntil("the first sample to land", 10.seconds)(app.sampleCount.peek > 0)
     pilot.waitForIdle()
     (app, pilot)
 
@@ -104,7 +94,7 @@ final class ProcmonAppSpec extends AnyFunSuite:
     // and a refresh replaces every row's numbers underneath it without moving the highlight to another process
     val samplesBefore = app.sampleCount.peek
     pilot.press("r")
-    waitUntil()(app.sampleCount.peek > samplesBefore)
+    pilot.waitUntil("the refresh to land", 10.seconds)(app.sampleCount.peek > samplesBefore)
     pilot.waitForIdle()
     assert(app.selectedProcessId == pinned)
     val afterRefresh  = app.tableState.selected
@@ -120,7 +110,9 @@ final class ProcmonAppSpec extends AnyFunSuite:
     assert(app.refreshSeconds.peek == 1)
     val samplesBefore = app.sampleCount.peek
     val drawsBefore   = pilot.backend.drawCount
-    waitUntil()(app.sampleCount.peek > samplesBefore && pilot.backend.drawCount > drawsBefore)
+    pilot.waitUntil("a tick-driven refresh to repaint", 10.seconds)(
+      app.sampleCount.peek > samplesBefore && pilot.backend.drawCount > drawsBefore
+    )
     assert(app.sampleCount.peek > samplesBefore)
     assert(pilot.backend.drawCount > drawsBefore, "a new sample repaints without anyone pressing a key")
     pilot.press("q")

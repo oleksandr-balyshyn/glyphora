@@ -22,13 +22,6 @@ private final class FakeWeatherClient(
 
 final class WeatherAppSpec extends AnyFunSuite:
 
-  /** Polls the rendered screen until `predicate` holds — the async fetch lands on the render thread on the next
-    * `RenderThread` drain, not synchronously with the key press that triggered it.
-    */
-  private def waitUntil(pilot: Pilot, timeout: FiniteDuration = 5.seconds)(predicate: String => Boolean): Unit =
-    val deadline = System.nanoTime() + timeout.toNanos
-    while !predicate(pilot.screenText) && System.nanoTime() < deadline do Thread.sleep(20)
-
   private val sampleReport = WeatherReport(
     city = "Lisbon",
     country = "Portugal",
@@ -46,7 +39,7 @@ final class WeatherAppSpec extends AnyFunSuite:
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("Lisbon").pressKey(KeyCode.Enter)
-    waitUntil(pilot)(_.contains("Lisbon, Portugal"))
+    pilot.waitUntil("the fetched conditions to render")(pilot.screenText.contains("Lisbon, Portugal"))
 
     assert(client.lastRequestedCity.contains("Lisbon"))
     assert(pilot.screenText.contains("Mainly clear"))
@@ -61,7 +54,7 @@ final class WeatherAppSpec extends AnyFunSuite:
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.typeText("Nowhereville").pressKey(KeyCode.Enter)
-    waitUntil(pilot)(_.contains("Couldn't fetch Nowhereville"))
+    pilot.waitUntil("the failure message to render")(pilot.screenText.contains("Couldn't fetch Nowhereville"))
 
     assert(pilot.screenText.contains("Couldn't fetch Nowhereville"))
     pilot.pressKey(KeyCode.Escape)
@@ -82,7 +75,7 @@ final class WeatherAppSpec extends AnyFunSuite:
     pilot.waitForIdle()
     pilot.typeText("Kyiv").pressKey(KeyCode.Enter)
     pilot.typeText("Lisbon").pressKey(KeyCode.Enter)
-    waitUntil(pilot)(_.contains("Lisbon, Portugal"))
+    pilot.waitUntil("the fetched conditions to render")(pilot.screenText.contains("Lisbon, Portugal"))
 
     // Wait out Kyiv's in-flight delay (plus its delivery to the render thread), then Lisbon must still own the
     // screen and Kyiv's temperature must never have appeared.

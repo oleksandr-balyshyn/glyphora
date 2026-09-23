@@ -14,7 +14,7 @@ final class HelloWorldSpec extends AnyFunSuite:
 
   private def start(): Pilot =
     val backend = HeadlessBackend(Size(40, 8))
-    Pilot.start(backend) { HelloWorld().runWith(backend) }.waitForIdle()
+    Pilot.start(backend) { HelloWorldApp().runWith(backend) }.waitForIdle()
 
   test("the panel renders its title and both lines"):
     val pilot = start()

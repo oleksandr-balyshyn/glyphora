@@ -18,9 +18,9 @@ final class DashboardAppSpec extends AnyFunSuite:
     val ticksBefore = app.tick.peek
     val drawsBefore = backend.drawCount
     // poll instead of a fixed sleep: under parallel test load the tick thread may be starved for a while
-    val deadline    = System.nanoTime() + 10.seconds.toNanos
-    while (app.tick.peek == ticksBefore || backend.drawCount == drawsBefore) && System.nanoTime() < deadline do
-      Thread.sleep(50)
+    pilot.waitUntil("ticks to drive a redraw", 10.seconds)(
+      app.tick.peek > ticksBefore && backend.drawCount > drawsBefore
+    )
     assert(app.tick.peek > ticksBefore)
     assert(backend.drawCount > drawsBefore)
     assert(pilot.screenText.contains("Load"))

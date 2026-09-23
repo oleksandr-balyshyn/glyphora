@@ -54,6 +54,12 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
 
   private var ticksUntilRefresh: Int = 0
 
+  /** Row count as of the last rendered frame, written once per frame in `view`: the steering keys read this instead of
+    * rebuilding the table just to count its visible rows. The count is one frame stale at worst, and a steering key
+    * only arrives after that frame rendered.
+    */
+  private var visibleRowCount: Int = 0
+
   // start where `top` starts, on the busiest process. `sortBy` always begins ascending, so the sort is set directly —
   // `sort` is public, and a `ColumnSort` is the whole of `DataTableState`'s sort API.
   tableState.sort = Some(ColumnSort(CpuColumn, SortDirection.Descending))
@@ -95,8 +101,7 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
         // different numbers in them would otherwise keep the previous ordering indefinitely.
         tableState.invalidate()
       case Left(error)    =>
-        // toasts age in ticks, not seconds, so the lifetime has to be computed from the tick rate
-        notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning, duration = 3.seconds)
+        notify(s"sample failed: ${error.getMessage}", NoticeLevel.Warning)
     }
 
   // ---- keys ----
@@ -154,8 +159,7 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
     val _ = buildTable(processes.peek).selectKey(tableState, pid)
 
   private def moveSelection(delta: Int): Unit =
-    val rows = visibleRows
-    if delta < 0 then tableState.selectPrevious(rows.size) else tableState.selectNext(rows.size)
+    if delta < 0 then tableState.selectPrevious(visibleRowCount) else tableState.selectNext(visibleRowCount)
 
   /** One steering step that also claims the event: keys and the wheel all dispatch through here. */
   private def steer(delta: Int): Boolean =
@@ -178,6 +182,7 @@ class ProcmonApp(val source: ProcessSource = ProcessSource.detect()) extends Tui
     val table   = buildTable(processes.get)
     syncFilter()
     val visible = table.visibleRows(tableState)
+    visibleRowCount = visible.size
     column(
       (Seq(summaryPanel(visible.size)) ++ filterRow ++ Seq(tableElement(table), statusBar(Hints)))*
     ).onKeyEvent(handleUnclaimedKey)

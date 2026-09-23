@@ -14,6 +14,11 @@ import java.util.concurrent.{CompletableFuture, Executor}
 import javax.net.ssl.{SSLContext, SSLParameters}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
+/** Every condition that waits on an `Async` continuation landing — a sensor read, a poll-timer delivery — waits through
+  * [[Pilot.waitUntil]] rather than a hand-rolled poll: `waitForIdle` proves the posted event queue drained, not that a
+  * later render-thread drain delivered the read. Polling a condition rather than sleeping a fixed time also survives a
+  * parallel test run starving the render thread for a while.
+  */
 final class AirSensorAppSpec extends AnyFunSuite:
 
   private val clean = Reading(co2Ppm = 640, pm25 = 4.1, tvocIndex = 72, temperatureC = 21.2)
@@ -36,16 +41,9 @@ final class AirSensorAppSpec extends AnyFunSuite:
     pilot.waitForIdle()
     (app, pilot, backend)
 
-  /** `waitForIdle` proves the posted event queue drained; it says nothing about an `Async` continuation landing
-    * afterwards. Every sensor read lands on a later render-thread drain, so the assertions poll for it.
-    */
-  private def waitFor(timeout: FiniteDuration = 5.seconds)(predicate: => Boolean): Unit =
-    val deadline = System.nanoTime() + timeout.toNanos
-    while !predicate && System.nanoTime() < deadline do Thread.sleep(20)
-
   test("the first reading fills the hero panel and every metric card"):
     val (app, pilot, _) = startedApp(Vector(Right(clean)))
-    waitFor()(pilot.screenText.contains("640 ppm"))
+    pilot.waitUntil("the first reading to render")(pilot.screenText.contains("640 ppm"))
 
     val screen = pilot.screenText
     assert(screen.contains("AQI 23")) // 4.1 ug/m3 interpolated onto the EPA's first breakpoint
@@ -56,17 +54,17 @@ final class AirSensorAppSpec extends AnyFunSuite:
     assert(screen.contains("Good"))   // the band as a word, not only as a colour
     assert(app.status.peek == Status.Ready)
     assert(app.history.peek == Vector(clean))
-    assert(app.worstBand.peek == Band.Good)
+    assert(pilot.readOnRenderThread(app.worstBand.peek) == Band.Good)
 
     pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("a failed poll explains itself and keeps the last good reading on screen"):
     val (app, pilot, _) = startedApp(Vector(Right(clean), Left("sensor offline")))
-    waitFor()(pilot.screenText.contains("640 ppm"))
+    pilot.waitUntil("the first reading to render")(pilot.screenText.contains("640 ppm"))
 
     pilot.press("r")
-    waitFor()(pilot.screenText.contains("sensor offline"))
+    pilot.waitUntil("the failure message to render")(pilot.screenText.contains("sensor offline"))
 
     val screen = pilot.screenText
     assert(screen.contains("showing the last good reading"))
@@ -81,7 +79,7 @@ final class AirSensorAppSpec extends AnyFunSuite:
     val (app, pilot, backend) = startedApp(Vector(Right(clean), Right(foul)), interval = 150.millis)
     val drawsBefore           = backend.drawCount
     // poll rather than sleeping a fixed time: under parallel test load the timer thread may be starved for a while
-    waitFor()(app.history.peek.sizeIs >= 2)
+    pilot.waitUntil("the poll timer to deliver a second reading")(app.history.peek.sizeIs >= 2)
 
     assert(app.history.peek.take(2) == Vector(clean, foul))
     assert(backend.drawCount > drawsBefore) // the timer alone drove repaints
@@ -92,24 +90,24 @@ final class AirSensorAppSpec extends AnyFunSuite:
 
   test("the band word and the worst-band summary follow the reading"):
     val (app, pilot, _) = startedApp(Vector(Right(clean), Right(foul)))
-    waitFor()(pilot.screenText.contains("640 ppm"))
-    assert(app.worstBand.peek == Band.Good)
+    pilot.waitUntil("the first reading to render")(pilot.screenText.contains("640 ppm"))
+    assert(pilot.readOnRenderThread(app.worstBand.peek) == Band.Good)
     assert(pilot.screenText.contains("air quality: Good"))
 
     pilot.press("r")
-    waitFor()(pilot.screenText.contains("1900 ppm"))
+    pilot.waitUntil("the second reading to render")(pilot.screenText.contains("1900 ppm"))
 
     val screen = pilot.screenText
     assert(screen.contains("Unhealthy"))
     assert(screen.contains("Elevated")) // temperature bands on a range, so 31 C is uncomfortable, not unhealthy
-    assert(app.worstBand.peek == Band.Unhealthy)
+    assert(pilot.readOnRenderThread(app.worstBand.peek) == Band.Unhealthy)
 
     pilot.press("q")
     assert(pilot.awaitTermination())
 
   test("h collapses the history pane and ? opens the help overlay"):
     val (_, pilot, _) = startedApp(Vector(Right(clean)))
-    waitFor()(pilot.screenText.contains("History · last"))
+    pilot.waitUntil("the history pane to render")(pilot.screenText.contains("History · last"))
 
     pilot.press("h").waitForIdle()
     assert(!pilot.screenText.contains("History · last"))
@@ -153,7 +151,7 @@ final class AirSensorAppSpec extends AnyFunSuite:
     val client = AirGradientClient(httpClient = interruptingHttpClient)
     assert(client.read() == Left("stop requested"))
     // `Thread.interrupted()` also clears the flag, so the restored interrupt cannot leak into the rest of the suite —
-    // `waitFor` sleeps, and a lingering interrupt would turn every later sleep into a thrown exception
+    // `waitUntil` sleeps, and a lingering interrupt would turn every later sleep into a thrown exception
     assert(Thread.currentThread().isInterrupted)
     assert(Thread.interrupted())
 
@@ -186,7 +184,7 @@ final class AirSensorAppSpec extends AnyFunSuite:
     try
       Locale.setDefault(Locale.GERMANY)
       val (_, pilot, _) = startedApp(Vector(Right(clean)))
-      waitFor()(pilot.screenText.contains("640 ppm"))
+      pilot.waitUntil("the first reading to render")(pilot.screenText.contains("640 ppm"))
 
       val screen = pilot.screenText
       assert(screen.contains("4.1 ug/m3"))

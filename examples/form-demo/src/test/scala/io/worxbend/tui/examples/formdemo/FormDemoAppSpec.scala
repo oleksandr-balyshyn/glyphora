@@ -53,7 +53,7 @@ final class FormDemoAppSpec extends AnyFunSuite:
     pilot.waitForIdle()
     submit(pilot)
     assert(app.formState.result.peek.contains(Signup("ada", 36, true)))
-    assert(pilot.screenText.contains("""submitted: Signup(ada,36,true)"""))
+    assert(pilot.screenText.contains("""last submitted: Signup(ada,36,true)"""))
     assert(!pilot.screenText.contains("! required"))
     pilot.pressKey(KeyCode.Escape)
     assert(pilot.awaitTermination())
