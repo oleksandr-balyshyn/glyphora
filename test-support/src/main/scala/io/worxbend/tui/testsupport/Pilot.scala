@@ -13,11 +13,14 @@ import io.worxbend.tui.core.{
   Position,
   Size,
 }
-import io.worxbend.tui.runtime.RunnerError
+import io.worxbend.tui.runtime.{RenderThread, RunnerError}
 import io.worxbend.tui.terminal.HeadlessBackend
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.{Deadline, DurationInt, FiniteDuration}
+import scala.util.control.NonFatal
+import scala.util.{Failure, Success, Try}
 
 /** Drives a TUI app end-to-end without a terminal: the app runs on a background thread against a [[HeadlessBackend]];
   * the test thread posts synthetic input and asserts on the rendered buffer.
@@ -401,6 +404,35 @@ final class Pilot private (
     val deadline = Deadline.now + timeout
     pollUntil(deadline, s"timed out after $timeout waiting for $description")(condition)(rethrowAppFailure())
     this
+
+  /** Reads a value on the app's render thread and returns it — the way a test reaches for `Computed` state, whose
+    * render-thread-only rule [[io.worxbend.tui.runtime.RenderThread.checkRenderThread]] now enforces for reads too, not
+    * just writes. `Signal`s stay readable straight from the test thread; a `Computed` reached from here is exactly as
+    * safe as one read by the view itself.
+    *
+    * The read queues behind whatever the loop is doing and lands within one backend poll, which is why the headless
+    * read times out instead of blocking forever: the loop notices the queued work on its own next iteration, so no
+    * synthetic event — nothing user-visible — is injected to hurry it along. A throwable from the read, or one that
+    * already killed the app thread, fails here rather than surfacing as a stale value or a dead wait.
+    */
+  def readOnRenderThread[A](read: => A, timeout: FiniteDuration = Pilot.DefaultTimeout): A =
+    val latch   = CountDownLatch(1)
+    var outcome =
+      Option.empty[Try[A]] // written on the render thread before `latch` opens: the latch is the happens-before
+    RenderThread.runOnRenderThread {
+      outcome = Some {
+        try Success(read)
+        catch { case NonFatal(error) => Failure(error) }
+      }
+      latch.countDown()
+    }
+    backend.wake()
+    if !latch.await(timeout.toMillis, TimeUnit.MILLISECONDS) then
+      CallSite.fail(s"timed out after $timeout waiting for a render-thread read")
+    rethrowAppFailure()
+    outcome.get match
+      case Success(value) => value
+      case Failure(error) => throw error
 
   /** Polls `settled` every [[Pilot.PollSleep]] until it holds or `deadline` runs out, failing with `timeoutMessage` on
     * the overrun. `onWake` runs once before the first check and again after every sleep — the hook each caller hangs
