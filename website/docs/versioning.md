@@ -18,12 +18,12 @@ All published modules share one synchronized version under `io.worxbend`:
 
 ```scala
 // Mill
-def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.15.0")
+def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.16.0")
 ```
 
 ```scala
 // sbt
-libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.15.0"
+libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.16.0"
 ```
 
 Applications normally need only `tui-dsl`. Lower-tier artifacts are `tui-core`,
@@ -33,7 +33,7 @@ headless test harness and belongs in the test configuration only.
 **Nothing is on Maven Central yet.** `0.14.0` is tagged, but no artifacts have been
 published, so the coordinates above resolve only after `./mill __.publishLocal` has put
 them in your local Ivy cache — see [Getting started](./getting-started#1-add-glyphora).
-`0.15.0` is the in-development version and is not tagged yet. Once a release lands, check
+`0.16.0` is the in-development version and is not tagged yet. Once a release lands, check
 [Maven Central](https://search.maven.org/search?q=g:io.worxbend)
 and the [release tags](https://github.com/oleksandr-balyshyn/glyphora/tags) before
 choosing a version.

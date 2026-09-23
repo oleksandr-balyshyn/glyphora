@@ -15,7 +15,7 @@ and make two changes that exercise state, layout, styling, and keyboard commands
 
 :::caution Not on Maven Central yet
 
-`0.14.0` is tagged, but no artifacts are published and `0.15.0` — the current development
+`0.14.0` is tagged, but no artifacts are published and `0.16.0` — the current development
 version — is not tagged or released yet, so the coordinates below will not
 resolve from a public repository. Until the first release lands, build the artifacts
 locally:
@@ -27,7 +27,7 @@ cd glyphora
 ```
 
 That publishes `tui-core`, `tui-terminal`, `tui-widgets`, `tui-runtime`,
-`tui-macros`, `tui-dsl` and `tui-test` at version `0.15.0` into your local Ivy cache
+`tui-macros`, `tui-dsl` and `tui-test` at version `0.16.0` into your local Ivy cache
 (`~/.ivy2/local`). Mill reads that cache by default. **sbt does not**, so an sbt build
 also needs
 
@@ -49,7 +49,7 @@ import mill.*, scalalib.*
 
 object app extends ScalaModule:
   def scalaVersion = "3.9.0"
-  def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.15.0")
+  def mvnDeps = Seq(mvn"io.worxbend::tui-dsl:0.16.0")
 ```
 
 Put application sources under `app/src/`, then run them with `mill app.run` (or
@@ -60,7 +60,7 @@ Put application sources under `app/src/`, then run them with `mill app.run` (or
 ```scala title="build.sbt"
 scalaVersion := "3.9.0"
 
-libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.15.0"
+libraryDependencies += "io.worxbend" %% "tui-dsl" % "0.16.0"
 ```
 
 Put application sources under `src/main/scala/`, then use `sbt run`.
