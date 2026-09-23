@@ -198,7 +198,7 @@ final case class SparklineElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = SparklineElement
-  def widget: Widget = w.Sparkline(data, max, direction, props.style, styleFor = styleFor)
+  def widget: Widget = w.Sparkline(data, max, direction, style = props.style, styleFor = styleFor)
 
   /** Pins the top of the scale instead of letting it float to the largest value present.
     *
@@ -406,7 +406,7 @@ final case class CanvasElement(
     props: ElementProps = ElementProps(),
 ) extends Element:
   type Self = CanvasElement
-  def widget: Widget = w.Canvas(xBounds, yBounds, shapes, marker, resolution)
+  def widget: Widget = w.Canvas(xBounds, yBounds, shapes, marker = marker, resolution = resolution)
 
   /** One `glyph` per hit cell — the coarsest mode, and the one that needs no special font. */
   def markers(glyph: String): CanvasElement = copy(marker = glyph, resolution = w.CanvasResolution.Cell)

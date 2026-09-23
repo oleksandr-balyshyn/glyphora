@@ -16,6 +16,7 @@ import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
   */
 private[dsl] final class SplashPlayer(intro: Option[SplashScreen], now: () => Long):
 
+  private var started: Boolean  = false
   private var startNanos: Long  = 0L
   private var finished: Boolean = false
   private var skipped: Boolean  = false
@@ -27,11 +28,15 @@ private[dsl] final class SplashPlayer(intro: Option[SplashScreen], now: () => Lo
   def skip(): Unit = skipped = true
 
   /** Paints the intro's content with its effect applied at the elapsed time. The first call starts the clock, so the
-    * intro is timed from the frame it first appeared on rather than from when the runner started.
+    * intro is timed from the frame it first appeared on rather than from when the runner started. A separate `started`
+    * flag carries that state — a clock whose first reading is `0` (a `ManualClock`, a freshly booted system's nanoTime)
+    * would otherwise be indistinguishable from "not started" and the intro would never finish.
     */
   def render(frame: Frame): Unit =
     intro.foreach { splash =>
-      if startNanos == 0L then startNanos = now()
+      if !started then
+        started = true
+        startNanos = now()
       frame.renderWidget(splash.content.widget, frame.area)
       frame.applyEffect(splash.effect, elapsed)
     }
@@ -41,7 +46,7 @@ private[dsl] final class SplashPlayer(intro: Option[SplashScreen], now: () => Lo
     */
   def advance(): Boolean =
     intro match
-      case Some(splash) if isActive && startNanos != 0L =>
+      case Some(splash) if isActive && started =>
         val total = splash.effect.duration match
           case finite: FiniteDuration => if finite > splash.minimumDuration then finite else splash.minimumDuration
           case _                      => splash.minimumDuration
@@ -49,7 +54,7 @@ private[dsl] final class SplashPlayer(intro: Option[SplashScreen], now: () => Lo
           finished = true
           true
         else false
-      case _                                            => false
+      case _                                   => false
 
   private def elapsed: FiniteDuration = (now() - startNanos).nanos
 

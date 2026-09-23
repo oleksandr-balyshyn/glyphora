@@ -248,7 +248,7 @@ private[dsl] trait ElementFactories:
     * knobs.
     */
   def barChart(data: Seq[(String, Long)], barWidth: Int = 3, showValues: Boolean = false): WidgetElement =
-    WidgetElement(w.BarChart(data, barWidth, showValues = showValues))
+    WidgetElement(w.BarChart(data, barWidth = barWidth, showValues = showValues))
 
   /** [[barChart(data:Seq*]] with one bar allowed to look different from the rest.
     *
@@ -273,7 +273,7 @@ private[dsl] trait ElementFactories:
       barStyleFor: (Int, Long) => Option[Style],
       showValues: Boolean,
   ): WidgetElement =
-    WidgetElement(w.BarChart(data, barWidth, showValues = showValues, barStyleFor = barStyleFor))
+    WidgetElement(w.BarChart(data, barWidth = barWidth, showValues = showValues, barStyleFor = barStyleFor))
 
   /** The same bars laid on their side: one per `(label, value)`, growing rightwards, `barHeight` rows thick, with the
     * labels right-aligned in a gutter down the left edge.

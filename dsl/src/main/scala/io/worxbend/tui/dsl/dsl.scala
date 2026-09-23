@@ -99,6 +99,7 @@ export Element.{
 // shared time-to-position arithmetic those four and the animated widgets are built *from*, so it belongs to whoever
 // writes a widget, not to whoever writes a view. Widget authors already import `io.worxbend.tui.core`.
 export io.worxbend.tui.core.{
+  Alignment,
   Buffer,
   Color,
   Constraint,
@@ -220,7 +221,6 @@ export io.worxbend.tui.terminal.{Backend, BackendError, ColorDepth, TerminalGlyp
 //     `Bounds`, a keyed table without `KeyedRow`, and an element's `options` field is named the moment a view copies
 //     one field of it.
 export io.worxbend.tui.widgets.{
-  Alignment,
   BadgeVariant,
   BlockTitle,
   BorderType,

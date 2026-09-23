@@ -20,7 +20,8 @@ import scala.concurrent.duration.FiniteDuration
   *
   * Ownership and threads: an instance is bound to one `TuiApp` and, like everything else that writes a `Signal`, must
   * be called on that app's render thread — which every event handler, timer body and `Async` continuation already is. A
-  * toast needs a `config.tickRate`, or an ambient animation, for it to age out again; that is unchanged.
+  * toast ages out on its own: the run keeps its ambient tick going for as long as a toast is live, so neither a
+  * `config.tickRate` nor an ambient animation is needed for one to disappear.
   */
 trait Notifications:
 

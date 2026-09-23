@@ -12,21 +12,25 @@ import scala.concurrent.duration.FiniteDuration
   * `dismissAll` from event handlers, `age` from the tick stage, `overlay` from the view evaluation — so the queue needs
   * no synchronisation of its own; the [[Signal]] it lives in enforces that with its own render-thread check.
   *
-  * A toast's lifetime is wall-clock time rather than a count of ticks. Ticks are what *notices* the expiry — a run arms
-  * its own ambient tick for as long as a toast is live, so no `config.tickRate` is needed for a toast to disappear on
-  * its own — but they no longer decide how long "three seconds" is, so the same `notify` call means the same thing in
-  * an app that ticks every 20ms and one that ticks every 200ms.
+  * A toast's lifetime is clock time rather than a count of ticks. Ticks are what *notices* the expiry — a run arms its
+  * own ambient tick for as long as a toast is live, so no `config.tickRate` is needed for a toast to disappear on its
+  * own — but they no longer decide how long "three seconds" is, so the same `notify` call means the same thing in an
+  * app that ticks every 20ms and one that ticks every 200ms.
+  *
+  * `now` is the clock, in nanoseconds, and is a parameter rather than a direct `System.nanoTime()` call so a test can
+  * step a toast's expiry without waiting for wall-clock time to pass; `TuiApp` hands in the run's clock, which is the
+  * system clock unless a `runWith` overrides it.
   */
-private[dsl] final class ToastStack:
+private[dsl] final class ToastStack(now: () => Long):
 
-  /** One queued toast: what to say, how loudly, and the `System.nanoTime()` reading past which it is stale. */
+  /** One queued toast: what to say, how loudly, and the clock reading past which it is stale. */
   private final case class ActiveToast(message: String, level: NoticeLevel, expiresAtNanos: Long)
 
   private val queued: Signal[Vector[ActiveToast]] = Signal(Vector.empty)
 
   /** Queues a toast that expires `duration` from now. */
   def push(message: String, level: NoticeLevel, duration: FiniteDuration): Unit =
-    queued.update(_ :+ ActiveToast(message, level, System.nanoTime() + duration.toNanos))
+    queued.update(_ :+ ActiveToast(message, level, now() + duration.toNanos))
 
   /** Whether anything is queued, read without subscribing — so `TuiApp` can ask "does this run still owe ticks?"
     * without the question itself becoming a reason to repaint.
@@ -42,8 +46,8 @@ private[dsl] final class ToastStack:
     */
   def age(): Unit =
     if queued.peek.nonEmpty then
-      val now = System.nanoTime()
-      queued.update(_.filter(_.expiresAtNanos > now))
+      val at = now()
+      queued.update(_.filter(_.expiresAtNanos > at))
 
   /** The overlay to layer over the app's view, or `None` when nothing is showing.
     *
