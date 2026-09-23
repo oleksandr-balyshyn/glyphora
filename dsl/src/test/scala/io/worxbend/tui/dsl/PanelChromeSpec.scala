@@ -52,13 +52,13 @@ final class PanelChromeSpec extends AnyFunSuite:
     assert(panel(prose).borderless.intrinsicHeight(6) == Some(2))
 
   test("titleAligned and titleBottomAligned move the captions along their borders"):
-    val centred = panel("ab")(text("x")).titleAligned(w.Alignment.Center)
+    val centred = panel("ab")(text("x")).titleAligned(Alignment.Center)
     assert(bufferLine(rendered(centred.widget, 8, 3), 0) == "┌──ab──┐")
 
   test("the bottom caption starts at the right and can be moved left"):
     val element = panel("top")(text("x")).titleBottom("ok")
     assert(bufferLine(rendered(element.widget, 8, 3), 2).endsWith("ok┘"))
-    val moved   = element.titleBottomAligned(w.Alignment.Left)
+    val moved   = element.titleBottomAligned(Alignment.Left)
     assert(bufferLine(rendered(moved.widget, 8, 3), 2).startsWith("└ok"))
 
   test("titles adds further captions carrying styled lines"):
@@ -72,7 +72,7 @@ final class PanelChromeSpec extends AnyFunSuite:
 
   test("a CJK caption is measured in display columns, not characters"):
     // Each ideograph is two columns wide, so "設定" occupies four of the eight border cells.
-    val element = panel("設定")(text("x")).titleAligned(w.Alignment.Center)
+    val element = panel("設定")(text("x")).titleAligned(Alignment.Center)
     assert(bufferLine(rendered(element.widget, 8, 3), 0) == "┌─設定─┐")
 
   test("an area with no room for a frame does not throw"):

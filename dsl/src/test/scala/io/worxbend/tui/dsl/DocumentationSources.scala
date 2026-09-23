@@ -23,12 +23,15 @@ private[dsl] object DocumentationSources:
       .find(candidate => Files.isRegularFile(candidate.resolve("build.mill")))
 
   /** Everything a reader of this project sees as documentation: the pages under `website/docs`, which are published to
-    * both GitHub Pages and the Wiki, plus the top-level README.
+    * both GitHub Pages and the Wiki, the top-level README, and each module's own README — the prose the JLine drift
+    * survived in across audit rounds because no suite read it.
     */
   def markdownSources(root: Path): Seq[Path] =
-    val docs  = root.resolve("website/docs")
-    val pages =
+    val docs    = root.resolve("website/docs")
+    val pages   =
       if Files.isDirectory(docs) then
         Using.resource(Files.list(docs))(_.iterator.asScala.filter(_.toString.endsWith(".md")).toVector)
       else Vector.empty
-    (root.resolve("README.md") +: pages).filter(Files.isRegularFile(_))
+    val modules = Seq("core", "terminal", "widgets", "runtime", "dsl", "macros", "test-support")
+    val readmes = modules.map(name => root.resolve(name).resolve("README.md"))
+    (Seq(root.resolve("README.md")) ++ pages ++ readmes).filter(Files.isRegularFile(_))

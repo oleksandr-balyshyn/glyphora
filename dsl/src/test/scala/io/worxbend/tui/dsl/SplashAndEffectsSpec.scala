@@ -2,7 +2,7 @@ package io.worxbend.tui.dsl
 
 import io.worxbend.tui.core.{KeyCode, Size}
 import io.worxbend.tui.terminal.HeadlessBackend
-import io.worxbend.tui.testsupport.Pilot
+import io.worxbend.tui.testsupport.{ManualClock, Pilot}
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -48,15 +48,16 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
     assert(!stack.prune(), "an empty stack has nothing left to report")
 
   test("the splash shows first, then transitions to the main view"):
-    val backend  = HeadlessBackend(Size(30, 5))
-    val app      = SplashApp()
-    val pilot    = Pilot.start(backend) { app.runWith(backend) }
+    val backend = HeadlessBackend(Size(30, 5))
+    val clock   = ManualClock()
+    val app     = SplashApp()
+    val pilot   = Pilot.start(backend) { app.runWith(backend, clock.reading) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("LOADING"))
     assert(!pilot.screenText.contains("main view"))
-    val deadline = System.nanoTime() + 3.seconds.toNanos
-    while !pilot.screenText.contains("main view") && System.nanoTime() < deadline do Thread.sleep(20)
-    assert(pilot.screenText.contains("main view"))
+    // the intro's minimumDuration is 300 ms; stepping the clock past it has to end the intro on the next tick
+    pilot.advanceClock(clock, 500.millis, draws = 0)
+    pilot.waitUntil("the main view once the intro has elapsed")(pilot.screenText.contains("main view"))
     pilot.pressKey(KeyCode.Char('q'))
     assert(pilot.awaitTermination())
 
@@ -77,28 +78,25 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
     assert(pilot.awaitTermination())
 
   test("runEffect animates over the rendered view and completes"):
-    val backend         = HeadlessBackend(Size(20, 3))
-    val app             = new TuiApp:
+    val backend = HeadlessBackend(Size(20, 3))
+    val clock   = ManualClock()
+    val app     = new TuiApp:
       override def config                           = io.worxbend.tui.runtime.RunnerConfig(tickRate = Some(20.millis))
       override def bindings: KeyBindings            = KeyBindings(
         binding("e", "run effect")(runEffect(Effect.dissolve(150.millis))),
         binding("q", "quit")(quit()),
       )
       def view(using ReactiveScope, Theme): Element = text("solid content here")
-    val pilot           = Pilot.start(backend) { app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend, clock.reading) }
     pilot.waitForIdle()
     assert(pilot.screenText.contains("solid content here"))
-    pilot.pressKey(KeyCode.Char('e'))
-    // mid-effect some cells are erased; after completion the content is fully back
-    val deadline        = System.nanoTime() + 3.seconds.toNanos
-    var sawPartial      = false
-    while !sawPartial && System.nanoTime() < deadline do
-      if !pilot.screenText.contains("solid content here") then sawPartial = true
-      Thread.sleep(5)
-    assert(sawPartial, "effect never visibly altered the frame")
-    val restoreDeadline = System.nanoTime() + 3.seconds.toNanos
-    while !pilot.screenText.contains("solid content here") && System.nanoTime() < restoreDeadline do Thread.sleep(10)
-    assert(pilot.screenText.contains("solid content here"))
+    pilot.pressKey(KeyCode.Char('e')).waitForIdle()
+    // an effect is a pure function of the clock: stepping into the middle of the dissolve has to erase content, and
+    // stepping past its duration has to drop it and put the frame back — no wall-clock waiting either way
+    pilot.advanceClock(clock, 75.millis)
+    pilot.waitUntil("the effect to visibly alter the frame")(!pilot.screenText.contains("solid content here"))
+    pilot.advanceClock(clock, 100.millis)
+    pilot.waitUntil("the content to be fully restored")(pilot.screenText.contains("solid content here"))
     pilot.pressKey(KeyCode.Char('q'))
     assert(pilot.awaitTermination())
 
@@ -107,22 +105,25 @@ final class SplashAndEffectsSpec extends AnyFunSuite:
     * must not keep receiving them for the rest of the process.
     */
   test("an app that configured no tickRate stops receiving ticks once the splash is over"):
-    val backend  = HeadlessBackend(Size(30, 5))
-    val ticks    = new java.util.concurrent.atomic.AtomicInteger(0)
-    val app      = new TuiApp:
+    val backend = HeadlessBackend(Size(30, 5))
+    val clock   = ManualClock()
+    val ticks   = new java.util.concurrent.atomic.AtomicInteger(0)
+    val app     = new TuiApp:
       override def splash: Option[SplashScreen]     = Some(
         SplashScreen(text("INTRO"), Effect.fadeIn(20.millis), minimumDuration = 20.millis)
       )
       override def onTick(): Unit                   = { val _ = ticks.incrementAndGet() }
       override def bindings: KeyBindings            = KeyBindings(binding("q", "quit")(quit()))
       def view(using ReactiveScope, Theme): Element = text("main view")
-    val pilot    = Pilot.start(backend) { app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend, clock.reading) }
     pilot.waitForIdle()
-    val deadline = System.nanoTime() + 3.seconds.toNanos
-    while !pilot.screenText.contains("main view") && System.nanoTime() < deadline do Thread.sleep(20)
-    assert(pilot.screenText.contains("main view"))
-    val before   = ticks.get()
-    Thread.sleep(500)
-    assert(ticks.get() == before, s"ticks kept firing after the splash: $before -> ${ticks.get()}")
+    assert(pilot.screenText.contains("INTRO"))
+    // the intro lasts 20 ms; stepping well past it has to end the intro on the next tick
+    pilot.advanceClock(clock, 1.second, draws = 0)
+    pilot.waitUntil("the main view once the intro has elapsed")(pilot.screenText.contains("main view"))
+    // the tick loan ends with the intro: a couple of ambient intervals of honest wall-clock time lets any tick queued
+    // before the stand-down land, and after it nothing may deliver ticks — there is no configured rate to deliver them
+    Thread.sleep(100)
+    assert(ticks.get() == 0, s"onTick fired in an app that configured no tickRate: ${ticks.get()}")
     pilot.pressKey(KeyCode.Char('q'))
     assert(pilot.awaitTermination())

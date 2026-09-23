@@ -91,9 +91,9 @@ final class OneImportSpec extends AnyFunSuite:
     * appears in completion, the layout solver has a branch for it, and no DSL extension reached it.
     */
   test("the whole core motion group, and every constraint, are reachable from the one import"):
-    val spring               = Spring(frequency = 6.0, damping = 0.75, deltaTime = 0.05)
-    val (position, velocity) = spring.step(0.0, 0.0, 100.0)
-    assert(position > 0.0 && !spring.settled(position, velocity, 100.0))
+    val spring = Spring(frequency = 6.0, damping = 0.75, deltaTime = 0.05)
+    val next   = spring.step(Spring.State(0.0, 0.0), 100.0)
+    assert(next.position > 0.0 && !spring.settled(next.position, next.velocity, 100.0))
 
     val third: Element = text("a").ratio(1, 3)
     assert(third.props.constraint.contains(Constraint.Ratio(1, 3)))

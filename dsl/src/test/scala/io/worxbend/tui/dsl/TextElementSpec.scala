@@ -1,7 +1,6 @@
 package io.worxbend.tui.dsl
 
 import io.worxbend.tui.testsupport.BufferAssertions.{line as bufferLine, rendered, trimmedLines}
-import io.worxbend.tui.widgets as w
 
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -26,7 +25,7 @@ final class TextElementSpec extends AnyFunSuite:
   test("alignment positions a short line inside the area"):
     assert(bufferLine(rendered(text("ab").centered.widget, 6, 1), 0) == "  ab  ")
     assert(bufferLine(rendered(text("ab").rightAligned.widget, 6, 1), 0) == "    ab")
-    assert(bufferLine(rendered(text("ab").aligned(w.Alignment.Left).widget, 6, 1), 0) == "ab    ")
+    assert(bufferLine(rendered(text("ab").aligned(Alignment.Left).widget, 6, 1), 0) == "ab    ")
 
   test("wrapping never splits a wide character across two rows"):
     // Each ideograph is two columns wide, so three of them do not fit a five-column row.

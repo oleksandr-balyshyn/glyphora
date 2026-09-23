@@ -153,21 +153,19 @@ final class AppServicesSpec extends AnyFunSuite:
     * the app ticks every 10ms or every 200ms, which is the whole point of spelling it as a duration.
     */
   test("toasts appear on notify and age out once their duration has passed"):
-    val backend  = HeadlessBackend(Size(40, 6))
-    val app      = new TuiApp:
+    val backend = HeadlessBackend(Size(40, 6))
+    val app     = new TuiApp:
       override def config: RunnerConfig             = RunnerConfig(tickRate = Some(10.millis))
       override def bindings: KeyBindings            = KeyBindings(
         binding("n", "notify me")(notify("saved ok", NoticeLevel.Success, duration = 400.millis)),
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope, Theme): Element = text("content")
-    val pilot    = Pilot.start(backend) { app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Char('n')).waitForIdle()
     assert(pilot.screenText.contains("saved ok"))
-    val deadline = System.nanoTime() + 3.seconds.toNanos
-    while pilot.screenText.contains("saved ok") && System.nanoTime() < deadline do Thread.sleep(20)
-    assert(!pilot.screenText.contains("saved ok"))
+    pilot.waitUntil("the toast to age out")(!pilot.screenText.contains("saved ok"))
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
     assert(pilot.awaitTermination())
 

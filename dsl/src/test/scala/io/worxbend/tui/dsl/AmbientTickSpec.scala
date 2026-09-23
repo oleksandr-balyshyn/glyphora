@@ -3,25 +3,20 @@ package io.worxbend.tui.dsl
 import io.worxbend.tui.core.Size
 import io.worxbend.tui.runtime.Signal
 import io.worxbend.tui.terminal.HeadlessBackend
-import io.worxbend.tui.testsupport.Pilot
+import io.worxbend.tui.testsupport.{ManualClock, Pilot}
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.duration.DurationInt
 
 /** An app that renders an animation gets the ticks that animation needs, without configuring a `tickRate`.
   *
   * The assertion throughout is that the *drawn glyph* changes over time, because that is what a frozen spinner looks
-  * like from the outside and it is what the negotiation exists to prevent. Each test bounds its wait, so a failure is
-  * an assertion rather than a hung suite.
+  * like from the outside and it is what the negotiation exists to prevent. Where a test's wait bounds a genuinely
+  * concurrent claim, the smallest honest window of wall-clock time is kept; everything else is asserted through
+  * `pilot.waitUntil`, so a failure is an assertion rather than a hung suite.
   */
 final class AmbientTickSpec extends AnyFunSuite:
-
-  /** Waits until `condition` holds, up to `within`; answers whether it did. */
-  private def eventually(within: FiniteDuration)(condition: => Boolean): Boolean =
-    val deadline = System.nanoTime() + within.toNanos
-    while !condition && System.nanoTime() < deadline do Thread.sleep(10)
-    condition
 
   private def quitApp(pilot: Pilot): Unit =
     pilot.pressKey(KeyCode.Char('q'), KeyModifiers.Ctrl)
@@ -35,11 +30,13 @@ final class AmbientTickSpec extends AnyFunSuite:
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     val first   = pilot.screenText
-    assert(eventually(3.seconds)(pilot.screenText != first), s"the frame never changed; it stayed at '$first'")
+    pilot.waitUntil("the spinner frame to change", 3.seconds)(pilot.screenText != first)
     quitApp(pilot)
 
   /** The other half of the bargain: a frame with nothing animated on it must not leave a ticker running. The app is
-    * driven into an animated state and back out of it, and the assertion is that the frame then stops changing.
+    * driven into an animated state and back out of it, and the assertion is on the backend's draw count: the "idle"
+    * text reads the same whether or not anything repaints it, so only a counter catches a ticker that kept asking for
+    * frames.
     */
   test("an app whose frame stops animating stops ticking"):
     val backend = HeadlessBackend(Size(20, 3))
@@ -53,13 +50,16 @@ final class AmbientTickSpec extends AnyFunSuite:
         if busy.get then spinner() else text("idle")
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
-    assert(eventually(3.seconds)(pilot.screenText.trim.nonEmpty))
     pilot.pressKey(KeyCode.Char('s')).waitForIdle()
     assert(pilot.screenText.contains("idle"))
-    // let several tick intervals go by; a ticker still running would keep asking for frames
-    val settled = pilot.screenText
-    Thread.sleep(400)
-    assert(pilot.screenText == settled)
+    // a ticker still running would keep asking for frames; several of its own intervals of silence is the honest
+    // proof that it stood down
+    val settled = backend.drawCount
+    Thread.sleep(300)
+    assert(
+      backend.drawCount == settled,
+      s"redraws kept coming after the frame stopped animating: $settled -> ${backend.drawCount}",
+    )
     quitApp(pilot)
 
   /** An app that *did* configure a tick rate must be driven by the runner exactly as before — the ambient ticker stays
@@ -75,7 +75,15 @@ final class AmbientTickSpec extends AnyFunSuite:
       def view(using ReactiveScope, Theme): Element = spinner()
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
-    assert(eventually(3.seconds)(ticks > 3), s"onTick ran $ticks times")
+    pilot.waitUntil("onTick to be driven by the configured rate", 3.seconds)(ticks > 3)
+    // at a 10 ms rate, 100 ms of wall-clock time is due exactly ten ticks; a second stream from the ambient path
+    // would roughly double that, so the growth over the window is bounded well below double
+    val before  = ticks
+    Thread.sleep(100)
+    assert(
+      ticks - before < 20,
+      s"the ambient path double-ticked: $before -> $ticks over 100 ms at a 10 ms rate",
+    )
     quitApp(pilot)
 
   /** `onTick` is documented as needing a `config.tickRate`. The ambient ticker deliberately does not call it, so an app
@@ -91,24 +99,27 @@ final class AmbientTickSpec extends AnyFunSuite:
     val pilot   = Pilot.start(backend) { app.runWith(backend) }
     pilot.waitForIdle()
     val first   = pilot.screenText
-    assert(eventually(3.seconds)(pilot.screenText != first)) // it really is animating
+    pilot.waitUntil("the spinner to animate", 3.seconds)(pilot.screenText != first) // it really is animating
     assert(ticks == 0)
     quitApp(pilot)
 
-  /** Toasts age in wall-clock time and are not part of the tree, so they ask for ticks on their own account — an app
-    * with no animation and no configured tick rate must still see a toast disappear.
+  /** Toasts age in clock time and are not part of the tree, so they ask for ticks on their own account — an app with no
+    * animation and no configured tick rate must still see a toast disappear. The injected clock makes the expiry exact:
+    * advancing past the toast's own duration has to age it out.
     */
   test("a toast ages out in an app that configured no tick rate"):
     val backend = HeadlessBackend(Size(40, 6))
+    val clock   = ManualClock()
     val app     = new TuiApp:
       override def bindings: KeyBindings            = KeyBindings(
         binding("n", "notify")(notify("saved ok", duration = 300.millis)),
         binding("ctrl+q", "quit")(quit()),
       )
       def view(using ReactiveScope, Theme): Element = text("content")
-    val pilot   = Pilot.start(backend) { app.runWith(backend) }
+    val pilot   = Pilot.start(backend) { app.runWith(backend, clock.reading) }
     pilot.waitForIdle()
     pilot.pressKey(KeyCode.Char('n')).waitForIdle()
     assert(pilot.screenText.contains("saved ok"))
-    assert(eventually(3.seconds)(!pilot.screenText.contains("saved ok")), "the toast never aged out")
+    pilot.advanceClock(clock, 1.second, draws = 0)
+    pilot.waitUntil("the toast to age out")(!pilot.screenText.contains("saved ok"))
     quitApp(pilot)
